@@ -1,5 +1,36 @@
-# Visual Studio 缓存/临时文件
+# 忽略用户指定的文件夹
 .vs/
+.vscode/
+Bin/
+build/
+debug/
+image/
+include/
+Lib/
+myImage/
+OpenCV/
+PaddleOCR/
+release/
+SDK/
+
+# Qt / QMake 编译生成文件
+Makefile
+Makefile.Debug
+Makefile.Release
+object_script.*
+*_plugin_import.cpp
+/.qmake.stash
+/.qmake.cache
+*.pro.user
+*.pro.user.*
+
+# Qt MOC, UIC, RCC 生成的文件
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+
+# Visual Studio 相关及编译中转文件
 *.suo
 *.user
 *.ipch
@@ -10,43 +41,21 @@
 *.sdf
 *.VC.db
 *.VC.opendb
+*.vcxproj.user
 
-# Qt Creator 临时文件
-*.pro.user
-CMakeLists.txt.user
-*.autosave
-
-# 编译输出目录
-Debug/
-Release/
-x64/
-x86/
-build/
+# 编译生成的可执行文件、库和对象文件
 *.obj
+*.o
 *.exe
 *.dll
+*.so
+*.a
 *.lib
 *.pdb
 
-# OpenCV 等第三方库（建议用 vcpkg 或手动下载）
-OpenCV/*.dll
-OpenCV/*.exe
-
-# 系统文件
+# 日志及系统保留文件
+*.log
+*.bak
+*.autosave
 Thumbs.db
 .DS_Store
-
-# 日志/备份
-*.log
-*.bak.vs/
-*.ipch
-*.db
-*.dll
-*.exe
-*.lib
-*.pdb
-Debug/
-Release/
-x64/
-x86/
-*.pro.user
