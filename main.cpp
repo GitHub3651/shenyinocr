@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QLoggingCategory>
+#include <QTimer>
 #include "RuntimeGuard.h"
 
 #ifdef Q_OS_WIN
@@ -83,6 +84,14 @@ void setupLogging()
     qInstallMessageHandler(messageHandler);
 }
 
+void showRuntimeGuardExitMessage(const QString &message)
+{
+    QMessageBox msgBox(QMessageBox::Critical, "提示", message, QMessageBox::NoButton);
+    msgBox.addButton("确认退出", QMessageBox::AcceptRole);
+    msgBox.setWindowModality(Qt::ApplicationModal);
+    msgBox.exec();
+}
+
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
@@ -97,9 +106,19 @@ int main(int argc, char *argv[])
         QThread::msleep(100);     // 给一点时间清理
     });
     if (!RuntimeGuard::check()) {
-        QMessageBox::critical(nullptr, "提示", "系统初始化失败，请联系供应商。");
+        showRuntimeGuardExitMessage("系统初始化失败，请联系供应商。");
         return -1;
     }
+
+    QTimer runtimeGuardTimer;
+    QObject::connect(&runtimeGuardTimer, &QTimer::timeout, [](){
+        if (!RuntimeGuard::check()) {
+            showRuntimeGuardExitMessage("程序已失效，即将退出，请联系供应商。");
+            QCoreApplication::quit();
+        }
+    });
+    runtimeGuardTimer.start(24 * 60 * 60 * 1000);
+
     // 初始化一个共享内存对象，用于检查程序是否已被打开
     QSharedMemory shared("ecust");
 
