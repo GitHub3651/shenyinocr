@@ -1,8 +1,135 @@
 ﻿#include "Detector.h"
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <fstream>
 #include <mutex> // 必须添加，用于多线程安全锁
+
+namespace {
+
+struct DateTopLine {
+    bool valid = false;
+    cv::Point2f left;
+    cv::Point2f right;
+
+    float yAt(float x) const {
+        const float dx = right.x - left.x;
+        if (std::abs(dx) < 1e-3f) {
+            return std::min(left.y, right.y);
+        }
+        return left.y + (x - left.x) * (right.y - left.y) / dx;
+    }
+};
+
+DateTopLine buildDateTopLine(const std::vector<cv::Point>& datePoly) {
+    DateTopLine line;
+    if (datePoly.size() < 2) {
+        return line;
+    }
+
+    struct EdgeCandidate {
+        cv::Point2f p1;
+        cv::Point2f p2;
+        double len2 = 0.0;
+        double midY = 0.0;
+    };
+
+    std::vector<EdgeCandidate> edges;
+    edges.reserve(datePoly.size());
+
+    double maxLen2 = 0.0;
+    for (size_t i = 0; i < datePoly.size(); ++i) {
+        const cv::Point2f p1(static_cast<float>(datePoly[i].x), static_cast<float>(datePoly[i].y));
+        const cv::Point2f p2(static_cast<float>(datePoly[(i + 1) % datePoly.size()].x),
+                             static_cast<float>(datePoly[(i + 1) % datePoly.size()].y));
+        const double dx = p2.x - p1.x;
+        const double dy = p2.y - p1.y;
+        const double len2 = dx * dx + dy * dy;
+        if (len2 <= 1.0) {
+            continue;
+        }
+
+        EdgeCandidate edge;
+        edge.p1 = p1;
+        edge.p2 = p2;
+        edge.len2 = len2;
+        edge.midY = (p1.y + p2.y) * 0.5;
+        edges.push_back(edge);
+        maxLen2 = std::max(maxLen2, len2);
+    }
+
+    if (edges.empty()) {
+        return line;
+    }
+
+    // 日期框通常是宽矩形：先保留长边，再从长边中取屏幕上方那条作为“上框线”。
+    const double minLongEdgeLen2 = maxLen2 * 0.25;
+    const EdgeCandidate* topEdge = nullptr;
+    for (const auto& edge : edges) {
+        if (edge.len2 < minLongEdgeLen2) {
+            continue;
+        }
+        if (topEdge == nullptr || edge.midY < topEdge->midY) {
+            topEdge = &edge;
+        }
+    }
+
+    if (topEdge == nullptr || std::abs(topEdge->p1.x - topEdge->p2.x) < 1e-3f) {
+        return line;
+    }
+
+    line.valid = true;
+    line.left = topEdge->p1;
+    line.right = topEdge->p2;
+    if (line.right.x < line.left.x) {
+        std::swap(line.left, line.right);
+    }
+    return line;
+}
+
+void suppressCandidatesBelowDateLine(cv::Mat& matchResult,
+                                     const cv::Rect& searchRoi,
+                                     const cv::Size& templateSize,
+                                     const DateTopLine& dateTopLine,
+                                     double coordinateScale) {
+    if (!dateTopLine.valid || matchResult.empty() || coordinateScale <= 0.0) {
+        return;
+    }
+
+    const double invScale = 1.0 / coordinateScale;
+    const float invalidScore = -2.0f;
+
+    for (int y = 0; y < matchResult.rows; ++y) {
+        float* row = matchResult.ptr<float>(y);
+        const float bottomY = static_cast<float>(searchRoi.y + (y + templateSize.height) * invScale);
+        for (int x = 0; x < matchResult.cols; ++x) {
+            const float leftX = static_cast<float>(searchRoi.x + x * invScale);
+            const float rightX = static_cast<float>(searchRoi.x + (x + templateSize.width) * invScale);
+            if (bottomY > dateTopLine.yAt(leftX) || bottomY > dateTopLine.yAt(rightX)) {
+                row[x] = invalidScore;
+            }
+        }
+    }
+}
+
+cv::Rect buildRingSearchRoi(const cv::Size& imageSize,
+                            const cv::Rect& dateBounds,
+                            const DateTopLine& dateTopLine) {
+    if (dateTopLine.valid) {
+        const float leftY = dateTopLine.yAt(0.0f);
+        const float rightY = dateTopLine.yAt(static_cast<float>(imageSize.width));
+        int roiBottom = cvCeil(std::max(leftY, rightY));
+        roiBottom = std::max(0, std::min(imageSize.height, roiBottom));
+        return cv::Rect(0, 0, imageSize.width, roiBottom);
+    }
+
+    if (dateBounds.y > 0) {
+        return cv::Rect(0, 0, imageSize.width, dateBounds.y);
+    }
+    return cv::Rect(0, 0, imageSize.width, imageSize.height);
+}
+
+} // namespace
 
 bool CalibrationData::load(const std::string& yamlPath) {
     try {
@@ -119,14 +246,14 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
     // 生成生产日期多边形
     res.finalDatePoly = datePoly;
 
-    // 2. 限制拉环搜索区域：有日期多边形时，只搜索日期上方的整幅宽度区域。
+    // 2. 限制拉环搜索区域：有日期多边形时，以日期上框线的斜线为边界，只搜索其上方区域。
     // 没有日期多边形时保留全图搜索，此时产品本身后续也会被判为NG。
     cv::Rect ringSearchRoi(0, 0, gray.cols, gray.rows);
+    DateTopLine dateTopLine;
     if (datePoly.size() >= 3) {
         cv::Rect dateBounds = cv::boundingRect(datePoly) & cv::Rect(0, 0, gray.cols, gray.rows);
-        if (dateBounds.y > 0) {
-            ringSearchRoi = cv::Rect(0, 0, gray.cols, dateBounds.y);
-        }
+        dateTopLine = buildDateTopLine(datePoly);
+        ringSearchRoi = buildRingSearchRoi(gray.size(), dateBounds, dateTopLine);
     }
 
     cv::Mat searchGray = gray(ringSearchRoi);
@@ -168,6 +295,7 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
 
             cv::Mat matchR;
             cv::matchTemplate(smallGray, smallTpl, matchR, cv::TM_CCOEFF_NORMED);
+            suppressCandidatesBelowDateLine(matchR, ringSearchRoi, smallTpl.size(), dateTopLine, pyramidScale);
 
             double rMinV, rMaxV;
             cv::Point rMinL, rMaxL;
@@ -198,6 +326,7 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
 
                 cv::Mat matchR;
                 cv::matchTemplate(smallGray, smallTpl, matchR, cv::TM_CCOEFF_NORMED);
+                suppressCandidatesBelowDateLine(matchR, ringSearchRoi, smallTpl.size(), dateTopLine, pyramidScale);
                 double rMinV, rMaxV;
                 cv::Point rMinL, rMaxL;
                 cv::minMaxLoc(matchR, &rMinV, &rMaxV, &rMinL, &rMaxL);
@@ -234,6 +363,7 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
         cv::Mat exactArea = gray(exactRoi);
         cv::Mat matchR;
         cv::matchTemplate(exactArea, bestTpl, matchR, cv::TM_CCOEFF_NORMED);
+        suppressCandidatesBelowDateLine(matchR, exactRoi, bestTpl.size(), dateTopLine, 1.0);
         double rMinV, rMaxV;
         cv::Point rMinL, rMaxL;
         cv::minMaxLoc(matchR, &rMinV, &rMaxV, &rMinL, &rMaxL);
