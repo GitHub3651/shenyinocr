@@ -56,6 +56,7 @@ SOURCES += \
     PaddleOCR/src/preprocess_op.cpp \
     PaddleOCR/src/utility.cpp \
     TrackingPoseMatcher.cpp \
+    RuntimeGuard.cpp \
     Zhuizong.cpp \
     ccrashstack.cpp \
     cmvcamera.cpp \
@@ -80,6 +81,7 @@ HEADERS += \
     PaddleOCR/include/utility.h \
     TrackingPoseMatcher.h \
     TrackingTypes.h \
+    RuntimeGuard.h \
     Zhuizong.h \
     ccrashstack.h \
     cmvcamera.h \
