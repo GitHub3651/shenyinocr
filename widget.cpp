@@ -1751,18 +1751,22 @@ void Widget::showParameterCritical(const QString &title, const QString &message)
 
 void Widget::updateCurrentTemplateName()
 {
-    if (currentTemplateDirPath.isEmpty()) {
+    if (!m_currentTemplateNameVisible || currentTemplateDirPath.isEmpty()) {
+        ui->currentTemplateName->setText("--");
         return;
     }
 
     QDir templateDir(currentTemplateDirPath);
     if (!templateDir.exists()) {
+        ui->currentTemplateName->setText("--");
         return;
     }
 
     const QString templateName = templateDir.dirName();
     if (!templateName.isEmpty()) {
         ui->currentTemplateName->setText(templateName);
+    } else {
+        ui->currentTemplateName->setText("--");
     }
 }
 
@@ -2609,6 +2613,7 @@ void Widget::on_pushButton_5_clicked()
 
     // 5. 保存所有配置
     saveSettingsToDir(savePath);
+    m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
     QMessageBox::information(this, "成功", "模板及双框配置已全部保存！");
 }
@@ -2720,7 +2725,7 @@ void Widget::on_pushButton_4_clicked()
     currentTemplateDirPath = dirPath;
 
     saveSettings(); // 保存路径
-    loadSettingsFromDir(dirPath);
+    m_currentTemplateNameVisible = loadSettingsFromDir(dirPath);
     updateCurrentTemplateName();
     wrongindex = ui->lineEdit_12->text().toInt();
 
@@ -2872,10 +2877,11 @@ void Widget::on_pushButton_9_clicked()
 
 
 
-void Widget::loadSettingsFromDir(const QString &dirPath)
+bool Widget::loadSettingsFromDir(const QString &dirPath)
 {
     // 配置文件路径：用户选择的文件夹 + "app_settings.appset"
     QString settingsFilePath = dirPath + "/app_settings.appset";
+    const bool settingsFileExists = QFile::exists(settingsFilePath);
     QSettings settings(settingsFilePath, QSettings::IniFormat); // 对应保存时的INI格式
 
     if (settings.contains("spinbox_value")) ui->spinBox->setValue(settings.value("spinbox_value").toInt());
@@ -2961,6 +2967,7 @@ void Widget::loadSettingsFromDir(const QString &dirPath)
     }
 
     updateCurrentTemplateName();
+    return settingsFileExists && settings.status() == QSettings::NoError;
 }
 
 

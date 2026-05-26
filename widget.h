@@ -121,7 +121,7 @@ public:
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
     void display(const Mat* image);     ///< 显示图像
     void saveSettingsToDir(const QString &dirPath);
-    void loadSettingsFromDir(const QString &dirPath);
+    bool loadSettingsFromDir(const QString &dirPath);
 
 signals:
     // ========== 信号定义 ==========
@@ -228,6 +228,7 @@ private:
     Ui::Widget *ui;                     ///< UI界面指针
     bool m_confirmAllParamsRunning = false;
     bool m_allParamsConfirmed = false;
+    bool m_currentTemplateNameVisible = false;
     QStringList m_confirmAllParamErrors;
 
     // ========== 定时器 ==========
