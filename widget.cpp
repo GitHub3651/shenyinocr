@@ -472,6 +472,7 @@ Widget::Widget(QWidget *parent)
     qDebug() << "8. loadSettings 执行完毕";
 
     loadLastTemplateConfig(); // 加载模板图像
+    updateCurrentTemplateName();
 
     QTimer::singleShot(1000, this, [this]() {
         // 1. 先把从界面获取的文本存为一个 QString 变量
@@ -1747,6 +1748,23 @@ void Widget::showParameterCritical(const QString &title, const QString &message)
     QMessageBox::critical(this, title, message);
 }
 
+void Widget::updateCurrentTemplateName()
+{
+    if (currentTemplateDirPath.isEmpty()) {
+        return;
+    }
+
+    QDir templateDir(currentTemplateDirPath);
+    if (!templateDir.exists()) {
+        return;
+    }
+
+    const QString templateName = templateDir.dirName();
+    if (!templateName.isEmpty()) {
+        ui->currentTemplateName->setText(templateName);
+    }
+}
+
 /**
  * @brief 曝光确定按钮点击槽函数
  * @details 设置相机曝光值
@@ -2093,7 +2111,7 @@ void Widget::on_cancel_clicked()
 {
     qDebug() << "=== on_cancel_clicked() START ===";
 
-    // Step 2: 请求线程停止，并强制清空内存中的追踪模板
+    // Step 2: 请求线程停止，保留当前模板状态，便于再次启动
     if (myThread) {
         myThread->requestStop();
         myThread->stopTracking();
@@ -2103,10 +2121,6 @@ void Widget::on_cancel_clicked()
         cameraThread->requestStop();
         cameraThread->stopTracking();
     }
-
-    // 🔥 清理当前类的内存模板，以便下一次能重新画框
-    m_loadedTrackingTemplate.release();
-    hasValidBoxes = false;
 
     // 🔥 Step 3: myThread - 保持原逻辑
     bool myThreadWasRunning = false;
@@ -2594,6 +2608,7 @@ void Widget::on_pushButton_5_clicked()
 
     // 5. 保存所有配置
     saveSettingsToDir(savePath);
+    updateCurrentTemplateName();
     QMessageBox::information(this, "成功", "模板及双框配置已全部保存！");
 }
 
@@ -2705,6 +2720,7 @@ void Widget::on_pushButton_4_clicked()
 
     saveSettings(); // 保存路径
     loadSettingsFromDir(dirPath);
+    updateCurrentTemplateName();
     wrongindex = ui->lineEdit_12->text().toInt();
 
     qDebug()<<"currentTemplate"<<currentTemplateDirPath;
@@ -2712,10 +2728,16 @@ void Widget::on_pushButton_4_clicked()
     initOverlapDetectorFromCurrentDir();
 
     //设置PLC参数
+    if (!ui->checkBox->isChecked())
+    {
+        QMessageBox::information(this, "提示", "模板已选择");
+        return;
+    }
+
     //判断plc是否连接
     if (!client->Connected())
     {
-        QMessageBox::warning(this, "警告", "PLC未连接！");
+        QMessageBox::warning(this, "警告", "已启用触发，但PLC未连接！");
         return;
     }
 
@@ -2936,6 +2958,8 @@ void Widget::loadSettingsFromDir(const QString &dirPath)
             savedDatePoly = calib.date_poly;
         }
     }
+
+    updateCurrentTemplateName();
 }
 
 
@@ -3160,6 +3184,8 @@ void Widget::on_plcbtn_clicked()
         QMessageBox::warning(this, "警告", "采集失败,请打开设备！");
         return;
     }
+
+    updateCurrentTemplateName();
 
     // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
     if (!hasValidBoxes || m_loadedTrackingTemplate.empty()) {

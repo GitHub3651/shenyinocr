@@ -222,6 +222,7 @@ private:
     void showParameterWarning(const QString &title, const QString &message);
     void showParameterCritical(const QString &title, const QString &message);
     void addConfirmAllParamError(const QString &message);
+    void updateCurrentTemplateName();
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
