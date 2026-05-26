@@ -2744,6 +2744,11 @@ void Widget::on_pushButton_4_clicked()
     if (!client->Connected())
     {
         QMessageBox::warning(this, "警告", "已启用触发，但PLC未连接！");
+        if (m_currentTemplateNameVisible) {
+            QMessageBox::information(this, "提示", "模板已选择");
+        } else {
+            QMessageBox::warning(this, "提示", "模板加载失败，请检查模板文件夹");
+        }
         return;
     }
 
@@ -3193,11 +3198,19 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
+    updateCurrentTemplateName();
+
+    // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
+    if (!hasValidBoxes || m_loadedTrackingTemplate.empty()) {
+        QMessageBox::warning(this, "操作规范", "缺乏追踪模板，无法启动！\n\n1. 如果是新产品：请先【拍照】，画好双框并点击【保存模板】\n2. 如果是换线复用：请先点击【加载模板】");
+        return;
+    }
+
     if (!m_allParamsConfirmed) {
         QMessageBox messageBox(this);
         messageBox.setIcon(QMessageBox::Warning);
         messageBox.setWindowTitle("操作确认");
-        messageBox.setText("当前没有确认所有参数，是否继续运行");
+        messageBox.setText("当前没有点击“确认所有参数”按钮，是否继续运行");
 
         QPushButton *continueButton = messageBox.addButton("继续运行", QMessageBox::AcceptRole);
         QPushButton *cancelButton = messageBox.addButton("取消", QMessageBox::RejectRole);
@@ -3209,14 +3222,6 @@ void Widget::on_plcbtn_clicked()
         }
     }
     m_allParamsConfirmed = false;
-
-    updateCurrentTemplateName();
-
-    // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
-    if (!hasValidBoxes || m_loadedTrackingTemplate.empty()) {
-        QMessageBox::warning(this, "操作规范", "缺乏追踪模板，无法启动！\n\n1. 如果是新产品：请先【拍照】，画好双框并点击【保存模板】\n2. 如果是换线复用：请先点击【加载模板】");
-        return;
-    }
 
     // ==========================================================
     // 以下为原有启动线程逻辑，完全保留你所有的 PLC/相机 流程
@@ -4034,7 +4039,7 @@ void Widget::on_confirmAllParamsButton_clicked()
     ui->pushButton_8->click();
 
     m_confirmAllParamsRunning = false;
-    m_allParamsConfirmed = m_confirmAllParamErrors.isEmpty();
+    m_allParamsConfirmed = true;
 
     if (m_confirmAllParamErrors.isEmpty()) {
         QMessageBox::information(this, "提示", "所有参数设置成功！");
