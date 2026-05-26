@@ -227,6 +227,7 @@ private:
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
     bool m_confirmAllParamsRunning = false;
+    bool m_allParamsConfirmed = false;
     QStringList m_confirmAllParamErrors;
 
     // ========== 定时器 ==========

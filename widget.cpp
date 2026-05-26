@@ -32,6 +32,7 @@
 #include <QString>
 #include <QPixmap>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QDesktopServices>
 #include <QDateTime>
 #include <QApplication>
@@ -3185,6 +3186,23 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
+    if (!m_allParamsConfirmed) {
+        QMessageBox messageBox(this);
+        messageBox.setIcon(QMessageBox::Warning);
+        messageBox.setWindowTitle("操作确认");
+        messageBox.setText("当前没有确认所有参数，是否继续运行");
+
+        QPushButton *continueButton = messageBox.addButton("继续运行", QMessageBox::AcceptRole);
+        QPushButton *cancelButton = messageBox.addButton("取消", QMessageBox::RejectRole);
+        messageBox.setDefaultButton(cancelButton);
+        messageBox.exec();
+
+        if (messageBox.clickedButton() != continueButton) {
+            return;
+        }
+    }
+    m_allParamsConfirmed = false;
+
     updateCurrentTemplateName();
 
     // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
@@ -4009,6 +4027,7 @@ void Widget::on_confirmAllParamsButton_clicked()
     ui->pushButton_8->click();
 
     m_confirmAllParamsRunning = false;
+    m_allParamsConfirmed = m_confirmAllParamErrors.isEmpty();
 
     if (m_confirmAllParamErrors.isEmpty()) {
         QMessageBox::information(this, "提示", "所有参数设置成功！");
