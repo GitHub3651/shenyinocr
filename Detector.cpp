@@ -119,10 +119,25 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
     // 生成生产日期多边形
     res.finalDatePoly = datePoly;
 
-    // 2. 全图降采样
-    cv::Mat smallGray;
+    // 2. 限制拉环搜索区域：有日期多边形时，只搜索日期上方的整幅宽度区域。
+    // 没有日期多边形时保留全图搜索，此时产品本身后续也会被判为NG。
+    cv::Rect ringSearchRoi(0, 0, gray.cols, gray.rows);
+    if (datePoly.size() >= 3) {
+        cv::Rect dateBounds = cv::boundingRect(datePoly) & cv::Rect(0, 0, gray.cols, gray.rows);
+        if (dateBounds.y > 0) {
+            ringSearchRoi = cv::Rect(0, 0, gray.cols, dateBounds.y);
+        }
+    }
 
-    cv::resize(gray, smallGray, cv::Size(), pyramidScale, pyramidScale, cv::INTER_AREA);
+    cv::Mat searchGray = gray(ringSearchRoi);
+    if (searchGray.empty() ||
+        searchGray.cols * pyramidScale < 1.0 ||
+        searchGray.rows * pyramidScale < 1.0) {
+        return res;
+    }
+
+    cv::Mat smallGray;
+    cv::resize(searchGray, smallGray, cv::Size(), pyramidScale, pyramidScale, cv::INTER_AREA);
 
     double bestValSmall = -1.0;
     cv::Point bestLocSmall;
@@ -200,16 +215,21 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
 
     // 3. 原图局部精配
     if (bestValSmall >= 0.35 && bestAngleIdx >= 0) {
-        // 还原粗配坐标到原图尺寸
-        cv::Point roughLoc(bestLocSmall.x / pyramidScale, bestLocSmall.y / pyramidScale);
+        // 还原粗配坐标到原图尺寸，并补回搜索ROI偏移
+        cv::Point roughLoc(ringSearchRoi.x + bestLocSmall.x / pyramidScale,
+                           ringSearchRoi.y + bestLocSmall.y / pyramidScale);
         const cv::Mat& bestTpl = preRotatedRings[bestAngleIdx];
 
         int padding = 40;
-        int sx = std::max(0, roughLoc.x - padding);
-        int sy = std::max(0, roughLoc.y - padding);
-        int sw = std::min(gray.cols - sx, bestTpl.cols + 2 * padding);
-        int sh = std::min(gray.rows - sy, bestTpl.rows + 2 * padding);
-        cv::Rect exactRoi(sx, sy, sw, sh);
+        cv::Rect exactRoi(roughLoc.x - padding,
+                          roughLoc.y - padding,
+                          bestTpl.cols + 2 * padding,
+                          bestTpl.rows + 2 * padding);
+        exactRoi &= ringSearchRoi;
+
+        if (exactRoi.width < bestTpl.cols || exactRoi.height < bestTpl.rows) {
+            return res;
+        }
 
         cv::Mat exactArea = gray(exactRoi);
         cv::Mat matchR;
@@ -223,7 +243,7 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
         // 🔥 修复致命BUG：将错误的 45 纠正回 0.45 ！！！！
         if (rMaxV >= 0.2) {
             res.foundRing = true;
-            res.locRing = cv::Point(rMaxL.x + sx, rMaxL.y + sy);
+            res.locRing = cv::Point(rMaxL.x + exactRoi.x, rMaxL.y + exactRoi.y);
             res.angleRing = preRotatedAngles[bestAngleIdx];
             res.shapeRing = cv::Size(bestTpl.cols, bestTpl.rows);
 
