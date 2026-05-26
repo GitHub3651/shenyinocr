@@ -210,13 +210,23 @@ private slots:
 
     void on_pushButton_12_clicked();
 
+    void on_confirmAllParamsButton_clicked();
+
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
     cv::Mat m_loadedTrackingTemplate;
+    void showParameterInfo(const QString &title, const QString &message);
+    void showParameterInfoAsError(const QString &title, const QString &message);
+    void showParameterWarning(const QString &title, const QString &message);
+    void showParameterCritical(const QString &title, const QString &message);
+    void addConfirmAllParamError(const QString &message);
+
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
+    bool m_confirmAllParamsRunning = false;
+    QStringList m_confirmAllParamErrors;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器

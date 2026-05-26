@@ -1698,6 +1698,55 @@ void Widget::showscreen()
     this->show();
 }
 
+void Widget::addConfirmAllParamError(const QString &message)
+{
+    const QString normalizedMessage = message.trimmed();
+    if (normalizedMessage.isEmpty() || m_confirmAllParamErrors.contains(normalizedMessage)) {
+        return;
+    }
+
+    m_confirmAllParamErrors.append(normalizedMessage);
+}
+
+void Widget::showParameterInfo(const QString &title, const QString &message)
+{
+    if (m_confirmAllParamsRunning) {
+        return;
+    }
+
+    QMessageBox::information(this, title, message);
+}
+
+void Widget::showParameterInfoAsError(const QString &title, const QString &message)
+{
+    if (m_confirmAllParamsRunning) {
+        addConfirmAllParamError(message);
+        return;
+    }
+
+    QMessageBox::information(this, title, message);
+}
+
+void Widget::showParameterWarning(const QString &title, const QString &message)
+{
+    if (m_confirmAllParamsRunning) {
+        addConfirmAllParamError(message);
+        return;
+    }
+
+    QMessageBox::warning(this, title, message);
+}
+
+void Widget::showParameterCritical(const QString &title, const QString &message)
+{
+    if (m_confirmAllParamsRunning) {
+        addConfirmAllParamError(message);
+        return;
+    }
+
+    QMessageBox::critical(this, title, message);
+}
+
 /**
  * @brief 曝光确定按钮点击槽函数
  * @details 设置相机曝光值
@@ -1706,14 +1755,14 @@ void Widget::on_sureButton_clicked()
 {
     if (m_bOpenDevice == false)
     {
-        QMessageBox::warning(this, "警告", "未打开相机，无法设置曝光！");
+        showParameterWarning("警告", "未打开相机，无法设置曝光！");
         return;
     }
     else
     {
         int exposureValue = ui->spinBox->value();
         qDebug() << "SetExposureTime:" <<exposureValue<<m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-        QMessageBox::information(this, "提示", "相机曝光设置成功！");
+        showParameterInfo("提示", "相机曝光设置成功！");
     }
 }
 
@@ -1772,7 +1821,7 @@ void Widget::on_Saveimage_clicked()
 
     // 统一弹窗警告
     if (!isParamValid) {
-        QMessageBox::warning(this, "参数错误", "图像处理参数必须均为大于1的奇数，请修正后重试！");
+        showParameterWarning("参数错误", "图像处理参数必须均为大于1的奇数，请修正后重试！");
         return;
     }
 
@@ -1916,7 +1965,7 @@ void Widget::on_pushButton_8_clicked()
 {
 if (!client->Connected())
 {
-    QMessageBox::warning(this, "警告", "PLC未连接！");
+    showParameterWarning("警告", "PLC未连接！");
     return;
 }
 
@@ -1937,7 +1986,7 @@ delay_time[0] = (unsigned char)((0xFF00 & value4) >> 8);
 int tmp4 = client->WriteArea(S7AreaDB, 1, 980, 2, S7WLWord, delay_time);
 if (tmp4 != 0)
 {
-    QMessageBox::warning(this, "error", "设置剔除时间失败");
+    showParameterWarning("error", "设置剔除时间失败");
     return;
 }
 
@@ -1957,7 +2006,7 @@ delay_data[0] = (unsigned char)((0xFF000000 & value2) >> 24);
 int tmp2 = client->WriteArea(S7AreaDB, 1, 920, 4, S7WLDWord, delay_data);
 if (tmp2 != 0)
 {
-    QMessageBox::warning(this, "error", "设置剔除距离失败");
+    showParameterWarning("error", "设置剔除距离失败");
     return;
 }
 
@@ -1976,7 +2025,7 @@ pz_time[0] = (unsigned char)((0xFF00 & value5) >> 8);
 int tmp5 = client->WriteArea(S7AreaDB, 1, 982, 2, S7WLWord, pz_time);
 if (tmp5 != 0)
 {
-    QMessageBox::warning(this, "error", "设置拍照时间失败");
+    showParameterWarning("error", "设置拍照时间失败");
     return;
 }
 
@@ -1999,11 +2048,11 @@ v_data[0] = (unsigned char)((0xFF000000 & value) >> 24);
 int tmp = client->WriteArea(S7AreaDB, 1, 924, 4, S7WLDWord, v_data);
 if (tmp != 0)
 {
-    QMessageBox::warning(this, "error", "设置拍照距离失败");
+    showParameterWarning("error", "设置拍照距离失败");
     return;
 }
 
-QMessageBox::information(this, "提示", "所有设置已经完成！");
+showParameterInfo("提示", "所有设置已经完成！");
 }
 
 /**
@@ -2181,14 +2230,14 @@ void Widget::on_textsure_btn_clicked()
     {
         // 1. 检查是否存在有效的模板路径
         if (currentTemplateDirPath.isEmpty()) {
-            QMessageBox::information(this, "提示", "请先选择模板文件夹");
+            showParameterInfoAsError("提示", "请先选择模板文件夹");
             return;
         }
         // 2. 读取当前修改后的目标字符
         QString newMubiaozifu = ui->dateEdit->toPlainText();
         if (newMubiaozifu.isEmpty()) {
             digitTemplates.clear();
-            QMessageBox::information(this, "提示", "目标字符为空，已清空模板");
+            showParameterInfoAsError("提示", "目标字符为空，已清空模板");
             return;
         }
 
@@ -2257,17 +2306,17 @@ void Widget::on_textsure_btn_clicked()
         // ================== 修复 4：友好的报警和隔离机制 ==================
         if (hasMissing) {
             // 如果有任何图片读取失败或丢失，绝不更新到全局的 digitTemplates，同时给出严厉警告
-            QMessageBox::critical(this, "严重警告",
+            showParameterCritical("严重警告",
                 QString("以下字符未在文件夹中找到对应图片，或图片读取失败：\n[ %1 ]\n\n请检查模板文件夹内的图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。").arg(missingNames));
             return;
         }
 
         // 5. 全部成功后，再更新到全局容器
         digitTemplates = tempTemplates;
-        QMessageBox::information(this, "提示", QString("目标字符确认成功，共加载 %1 个模板！").arg(digitTemplates.size()));
+        showParameterInfo("提示", QString("目标字符确认成功，共加载 %1 个模板！").arg(digitTemplates.size()));
     }
     else{
-     QMessageBox::information(this, "提示", "目标字符确认成功");
+     showParameterInfo("提示", "目标字符确认成功");
     }
 
 
@@ -2397,7 +2446,7 @@ void Widget::on_pushButton_clicked()
 
     // 统一弹窗警告
     if (!isParamValid) {
-        QMessageBox::warning(this, "参数错误", "图像处理参数必须均为大于1的奇数，请修正后重试！");
+        showParameterWarning("参数错误", "图像处理参数必须均为大于1的奇数，请修正后重试！");
         return;
     }
 
@@ -2406,7 +2455,7 @@ void Widget::on_pushButton_clicked()
                        horizontalKernel, verticalKernel);
     emit kernal(kernelsize);
 
-    QMessageBox::information(this, "提示", "图像参数设置成功");
+    showParameterInfo("提示", "图像参数设置成功");
 }
 
 /**
@@ -2417,7 +2466,7 @@ void Widget::on_pushButton_3_clicked()
 {
     int number = ui->lineEdit_yuzhi->text().toDouble();
     emit ssim(number);
-    QMessageBox::information(this, "提示", "阈值设置成功");
+    showParameterInfo("提示", "阈值设置成功");
 }
 
 /**
@@ -2795,7 +2844,7 @@ void Widget::on_pushButton_9_clicked()
     }
 
     emit rotate(angleValue);
-    QMessageBox::information(this, "提示", "旋转角度设置成功");
+    showParameterInfo("提示", "旋转角度设置成功");
 }
 
 
@@ -3340,7 +3389,7 @@ void Widget::on_plcmodebtn_clicked()
     PLCmode = ui->comboBox_3->currentIndex();
     if (!client->Connected())
     { // 未连接则不执行
-        QMessageBox::warning(this, "警告", "PLC未连接！");
+        showParameterWarning("警告", "PLC未连接！");
         return;
     }
 
@@ -3355,7 +3404,12 @@ void Widget::on_plcmodebtn_clicked()
 
         // 写入DB1的1032位置，写入1个字节
         int tmp2 = client->WriteArea(S7AreaDB, 1, 1032, 1, S7WLByte, mode_data); // 使用S7WLByte确保只写入1个字节
-        QMessageBox::information(this, "提示", "连续模式设置成功");
+        if (tmp2 != 0)
+        {
+            showParameterWarning("error", "设置连续模式失败");
+            return;
+        }
+        showParameterInfo("提示", "连续模式设置成功");
     }
     else if (PLCmode == 1)
     {
@@ -3368,7 +3422,12 @@ void Widget::on_plcmodebtn_clicked()
 
         // 写入DB1的1032位置，写入1个字节
         int tmp2 = client->WriteArea(S7AreaDB, 1, 1032, 1, S7WLByte, mode_data); // 使用S7WLByte确保只写入1个字节
-        QMessageBox::information(this, "提示", "间歇模式设置成功");
+        if (tmp2 != 0)
+        {
+            showParameterWarning("error", "设置间歇模式失败");
+            return;
+        }
+        showParameterInfo("提示", "间歇模式设置成功");
     }
 }
 
@@ -3389,7 +3448,7 @@ void Widget::on_pushButton_2_clicked()
 
     emit caijianchicun(width_min, width_max, height_min, height_max, block_size1,  horizontalKernel, verticalKernel);
     emit kernal(kernelsize);
-    QMessageBox::warning(this, "提示", "模板尺寸设置成功");
+    showParameterInfo("提示", "模板尺寸设置成功");
 }
 
 // 剔除位置设置
@@ -3789,7 +3848,7 @@ void Widget::on_pushButton_7_clicked()
     }
 
     emit choosechannel(colorchannel);
-    QMessageBox::information(this, "提示", "颜色通道设置成功");
+    showParameterInfo("提示", "颜色通道设置成功");
 
 }
 
@@ -3830,7 +3889,7 @@ void Widget::on_pushButton_11_clicked()
 void Widget::on_pushButton_12_clicked()
 {
     if (m_pcMyCamera == nullptr || m_bOpenDevice == false) {
-        QMessageBox::warning(this, "提示", "相机未初始化或未打开，无法设置增益！");
+        showParameterWarning("提示", "相机未初始化或未打开，无法设置增益！");
         return;
     }
 
@@ -3838,7 +3897,7 @@ void Widget::on_pushButton_12_clicked()
     MVCC_FLOATVALUE stParam = {0};
     int nRet = m_pcMyCamera->GetFloatValue("Gain", &stParam);
     if (nRet != MV_OK) {
-        QMessageBox::warning(this, "提示", QString::fromLocal8Bit("无法获取相机增益支持的范围！错误码：%1").arg(nRet));
+        showParameterWarning("提示", QString::fromLocal8Bit("无法获取相机增益支持的范围！错误码：%1").arg(nRet));
         return;
     }
 
@@ -3848,13 +3907,13 @@ void Widget::on_pushButton_12_clicked()
     float gainValue = gainStr.toFloat(&isOk);
 
     if (!isOk) {
-        QMessageBox::warning(this, "提示", QString::fromLocal8Bit("请输入有效的增益数字！\n当前相机允许范围：%1 ~ %2").arg(stParam.fMin).arg(stParam.fMax));
+        showParameterWarning("提示", QString::fromLocal8Bit("请输入有效的增益数字！\n当前相机允许范围：%1 ~ %2").arg(stParam.fMin).arg(stParam.fMax));
         return;
     }
 
     // 检查输入值是否在支持的范围内
     if (gainValue < stParam.fMin || gainValue > stParam.fMax) {
-        QMessageBox::warning(this, "提示", QString::fromLocal8Bit("输入的增益值超出限制！\n当前相机允许范围：%1 ~ %2").arg(stParam.fMin).arg(stParam.fMax));
+        showParameterWarning("提示", QString::fromLocal8Bit("输入的增益值超出限制！\n当前相机允许范围：%1 ~ %2").arg(stParam.fMin).arg(stParam.fMax));
         // 可以选择自动规整到最大或最小值
         // gainValue = qBound(stParam.fMin, gainValue, stParam.fMax);
         // ui->lineEdit_14->setText(QString::number(gainValue));
@@ -3865,10 +3924,10 @@ void Widget::on_pushButton_12_clicked()
     nRet = m_pcMyCamera->SetFloatValue("Gain", gainValue);
     if (nRet == MV_OK) {
         qDebug() << "SetGain success:" << gainValue;
-        QMessageBox::information(this, "提示", "相机增益设置成功！");
+        showParameterInfo("提示", "相机增益设置成功！");
     } else {
         qDebug() << "SetGain failed! Ret:" << nRet;
-        QMessageBox::warning(this, "提示", QString::fromLocal8Bit("相机增益设置失败！错误码：%1").arg(nRet));
+        showParameterWarning("提示", QString::fromLocal8Bit("相机增益设置失败！错误码：%1").arg(nRet));
     }
 }
 
@@ -3878,6 +3937,7 @@ void Widget::on_WriteVDpushButton_clicked()
 
     if (!client->Connected())
     {
+        showParameterWarning("警告", "PLC未连接！");
         return;
     }
 
@@ -3896,11 +3956,38 @@ void Widget::on_WriteVDpushButton_clicked()
     if (tmp != 0)
     {
         // 写入失败
-        QMessageBox::warning(this, "error", "设置错误，请重新设置");
+        showParameterWarning("error", "设置拍照距离失败");
     }
     else
     {
         // 写入成功
-        QMessageBox::information(this, "提示", "拍照距离设置成功");
+        showParameterInfo("提示", "拍照距离设置成功");
+    }
+}
+
+void Widget::on_confirmAllParamsButton_clicked()
+{
+    m_confirmAllParamsRunning = true;
+    m_confirmAllParamErrors.clear();
+
+    ui->textsure_btn->click();
+    ui->WriteVDpushButton->click();
+    ui->plcmodebtn->click();
+    ui->pushButton_7->click();
+    ui->pushButton_3->click();
+    ui->sureButton->click();
+    ui->pushButton_12->click();
+    ui->pushButton_9->click();
+    ui->pushButton_2->click();
+    ui->pushButton->click();
+    ui->pushButton_8->click();
+
+    m_confirmAllParamsRunning = false;
+
+    if (m_confirmAllParamErrors.isEmpty()) {
+        QMessageBox::information(this, "提示", "所有参数设置成功！");
+    } else {
+        QMessageBox::warning(this, "设置失败",
+                             QString("以下参数设置失败：\n%1").arg(m_confirmAllParamErrors.join("\n")));
     }
 }
