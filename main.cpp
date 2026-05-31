@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
     QTimer runtimeGuardTimer;
     QObject::connect(&runtimeGuardTimer, &QTimer::timeout, [](){
         if (!RuntimeGuard::check()) {
-            showRuntimeGuardExitMessage("程序已失效，即将退出，请联系供应商。");
+            showRuntimeGuardExitMessage("程序出错，即将退出，请联系供应商。");
             QCoreApplication::quit();
         }
     });
