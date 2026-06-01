@@ -47,6 +47,7 @@ SOURCES += \
     CameraThread.cpp \
     Detector.cpp \
     ImageManipulator.cpp \
+    MultiCameraUnit.cpp \
     PaddleOCR/src/clipper.cpp \
     PaddleOCR/src/config.cpp \
     PaddleOCR/src/ocr_cls.cpp \
@@ -74,6 +75,7 @@ HEADERS += \
     Detector.h \
     IMultiCameraProvider.h \
     MultiCameraTypes.h \
+    MultiCameraUnit.h \
     PaddleOCR/include/clipper.h \
     PaddleOCR/include/config.h \
     PaddleOCR/include/ocr_cls.h \
