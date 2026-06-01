@@ -62,6 +62,7 @@ SOURCES += \
     cmvcamera.cpp \
     imagelabel.cpp \
         main.cpp \
+    multicamerawidget.cpp \
     mythread.cpp \
     snap7.cpp \
     templatematch.cpp \
@@ -87,12 +88,14 @@ HEADERS += \
     cmvcamera.h \
     imageManipulator.h \
     imagelabel.h \
+    multicamerawidget.h \
     mythread.h \
     snap7.h \
     templatematch.h \
         widget.h
 
 FORMS += \
+        multicamerawidget.ui \
         widget.ui
 
 RESOURCES += \

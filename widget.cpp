@@ -14,6 +14,7 @@
 #include "enlarge.h"
 #include "choosebarcodedialog.h"
 #include "snap7.h"
+#include "multicamerawidget.h"
 
 
 // Qt核心组件
@@ -3185,6 +3186,21 @@ void Widget::on_CloseCamera_clicked()
     m_bOpenDevice = false;
     ui->statusLabel->setText("相机已关闭");
     ui->statusLabel->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
+}
+
+void Widget::on_MultiCameraMode_clicked()
+{
+    if (!m_multiCameraWidget) {
+        m_multiCameraWidget = new MultiCameraWidget(this);
+        m_multiCameraWidget->setAttribute(Qt::WA_DeleteOnClose);
+        connect(m_multiCameraWidget, &QObject::destroyed, this, [this]() {
+            m_multiCameraWidget = nullptr;
+        });
+    }
+
+    m_multiCameraWidget->show();
+    m_multiCameraWidget->raise();
+    m_multiCameraWidget->activateWindow();
 }
 
 

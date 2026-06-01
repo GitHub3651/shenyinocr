@@ -78,6 +78,8 @@ namespace Ui {
 class Widget;
 }
 
+class MultiCameraWidget;
+
 /**
  * @brief 主窗口类
  *
@@ -211,6 +213,7 @@ private slots:
     void on_pushButton_12_clicked();
 
     void on_confirmAllParamsButton_clicked();
+    void on_MultiCameraMode_clicked();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -226,6 +229,7 @@ private:
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
+    MultiCameraWidget *m_multiCameraWidget = nullptr;
     bool m_confirmAllParamsRunning = false;
     bool m_allParamsConfirmed = false;
     bool m_currentTemplateNameVisible = false;
