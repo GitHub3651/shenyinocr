@@ -47,6 +47,8 @@ SOURCES += \
     CameraThread.cpp \
     Detector.cpp \
     ImageManipulator.cpp \
+    MultiCameraController.cpp \
+    MultiCameraSyncManager.cpp \
     MultiCameraUnit.cpp \
     PaddleOCR/src/clipper.cpp \
     PaddleOCR/src/config.cpp \
@@ -74,6 +76,8 @@ HEADERS += \
     CryptoUtils.h \
     Detector.h \
     IMultiCameraProvider.h \
+    MultiCameraController.h \
+    MultiCameraSyncManager.h \
     MultiCameraTypes.h \
     MultiCameraUnit.h \
     PaddleOCR/include/clipper.h \
