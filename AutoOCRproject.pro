@@ -72,6 +72,8 @@ HEADERS += \
     CameraThread.h \
     CryptoUtils.h \
     Detector.h \
+    IMultiCameraProvider.h \
+    MultiCameraTypes.h \
     PaddleOCR/include/clipper.h \
     PaddleOCR/include/config.h \
     PaddleOCR/include/ocr_cls.h \
