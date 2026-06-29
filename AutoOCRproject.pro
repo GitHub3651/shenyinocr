@@ -60,6 +60,7 @@ SOURCES += \
     PaddleOCR/src/utility.cpp \
     TrackingPoseMatcher.cpp \
     RuntimeGuard.cpp \
+    TissueRollDetector.cpp \
     Zhuizong.cpp \
     ccrashstack.cpp \
     cmvcamera.cpp \
@@ -91,6 +92,7 @@ HEADERS += \
     TrackingPoseMatcher.h \
     TrackingTypes.h \
     RuntimeGuard.h \
+    TissueRollDetector.h \
     Zhuizong.h \
     ccrashstack.h \
     cmvcamera.h \

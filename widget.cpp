@@ -235,6 +235,9 @@ static qint64 g_lastDetectTime = 0;
 // ============ 新增：用于绘制钢印的数据缓存 ============
 static std::vector<cv::Point> g_lastStampPoly; // 保存钢印的多边形坐标
 static bool g_lastStampIsOverlap = false;      // 记录钢印是否发生重叠
+static bool g_allowTissueDetectionFrameDisplay = false;
+static TissueRollItem g_lastTissueRoll;
+static bool g_hasLastTissueRoll = false;
 
 static cv::Point2f transformPoint(const cv::Mat& affine, const cv::Point2f& pt)
 {
@@ -391,6 +394,7 @@ Widget::Widget(QWidget *parent)
     qRegisterMetaType<cv::Rect2d>("cv::Rect2d");
     qRegisterMetaType<std::vector<cv::Point>>("std::vector<cv::Point>");
     qRegisterMetaType<DetectionPose>("DetectionPose");
+    qRegisterMetaType<TissueRollResult>("TissueRollResult");
     qRegisterMetaType<QString>("QString");
 
     // 初始化追踪对象（使用智能指针）
@@ -604,14 +608,11 @@ void Widget::initWidget()
 
     // 连接线程信号槽 - 图像检测（根据检测模式选择不同的处理函数）
     QObject::connect(myThread, &MyThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-        if (ui->comboBox_4->currentIndex() == 2) {
-            this->slot_readAndDetect(&img, pose);
-        } else if(ui->comboBox_4->currentIndex() == 0) {
-            this->slot_readAndDetect3(&img, pose);
-        } else if(ui->comboBox_4->currentIndex() == 1){
-            this->slot_readAndDetect4(&img, pose);
-        }
+        this->dispatchDetectionByMode(&img, pose);
     });
+    QObject::connect(myThread, &MyThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
+        this->slot_handleTissueResult(&img, result);
+    }, Qt::QueuedConnection);
 
 
     // 连接其他信号槽
@@ -1129,6 +1130,14 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
     // 1. 校验图像有效性
     if (!image || image->empty()) return;
 
+    // 纸巾检测生产运行时，画面应当和检测结果绑定。
+    // 普通预览帧不再覆盖界面，只有检测槽主动放行的那一帧会显示。
+    const bool tissueMode = ui->comboBox_4->currentIndex() == 3;
+    const bool productionRunning = isCollecting || !ui->plcbtn->isEnabled();
+    if (tissueMode && productionRunning && !g_allowTissueDetectionFrameDisplay) {
+        return;
+    }
+
     // 2. 深拷贝原图，准备作为画板
     cv::Mat displayImg;
     if (image->channels() == 3) {
@@ -1143,7 +1152,8 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
     if (!g_lastDrawResults.empty() ||
         !g_lastPose.trackingPoly.empty() ||
         !g_lastPose.datePoly.empty() ||
-        !g_lastStampPoly.empty()) {
+        !g_lastStampPoly.empty() ||
+        (tissueMode && g_hasLastTissueRoll)) {
 
         // 动态计算自适应比例
         double dynamicScale = std::max(1.0, displayImg.rows / 800.0);
@@ -1197,6 +1207,21 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
             std::vector<std::vector<cv::Point>> polys = {g_lastStampPoly};
             cv::polylines(displayImg, polys, true, stampColor, boxThickness);
         }
+
+        if (tissueMode && g_hasLastTissueRoll) {
+            const TissueRollItem& roll = g_lastTissueRoll;
+            const int outerRadius = std::max(1, cvRound(std::max(roll.outerAxes.width, roll.outerAxes.height)));
+            const int innerRadius = std::max(1, cvRound(std::max(roll.innerAxes.width, roll.innerAxes.height)));
+
+            cv::circle(displayImg,
+                       cv::Point(cvRound(roll.center.x), cvRound(roll.center.y)),
+                       outerRadius,
+                       cv::Scalar(0, 255, 255), boxThickness);
+            cv::circle(displayImg,
+                       cv::Point(cvRound(roll.innerCenter.x), cvRound(roll.innerCenter.y)),
+                       innerRadius,
+                       cv::Scalar(255, 0, 0), boxThickness);
+        }
     }
 
     // 4. OpenCV Mat 转 Qt QImage 显示
@@ -1217,9 +1242,35 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
 
 
 /**
+ * @brief 根据 comboBox_4 当前识别模式分发检测逻辑
+ * @param image 输入图像指针
+ * @param pose 当前检测姿态
+ */
+void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
+{
+    if (!image || image->empty()) {
+        qDebug() << "[DETECTION_DISPATCH] Empty image, skip detection.";
+        return;
+    }
+
+    const int mode = ui->comboBox_4->currentIndex();
+    if (mode == 2) {
+        slot_readAndDetect(image, pose);
+    } else if (mode == 0) {
+        slot_readAndDetect3(image, pose);
+    } else if (mode == 1) {
+        slot_readAndDetect4(image, pose);
+    } else if (mode == 3) {
+        qDebug() << "[DETECTION_DISPATCH] Tissue mode is handled in worker thread.";
+    } else {
+        qDebug() << "[DETECTION_DISPATCH] Unsupported comboBox_4 index:" << mode;
+    }
+}
+
+/**
  * @brief OCR识别检测槽函数
  * @param image 输入图像指针
- * @param diffbox 检测区域
+ * @param pose 当前检测姿态
  * @details 使用PaddleOCR进行文字识别，支持中英文、数字识别
  */
 void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
@@ -1561,6 +1612,130 @@ void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
 }
 
 /**
+ * @brief 纸巾卷检测结果处理槽函数
+ * @param image 输入整张相机图像
+ * @param tissueResult 工作线程计算出的纸巾检测结果
+ */
+void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResult)
+{
+    if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
+        qDebug() << "[TISSUE_DETECT] Delayed wrongremove triggered, wrongindex:" << wrongindex;
+        wrongremove();
+        removalQueue.pop();
+    }
+
+    currentImagesSnapshot = totalImages;
+    auto start = std::chrono::high_resolution_clock::now();
+
+    if (!image || image->empty()) {
+        qDebug() << "[TISSUE_DETECT] Invalid input image.";
+        return;
+    }
+
+    if (judge) {
+        j = 1;
+        x++;
+        judge = false;
+    }
+    if ((j - 1) % x == 0) {
+        detectedRects.clear();
+        string1.clear();
+    }
+
+    const bool isOk = tissueResult.isOk;
+
+    g_lastDrawResults.clear();
+    g_lastPose = DetectionPose();
+    g_lastStampPoly.clear();
+    g_lastStampIsOverlap = false;
+    if (tissueResult.rollFound) {
+        g_lastTissueRoll = tissueResult.roll;
+        g_hasLastTissueRoll = true;
+    } else {
+        g_lastTissueRoll = TissueRollItem();
+        g_hasLastTissueRoll = false;
+    }
+    g_lastDetectTime = QDateTime::currentMSecsSinceEpoch();
+
+    ui->resultlabel->setText(isOk ? "OK" : "NG");
+    ui->resultlabel->setStyleSheet(isOk
+        ? "background-color: #eef1f6; border-radius: 6px; font-size: 36px; font-weight: 900; color: #20b455;"
+        : "background-color: #eef1f6; border-radius: 6px; font-size: 36px; font-weight: 900; color: #ff4d4f;");
+    ui->resultlabel->setWordWrap(true);
+    if (tissueResult.rollFound) {
+        ui->resultlabel_7->setText(QString("粗糙度：%1").arg(tissueResult.roll.roughnessScore, 0, 'f', 3));
+    } else {
+        ui->resultlabel_7->setText("粗糙度：--");
+    }
+    ui->resultlabel_7->setWordWrap(true);
+
+    g_allowTissueDetectionFrameDisplay = true;
+    slot_displayAndDetect(image);
+    g_allowTissueDetectionFrameDisplay = false;
+
+    qDebug() << "[TISSUE_DETECT]" << QString::fromStdString(tissueResult.message);
+    qDebug() << "[TISSUE_DETECT_DEBUG]"
+             << "image" << tissueResult.imageWidth << "x" << tissueResult.imageHeight
+             << "processingTimeMs" << tissueResult.processingTimeMs
+             << "rollFound" << tissueResult.rollFound
+             << "overall" << (tissueResult.isOk ? "OK" : "NG");
+    if (tissueResult.rollFound) {
+        const TissueRollItem& roll = tissueResult.roll;
+        qDebug() << "[TISSUE_DETECT_DEBUG]"
+                 << (roll.isOk ? "OK" : "NG")
+                 << "reason" << QString::fromStdString(roll.rejectReason)
+                 << "rough" << roll.roughnessScore
+                 << "roughNg" << roll.roughnessNg
+                 << "ringPixels" << roll.ringPixelCount
+                 << "outerCenter" << roll.center.x << roll.center.y
+                 << "outerRadius" << roll.outerAxes.width
+                 << "outerBbox" << roll.outerBbox.x << roll.outerBbox.y
+                 << roll.outerBbox.width << roll.outerBbox.height
+                 << "innerFound" << roll.innerHoleFound
+                 << "innerCenter" << roll.innerCenter.x << roll.innerCenter.y
+                 << "innerRadius" << roll.innerAxes.width;
+    }
+
+    if (j % x == 0) {
+        if (!isOk) {
+            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
+                saveImage2("png", selectedDir + "/ng/");
+            }
+            ngImages++;
+            totalImages++;
+
+            if (wrongindex == 0) {
+                wrongremove();
+            } else {
+                removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
+            }
+        } else {
+            totalImages++;
+            if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
+                saveImage2("png", selectedDir + "/ok/");
+            }
+            rightremove();
+        }
+    }
+
+    const double hegerate = (totalImages > 0)
+        ? (1 - static_cast<double>(ngImages) / totalImages) * 100
+        : 0;
+    ui->lineBoxIndex_6->setText(QString::number(hegerate, 'f', 1));
+    ui->ngnum->setText(QString::number(ngImages));
+    ui->imagenum->setText(QString::number(totalImages));
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    if (tissueResult.processingTimeMs > 0) {
+        duration = tissueResult.processingTimeMs;
+    }
+    ui->speedLabel->setText(QString("检测耗时 %1 毫秒").arg(duration));
+
+    j++;
+}
+
+/**
  * @brief 软触发拍照按钮点击槽函数
  * @details 发送软触发信号给相机，采集一张图像并进行识别
  */
@@ -1769,6 +1944,25 @@ void Widget::updateCurrentTemplateName()
     } else {
         ui->currentTemplateName->setText("--");
     }
+}
+
+bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
+{
+    bool ok = false;
+    const double threshold = ui->lineEdit_tissueRoughnessThreshold->text().trimmed().toDouble(&ok);
+    if (!ok || threshold <= 0.0) {
+        if (showMessage) {
+            showParameterWarning("参数错误", "粗糙度阈值必须是大于0的数字");
+        }
+        return false;
+    }
+
+    TissueRollDetector::setDefaultRoughnessThreshold(threshold);
+    ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(threshold, 'f', 3));
+    if (showMessage) {
+        showParameterInfo("提示", "粗糙度阈值设置成功");
+    }
+    return true;
 }
 
 /**
@@ -2646,6 +2840,7 @@ void Widget::saveSettingsToDir(const QString &dirPath)
     settings.setValue("lineEdit_18_value", ui->lineEdit_18->text());
     settings.setValue("lineEdit_19_value", ui->lineEdit_19->text());
     settings.setValue("lineEdit_yuzhi_value", ui->lineEdit_yuzhi->text());
+    settings.setValue("lineEdit_tissueRoughnessThreshold_value", ui->lineEdit_tissueRoughnessThreshold->text());
     settings.setValue("dateEdit_value", ui->dateEdit->toPlainText());
     settings.setValue("comboBox_value", ui->comboBox->currentText());
     settings.setValue("comboBox_2_value", ui->comboBox_2->currentText());
@@ -2903,6 +3098,10 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
     if (settings.contains("lineEdit_18_value")) ui->lineEdit_18->setText(settings.value("lineEdit_18_value").toString());
     if (settings.contains("lineEdit_19_value")) ui->lineEdit_19->setText(settings.value("lineEdit_19_value").toString());
     if (settings.contains("lineEdit_yuzhi_value")) ui->lineEdit_yuzhi->setText(settings.value("lineEdit_yuzhi_value").toString());
+    if (settings.contains("lineEdit_tissueRoughnessThreshold_value")) {
+        ui->lineEdit_tissueRoughnessThreshold->setText(settings.value("lineEdit_tissueRoughnessThreshold_value").toString());
+    }
+    applyTissueRoughnessThresholdFromUi(false);
 
     if (settings.contains("lineEdit_value")) {
         ui->lineEdit->setText(settings.value("lineEdit_value").toString());
@@ -3024,6 +3223,11 @@ void Widget::loadSettings()
     if (settings.contains("lineEdit_yuzhi_value"))
         ui->lineEdit_yuzhi->setText(settings.value("lineEdit_yuzhi_value").toString());
 
+    if (settings.contains("lineEdit_tissueRoughnessThreshold_value"))
+        ui->lineEdit_tissueRoughnessThreshold->setText(settings.value("lineEdit_tissueRoughnessThreshold_value").toString());
+
+    applyTissueRoughnessThresholdFromUi(false);
+
     if (settings.contains("dateEdit_value"))
         ui->dateEdit->setPlainText(settings.value("dateEdit_value").toString());
 
@@ -3101,6 +3305,7 @@ void Widget::saveSettings()
     settings.setValue("lineEdit_18_value", ui->lineEdit_18->text());
     settings.setValue("lineEdit_19_value", ui->lineEdit_19->text());
     settings.setValue("lineEdit_yuzhi_value", ui->lineEdit_yuzhi->text());
+    settings.setValue("lineEdit_tissueRoughnessThreshold_value", ui->lineEdit_tissueRoughnessThreshold->text());
 //    settings.setValue("dateEdit_value", ui->dateEdit->toPlainText());
     settings.setValue("comboBox_value", ui->comboBox->currentText());
     settings.setValue("comboBox_2_value", ui->comboBox_2->currentText());
@@ -3130,6 +3335,7 @@ void Widget::setupDefaultValues()
     ui->lineEdit_13->setText("11");
     ui->lineEdit_15->setText("3");
     ui->lineEdit_yuzhi->setText("70");
+    ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(TissueRollDetector::defaultRoughnessThreshold(), 'f', 3));
     ui->dateEdit->setPlainText("");
     ui->spinBox->setValue(800);
     ui->lineEdit_14->setText("1.0"); // 默认增益
@@ -3138,6 +3344,7 @@ void Widget::setupDefaultValues()
     ui->comboBox_2->setCurrentText("无旋转");
     ui->comboBox_3->setCurrentText("间歇触发模式");
     ui->checkBox->setChecked(true);
+    applyTissueRoughnessThresholdFromUi(false);
 }
 
 // ================= 拦截滚轮误操作事件 =================
@@ -3215,9 +3422,13 @@ void Widget::on_plcbtn_clicked()
     }
 
     updateCurrentTemplateName();
+    const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
+    const QString runningTemplateName = isTissueMode
+            ? QString("无")
+            : QDir(currentTemplateDirPath).dirName();
 
     // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
-    if (!hasValidBoxes || m_loadedTrackingTemplate.empty()) {
+    if (!isTissueMode && (!hasValidBoxes || m_loadedTrackingTemplate.empty())) {
         QMessageBox::warning(this, "操作规范", "缺乏追踪模板，无法启动！\n\n1. 如果是新产品：请先【拍照】，画好双框并点击【保存模板】\n2. 如果是换线复用：请先点击【加载模板】");
         return;
     }
@@ -3298,9 +3509,14 @@ void Widget::on_plcbtn_clicked()
 
         cameraThread = new CameraThread(this, m_pcMyCamera);
 
-        // 🔥 核心修改：将双框坐标和静态模板喂给线程
-        cameraThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
-        cameraThread->setPreloadedTemplate(m_loadedTrackingTemplate);
+        cameraThread->setBypassTracking(isTissueMode);
+        if (isTissueMode) {
+            cameraThread->clearPresetBoxes();
+        } else {
+            // 🔥 核心修改：将双框坐标和静态模板喂给线程
+            cameraThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
+            cameraThread->setPreloadedTemplate(m_loadedTrackingTemplate);
+        }
 
         // 连接所有功能信号
         connect(this, &Widget::rotate, cameraThread, &CameraThread::receiveangle1);
@@ -3311,11 +3527,10 @@ void Widget::on_plcbtn_clicked()
         }, Qt::QueuedConnection);
         connect(cameraThread, &CameraThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
         connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-            if (!img.empty()) {
-                if (ui->comboBox_4->currentIndex() == 2) this->slot_readAndDetect(&img, pose);
-                else if (ui->comboBox_4->currentIndex() == 0) this->slot_readAndDetect3(&img, pose);
-                else if (ui->comboBox_4->currentIndex() == 1) this->slot_readAndDetect4(&img, pose);
-            }
+            this->dispatchDetectionByMode(&img, pose);
+        }, Qt::QueuedConnection);
+        connect(cameraThread, &CameraThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
+            this->slot_handleTissueResult(&img, result);
         }, Qt::QueuedConnection);
 
         // 发送各项参数
@@ -3331,7 +3546,7 @@ void Widget::on_plcbtn_clicked()
         cameraThread->start();
         if (!cameraThread->wait(100)) {
             isCollecting = true;
-            ui->statusLabel->setText(QString("触发模式运行中\n产品模板：%1").arg(QDir(currentTemplateDirPath).dirName()));
+            ui->statusLabel->setText(QString("触发模式运行中\n产品模板：%1").arg(runningTemplateName));
             ui->plcbtn->setText("采集中...");
             ui->plcbtn->setEnabled(false);
             ui->VideoShoot->setEnabled(false);
@@ -3351,9 +3566,14 @@ void Widget::on_plcbtn_clicked()
         ensureThreadsReady();
         if (!myThread) reinitializeMyThread();
 
-        // 🔥 核心修改：将双框坐标和静态模板喂给线程
-        myThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
-        myThread->setPreloadedTemplate(m_loadedTrackingTemplate);
+        myThread->setBypassTracking(isTissueMode);
+        if (isTissueMode) {
+            myThread->clearPresetBoxes();
+        } else {
+            // 🔥 核心修改：将双框坐标和静态模板喂给线程
+            myThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
+            myThread->setPreloadedTemplate(m_loadedTrackingTemplate);
+        }
 
         connect(myThread, &MyThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
 
@@ -3370,7 +3590,7 @@ void Widget::on_plcbtn_clicked()
 
         if (!myThread->isRunning()) {
             myThread->start();
-            ui->statusLabel->setText(QString("软触发模式运行中\n产品模板：%1").arg(QDir(currentTemplateDirPath).dirName()));
+            ui->statusLabel->setText(QString("软触发模式运行中\n产品模板：%1").arg(runningTemplateName));
             ui->plcbtn->setEnabled(false);
             ui->VideoShoot->setEnabled(false);
             ui->pushButton_4->setEnabled(false);
@@ -3591,14 +3811,11 @@ void Widget::reinitializeMyThread()
 
     // 连接信号槽 - 图像检测（根据检测模式）
     QObject::connect(myThread, &MyThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-        if (ui->comboBox_4->currentIndex() == 2) {
-            this->slot_readAndDetect(&img, pose);
-        } else if(ui->comboBox_4->currentIndex() == 0) {
-            this->slot_readAndDetect3(&img, pose);
-        } else if(ui->comboBox_4->currentIndex() == 1){
-            this->slot_readAndDetect4(&img, pose);
-        }
+        this->dispatchDetectionByMode(&img, pose);
     });
+    QObject::connect(myThread, &MyThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
+        this->slot_handleTissueResult(&img, result);
+    }, Qt::QueuedConnection);
 
     // 步骤6: 连接其他控制信号
     connect(this, &Widget::rotate, myThread, &MyThread::receiveangle);
@@ -3682,15 +3899,10 @@ void Widget::reinitializeCameraThread()
 
     // 步骤7: 连接信号槽 - 图像检测（根据检测模式）
     connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-        if (!img.empty()) {
-            if (ui->comboBox_4->currentIndex() == 2) {
-                this->slot_readAndDetect(&img, pose);
-            } else if (ui->comboBox_4->currentIndex() == 0) {
-                this->slot_readAndDetect3(&img, pose);
-            } else if (ui->comboBox_4->currentIndex() == 1) {
-                this->slot_readAndDetect4(&img, pose);
-            }
-        }
+        this->dispatchDetectionByMode(&img, pose);
+    }, Qt::QueuedConnection);
+    connect(cameraThread, &CameraThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
+        this->slot_handleTissueResult(&img, result);
     }, Qt::QueuedConnection);
 
     // 步骤8: 连接模板匹配相关信号
@@ -4003,6 +4215,11 @@ void Widget::on_pushButton_12_clicked()
     }
 }
 
+void Widget::on_pushButton_tissueRoughnessThreshold_clicked()
+{
+    applyTissueRoughnessThresholdFromUi(true);
+}
+
 
 void Widget::on_WriteVDpushButton_clicked()
 {
@@ -4047,6 +4264,7 @@ void Widget::on_confirmAllParamsButton_clicked()
     ui->plcmodebtn->click();
     ui->pushButton_7->click();
     ui->pushButton_3->click();
+    ui->pushButton_tissueRoughnessThreshold->click();
     ui->sureButton->click();
     ui->pushButton_12->click();
     ui->pushButton_9->click();

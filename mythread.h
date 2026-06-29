@@ -12,6 +12,7 @@
 #include "Zhuizong.h"
 #include "TrackingPoseMatcher.h"
 #include "TrackingTypes.h"
+#include "TissueRollDetector.h"
 
 using namespace cv;
 using namespace std;
@@ -80,6 +81,9 @@ public:
     // 🔥 新增：清除预设框
     void clearPresetBoxes();
 
+    // 纸巾检测使用整图，不需要追踪模板和定位姿态。
+    void setBypassTracking(bool enabled);
+
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
         if (!tpl.empty()) {
@@ -101,6 +105,13 @@ signals:
      * @param pose 检测姿态
      */
     void signal_sendForDetection(cv::Mat image, DetectionPose pose);
+
+    /**
+     * @brief 发送纸巾检测结果
+     * @param image 已检测的整帧图像
+     * @param result 纸巾检测结果
+     */
+    void signal_sendTissueResult(cv::Mat image, TissueRollResult result);
 
     /**
      * @brief 清除标签信号
@@ -162,6 +173,7 @@ private:
     std::vector<cv::Point2f> presetDatePoly;   // 预设的生产日期多边形相对坐标
     cv::Rect2d presetTrackingBox;    // 预设的跟踪框
     bool usePresetBoxes;              // 是否使用预设框
+    bool bypassTracking;              // 是否跳过追踪，直接发送整图检测
 };
 
 #endif // MYTHREAD_H

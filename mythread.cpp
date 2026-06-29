@@ -12,6 +12,7 @@ MyThread::MyThread(QObject *parent)
     lastDetectionTime = std::chrono::steady_clock::now();
     presetTrackingBox = cv::Rect2d(0, 0, 0, 0);
     usePresetBoxes = false;
+    bypassTracking = false;
 }
 
 MyThread::~MyThread() {
@@ -33,6 +34,7 @@ void MyThread::setPresetBoxes(const std::vector<cv::Point2f>& datePoly, const cv
 }
 
 void MyThread::clearPresetBoxes() { usePresetBoxes = false; }
+void MyThread::setBypassTracking(bool enabled) { bypassTracking = enabled; }
 void MyThread::receiveangle(int a) { angle1 = a; }
 void MyThread::receivecolorchannel1(int c) { colorc1 = c; }
 void MyThread::getCameraPtr(CMvCamera *camera) { cameraPtr = camera; }
@@ -90,26 +92,43 @@ void MyThread::run() {
                 } else { needInitTracker = false; }
             }
 
-            cv::Mat displayImage = imagePtr->clone();
-
-            if (m_tracking.load() && m_poseMatcher.isReady()) {
-                DetectionPose pose = m_poseMatcher.match(*imagePtr, initialDatePoly);
-                 emit signal_boxesSelected(pose);
-                 if (pose.valid) {
-                    auto now = std::chrono::steady_clock::now();
-                    int interval = receivedata.toInt();
-                    if (interval <= 0) interval = 300;
-                    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
-                        emit signal_cleanlabel(); //
-                        emit signal_sendForDetection(imagePtr->clone(), pose); //
-                        lastDetectionTime = now;
-                    }
-                } else if (initialTrackingBox.width > 0 && initialTrackingBox.height > 0) {
-                    cv::rectangle(displayImage, initialTrackingBox, cv::Scalar(0, 0, 255), 4, 1);
+            if (bypassTracking) {
+                auto now = std::chrono::steady_clock::now();
+                int interval = receivedata.toInt();
+                if (interval <= 0) interval = 300;
+                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
+                    cv::Mat detectionImage = imagePtr->clone();
+                    TissueRollDetector detector;
+                    auto detectStart = std::chrono::high_resolution_clock::now();
+                    TissueRollResult result = detector.processImage(detectionImage);
+                    auto detectEnd = std::chrono::high_resolution_clock::now();
+                    result.processingTimeMs = static_cast<int>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
+                    emit signal_cleanlabel();
+                    emit signal_sendTissueResult(detectionImage, result);
+                    lastDetectionTime = now;
                 }
-            }
+            } else {
+                cv::Mat displayImage = imagePtr->clone();
+                if (m_tracking.load() && m_poseMatcher.isReady()) {
+                    DetectionPose pose = m_poseMatcher.match(*imagePtr, initialDatePoly);
+                    emit signal_boxesSelected(pose);
+                    if (pose.valid) {
+                        auto now = std::chrono::steady_clock::now();
+                        int interval = receivedata.toInt();
+                        if (interval <= 0) interval = 300;
+                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
+                            emit signal_cleanlabel(); //
+                            emit signal_sendForDetection(imagePtr->clone(), pose); //
+                            lastDetectionTime = now;
+                        }
+                    } else if (initialTrackingBox.width > 0 && initialTrackingBox.height > 0) {
+                        cv::rectangle(displayImage, initialTrackingBox, cv::Scalar(0, 0, 255), 4, 1);
+                    }
+                }
 
-            emit signal_messImage(displayImage); //
+                emit signal_messImage(displayImage); //
+            }
 
         } catch (...) { qDebug() << "Exception in run loop"; }
         msleep(100);

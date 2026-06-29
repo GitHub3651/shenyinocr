@@ -45,6 +45,7 @@
 #include "cmvcamera.h"
 #include "mythread.h"
 #include "CameraThread.h"
+#include "TissueRollDetector.h"
 #include "snap7.h"
 #include "PaddleOCR/include/config.h"
 #include <PaddleOCR/include/ocr_det.h>
@@ -149,6 +150,7 @@ private slots:
     void slot_readAndDetect(cv::Mat *image, DetectionPose pose);   ///< 读取并检测（主检测框）
     void slot_readAndDetect3(cv::Mat *image, DetectionPose pose);  ///< 读取并检测3（模板匹配）
     void slot_readAndDetect4(cv::Mat *image, DetectionPose pose); ///< 读取并检测4（字库匹配）
+    void slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResult); ///< 处理纸巾检测结果
 
     // ❌ 已移除：void slot_readAndDetect2() - 额外检测框处理函数（简化版不支持）
 
@@ -212,6 +214,8 @@ private slots:
 
     void on_pushButton_12_clicked();
 
+    void on_pushButton_tissueRoughnessThreshold_clicked();
+
     void on_confirmAllParamsButton_clicked();
     void on_MultiCameraMode_clicked();
 
@@ -226,6 +230,7 @@ private:
     void showParameterCritical(const QString &title, const QString &message);
     void addConfirmAllParamError(const QString &message);
     void updateCurrentTemplateName();
+    bool applyTissueRoughnessThresholdFromUi(bool showMessage);
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -363,6 +368,7 @@ private:
     void loadSettings();                ///< 加载设置
     void saveSettings();                ///< 保存设置
     void setupDefaultValues();          ///< 设置默认值
+    void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
     void loadLastTemplateConfig();        // 新增：加载模板图像
     QString currentTemplateDirPath;       // 新增：持久化模板路径
     void initStyle();  // 声明后才能在 cpp 中实现和调用

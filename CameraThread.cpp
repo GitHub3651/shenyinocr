@@ -7,6 +7,7 @@ CameraThread::CameraThread(QObject *parent, CMvCamera *camera) :
 {
     presetTrackingBox = cv::Rect2d(0, 0, 0, 0);
     usePresetBoxes = false;
+    bypassTracking = false;
 }
 
 CameraThread::~CameraThread() { m_running = false; wait(); }
@@ -15,6 +16,10 @@ void CameraThread::setPresetBoxes(const std::vector<cv::Point2f>& datePoly, cons
     presetDatePoly = datePoly;
     presetTrackingBox = trackBox;
     usePresetBoxes = true;
+}
+
+void CameraThread::setBypassTracking(bool enabled) {
+    bypassTracking = enabled;
 }
 
 void CameraThread::run() {
@@ -70,22 +75,35 @@ void CameraThread::run() {
                     }
                 }
 
-                cv::Mat displayImage = image->clone();
-
-                if (tracking && m_poseMatcher.isReady()) {
-                    DetectionPose pose = m_poseMatcher.match(*image, initialDatePoly);                    
-                    emit signal_boxesSelected(pose);
-                    if (pose.valid) {
-                        if (m_pcMyCamera->isImageReadyForMain()) {
-                            emit signal_cleanlabel(); //
-                            emit signal_sendForDetection(image->clone(), pose);
-                        }
-                    } else if (initialTrackingBox.width > 0 && initialTrackingBox.height > 0) {
-                        cv::rectangle(displayImage, initialTrackingBox, cv::Scalar(0, 0, 255), 4, 1);
+                if (bypassTracking) {
+                    if (m_pcMyCamera->isImageReadyForMain()) {
+                        cv::Mat detectionImage = image->clone();
+                        TissueRollDetector detector;
+                        auto detectStart = std::chrono::high_resolution_clock::now();
+                        TissueRollResult result = detector.processImage(detectionImage);
+                        auto detectEnd = std::chrono::high_resolution_clock::now();
+                        result.processingTimeMs = static_cast<int>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
+                        emit signal_cleanlabel();
+                        emit signal_sendTissueResult(detectionImage, result);
                     }
-                }
+                } else {
+                    cv::Mat displayImage = image->clone();
+                    if (tracking && m_poseMatcher.isReady()) {
+                        DetectionPose pose = m_poseMatcher.match(*image, initialDatePoly);
+                        emit signal_boxesSelected(pose);
+                        if (pose.valid) {
+                            if (m_pcMyCamera->isImageReadyForMain()) {
+                                emit signal_cleanlabel(); //
+                                emit signal_sendForDetection(image->clone(), pose);
+                            }
+                        } else if (initialTrackingBox.width > 0 && initialTrackingBox.height > 0) {
+                            cv::rectangle(displayImage, initialTrackingBox, cv::Scalar(0, 0, 255), 4, 1);
+                        }
+                    }
 
-                emit signal_messImage(displayImage); //
+                    emit signal_messImage(displayImage); //
+                }
 
             } catch (...) { msleep(10); continue; }
         }
