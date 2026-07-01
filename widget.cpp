@@ -1268,6 +1268,32 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
     } else if (mode == 0) {
         slot_readAndDetect3(image, pose);
     } else if (mode == 1) {
+        if (pose.wordTemplateProfileIndex >= 0) {
+            const int profileIndex = pose.wordTemplateProfileIndex;
+            if (m_wordMultiTemplateMode
+                    && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
+                const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+                if (profile.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
+                    qDebug() << "[WORD_MULTI_TEMPLATE] Selected profile has no target text/templates:"
+                             << profileIndex
+                             << profile.name;
+                    return;
+                }
+
+                qDebug() << "[WORD_MULTI_TEMPLATE] Widget dispatch profile:"
+                         << profileIndex
+                         << profile.name
+                         << "score:" << pose.score;
+                runWordTemplateDetection(image, pose, profile.digitTemplates, profile.targetText);
+                return;
+            }
+
+            qDebug() << "[WORD_MULTI_TEMPLATE] Invalid profile index from pose:"
+                     << profileIndex
+                     << "profile count:" << static_cast<int>(m_wordTemplateProfiles.size());
+            return;
+        }
+
         slot_readAndDetect4(image, pose);
     } else if (mode == 3) {
         qDebug() << "[DETECTION_DISPATCH] Tissue mode is handled in worker thread.";
@@ -2462,11 +2488,13 @@ void Widget::on_cancel_clicked()
 
     // 🔥 Step 3: myThread - 保持原逻辑
     bool myThreadWasRunning = false;
+    bool myThreadStopped = true;
     if (myThread && myThread->isRunning()) {
         myThreadWasRunning = true;
         myThread->stop();
-        if (!myThread->wait(500)) {
+        if (!myThread->wait(3000)) {
             qDebug() << "WARNING: myThread did not stop";
+            myThreadStopped = false;
         }
     }
 
@@ -2485,6 +2513,16 @@ void Widget::on_cancel_clicked()
 
         cameraThread->deleteLater();
         cameraThread = nullptr;
+    }
+
+    if (!myThreadStopped) {
+        ui->statusLabel->setText("停止中，请稍后再关闭相机");
+        ui->plcbtn->setText("停止中...");
+        ui->plcbtn->setEnabled(false);
+        ui->VideoShoot->setEnabled(false);
+        ui->pushButton_4->setEnabled(false);
+        isCollecting = true;
+        return;
     }
 
     // 🔥 Step 5: 如果cameraThread运行过，重启相机
@@ -3851,6 +3889,23 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
 //关闭相机按钮
 void Widget::on_CloseCamera_clicked()
 {
+    if (!isCollecting && myThread && myThread->isRunning()) {
+        myThread->requestStop();
+        myThread->stop();
+        if (!myThread->wait(3000)) {
+            QMessageBox::warning(this, "警告", "相机正在检测采图中！\n请先点击【停止识别】完全停止检测后，再关闭相机。");
+            return;
+        }
+    }
+
+    if (!isCollecting && cameraThread && cameraThread->isRunning()) {
+        cameraThread->requestStop();
+        if (!cameraThread->wait(3000)) {
+            QMessageBox::warning(this, "警告", "相机正在检测采图中！\n请先点击【停止识别】完全停止检测后，再关闭相机。");
+            return;
+        }
+    }
+
     // 如果系统正在采集中（软触发或硬触发线程在跑），拦截关闭并提示
     if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting)
     {
@@ -3912,12 +3967,15 @@ void Widget::on_plcbtn_clicked()
 
     updateCurrentTemplateName();
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
+    const bool isWordMultiMode = (ui->comboBox_4->currentIndex() == 1)
+            && m_wordMultiTemplateMode
+            && !m_wordTemplateProfiles.empty();
     const QString runningTemplateName = isTissueMode
             ? QString("无")
-            : QDir(currentTemplateDirPath).dirName();
+            : (isWordMultiMode ? QString("字库多模板") : QDir(currentTemplateDirPath).dirName());
 
     // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
-    if (!isTissueMode && (!hasValidBoxes || m_loadedTrackingTemplate.empty())) {
+    if (!isTissueMode && !isWordMultiMode && (!hasValidBoxes || m_loadedTrackingTemplate.empty())) {
         QMessageBox::warning(this, "操作规范", "缺乏追踪模板，无法启动！\n\n1. 如果是新产品：请先【拍照】，画好双框并点击【保存模板】\n2. 如果是换线复用：请先点击【加载模板】");
         return;
     }
@@ -3944,6 +4002,11 @@ void Widget::on_plcbtn_clicked()
     // ==========================================================
     if (ui->checkBox->isChecked())
     {
+        if (isWordMultiMode) {
+            QMessageBox::warning(this, "提示", "字库多模板当前阶段只支持软触发，硬触发将在下一阶段接入。");
+            return;
+        }
+
         // 外部触发/硬触发模式逻辑
         int exposureValue = ui->spinBox->value();
         float gainValue = ui->lineEdit_14->text().toFloat();
@@ -4058,6 +4121,39 @@ void Widget::on_plcbtn_clicked()
         myThread->setBypassTracking(isTissueMode);
         if (isTissueMode) {
             myThread->clearPresetBoxes();
+            myThread->clearWordTemplateTrackingProfiles();
+        } else if (isWordMultiMode) {
+            QStringList pendingProfiles;
+            std::vector<WordTrackingProfile> trackingProfiles;
+            for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
+                const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
+                if (profile.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
+                    pendingProfiles.append(profile.name);
+                    continue;
+                }
+
+                WordTrackingProfile trackingProfile;
+                trackingProfile.name = profile.name;
+                trackingProfile.profileIndex = i;
+                trackingProfile.trackingTemplate = profile.trackingTemplate;
+                trackingProfile.datePoly = profile.datePoly;
+                trackingProfiles.push_back(trackingProfile);
+            }
+
+            if (!pendingProfiles.isEmpty()) {
+                QMessageBox::warning(this,
+                                     "提示",
+                                     QString("以下字库模板还没有确认目标字符，不能启动多模板检测：\n%1")
+                                     .arg(pendingProfiles.join("\n")));
+                return;
+            }
+            if (trackingProfiles.empty()) {
+                QMessageBox::warning(this, "提示", "没有可用的字库多模板定位配置。");
+                return;
+            }
+
+            myThread->clearPresetBoxes();
+            myThread->setWordTemplateTrackingProfiles(trackingProfiles);
         } else {
             // 🔥 核心修改：将双框坐标和静态模板喂给线程
             myThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
@@ -4628,6 +4724,54 @@ void Widget::on_pushButton_7_clicked()
 
 void Widget::on_pushButton_11_clicked()
 {
+    if (ui->comboBox_4->currentIndex() == 1 && m_wordMultiTemplateMode) {
+        if (m_wordTemplateProfiles.empty()) {
+            QMessageBox::warning(this, "提示", "当前没有加载任何字库多模板！");
+            return;
+        }
+
+        const QString oldDateEditText = ui->dateEdit->toPlainText();
+        int savedCount = 0;
+        QStringList failedTemplates;
+
+        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+            QDir dir(profile.dirPath);
+            if (profile.dirPath.isEmpty() || !dir.exists()) {
+                failedTemplates.append(profile.name.isEmpty() ? profile.dirPath : profile.name);
+                continue;
+            }
+
+            {
+                QSignalBlocker blocker(ui->dateEdit);
+                ui->dateEdit->setPlainText(profile.targetText);
+                saveSettingsToDir(profile.dirPath);
+            }
+            ++savedCount;
+        }
+
+        {
+            QSignalBlocker blocker(ui->dateEdit);
+            ui->dateEdit->setPlainText(oldDateEditText);
+        }
+
+        saveSettings();
+
+        if (!failedTemplates.isEmpty()) {
+            QMessageBox::warning(this,
+                                 "提示",
+                                 QString("已将当前参数保存到 %1 个字库模板。\n\n以下模板保存失败：\n%2")
+                                 .arg(savedCount)
+                                 .arg(failedTemplates.join("\n")));
+            return;
+        }
+
+        QMessageBox::information(this,
+                                 "成功",
+                                 QString("已将当前参数保存到 %1 个字库模板。\n\n目标字符仍按每个模板自己的配置保存，不会被统一覆盖。")
+                                 .arg(savedCount));
+        return;
+    }
+
     // 1. 检查是否已经加载了模板文件夹
     if (currentTemplateDirPath.isEmpty()) {
         QMessageBox::warning(this, "提示", "当前没有加载任何模板！\n请先点击【加载模板】后再尝试更新参数。");

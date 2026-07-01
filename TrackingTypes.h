@@ -12,6 +12,7 @@ struct DetectionPose {
     cv::Point2f anchorCenter = cv::Point2f(0.0f, 0.0f);
     float angleDeg = 0.0f;
     float score = 0.0f;
+    int wordTemplateProfileIndex = -1;
 };
 
 Q_DECLARE_METATYPE(DetectionPose)

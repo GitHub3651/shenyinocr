@@ -35,6 +35,45 @@ void MyThread::setPresetBoxes(const std::vector<cv::Point2f>& datePoly, const cv
 
 void MyThread::clearPresetBoxes() { usePresetBoxes = false; }
 void MyThread::setBypassTracking(bool enabled) { bypassTracking = enabled; }
+
+void MyThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles) {
+    m_wordTrackingProfiles.clear();
+    m_wordMultiTemplateMode = false;
+    m_tracking.store(false);
+    m_poseMatcher.clear();
+    if (!m_trackingTemplate.empty()) {
+        m_trackingTemplate.release();
+    }
+
+    for (const WordTrackingProfile &profile : profiles) {
+        if (profile.trackingTemplate.empty() || profile.datePoly.empty() || profile.profileIndex < 0) {
+            continue;
+        }
+
+        WordTrackingState state;
+        state.name = profile.name;
+        state.profileIndex = profile.profileIndex;
+        state.datePoly = profile.datePoly;
+        state.ready = state.matcher.init(profile.trackingTemplate);
+        if (state.ready) {
+            m_wordTrackingProfiles.push_back(state);
+        }
+    }
+
+    m_wordMultiTemplateMode = !m_wordTrackingProfiles.empty();
+    qDebug() << "[WORD_MULTI_TEMPLATE] MyThread tracking profiles ready:"
+             << static_cast<int>(m_wordTrackingProfiles.size());
+}
+
+void MyThread::clearWordTemplateTrackingProfiles() {
+    for (WordTrackingState &state : m_wordTrackingProfiles) {
+        state.matcher.clear();
+        state.ready = false;
+    }
+    m_wordTrackingProfiles.clear();
+    m_wordMultiTemplateMode = false;
+}
+
 void MyThread::receiveangle(int a) { angle1 = a; }
 void MyThread::receivecolorchannel1(int c) { colorc1 = c; }
 void MyThread::getCameraPtr(CMvCamera *camera) { cameraPtr = camera; }
@@ -110,7 +149,43 @@ void MyThread::run() {
                 }
             } else {
                 cv::Mat displayImage = imagePtr->clone();
-                if (m_tracking.load() && m_poseMatcher.isReady()) {
+                if (m_wordMultiTemplateMode && !m_wordTrackingProfiles.empty()) {
+                    DetectionPose bestPose;
+                    QString bestName;
+                    for (const WordTrackingState &state : m_wordTrackingProfiles) {
+                        if (!state.ready) {
+                            continue;
+                        }
+
+                        DetectionPose pose = state.matcher.match(*imagePtr, state.datePoly);
+                        if (!pose.valid) {
+                            continue;
+                        }
+
+                        pose.wordTemplateProfileIndex = state.profileIndex;
+                        if (!bestPose.valid || pose.score > bestPose.score) {
+                            bestPose = pose;
+                            bestName = state.name;
+                        }
+                    }
+
+                    emit signal_boxesSelected(bestPose);
+                    if (bestPose.valid) {
+                        qDebug() << "[WORD_MULTI_TEMPLATE] MyThread selected profile:"
+                                 << bestPose.wordTemplateProfileIndex
+                                 << bestName
+                                 << "score:" << bestPose.score;
+
+                        auto now = std::chrono::steady_clock::now();
+                        int interval = receivedata.toInt();
+                        if (interval <= 0) interval = 300;
+                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
+                            emit signal_cleanlabel(); //
+                            emit signal_sendForDetection(imagePtr->clone(), bestPose); //
+                            lastDetectionTime = now;
+                        }
+                    }
+                } else if (m_tracking.load() && m_poseMatcher.isReady()) {
                     DetectionPose pose = m_poseMatcher.match(*imagePtr, initialDatePoly);
                     emit signal_boxesSelected(pose);
                     if (pose.valid) {
@@ -139,6 +214,7 @@ void MyThread::startTracking() { m_tracking.store(m_poseMatcher.isReady()); last
 void MyThread::stopTracking() {
     m_tracking.store(false);
     m_poseMatcher.clear();
+    clearWordTemplateTrackingProfiles();
     if (!m_trackingTemplate.empty()) {
         m_trackingTemplate.release();
     }

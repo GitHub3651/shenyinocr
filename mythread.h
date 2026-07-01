@@ -17,6 +17,13 @@
 using namespace cv;
 using namespace std;
 
+struct WordTrackingProfile {
+    QString name;
+    int profileIndex = -1;
+    cv::Mat trackingTemplate;
+    std::vector<cv::Point2f> datePoly;
+};
+
 /**
  * @brief MyThread 工作线程类
  * @details 负责软触发模式下的图像采集、目标跟踪和检测
@@ -84,8 +91,12 @@ public:
     // 纸巾检测使用整图，不需要追踪模板和定位姿态。
     void setBypassTracking(bool enabled);
 
+    void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
+    void clearWordTemplateTrackingProfiles();
+
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
+        clearWordTemplateTrackingProfiles();
         if (!tpl.empty()) {
             m_trackingTemplate = tpl.clone();
             m_tracking.store(m_poseMatcher.init(m_trackingTemplate));
@@ -152,6 +163,16 @@ private:
     Zhuizong *zhuizong;                 // 追踪辅助类
     cv::Mat m_trackingTemplate;
     TrackingPoseMatcher m_poseMatcher;
+
+    struct WordTrackingState {
+        QString name;
+        int profileIndex = -1;
+        std::vector<cv::Point2f> datePoly;
+        TrackingPoseMatcher matcher;
+        bool ready = false;
+    };
+    std::vector<WordTrackingState> m_wordTrackingProfiles;
+    bool m_wordMultiTemplateMode = false;
 
     // 相机相关
     CMvCamera *cameraPtr;               // 相机指针
