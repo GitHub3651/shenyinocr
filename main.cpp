@@ -6,6 +6,8 @@
 #include <QSharedMemory>
 #include <QDebug>
 #include <QTextCodec>
+#include <QTranslator>
+#include <QLibraryInfo>
 #include <iostream>
 #include <memory>
 #include <QFile>
@@ -95,6 +97,21 @@ void showRuntimeGuardExitMessage(const QString &message)
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QString qtTranslationPath = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
+#else
+    const QString qtTranslationPath = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+#endif
+    QTranslator qtBaseTranslator;
+    if (qtBaseTranslator.load("qtbase_zh_CN", qtTranslationPath)) {
+        a.installTranslator(&qtBaseTranslator);
+    }
+    QTranslator qtTranslator;
+    if (qtTranslator.load("qt_zh_CN", qtTranslationPath)) {
+        a.installTranslator(&qtTranslator);
+    }
+
     qRegisterMetaType<cv::Mat>("cv::Mat");
 
     // 确保最后一个窗口关闭时立即退出

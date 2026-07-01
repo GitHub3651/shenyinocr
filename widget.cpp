@@ -2029,11 +2029,25 @@ void Widget::setupWordTemplateEditorCombo()
     connect(ui->comboBox_4,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
-            [this](int) {
+            [this](int index) {
+                if (index != 1 && m_wordMultiTemplateMode) {
+                    clearWordMultiTemplateState();
+                    return;
+                }
                 refreshWordTemplateEditorCombo();
             });
 
     m_wordTemplateEditWidget->hide();
+}
+
+void Widget::clearWordMultiTemplateState()
+{
+    m_wordTemplateDirPaths.clear();
+    m_wordTemplateProfiles.clear();
+    m_wordMultiTemplateMode = false;
+    m_currentTemplateNameVisible = false;
+    updateCurrentTemplateName();
+    refreshWordTemplateEditorCombo();
 }
 
 void Widget::refreshWordTemplateEditorCombo()
@@ -3217,6 +3231,12 @@ void Widget::on_pushButton_4_clicked()
         dialog.setFileMode(QFileDialog::Directory);
         dialog.setOption(QFileDialog::ShowDirsOnly, true);
         dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+        dialog.setLabelText(QFileDialog::LookIn, "查找范围:");
+        dialog.setLabelText(QFileDialog::FileName, "文件夹:");
+        dialog.setLabelText(QFileDialog::FileType, "文件类型:");
+        dialog.setLabelText(QFileDialog::Accept, "选择");
+        dialog.setLabelText(QFileDialog::Reject, "取消");
+        dialog.setNameFilter("所有文件 (*)");
 
         QListView *listView = dialog.findChild<QListView *>("listView");
         if (listView) {
@@ -3225,6 +3245,10 @@ void Widget::on_pushButton_4_clicked()
         QTreeView *treeView = dialog.findChild<QTreeView *>();
         if (treeView) {
             treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+            treeView->setHeaderHidden(true);
+            treeView->setColumnHidden(1, true);
+            treeView->setColumnHidden(2, true);
+            treeView->setColumnHidden(3, true);
         }
 
         if (dialog.exec() != QDialog::Accepted) return;
@@ -3841,7 +3865,7 @@ void Widget::saveSettings()
     settings.setValue("comboBox_5_value", ui->comboBox_5->currentText());
     // 新增：保存模板路径
     settings.setValue("saveDirPath", selectedDir);
-    settings.setValue("TemplateDirPath", currentTemplateDirPath);
+    settings.setValue("TemplateDirPath", m_wordMultiTemplateMode ? QString() : currentTemplateDirPath);
     settings.setValue("lineEdit_value", ui->lineEdit->text()); // 保存IP地址
 }
 
@@ -3966,13 +3990,19 @@ void Widget::on_plcbtn_clicked()
     }
 
     updateCurrentTemplateName();
+    const bool isWordMode = (ui->comboBox_4->currentIndex() == 1);
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
-    const bool isWordMultiMode = (ui->comboBox_4->currentIndex() == 1)
+    const bool isWordMultiMode = isWordMode
             && m_wordMultiTemplateMode
             && !m_wordTemplateProfiles.empty();
     const QString runningTemplateName = isTissueMode
             ? QString("无")
             : (isWordMultiMode ? QString("字库多模板") : QDir(currentTemplateDirPath).dirName());
+
+    if (isWordMode && m_wordMultiTemplateMode && m_wordTemplateProfiles.empty()) {
+        QMessageBox::warning(this, "提示", "当前字库多模板缓存为空，请重新选择模板文件夹。");
+        return;
+    }
 
     // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
     if (!isTissueMode && !isWordMultiMode && (!hasValidBoxes || m_loadedTrackingTemplate.empty())) {
@@ -4736,6 +4766,7 @@ void Widget::on_pushButton_11_clicked()
         }
 
         const QString oldDateEditText = ui->dateEdit->toPlainText();
+        const QString oldCurrentTemplateDirPath = currentTemplateDirPath;
         int savedCount = 0;
         QStringList failedTemplates;
 
@@ -4749,11 +4780,13 @@ void Widget::on_pushButton_11_clicked()
             {
                 QSignalBlocker blocker(ui->dateEdit);
                 ui->dateEdit->setPlainText(profile.targetText);
+                currentTemplateDirPath = profile.dirPath;
                 saveSettingsToDir(profile.dirPath);
             }
             ++savedCount;
         }
 
+        currentTemplateDirPath = oldCurrentTemplateDirPath;
         {
             QSignalBlocker blocker(ui->dateEdit);
             ui->dateEdit->setPlainText(oldDateEditText);

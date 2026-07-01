@@ -385,6 +385,7 @@ private:
     bool m_wordMultiTemplateMode = false; ///< 字库多模板模式标志
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
     void setupWordTemplateEditorCombo();
+    void clearWordMultiTemplateState();
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
     void runWordTemplateDetection(cv::Mat *image,
