@@ -81,8 +81,12 @@ public:
     // 纸巾检测使用整图，不需要追踪模板和定位姿态。
     void setBypassTracking(bool enabled);
 
+    void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
+    void clearWordTemplateTrackingProfiles();
+
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
+        clearWordTemplateTrackingProfiles();
         if (!tpl.empty()) {
             m_trackingTemplate = tpl.clone();
             tracking = m_poseMatcher.init(m_trackingTemplate);
@@ -178,6 +182,16 @@ private:
     std::vector<cv::Scalar> colors;      ///< 框的颜色列表
     cv::Mat m_trackingTemplate;
     TrackingPoseMatcher m_poseMatcher;
+
+    struct WordTrackingState {
+        QString name;
+        int profileIndex = -1;
+        std::vector<cv::Point2f> datePoly;
+        TrackingPoseMatcher matcher;
+        bool ready = false;
+    };
+    std::vector<WordTrackingState> m_wordTrackingProfiles;
+    bool m_wordMultiTemplateMode = false;
 
     // ========== 配置参数 ==========
     int angle2 = 0;  ///< 图像旋转角度 (默认0，不旋转)

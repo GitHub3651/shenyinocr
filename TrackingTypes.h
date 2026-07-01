@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMetaType>
+#include <QString>
 #include <opencv2/opencv.hpp>
 #include <cmath>
 #include <vector>
@@ -16,6 +17,13 @@ struct DetectionPose {
 };
 
 Q_DECLARE_METATYPE(DetectionPose)
+
+struct WordTrackingProfile {
+    QString name;
+    int profileIndex = -1;
+    cv::Mat trackingTemplate;
+    std::vector<cv::Point2f> datePoly;
+};
 
 struct OrientedDateRoi {
     bool valid = false;

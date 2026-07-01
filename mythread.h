@@ -17,13 +17,6 @@
 using namespace cv;
 using namespace std;
 
-struct WordTrackingProfile {
-    QString name;
-    int profileIndex = -1;
-    cv::Mat trackingTemplate;
-    std::vector<cv::Point2f> datePoly;
-};
-
 /**
  * @brief MyThread 工作线程类
  * @details 负责软触发模式下的图像采集、目标跟踪和检测

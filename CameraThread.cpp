@@ -22,6 +22,44 @@ void CameraThread::setBypassTracking(bool enabled) {
     bypassTracking = enabled;
 }
 
+void CameraThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles) {
+    m_wordTrackingProfiles.clear();
+    m_wordMultiTemplateMode = false;
+    tracking = false;
+    m_poseMatcher.clear();
+    if (!m_trackingTemplate.empty()) {
+        m_trackingTemplate.release();
+    }
+
+    for (const WordTrackingProfile &profile : profiles) {
+        if (profile.trackingTemplate.empty() || profile.datePoly.empty() || profile.profileIndex < 0) {
+            continue;
+        }
+
+        WordTrackingState state;
+        state.name = profile.name;
+        state.profileIndex = profile.profileIndex;
+        state.datePoly = profile.datePoly;
+        state.ready = state.matcher.init(profile.trackingTemplate);
+        if (state.ready) {
+            m_wordTrackingProfiles.push_back(state);
+        }
+    }
+
+    m_wordMultiTemplateMode = !m_wordTrackingProfiles.empty();
+    qDebug() << "[WORD_MULTI_TEMPLATE] CameraThread tracking profiles ready:"
+             << static_cast<int>(m_wordTrackingProfiles.size());
+}
+
+void CameraThread::clearWordTemplateTrackingProfiles() {
+    for (WordTrackingState &state : m_wordTrackingProfiles) {
+        state.matcher.clear();
+        state.ready = false;
+    }
+    m_wordTrackingProfiles.clear();
+    m_wordMultiTemplateMode = false;
+}
+
 void CameraThread::run() {
     std::unique_ptr<cv::Mat> image = std::make_unique<cv::Mat>();
     m_pcMyCamera->setnonblocking(true); //
@@ -89,7 +127,39 @@ void CameraThread::run() {
                     }
                 } else {
                     cv::Mat displayImage = image->clone();
-                    if (tracking && m_poseMatcher.isReady()) {
+                    if (m_wordMultiTemplateMode && !m_wordTrackingProfiles.empty()) {
+                        DetectionPose bestPose;
+                        QString bestName;
+                        for (const WordTrackingState &state : m_wordTrackingProfiles) {
+                            if (!state.ready) {
+                                continue;
+                            }
+
+                            DetectionPose pose = state.matcher.match(*image, state.datePoly);
+                            if (!pose.valid) {
+                                continue;
+                            }
+
+                            pose.wordTemplateProfileIndex = state.profileIndex;
+                            if (!bestPose.valid || pose.score > bestPose.score) {
+                                bestPose = pose;
+                                bestName = state.name;
+                            }
+                        }
+
+                        emit signal_boxesSelected(bestPose);
+                        if (bestPose.valid) {
+                            qDebug() << "[WORD_MULTI_TEMPLATE] CameraThread selected profile:"
+                                     << bestPose.wordTemplateProfileIndex
+                                     << bestName
+                                     << "score:" << bestPose.score;
+
+                            if (m_pcMyCamera->isImageReadyForMain()) {
+                                emit signal_cleanlabel(); //
+                                emit signal_sendForDetection(image->clone(), bestPose);
+                            }
+                        }
+                    } else if (tracking && m_poseMatcher.isReady()) {
                         DetectionPose pose = m_poseMatcher.match(*image, initialDatePoly);
                         emit signal_boxesSelected(pose);
                         if (pose.valid) {
@@ -126,6 +196,7 @@ void CameraThread::receivecolorchannel(int c) { colorc = c; }
 void CameraThread::stopTracking() {
     tracking = false;
     m_poseMatcher.clear();
+    clearWordTemplateTrackingProfiles();
     if (!m_trackingTemplate.empty()) {
         m_trackingTemplate.release();
     }

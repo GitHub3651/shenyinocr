@@ -3980,6 +3980,41 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
+    std::vector<WordTrackingProfile> wordTrackingProfilesForRun;
+    if (isWordMultiMode) {
+        QStringList pendingProfiles;
+        for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
+            const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
+            const QString profileName = profile.name.isEmpty()
+                    ? QDir(profile.dirPath).dirName()
+                    : profile.name;
+
+            if (profile.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
+                pendingProfiles.append(profileName);
+                continue;
+            }
+
+            WordTrackingProfile trackingProfile;
+            trackingProfile.name = profileName;
+            trackingProfile.profileIndex = i;
+            trackingProfile.trackingTemplate = profile.trackingTemplate;
+            trackingProfile.datePoly = profile.datePoly;
+            wordTrackingProfilesForRun.push_back(trackingProfile);
+        }
+
+        if (!pendingProfiles.isEmpty()) {
+            QMessageBox::warning(this,
+                                 "提示",
+                                 QString("以下字库模板还没有确认目标字符，不能启动多模板检测：\n%1")
+                                 .arg(pendingProfiles.join("\n")));
+            return;
+        }
+        if (wordTrackingProfilesForRun.empty()) {
+            QMessageBox::warning(this, "提示", "没有可用的字库多模板定位配置。");
+            return;
+        }
+    }
+
     if (!m_allParamsConfirmed) {
         QMessageBox messageBox(this);
         messageBox.setIcon(QMessageBox::Warning);
@@ -4002,11 +4037,6 @@ void Widget::on_plcbtn_clicked()
     // ==========================================================
     if (ui->checkBox->isChecked())
     {
-        if (isWordMultiMode) {
-            QMessageBox::warning(this, "提示", "字库多模板当前阶段只支持软触发，硬触发将在下一阶段接入。");
-            return;
-        }
-
         // 外部触发/硬触发模式逻辑
         int exposureValue = ui->spinBox->value();
         float gainValue = ui->lineEdit_14->text().toFloat();
@@ -4064,6 +4094,10 @@ void Widget::on_plcbtn_clicked()
         cameraThread->setBypassTracking(isTissueMode);
         if (isTissueMode) {
             cameraThread->clearPresetBoxes();
+            cameraThread->clearWordTemplateTrackingProfiles();
+        } else if (isWordMultiMode) {
+            cameraThread->clearPresetBoxes();
+            cameraThread->setWordTemplateTrackingProfiles(wordTrackingProfilesForRun);
         } else {
             // 🔥 核心修改：将双框坐标和静态模板喂给线程
             cameraThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
@@ -4123,37 +4157,8 @@ void Widget::on_plcbtn_clicked()
             myThread->clearPresetBoxes();
             myThread->clearWordTemplateTrackingProfiles();
         } else if (isWordMultiMode) {
-            QStringList pendingProfiles;
-            std::vector<WordTrackingProfile> trackingProfiles;
-            for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
-                const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
-                if (profile.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
-                    pendingProfiles.append(profile.name);
-                    continue;
-                }
-
-                WordTrackingProfile trackingProfile;
-                trackingProfile.name = profile.name;
-                trackingProfile.profileIndex = i;
-                trackingProfile.trackingTemplate = profile.trackingTemplate;
-                trackingProfile.datePoly = profile.datePoly;
-                trackingProfiles.push_back(trackingProfile);
-            }
-
-            if (!pendingProfiles.isEmpty()) {
-                QMessageBox::warning(this,
-                                     "提示",
-                                     QString("以下字库模板还没有确认目标字符，不能启动多模板检测：\n%1")
-                                     .arg(pendingProfiles.join("\n")));
-                return;
-            }
-            if (trackingProfiles.empty()) {
-                QMessageBox::warning(this, "提示", "没有可用的字库多模板定位配置。");
-                return;
-            }
-
             myThread->clearPresetBoxes();
-            myThread->setWordTemplateTrackingProfiles(trackingProfiles);
+            myThread->setWordTemplateTrackingProfiles(wordTrackingProfilesForRun);
         } else {
             // 🔥 核心修改：将双框坐标和静态模板喂给线程
             myThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
