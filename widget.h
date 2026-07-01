@@ -387,6 +387,10 @@ private:
     void setupWordTemplateEditorCombo();
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
+    void runWordTemplateDetection(cv::Mat *image,
+                                  const DetectionPose &pose,
+                                  const std::vector<cv::Mat> &templates,
+                                  const QString &targetText);
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

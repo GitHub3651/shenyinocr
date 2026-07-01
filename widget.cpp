@@ -1546,6 +1546,14 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
  */
 void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
 {
+    runWordTemplateDetection(image, pose, digitTemplates, ui->dateEdit->toPlainText());
+}
+
+void Widget::runWordTemplateDetection(cv::Mat *image,
+                                      const DetectionPose &pose,
+                                      const std::vector<cv::Mat> &templates,
+                                      const QString &targetString)
+{
     if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
         wrongremove();
         removalQueue.pop();
@@ -1572,14 +1580,13 @@ void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
     emit imgshibie(&croppedImage);
     ui->imagenum->setText(QString::number(totalImages));
 
-    QString targetString = ui->dateEdit->toPlainText();
     int targetNum = 0;
     QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
     QRegularExpressionMatchIterator matchIt = regex.globalMatch(targetString);
     while (matchIt.hasNext()) { matchIt.next(); targetNum++; }
     if (targetNum == 0 && !targetString.isEmpty()) targetNum = targetString.length();
 
-    int detectNum = templatematch->run3(digitTemplates);
+    int detectNum = templatematch->run3(templates);
     QString judgeResult = (detectNum == targetNum ? "ok" : "no");
 
     g_lastDrawResults = mapMatchResultsToOriginal(templatematch->lastMatchResults, oriented, image->size());
