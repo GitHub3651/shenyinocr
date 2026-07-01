@@ -21,6 +21,7 @@
 #include <QMetaType>
 #include <QTranslator>
 #include <QSettings>
+#include <QStringList>
 #include <QStandardItemModel>
 #include "waitting.h"
 #include <string>
@@ -363,6 +364,8 @@ private:
     vector<Mat> digitRegions;           ///< 数字区域
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
+    QStringList m_wordTemplateDirPaths; ///< 字库多模板路径缓存
+    bool m_wordMultiTemplateMode = false; ///< 字库多模板模式标志
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

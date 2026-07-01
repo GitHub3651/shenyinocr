@@ -21,8 +21,10 @@
 #include <QTimer>
 #include <QThread>
 #include <QFileDialog>
+#include <QAbstractItemView>
 #include <QImageReader>
 #include <QLabel>
+#include <QListView>
 #include <QPainter>
 #include <QLineEdit>
 #include <QMetaType>
@@ -48,6 +50,7 @@
 #include <QElapsedTimer>
 #include <QDir>
 #include <QInputDialog>
+#include <QTreeView>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -2913,11 +2916,59 @@ void Widget::initOverlapDetectorFromCurrentDir() {
 // 功能：从用户输入解析模板文件名，选择模板文件夹
 void Widget::on_pushButton_4_clicked()
 {
-    QString dirPath = QFileDialog::getExistingDirectory(nullptr, "选择模板文件夹",
-                                                        "D:/muban",
-                                                        QFileDialog::ShowDirsOnly);
+    QString dirPath;
+
+    if (ui->comboBox_4->currentIndex() == 1) {
+        QFileDialog dialog(this, "选择字库模板文件夹", "D:/muban");
+        dialog.setFileMode(QFileDialog::Directory);
+        dialog.setOption(QFileDialog::ShowDirsOnly, true);
+        dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+
+        QListView *listView = dialog.findChild<QListView *>("listView");
+        if (listView) {
+            listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        }
+        QTreeView *treeView = dialog.findChild<QTreeView *>();
+        if (treeView) {
+            treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        }
+
+        if (dialog.exec() != QDialog::Accepted) return;
+
+        QStringList selectedDirs;
+        const QStringList dialogSelectedDirs = dialog.selectedFiles();
+        for (const QString &selectedDirPath : dialogSelectedDirs) {
+            const QString cleanDir = QDir(selectedDirPath).absolutePath();
+            if (!cleanDir.isEmpty() && !selectedDirs.contains(cleanDir)) {
+                selectedDirs.append(cleanDir);
+            }
+        }
+
+        if (selectedDirs.isEmpty()) return;
+
+        if (selectedDirs.size() > 1) {
+            m_wordTemplateDirPaths = selectedDirs;
+            m_wordMultiTemplateMode = true;
+            currentTemplateDirPath.clear();
+            m_currentTemplateNameVisible = false;
+            updateCurrentTemplateName();
+
+            qDebug() << "[WORD_MULTI_TEMPLATE] selected dirs:" << m_wordTemplateDirPaths;
+            showParameterInfo("提示", QString("已选择 %1 个字库模板").arg(m_wordTemplateDirPaths.size()));
+            return;
+        }
+
+        dirPath = selectedDirs.first();
+    } else {
+        dirPath = QFileDialog::getExistingDirectory(nullptr, "选择模板文件夹",
+                                                    "D:/muban",
+                                                    QFileDialog::ShowDirsOnly);
+    }
+
     if (dirPath.isEmpty()) return;
 
+    m_wordTemplateDirPaths.clear();
+    m_wordMultiTemplateMode = false;
     currentTemplateDirPath = dirPath;
 
     saveSettings(); // 保存路径
