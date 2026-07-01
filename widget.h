@@ -81,6 +81,8 @@ class Widget;
 }
 
 class MultiCameraWidget;
+class QLabel;
+class QComboBox;
 
 /**
  * @brief 主窗口类
@@ -239,6 +241,9 @@ private:
     bool m_confirmAllParamsRunning = false;
     bool m_allParamsConfirmed = false;
     bool m_currentTemplateNameVisible = false;
+    QWidget *m_wordTemplateEditWidget = nullptr;
+    QLabel *m_wordTemplateEditLabel = nullptr;
+    QComboBox *m_wordTemplateEditComboBox = nullptr;
     QStringList m_confirmAllParamErrors;
 
     // ========== 定时器 ==========
@@ -379,6 +384,9 @@ private:
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     bool m_wordMultiTemplateMode = false; ///< 字库多模板模式标志
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
+    void setupWordTemplateEditorCombo();
+    void refreshWordTemplateEditorCombo();
+    void applyWordTemplateEditorSelection(int comboIndex);
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

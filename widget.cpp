@@ -51,6 +51,11 @@
 #include <QDir>
 #include <QInputDialog>
 #include <QTreeView>
+#include <QComboBox>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QSignalBlocker>
+#include <QSizePolicy>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -453,6 +458,7 @@ Widget::Widget(QWidget *parent)
 
     // 设置文本框自动换行
     ui->dateEdit->setWordWrapMode(QTextOption::WordWrap);
+    setupWordTemplateEditorCombo();
 
     // 禁用焦点滚动调节（防误触）- 遍历全局所有下拉框和数字输入框，一劳永逸
     QList<QComboBox *> comboBoxes = this->findChildren<QComboBox *>();
@@ -1949,6 +1955,106 @@ void Widget::updateCurrentTemplateName()
     }
 }
 
+void Widget::setupWordTemplateEditorCombo()
+{
+    if (m_wordTemplateEditComboBox || !ui || !ui->dateEdit) {
+        return;
+    }
+
+    QWidget *parentWidget = ui->dateEdit->parentWidget();
+    if (!parentWidget) {
+        parentWidget = this;
+    }
+
+    m_wordTemplateEditWidget = new QWidget(parentWidget);
+    QHBoxLayout *editorLayout = new QHBoxLayout(m_wordTemplateEditWidget);
+    editorLayout->setContentsMargins(0, 0, 0, 0);
+    editorLayout->setSpacing(6);
+
+    m_wordTemplateEditLabel = new QLabel("当前编辑模板:", m_wordTemplateEditWidget);
+    m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
+    m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
+    m_wordTemplateEditComboBox->setMinimumHeight(50);
+    m_wordTemplateEditComboBox->setMinimumWidth(160);
+    m_wordTemplateEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    editorLayout->addWidget(m_wordTemplateEditLabel);
+    editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
+
+    QGridLayout *targetLayout = qobject_cast<QGridLayout *>(parentWidget->layout());
+    if (targetLayout) {
+        targetLayout->addWidget(m_wordTemplateEditWidget, 1, 2);
+    }
+
+    connect(m_wordTemplateEditComboBox,
+            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index) {
+                applyWordTemplateEditorSelection(index);
+            });
+
+    connect(ui->comboBox_4,
+            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int) {
+                refreshWordTemplateEditorCombo();
+            });
+
+    m_wordTemplateEditWidget->hide();
+}
+
+void Widget::refreshWordTemplateEditorCombo()
+{
+    if (!m_wordTemplateEditComboBox || !m_wordTemplateEditWidget) {
+        return;
+    }
+
+    const bool shouldShow = m_wordMultiTemplateMode
+            && ui->comboBox_4->currentIndex() == 1
+            && !m_wordTemplateProfiles.empty();
+
+    {
+        QSignalBlocker blocker(m_wordTemplateEditComboBox);
+        m_wordTemplateEditComboBox->clear();
+
+        if (shouldShow) {
+            for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
+                const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
+                const QString displayName = profile.name.isEmpty()
+                        ? QString("模板%1").arg(i + 1)
+                        : profile.name;
+                m_wordTemplateEditComboBox->addItem(displayName, i);
+            }
+            m_wordTemplateEditComboBox->setCurrentIndex(0);
+        }
+    }
+
+    m_wordTemplateEditWidget->setVisible(shouldShow);
+    if (shouldShow) {
+        applyWordTemplateEditorSelection(m_wordTemplateEditComboBox->currentIndex());
+    }
+}
+
+void Widget::applyWordTemplateEditorSelection(int comboIndex)
+{
+    if (!m_wordTemplateEditComboBox || comboIndex < 0 || !m_wordMultiTemplateMode) {
+        return;
+    }
+
+    bool ok = false;
+    const int profileIndex = m_wordTemplateEditComboBox->itemData(comboIndex).toInt(&ok);
+    if (!ok || profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        return;
+    }
+
+    const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+    ui->dateEdit->setPlainText(profile.targetText);
+    qDebug() << "[WORD_MULTI_TEMPLATE] editing profile:"
+             << profileIndex
+             << profile.name
+             << profile.dirPath;
+}
+
 QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
 {
     QStringList baseNames;
@@ -2465,6 +2571,127 @@ bool Widget::isAlnumOrChinese(char c)
 
 void Widget::on_textsure_btn_clicked()
 {
+    if (ui->comboBox_4->currentIndex() == 1 && m_wordMultiTemplateMode)
+    {
+        if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
+            showParameterWarning("提示", "请先停止检测后再修改模板字符");
+            return;
+        }
+
+        if (!m_wordTemplateEditComboBox || m_wordTemplateProfiles.empty()) {
+            showParameterInfoAsError("提示", "请先选择字库模板");
+            return;
+        }
+
+        bool indexOk = false;
+        const int profileIndex = m_wordTemplateEditComboBox->currentData().toInt(&indexOk);
+        if (!indexOk || profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+            showParameterInfoAsError("提示", "当前编辑模板无效");
+            return;
+        }
+
+        WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+        const QString newMubiaozifu = ui->dateEdit->toPlainText();
+
+        std::vector<cv::Mat> tempTemplates;
+        if (!newMubiaozifu.trimmed().isEmpty()) {
+            const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+            if (baseNamesToFind.isEmpty()) {
+                showParameterInfoAsError("提示", "目标字符解析失败");
+                return;
+            }
+
+            QDir directory(profile.dirPath);
+            QMap<QString, QString> filePathMap;
+            static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
+            const QFileInfoList fileList = directory.entryInfoList(
+                        filters,
+                        QDir::Files | QDir::NoDotAndDotDot);
+
+            for (const QFileInfo &fileInfo : fileList) {
+                const QString baseName = fileInfo.completeBaseName().toLower();
+                if (!filePathMap.contains(baseName)) {
+                    filePathMap.insert(baseName, fileInfo.absoluteFilePath());
+                }
+            }
+
+            bool hasMissing = false;
+            QString missingNames;
+            for (const QString &searchKey : baseNamesToFind) {
+                if (!filePathMap.contains(searchKey)) {
+                    hasMissing = true;
+                    missingNames += searchKey + " ";
+                    continue;
+                }
+
+                QFile file(filePathMap.value(searchKey));
+                if (!file.open(QIODevice::ReadOnly)) {
+                    hasMissing = true;
+                    missingNames += searchKey + "(无法打开) ";
+                    continue;
+                }
+
+                const QByteArray data = file.readAll();
+                cv::Mat templateImg;
+                try {
+                    std::vector<uchar> buf(data.begin(), data.end());
+                    templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
+                } catch (...) {
+                    qDebug() << "[WORD_MULTI_TEMPLATE] confirm digit imdecode crashed:"
+                             << filePathMap.value(searchKey);
+                }
+
+                if (templateImg.empty()) {
+                    hasMissing = true;
+                    missingNames += searchKey + "(读取损坏) ";
+                    continue;
+                }
+
+                tempTemplates.push_back(templateImg);
+            }
+
+            if (hasMissing) {
+                showParameterCritical("严重警告",
+                    QString("当前模板 [%1] 中以下字符未找到对应图片，或图片读取失败：\n[ %2 ]\n\n本次更新已撤销。")
+                    .arg(profile.name)
+                    .arg(missingNames));
+                return;
+            }
+        }
+
+        const QString settingsFilePath = QDir(profile.dirPath).filePath("app_settings.appset");
+        if (!QFile::exists(settingsFilePath)) {
+            showParameterCritical("严重警告",
+                                  QString("当前模板 [%1] 缺少 app_settings.appset，无法保存目标字符。")
+                                  .arg(profile.name));
+            return;
+        }
+
+        QSettings settings(settingsFilePath, QSettings::IniFormat);
+        settings.setValue("dateEdit_value", newMubiaozifu);
+        settings.sync();
+        if (settings.status() != QSettings::NoError) {
+            showParameterCritical("严重警告",
+                                  QString("当前模板 [%1] 的目标字符写入失败。")
+                                  .arg(profile.name));
+            return;
+        }
+
+        profile.targetText = newMubiaozifu;
+        profile.targetCount = static_cast<int>(tempTemplates.size());
+        profile.digitTemplates = tempTemplates;
+
+        if (newMubiaozifu.trimmed().isEmpty()) {
+            showParameterInfo("提示", QString("模板 [%1] 的目标字符已清空").arg(profile.name));
+        } else {
+            showParameterInfo("提示",
+                              QString("模板 [%1] 目标字符确认成功，共加载 %2 个模板！")
+                              .arg(profile.name)
+                              .arg(profile.targetCount));
+        }
+        return;
+    }
+
     if((ui->comboBox_4->currentIndex() == 0)||(ui->comboBox_4->currentIndex() == 1))
     {
         // 1. 检查是否存在有效的模板路径
@@ -3121,6 +3348,7 @@ void Widget::on_pushButton_4_clicked()
                 currentTemplateDirPath.clear();
                 m_currentTemplateNameVisible = false;
                 updateCurrentTemplateName();
+                refreshWordTemplateEditorCombo();
                 QString detailMessage = "所选字库模板配置全部无效，未进入多模板模式。";
                 if (!skippedMessages.isEmpty()) {
                     detailMessage += "\n\n具体原因：\n" + skippedMessages.join("\n");
@@ -3138,6 +3366,7 @@ void Widget::on_pushButton_4_clicked()
             currentTemplateDirPath.clear();
             m_currentTemplateNameVisible = false;
             updateCurrentTemplateName();
+            refreshWordTemplateEditorCombo();
 
             qDebug() << "[WORD_MULTI_TEMPLATE] selected dirs:" << m_wordTemplateDirPaths;
             if (!skippedMessages.isEmpty() || !pendingTargetMessages.isEmpty()) {
@@ -3170,6 +3399,7 @@ void Widget::on_pushButton_4_clicked()
     m_wordTemplateDirPaths.clear();
     m_wordTemplateProfiles.clear();
     m_wordMultiTemplateMode = false;
+    refreshWordTemplateEditorCombo();
     currentTemplateDirPath = dirPath;
 
     saveSettings(); // 保存路径
