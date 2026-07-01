@@ -1949,6 +1949,28 @@ void Widget::updateCurrentTemplateName()
     }
 }
 
+QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
+{
+    QStringList baseNames;
+    QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
+    QRegularExpressionMatchIterator matchIt = regex.globalMatch(targetText);
+
+    while (matchIt.hasNext()) {
+        QRegularExpressionMatch match = matchIt.next();
+        QString unit;
+        if (!match.captured(1).isEmpty()) unit = match.captured(1);
+        else if (!match.captured(2).isEmpty()) unit = match.captured(2);
+        else if (!match.captured(3).isEmpty()) unit = match.captured(3);
+        else if (!match.captured(4).isEmpty()) unit = match.captured(4);
+
+        if (!unit.isEmpty()) {
+            baseNames.append(unit.toLower());
+        }
+    }
+
+    return baseNames;
+}
+
 bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
 {
     bool ok = false;
@@ -2947,14 +2969,192 @@ void Widget::on_pushButton_4_clicked()
         if (selectedDirs.isEmpty()) return;
 
         if (selectedDirs.size() > 1) {
-            m_wordTemplateDirPaths = selectedDirs;
+            std::vector<WordTemplateProfile> loadedProfiles;
+            QStringList loadedDirPaths;
+            QStringList skippedMessages;
+            QStringList pendingTargetMessages;
+
+            for (const QString &selectedDirPath : selectedDirs) {
+                QDir templateDir(selectedDirPath);
+
+                QString targetText;
+                QStringList baseNames;
+                const QString settingsFilePath = templateDir.filePath("app_settings.appset");
+                if (!QFile::exists(settingsFilePath)) {
+                    skippedMessages.append(QString("%1：缺少 app_settings.appset").arg(templateDir.dirName()));
+                    qDebug() << "[WORD_MULTI_TEMPLATE] skip app_settings missing:" << selectedDirPath;
+                    continue;
+                } else {
+                    QSettings settings(settingsFilePath, QSettings::IniFormat);
+                    targetText = settings.value("dateEdit_value").toString();
+                    baseNames = parseWordTemplateBaseNames(targetText);
+                    if (targetText.trimmed().isEmpty() || baseNames.isEmpty()) {
+                        pendingTargetMessages.append(QString("%1：目标字符为空或解析失败，目标字符待设置").arg(templateDir.dirName()));
+                        qDebug() << "[WORD_MULTI_TEMPLATE] target text pending:" << selectedDirPath;
+                    }
+                }
+
+                const QString yamlPath = templateDir.filePath("calibrate_config.yaml");
+                if (!QFile::exists(yamlPath)) {
+                    skippedMessages.append(QString("%1：缺少 calibrate_config.yaml").arg(templateDir.dirName()));
+                    qDebug() << "[WORD_MULTI_TEMPLATE] skip calibrate_config missing:" << selectedDirPath;
+                    continue;
+                }
+
+                CalibrationData calib;
+                if (!calib.load(yamlPath.toLocal8Bit().toStdString()) || calib.date_poly.empty()) {
+                    skippedMessages.append(QString("%1：date_poly 读取失败").arg(templateDir.dirName()));
+                    qDebug() << "[WORD_MULTI_TEMPLATE] skip date_poly invalid:" << selectedDirPath;
+                    continue;
+                }
+
+                const QString trackingPath = templateDir.filePath("tracking_template.bmp");
+                if (!QFile::exists(trackingPath)) {
+                    skippedMessages.append(QString("%1：缺少 tracking_template.bmp").arg(templateDir.dirName()));
+                    qDebug() << "[WORD_MULTI_TEMPLATE] skip tracking_template missing:" << selectedDirPath;
+                    continue;
+                }
+
+                cv::Mat trackingTemplate;
+                QFile trackingFile(trackingPath);
+                if (trackingFile.open(QIODevice::ReadOnly)) {
+                    QByteArray trackingData = trackingFile.readAll();
+                    try {
+                        std::vector<uchar> trackingBuffer(trackingData.begin(), trackingData.end());
+                        trackingTemplate = cv::imdecode(trackingBuffer, cv::IMREAD_COLOR);
+                    } catch (...) {
+                        qDebug() << "[WORD_MULTI_TEMPLATE] tracking_template imdecode crashed:" << selectedDirPath;
+                    }
+                }
+                if (trackingTemplate.empty()) {
+                    skippedMessages.append(QString("%1：tracking_template.bmp 读取失败").arg(templateDir.dirName()));
+                    qDebug() << "[WORD_MULTI_TEMPLATE] skip tracking_template empty:" << selectedDirPath;
+                    continue;
+                }
+
+                std::vector<cv::Mat> loadedDigitTemplates;
+                if (!baseNames.isEmpty()) {
+                    QMap<QString, QString> filePathMap;
+                    static const QStringList imageFilters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
+                    const QFileInfoList fileList = templateDir.entryInfoList(imageFilters, QDir::Files | QDir::NoDotAndDotDot);
+                    for (const QFileInfo &fileInfo : fileList) {
+                        const QString baseName = fileInfo.completeBaseName().toLower();
+                        if (!filePathMap.contains(baseName)) {
+                            filePathMap.insert(baseName, fileInfo.absoluteFilePath());
+                        }
+                    }
+
+                    int matchedDigitCount = 0;
+                    for (const QString &searchKey : baseNames) {
+                        if (filePathMap.contains(searchKey)) {
+                            ++matchedDigitCount;
+                        }
+                    }
+                    if (matchedDigitCount != baseNames.size()) {
+                        pendingTargetMessages.append(QString("%1：字符图片数量不完整，目标字符待重新确认").arg(templateDir.dirName()));
+                        qDebug() << "[WORD_MULTI_TEMPLATE] digit file count mismatch, target pending:"
+                                 << selectedDirPath
+                                 << "matched:" << matchedDigitCount
+                                 << "expected:" << baseNames.size();
+                    } else {
+                        bool allDigitFilesOpened = true;
+                        bool allDigitImagesDecoded = true;
+                        qint64 totalDigitBytes = 0;
+                        for (const QString &searchKey : baseNames) {
+                            QFile digitFile(filePathMap.value(searchKey));
+                            if (!digitFile.open(QIODevice::ReadOnly)) {
+                                allDigitFilesOpened = false;
+                                qDebug() << "[WORD_MULTI_TEMPLATE] digit file open failed:"
+                                         << filePathMap.value(searchKey);
+                                break;
+                            }
+                            QByteArray digitData = digitFile.readAll();
+                            totalDigitBytes += digitData.size();
+
+                            cv::Mat digitTemplate;
+                            try {
+                                std::vector<uchar> digitBuffer(digitData.begin(), digitData.end());
+                                digitTemplate = cv::imdecode(digitBuffer, cv::IMREAD_GRAYSCALE);
+                            } catch (...) {
+                                qDebug() << "[WORD_MULTI_TEMPLATE] digit template imdecode crashed:"
+                                         << filePathMap.value(searchKey);
+                            }
+
+                            if (digitTemplate.empty()) {
+                                allDigitImagesDecoded = false;
+                                qDebug() << "[WORD_MULTI_TEMPLATE] digit template decode failed:"
+                                         << filePathMap.value(searchKey);
+                                break;
+                            }
+                            loadedDigitTemplates.push_back(digitTemplate);
+                        }
+                        if (!allDigitFilesOpened) {
+                            loadedDigitTemplates.clear();
+                            pendingTargetMessages.append(QString("%1：字符图片打开失败，目标字符待重新确认").arg(templateDir.dirName()));
+                        } else if (!allDigitImagesDecoded) {
+                            loadedDigitTemplates.clear();
+                            pendingTargetMessages.append(QString("%1：字符图片解码失败，目标字符待重新确认").arg(templateDir.dirName()));
+                        } else {
+                            qDebug() << "[WORD_MULTI_TEMPLATE] digit files read bytes:"
+                                     << selectedDirPath
+                                     << totalDigitBytes;
+                        }
+                    }
+                }
+
+                WordTemplateProfile profile;
+                profile.name = templateDir.dirName();
+                profile.dirPath = templateDir.absolutePath();
+                profile.trackingTemplate = trackingTemplate;
+                profile.datePoly = calib.date_poly;
+                profile.targetText = targetText;
+                profile.targetCount = loadedDigitTemplates.size();
+                profile.digitTemplates = loadedDigitTemplates;
+                loadedDirPaths.append(profile.dirPath);
+                loadedProfiles.push_back(profile);
+            }
+
+            if (loadedProfiles.empty()) {
+                m_wordTemplateDirPaths.clear();
+                m_wordTemplateProfiles.clear();
+                m_wordMultiTemplateMode = false;
+                currentTemplateDirPath.clear();
+                m_currentTemplateNameVisible = false;
+                updateCurrentTemplateName();
+                QString detailMessage = "所选字库模板配置全部无效，未进入多模板模式。";
+                if (!skippedMessages.isEmpty()) {
+                    detailMessage += "\n\n具体原因：\n" + skippedMessages.join("\n");
+                }
+                if (!pendingTargetMessages.isEmpty()) {
+                    detailMessage += "\n\n目标字符待设置：\n" + pendingTargetMessages.join("\n");
+                }
+                showParameterCritical("严重警告", detailMessage);
+                return;
+            }
+
+            m_wordTemplateDirPaths = loadedDirPaths;
+            m_wordTemplateProfiles.swap(loadedProfiles);
             m_wordMultiTemplateMode = true;
             currentTemplateDirPath.clear();
             m_currentTemplateNameVisible = false;
             updateCurrentTemplateName();
 
             qDebug() << "[WORD_MULTI_TEMPLATE] selected dirs:" << m_wordTemplateDirPaths;
-            showParameterInfo("提示", QString("已选择 %1 个字库模板").arg(m_wordTemplateDirPaths.size()));
+            if (!skippedMessages.isEmpty() || !pendingTargetMessages.isEmpty()) {
+                QString detailMessage = QString("已加载 %1 个字库模板").arg(static_cast<int>(m_wordTemplateProfiles.size()));
+                if (!pendingTargetMessages.isEmpty()) {
+                    detailMessage += "\n\n以下模板已加载，但目标字符待设置：\n" + pendingTargetMessages.join("\n");
+                }
+                if (!skippedMessages.isEmpty()) {
+                    detailMessage += "\n\n以下模板已跳过：\n" + skippedMessages.join("\n");
+                }
+                showParameterWarning("提示",
+                                     detailMessage);
+            } else {
+                showParameterInfo("提示",
+                                  QString("已加载 %1 个有效字库模板")
+                                  .arg(static_cast<int>(m_wordTemplateProfiles.size())));
+            }
             return;
         }
 
@@ -2968,6 +3168,7 @@ void Widget::on_pushButton_4_clicked()
     if (dirPath.isEmpty()) return;
 
     m_wordTemplateDirPaths.clear();
+    m_wordTemplateProfiles.clear();
     m_wordMultiTemplateMode = false;
     currentTemplateDirPath = dirPath;
 

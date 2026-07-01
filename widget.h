@@ -364,8 +364,21 @@ private:
     vector<Mat> digitRegions;           ///< 数字区域
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
+
+    struct WordTemplateProfile {
+        QString name;
+        QString dirPath;
+        cv::Mat trackingTemplate;
+        std::vector<cv::Point2f> datePoly;
+        QString targetText;
+        int targetCount = 0;
+        std::vector<cv::Mat> digitTemplates;
+    };
+
     QStringList m_wordTemplateDirPaths; ///< 字库多模板路径缓存
+    std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     bool m_wordMultiTemplateMode = false; ///< 字库多模板模式标志
+    QStringList parseWordTemplateBaseNames(const QString &targetText) const;
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置
