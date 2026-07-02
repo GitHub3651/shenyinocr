@@ -123,6 +123,9 @@ public:
     void initWidget();                  ///< 初始化界面
     void saveImage(QString format, QString savePath);    ///< 保存图像
     void saveImage2(QString format, QString savePath);
+    void saveImage2(QString format, QString savePath, const QString &fileBaseName);
+    void saveRawImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName);
+    void saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image);
     void saveImage2Async(QString format, QString savePath);   ///< 保存图像2
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
     void display(const Mat* image);     ///< 显示图像

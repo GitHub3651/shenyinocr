@@ -1077,6 +1077,12 @@ void Widget::saveImage2Async(QString format, QString savePath)
 ////异步保存ui上的图像
 void Widget::saveImage2(QString format, QString savePath)
 {
+    const QString fileBaseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
+    saveImage2(format, savePath, fileBaseName);
+}
+
+void Widget::saveImage2(QString format, QString savePath, const QString &fileBaseName)
+{
     // 1. 主线程中先校验UI图像和参数（避免跨线程访问UI）
     const QPixmap* curPixmap = ui->image_undetected->pixmap();
     if (!curPixmap) {
@@ -1109,8 +1115,11 @@ void Widget::saveImage2(QString format, QString savePath)
     }
 
     // 生成带时间戳的文件名（主线程生成，避免线程安全问题）
-    QString curDate = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
-    QString saveName = savePath + curDate + "." + format;
+    QString baseName = fileBaseName.trimmed();
+    if (baseName.isEmpty()) {
+        baseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
+    }
+    QString saveName = savePath + baseName + "." + format;
 
     // 2. 使用QtConcurrent在后台线程执行保存操作（核心异步逻辑）
     QtConcurrent::run([=]() { // 捕获复制后的局部变量，避免跨线程访问UI
@@ -1127,6 +1136,74 @@ void Widget::saveImage2(QString format, QString savePath)
             qDebug() << "UI图像异步保存发生未知异常";
         }
     });
+}
+
+void Widget::saveRawImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName)
+{
+    if (image.empty()) {
+        qDebug() << "无框原图保存失败，图像为空";
+        return;
+    }
+
+    QImage img = cvMatToQImage(image);
+    if (img.isNull()) {
+        qDebug() << "无框原图保存失败，图像格式不支持";
+        return;
+    }
+
+    if (format.startsWith(".")) {
+        format = format.mid(1);
+    }
+    if (format.isEmpty()) {
+        format = "png";
+    }
+
+    QDir dir;
+    if (!dir.mkpath(savePath)) {
+        qDebug() << "无框原图目录创建失败！路径：" << savePath;
+        return;
+    }
+
+    if (!savePath.endsWith("/") && !savePath.endsWith("\\")) {
+        savePath += "/";
+    }
+
+    QString baseName = fileBaseName.trimmed();
+    if (baseName.isEmpty()) {
+        baseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
+    }
+    QString saveName = savePath + baseName + "." + format;
+
+    QtConcurrent::run([=]() {
+        try {
+            if (img.save(saveName, format.toUpper().toStdString().c_str())) {
+                qDebug() << "无框原图异步保存成功：" << saveName;
+            } else {
+                qDebug() << "无框原图异步保存失败！路径：" << saveName;
+            }
+        } catch (const std::exception& e) {
+            qDebug() << "无框原图异步保存异常:" << e.what();
+        } catch (...) {
+            qDebug() << "无框原图异步保存发生未知异常";
+        }
+    });
+}
+
+void Widget::saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image)
+{
+    if (selectedDir.trimmed().isEmpty()) {
+        qDebug() << "字库匹配图像保存失败，图像保存路径为空";
+        return;
+    }
+
+    QString resultName = resultDirName.trimmed();
+    if (resultName.isEmpty()) {
+        resultName = "unknown";
+    }
+
+    const QString fileBaseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
+    saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
+    saveRawImage(format, selectedDir + "/" + resultName + "_raw/", image, fileBaseName);
 }
 
 /**
@@ -1727,8 +1804,9 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
 
     if (j % x == 0) {
         if (judgeResult == "no") {
-            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3))
-                saveImage2("png", selectedDir + "/ng/");
+            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
+                saveWordResultImages("png", "ng", *image);
+            }
             ngImages++;
             totalImages++;
             ui->resultlabel->setText(QString("<font size='10' color='red'>错误！</font>"));
@@ -1736,8 +1814,9 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
             else removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
         } else {
             totalImages++;
-            if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3))
-                saveImage2("png", selectedDir + "/ok/");
+            if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
+                saveWordResultImages("png", "ok", *image);
+            }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font><br>"));
             rightremove();
         }
@@ -2911,7 +2990,7 @@ void Widget::on_cancel_clicked()
     // Step 6: 处理事件队列
     QCoreApplication::processEvents(QEventLoop::AllEvents, 1000);
 
-    // Step 7: 清理UI和变量
+    // Step 7: 清理临时绘制状态；生产统计保留，由“清零”按钮负责清空
     detectedRects.clear();
     selectionRect1 = QRect();
 
@@ -2921,21 +3000,12 @@ void Widget::on_cancel_clicked()
         imageLabel->clearSelection();
     }
 
-    ui->resultlabel->clear();
-    ui->imagenum->clear();
-    ui->ngnum->clear();
-    ui->resultlabel_7->clear();
-    ui->speedLabel->clear();
-    ui->lineBoxIndex_6->clear();
-
     g_lastDrawResults.clear();
     g_lastPose = DetectionPose();
     g_lastStampPoly.clear();
     g_lastStampIsOverlap = false;
     g_lastDetectTime = 0;
 
-    ngImages = 0;
-    totalImages = 0;
     first = false;
     x = 1;
     j = 1;
