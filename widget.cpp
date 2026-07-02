@@ -56,6 +56,8 @@
 #include <QHBoxLayout>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QToolTip>
+#include <QCursor>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -2201,6 +2203,42 @@ void Widget::updateTissueRoughnessUiVisibility()
 
 void Widget::setupWordTemplateEditorCombo()
 {
+    if (ui && ui->textsure_btn && ui->batchTextsure_btn) {
+        ui->textsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        ui->batchTextsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+        if (ui->textsure_btn->parentWidget()) {
+            ui->textsure_btn->parentWidget()->setStyleSheet(
+                        "#textConfirmButtonContainer { border: none; background: transparent; padding: 0px; }");
+        }
+
+        QHBoxLayout *buttonLayout = qobject_cast<QHBoxLayout *>(ui->textsure_btn->parentWidget()
+                ? ui->textsure_btn->parentWidget()->layout()
+                : nullptr);
+        if (buttonLayout) {
+            buttonLayout->setStretch(0, 1);
+            buttonLayout->setStretch(1, 1);
+        }
+
+        ui->textsure_btn->setToolTip("只保存当前编辑模板的目标字符，并重新加载该模板的字符图片。");
+        ui->batchTextsure_btn->setToolTip("把当前目标字符保存到所有已选择的字库模板，并分别重新加载字符图片。");
+        ui->textsure_btn->installEventFilter(this);
+        ui->batchTextsure_btn->installEventFilter(this);
+    }
+
+    if (ui && ui->pushButton_6) {
+        ui->pushButton_6->installEventFilter(this);
+    }
+
+    if (ui && ui->confirmAllParamsButton) {
+        ui->confirmAllParamsButton->setToolTip("依次确认当前界面上的所有参数；目标字符只按当前确认字符逻辑处理，不会批量覆盖所有模板字符。");
+        ui->confirmAllParamsButton->installEventFilter(this);
+    }
+
+    if (ui && ui->batchTextsure_btn) {
+        ui->batchTextsure_btn->hide();
+    }
+
     if (m_wordTemplateEditComboBox || !ui || !ui->dateEdit || !ui->lineEdit_yuzhi) {
         return;
     }
@@ -2364,13 +2402,17 @@ void Widget::clearWordMultiTemplateState()
 
 void Widget::refreshWordTemplateEditorCombo()
 {
-    if (!m_wordTemplateEditComboBox || !m_wordTemplateEditWidget) {
-        return;
-    }
-
     const bool shouldShow = m_wordMultiTemplateMode
             && ui->comboBox_4->currentIndex() == 1
             && !m_wordTemplateProfiles.empty();
+
+    if (ui->batchTextsure_btn) {
+        ui->batchTextsure_btn->setVisible(shouldShow);
+    }
+
+    if (!m_wordTemplateEditComboBox || !m_wordTemplateEditWidget) {
+        return;
+    }
 
     auto fillCombo = [this, shouldShow](QComboBox *comboBox) {
         if (!comboBox) {
@@ -3253,6 +3295,155 @@ void Widget::on_textsure_btn_clicked()
     }
 
 
+}
+
+
+
+void Widget::on_batchTextsure_btn_clicked()
+{
+    if (ui->comboBox_4->currentIndex() != 1 || !m_wordMultiTemplateMode) {
+        on_textsure_btn_clicked();
+        return;
+    }
+
+    if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
+        showParameterWarning("提示", "请先停止检测后再批量修改模板字符");
+        return;
+    }
+
+    if (m_wordTemplateProfiles.empty()) {
+        showParameterInfoAsError("提示", "请先选择字库模板");
+        return;
+    }
+
+    const QString newMubiaozifu = ui->dateEdit->toPlainText();
+    const bool needLoadDigitTemplates = !newMubiaozifu.trimmed().isEmpty();
+    QStringList baseNamesToFind;
+    if (needLoadDigitTemplates) {
+        baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+        if (baseNamesToFind.isEmpty()) {
+            showParameterInfoAsError("提示", "目标字符解析失败");
+            return;
+        }
+    }
+
+    const int oldProfileIndex = currentWordTemplateProfileIndex();
+    int successCount = 0;
+    QStringList failedMessages;
+
+    for (WordTemplateProfile &profile : m_wordTemplateProfiles) {
+        const QString profileName = profile.name.isEmpty()
+                ? QDir(profile.dirPath).dirName()
+                : profile.name;
+
+        QDir directory(profile.dirPath);
+        if (profile.dirPath.isEmpty() || !directory.exists()) {
+            failedMessages.append(QString("%1：模板文件夹不存在").arg(profileName));
+            continue;
+        }
+
+        const QString settingsFilePath = directory.filePath("app_settings.appset");
+        if (!QFile::exists(settingsFilePath)) {
+            failedMessages.append(QString("%1：缺少 app_settings.appset").arg(profileName));
+            continue;
+        }
+
+        std::vector<cv::Mat> tempTemplates;
+        if (needLoadDigitTemplates) {
+            QMap<QString, QString> filePathMap;
+            static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
+            const QFileInfoList fileList = directory.entryInfoList(
+                        filters,
+                        QDir::Files | QDir::NoDotAndDotDot);
+
+            for (const QFileInfo &fileInfo : fileList) {
+                const QString baseName = fileInfo.completeBaseName().toLower();
+                if (!filePathMap.contains(baseName)) {
+                    filePathMap.insert(baseName, fileInfo.absoluteFilePath());
+                }
+            }
+
+            QStringList missingNames;
+            for (const QString &searchKey : baseNamesToFind) {
+                if (!filePathMap.contains(searchKey)) {
+                    missingNames.append(searchKey);
+                    continue;
+                }
+
+                QFile file(filePathMap.value(searchKey));
+                if (!file.open(QIODevice::ReadOnly)) {
+                    missingNames.append(searchKey + "(无法打开)");
+                    continue;
+                }
+
+                const QByteArray data = file.readAll();
+                cv::Mat templateImg;
+                try {
+                    std::vector<uchar> buf(data.begin(), data.end());
+                    templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
+                } catch (...) {
+                    qDebug() << "[WORD_MULTI_TEMPLATE] batch confirm digit imdecode crashed:"
+                             << filePathMap.value(searchKey);
+                }
+
+                if (templateImg.empty()) {
+                    missingNames.append(searchKey + "(读取损坏)");
+                    continue;
+                }
+
+                tempTemplates.push_back(templateImg);
+            }
+
+            if (!missingNames.isEmpty()) {
+                failedMessages.append(QString("%1：缺少或无法读取字符图片 [ %2 ]")
+                                      .arg(profileName)
+                                      .arg(missingNames.join(" ")));
+                continue;
+            }
+        }
+
+        QSettings settings(settingsFilePath, QSettings::IniFormat);
+        settings.setValue("dateEdit_value", newMubiaozifu);
+        settings.sync();
+        if (settings.status() != QSettings::NoError) {
+            failedMessages.append(QString("%1：目标字符写入失败").arg(profileName));
+            continue;
+        }
+
+        profile.targetText = newMubiaozifu;
+        profile.targetCount = static_cast<int>(tempTemplates.size());
+        profile.digitTemplates = tempTemplates;
+        ++successCount;
+    }
+
+    if (oldProfileIndex >= 0) {
+        setCurrentWordTemplateEditIndex(oldProfileIndex);
+    }
+
+    if (successCount == 0) {
+        showParameterCritical("严重警告",
+                              QString("所有模板的目标字符批量保存失败：\n%1")
+                              .arg(failedMessages.join("\n")));
+        return;
+    }
+
+    if (!failedMessages.isEmpty()) {
+        QMessageBox::warning(this,
+                             "提示",
+                             QString("已成功保存 %1 个模板，失败 %2 个：\n%3")
+                             .arg(successCount)
+                             .arg(failedMessages.size())
+                             .arg(failedMessages.join("\n")));
+        return;
+    }
+
+    if (newMubiaozifu.trimmed().isEmpty()) {
+        showParameterInfo("提示",
+                          QString("已批量清空 %1 个模板的目标字符").arg(successCount));
+    } else {
+        showParameterInfo("提示",
+                          QString("目标字符批量确认成功，已保存到 %1 个模板").arg(successCount));
+    }
 }
 
 
@@ -4375,6 +4566,34 @@ void Widget::setupDefaultValues()
 // ================= 拦截滚轮误操作事件 =================
 bool Widget::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == ui->textsure_btn
+            || watched == ui->batchTextsure_btn
+            || watched == ui->pushButton_6
+            || watched == ui->confirmAllParamsButton) {
+        QWidget *button = qobject_cast<QWidget *>(watched);
+        if (!button) {
+            return QWidget::eventFilter(watched, event);
+        }
+
+        if (event->type() == QEvent::Enter) {
+            QTimer::singleShot(500, this, [button]() {
+                if (button->underMouse() && !button->toolTip().isEmpty()) {
+                    QToolTip::showText(QCursor::pos(), button->toolTip(), button);
+                }
+            });
+            return false;
+        }
+
+        if (event->type() == QEvent::Leave) {
+            QToolTip::hideText();
+            return false;
+        }
+
+        if (event->type() == QEvent::ToolTip) {
+            return true;
+        }
+    }
+
     if (event->type() == QEvent::Wheel) {
         // 利用类的继承关系，全局拦截所有 QComboBox 和 QAbstractSpinBox(如QSpinBox, QDoubleSpinBox)
         if (watched->inherits("QComboBox") || watched->inherits("QAbstractSpinBox")) {

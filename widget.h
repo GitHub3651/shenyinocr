@@ -183,6 +183,7 @@ private slots:
 
     // ========== 其他槽函数 ==========
     void on_textsure_btn_clicked();     ///< 文本确定按钮
+    void on_batchTextsure_btn_clicked(); ///< 批量文本确定按钮
     QImage cvMatToQImage(const cv::Mat& mat); ///< Mat转QImage
     Mat* QImageToMat(const QImage &image);    ///< QImage转Mat
     void on_cancel_clicked();           ///< 取消按钮
