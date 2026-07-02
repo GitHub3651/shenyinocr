@@ -233,6 +233,7 @@ private:
     void showParameterCritical(const QString &title, const QString &message);
     void addConfirmAllParamError(const QString &message);
     void updateCurrentTemplateName();
+    void updateSaveDirButtonText();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
 
     // ========== UI对象 ==========
@@ -244,6 +245,10 @@ private:
     QWidget *m_wordTemplateEditWidget = nullptr;
     QLabel *m_wordTemplateEditLabel = nullptr;
     QComboBox *m_wordTemplateEditComboBox = nullptr;
+    QWidget *m_wordThresholdEditWidget = nullptr;
+    QLabel *m_wordThresholdEditLabel = nullptr;
+    QComboBox *m_wordThresholdEditComboBox = nullptr;
+    int m_currentWordTemplateEditIndex = -1;
     QStringList m_confirmAllParamErrors;
 
     // ========== 定时器 ==========
@@ -376,6 +381,7 @@ private:
         cv::Mat trackingTemplate;
         std::vector<cv::Point2f> datePoly;
         QString targetText;
+        QString imageThresholdText;
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
     };
@@ -388,10 +394,15 @@ private:
     void clearWordMultiTemplateState();
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
+    void setCurrentWordTemplateEditIndex(int profileIndex);
+    int currentWordTemplateProfileIndex() const;
+    void displayWordTemplateRawImage(const QString &dirPath);
     void runWordTemplateDetection(cv::Mat *image,
                                   const DetectionPose &pose,
                                   const std::vector<cv::Mat> &templates,
-                                  const QString &targetText);
+                                  const QString &targetText,
+                                  const QString &imageThresholdText,
+                                  const QString &templateName);
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

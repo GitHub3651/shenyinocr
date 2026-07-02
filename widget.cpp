@@ -1284,7 +1284,20 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
                          << profileIndex
                          << profile.name
                          << "score:" << pose.score;
-                runWordTemplateDetection(image, pose, profile.digitTemplates, profile.targetText);
+
+                const QString currentUsedTemplateName = profile.name.isEmpty()
+                        ? QDir(profile.dirPath).dirName()
+                        : profile.name;
+                ui->currentTemplateName->setText(currentUsedTemplateName.isEmpty()
+                                                 ? QString("--")
+                                                 : currentUsedTemplateName);
+
+                runWordTemplateDetection(image,
+                                         pose,
+                                         profile.digitTemplates,
+                                         profile.targetText,
+                                         profile.imageThresholdText,
+                                         currentUsedTemplateName);
                 return;
             }
 
@@ -1572,13 +1585,20 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
  */
 void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
 {
-    runWordTemplateDetection(image, pose, digitTemplates, ui->dateEdit->toPlainText());
+    runWordTemplateDetection(image,
+                             pose,
+                             digitTemplates,
+                             ui->dateEdit->toPlainText(),
+                             ui->lineEdit_yuzhi->text(),
+                             QDir(currentTemplateDirPath).dirName());
 }
 
 void Widget::runWordTemplateDetection(cv::Mat *image,
                                       const DetectionPose &pose,
                                       const std::vector<cv::Mat> &templates,
-                                      const QString &targetString)
+                                      const QString &targetString,
+                                      const QString &imageThresholdText,
+                                      const QString &templateName)
 {
     if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
         wrongremove();
@@ -1588,7 +1608,10 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     currentImagesSnapshot = totalImages;
     auto start = std::chrono::high_resolution_clock::now();
 
-    if (!image || image->empty()) return;
+    if (!image || image->empty()) {
+        qDebug().noquote() << "[WORD_DETECT] skip: input image is empty";
+        return;
+    }
 
     if (judge) { j = 1; x++; judge = false; }
     if ((j - 1) % x == 0) {
@@ -1599,6 +1622,10 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
 
     OrientedDateRoi oriented = prepareOrientedDateRoi(*image, pose, 20);
     if (!oriented.valid) {
+        qDebug().noquote() << QString("[WORD_DETECT] template=%1 result=NG reason=日期ROI无效或超出原图范围 poseValid=%2 poseScore=%3")
+                              .arg(templateName.isEmpty() ? QString("--") : templateName)
+                              .arg(pose.valid ? QString("true") : QString("false"))
+                              .arg(pose.score, 0, 'f', 4);
         return;
     }
 
@@ -1612,8 +1639,83 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     while (matchIt.hasNext()) { matchIt.next(); targetNum++; }
     if (targetNum == 0 && !targetString.isEmpty()) targetNum = targetString.length();
 
+    bool thresholdOk = false;
+    int thresholdValue = static_cast<int>(imageThresholdText.trimmed().toDouble(&thresholdOk));
+    if (!thresholdOk) {
+        thresholdValue = static_cast<int>(ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk));
+    }
+    if (thresholdOk) {
+        templatematch->ssimvalue(thresholdValue);
+    }
+
     int detectNum = templatematch->run3(templates);
     QString judgeResult = (detectNum == targetNum ? "ok" : "no");
+
+    const QStringList targetUnits = parseWordTemplateBaseNames(targetString);
+    QStringList detectedUnits;
+    QStringList matchDetails;
+    detectedUnits.reserve(static_cast<int>(templatematch->lastMatchResults.size()));
+    matchDetails.reserve(static_cast<int>(templatematch->lastMatchResults.size()));
+    for (int i = 0; i < static_cast<int>(templatematch->lastMatchResults.size()); ++i) {
+        const auto &match = templatematch->lastMatchResults[static_cast<size_t>(i)];
+        const cv::Rect rect = std::get<0>(match);
+        const double score = std::get<1>(match);
+        const int templateIndex = static_cast<int>(std::get<2>(match));
+        const QString unit = targetUnits.value(templateIndex, QString("#%1").arg(templateIndex));
+        detectedUnits.append(unit);
+        matchDetails.append(QString("%1:%2 score=%3 rect=(%4,%5,%6,%7) templateIndex=%8")
+                            .arg(i + 1)
+                            .arg(unit)
+                            .arg(score, 0, 'f', 3)
+                            .arg(rect.x)
+                            .arg(rect.y)
+                            .arg(rect.width)
+                            .arg(rect.height)
+                            .arg(templateIndex));
+    }
+
+    QStringList missingUnits;
+    for (int i = 0; i < targetUnits.size(); ++i) {
+        bool found = false;
+        for (const auto &match : templatematch->lastMatchResults) {
+            if (static_cast<int>(std::get<2>(match)) == i) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            missingUnits.append(QString("%1:%2").arg(i + 1).arg(targetUnits.at(i)));
+        }
+    }
+
+    QString reason;
+    if (judgeResult == "ok") {
+        reason = "识别数量等于目标数量";
+    } else if (detectNum < targetNum) {
+        reason = QString("识别数量少于目标数量，少%1个").arg(targetNum - detectNum);
+    } else {
+        reason = QString("识别数量多于目标数量，多%1个").arg(detectNum - targetNum);
+    }
+    if (!missingUnits.isEmpty()) {
+        reason += QString("；未匹配目标=%1").arg(missingUnits.join(", "));
+    }
+
+    qDebug().noquote() << QString("[WORD_DETECT] template=%1 result=%2 reason=%3 targetText=\"%4\" targetCount=%5 detectedCount=%6 threshold=%7 poseScore=%8 roi=(%9,%10,%11,%12) detected=\"%13\"")
+                          .arg(templateName.isEmpty() ? QString("--") : templateName)
+                          .arg(judgeResult == "ok" ? QString("OK") : QString("NG"))
+                          .arg(reason)
+                          .arg(targetString)
+                          .arg(targetNum)
+                          .arg(detectNum)
+                          .arg(thresholdOk ? QString::number(thresholdValue) : QString("无效"))
+                          .arg(pose.score, 0, 'f', 4)
+                          .arg(oriented.roi.x)
+                          .arg(oriented.roi.y)
+                          .arg(oriented.roi.width)
+                          .arg(oriented.roi.height)
+                          .arg(detectedUnits.join(""));
+    qDebug().noquote() << QString("[WORD_DETECT_DETAIL] %1")
+                          .arg(matchDetails.isEmpty() ? QString("no matched boxes") : matchDetails.join(" | "));
 
     g_lastDrawResults = mapMatchResultsToOriginal(templatematch->lastMatchResults, oriented, image->size());
     g_lastPose = pose;
@@ -1988,43 +2090,161 @@ void Widget::updateCurrentTemplateName()
     }
 }
 
-void Widget::setupWordTemplateEditorCombo()
+void Widget::updateSaveDirButtonText()
 {
-    if (m_wordTemplateEditComboBox || !ui || !ui->dateEdit) {
+    if (!ui || !ui->pushButton_6) {
         return;
     }
 
+    const QString saveDir = selectedDir.trimmed();
+    if (saveDir.isEmpty()) {
+        ui->pushButton_6->setText("图像保存路径");
+        ui->pushButton_6->setToolTip("");
+        return;
+    }
+
+    const QString displayText = QString("图像保存路径：%1").arg(saveDir);
+    ui->pushButton_6->setText(displayText);
+    ui->pushButton_6->setToolTip("点击可设置图像保存路径");
+}
+
+void Widget::setupWordTemplateEditorCombo()
+{
+    if (m_wordTemplateEditComboBox || !ui || !ui->dateEdit || !ui->lineEdit_yuzhi) {
+        return;
+    }
+
+    auto shiftGridRowsDown = [](QGridLayout *gridLayout, int firstRow) {
+        struct MovedWidget {
+            QWidget *widget = nullptr;
+            int row = 0;
+            int column = 0;
+            int rowSpan = 1;
+            int columnSpan = 1;
+            Qt::Alignment alignment;
+        };
+
+        std::vector<MovedWidget> movedWidgets;
+        for (int i = gridLayout->count() - 1; i >= 0; --i) {
+            QLayoutItem *item = gridLayout->itemAt(i);
+            if (!item || !item->widget()) {
+                continue;
+            }
+
+            int row = 0;
+            int column = 0;
+            int rowSpan = 1;
+            int columnSpan = 1;
+            gridLayout->getItemPosition(i, &row, &column, &rowSpan, &columnSpan);
+            if (row < firstRow) {
+                continue;
+            }
+
+            MovedWidget moved;
+            moved.widget = item->widget();
+            moved.row = row;
+            moved.column = column;
+            moved.rowSpan = rowSpan;
+            moved.columnSpan = columnSpan;
+            moved.alignment = item->alignment();
+            movedWidgets.push_back(moved);
+            gridLayout->removeWidget(moved.widget);
+        }
+
+        for (auto it = movedWidgets.rbegin(); it != movedWidgets.rend(); ++it) {
+            gridLayout->addWidget(it->widget,
+                                  it->row + 1,
+                                  it->column,
+                                  it->rowSpan,
+                                  it->columnSpan,
+                                  it->alignment);
+        }
+    };
+
     QWidget *parentWidget = ui->dateEdit->parentWidget();
-    if (!parentWidget) {
-        parentWidget = this;
+    if (parentWidget) {
+        QGridLayout *targetLayout = qobject_cast<QGridLayout *>(parentWidget->layout());
+        if (targetLayout) {
+            shiftGridRowsDown(targetLayout, 2);
+        }
+
+        m_wordTemplateEditWidget = new QWidget(parentWidget);
+        m_wordTemplateEditWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_wordTemplateEditWidget->setFixedHeight(50);
+        QHBoxLayout *editorLayout = new QHBoxLayout(m_wordTemplateEditWidget);
+        editorLayout->setContentsMargins(0, 0, 0, 0);
+        editorLayout->setSpacing(6);
+
+        m_wordTemplateEditLabel = new QLabel("当前编辑模板:", m_wordTemplateEditWidget);
+        m_wordTemplateEditLabel->setFixedHeight(50);
+        m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
+        m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
+        m_wordTemplateEditComboBox->setMinimumHeight(50);
+        m_wordTemplateEditComboBox->setMaximumHeight(50);
+        m_wordTemplateEditComboBox->setMinimumWidth(160);
+        m_wordTemplateEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+        editorLayout->addWidget(m_wordTemplateEditLabel);
+        editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
+        if (targetLayout) {
+            targetLayout->addWidget(m_wordTemplateEditWidget, 2, 1, 1, 2);
+        }
+
+        connect(m_wordTemplateEditComboBox,
+                static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+                this,
+                [this](int index) {
+                    applyWordTemplateEditorSelection(index);
+                });
+
+        m_wordTemplateEditWidget->hide();
     }
 
-    m_wordTemplateEditWidget = new QWidget(parentWidget);
-    QHBoxLayout *editorLayout = new QHBoxLayout(m_wordTemplateEditWidget);
-    editorLayout->setContentsMargins(0, 0, 0, 0);
-    editorLayout->setSpacing(6);
+    QWidget *thresholdParentWidget = ui->lineEdit_yuzhi->parentWidget();
+    if (thresholdParentWidget) {
+        QGridLayout *thresholdLayout = qobject_cast<QGridLayout *>(thresholdParentWidget->layout());
+        if (thresholdLayout) {
+            shiftGridRowsDown(thresholdLayout, 2);
+        }
 
-    m_wordTemplateEditLabel = new QLabel("当前编辑模板:", m_wordTemplateEditWidget);
-    m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
-    m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
-    m_wordTemplateEditComboBox->setMinimumHeight(50);
-    m_wordTemplateEditComboBox->setMinimumWidth(160);
-    m_wordTemplateEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_wordThresholdEditWidget = new QWidget(thresholdParentWidget);
+        m_wordThresholdEditWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_wordThresholdEditWidget->setFixedHeight(50);
+        QHBoxLayout *thresholdLayoutBox = new QHBoxLayout(m_wordThresholdEditWidget);
+        thresholdLayoutBox->setContentsMargins(0, 0, 0, 0);
+        thresholdLayoutBox->setSpacing(6);
 
-    editorLayout->addWidget(m_wordTemplateEditLabel);
-    editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
+        m_wordThresholdEditLabel = new QLabel("当前阈值模板:", m_wordThresholdEditWidget);
+        m_wordThresholdEditLabel->setFixedHeight(50);
+        m_wordThresholdEditComboBox = new QComboBox(m_wordThresholdEditWidget);
+        m_wordThresholdEditComboBox->setObjectName("wordThresholdTemplateComboBox");
+        m_wordThresholdEditComboBox->setMinimumHeight(50);
+        m_wordThresholdEditComboBox->setMaximumHeight(50);
+        m_wordThresholdEditComboBox->setMinimumWidth(160);
+        m_wordThresholdEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-    QGridLayout *targetLayout = qobject_cast<QGridLayout *>(parentWidget->layout());
-    if (targetLayout) {
-        targetLayout->addWidget(m_wordTemplateEditWidget, 1, 2);
+        thresholdLayoutBox->addWidget(m_wordThresholdEditLabel);
+        thresholdLayoutBox->addWidget(m_wordThresholdEditComboBox, 1);
+        if (thresholdLayout) {
+            thresholdLayout->addWidget(m_wordThresholdEditWidget, 2, 1);
+        }
+
+        connect(m_wordThresholdEditComboBox,
+                static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+                this,
+                [this](int index) {
+                    if (!m_wordThresholdEditComboBox || index < 0 || !m_wordMultiTemplateMode) {
+                        return;
+                    }
+                    bool ok = false;
+                    const int profileIndex = m_wordThresholdEditComboBox->itemData(index).toInt(&ok);
+                    if (ok) {
+                        setCurrentWordTemplateEditIndex(profileIndex);
+                    }
+                });
+
+        m_wordThresholdEditWidget->hide();
     }
-
-    connect(m_wordTemplateEditComboBox,
-            static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
-            this,
-            [this](int index) {
-                applyWordTemplateEditorSelection(index);
-            });
 
     connect(ui->comboBox_4,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
@@ -2036,8 +2256,6 @@ void Widget::setupWordTemplateEditorCombo()
                 }
                 refreshWordTemplateEditorCombo();
             });
-
-    m_wordTemplateEditWidget->hide();
 }
 
 void Widget::clearWordMultiTemplateState()
@@ -2045,6 +2263,7 @@ void Widget::clearWordMultiTemplateState()
     m_wordTemplateDirPaths.clear();
     m_wordTemplateProfiles.clear();
     m_wordMultiTemplateMode = false;
+    m_currentWordTemplateEditIndex = -1;
     m_currentTemplateNameVisible = false;
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
@@ -2060,9 +2279,13 @@ void Widget::refreshWordTemplateEditorCombo()
             && ui->comboBox_4->currentIndex() == 1
             && !m_wordTemplateProfiles.empty();
 
-    {
-        QSignalBlocker blocker(m_wordTemplateEditComboBox);
-        m_wordTemplateEditComboBox->clear();
+    auto fillCombo = [this, shouldShow](QComboBox *comboBox) {
+        if (!comboBox) {
+            return;
+        }
+
+        QSignalBlocker blocker(comboBox);
+        comboBox->clear();
 
         if (shouldShow) {
             for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
@@ -2070,15 +2293,27 @@ void Widget::refreshWordTemplateEditorCombo()
                 const QString displayName = profile.name.isEmpty()
                         ? QString("模板%1").arg(i + 1)
                         : profile.name;
-                m_wordTemplateEditComboBox->addItem(displayName, i);
+                comboBox->addItem(displayName, i);
             }
-            m_wordTemplateEditComboBox->setCurrentIndex(0);
         }
-    }
+    };
+
+    fillCombo(m_wordTemplateEditComboBox);
+    fillCombo(m_wordThresholdEditComboBox);
 
     m_wordTemplateEditWidget->setVisible(shouldShow);
+    if (m_wordThresholdEditWidget) {
+        m_wordThresholdEditWidget->setVisible(shouldShow);
+    }
+
     if (shouldShow) {
-        applyWordTemplateEditorSelection(m_wordTemplateEditComboBox->currentIndex());
+        int profileIndex = m_currentWordTemplateEditIndex;
+        if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+            profileIndex = 0;
+        }
+        setCurrentWordTemplateEditIndex(profileIndex);
+    } else {
+        m_currentWordTemplateEditIndex = -1;
     }
 }
 
@@ -2094,12 +2329,102 @@ void Widget::applyWordTemplateEditorSelection(int comboIndex)
         return;
     }
 
+    setCurrentWordTemplateEditIndex(profileIndex);
+}
+
+void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
+{
+    if (!m_wordMultiTemplateMode
+            || profileIndex < 0
+            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        return;
+    }
+
+    m_currentWordTemplateEditIndex = profileIndex;
+
+    auto syncCombo = [profileIndex](QComboBox *comboBox) {
+        if (!comboBox) {
+            return;
+        }
+
+        int comboIndex = -1;
+        for (int i = 0; i < comboBox->count(); ++i) {
+            if (comboBox->itemData(i).toInt() == profileIndex) {
+                comboIndex = i;
+                break;
+            }
+        }
+
+        if (comboIndex >= 0) {
+            QSignalBlocker blocker(comboBox);
+            comboBox->setCurrentIndex(comboIndex);
+        }
+    };
+
+    syncCombo(m_wordTemplateEditComboBox);
+    syncCombo(m_wordThresholdEditComboBox);
+
     const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-    ui->dateEdit->setPlainText(profile.targetText);
+    {
+        QSignalBlocker blocker(ui->dateEdit);
+        ui->dateEdit->setPlainText(profile.targetText);
+    }
+    {
+        QSignalBlocker blocker(ui->lineEdit_yuzhi);
+        ui->lineEdit_yuzhi->setText(profile.imageThresholdText);
+    }
+
     qDebug() << "[WORD_MULTI_TEMPLATE] editing profile:"
              << profileIndex
              << profile.name
-             << profile.dirPath;
+             << profile.dirPath
+             << "threshold:" << profile.imageThresholdText;
+
+    displayWordTemplateRawImage(profile.dirPath);
+}
+
+int Widget::currentWordTemplateProfileIndex() const
+{
+    if (!m_wordMultiTemplateMode
+            || m_currentWordTemplateEditIndex < 0
+            || m_currentWordTemplateEditIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        return -1;
+    }
+    return m_currentWordTemplateEditIndex;
+}
+
+void Widget::displayWordTemplateRawImage(const QString &dirPath)
+{
+    if (!ui || !ui->image_undetected || dirPath.isEmpty()) {
+        return;
+    }
+
+    const QString rawImagePath = QDir(dirPath).filePath("template_raw.png");
+    if (!QFile::exists(rawImagePath)) {
+        qDebug() << "[WORD_MULTI_TEMPLATE] template_raw.png not found:" << rawImagePath;
+        return;
+    }
+
+    QPixmap rawPixmap;
+    if (!rawPixmap.load(rawImagePath)) {
+        qDebug() << "[WORD_MULTI_TEMPLATE] template_raw.png load failed:" << rawImagePath;
+        return;
+    }
+
+    QSize labelSize = ui->image_undetected->size();
+    if (!labelSize.isValid() || labelSize.isEmpty()) {
+        labelSize = rawPixmap.size();
+    }
+
+    const QPixmap scaledPixmap = rawPixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    ui->image_undetected->setScaledContents(false);
+    ui->image_undetected->setAlignment(Qt::AlignCenter);
+    ui->image_undetected->setPixmap(scaledPixmap);
+
+    if (imageLabel) {
+        imageLabel->clearGreenRects();
+        imageLabel->clearSelection();
+    }
 }
 
 QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
@@ -2637,14 +2962,13 @@ void Widget::on_textsure_btn_clicked()
             return;
         }
 
-        if (!m_wordTemplateEditComboBox || m_wordTemplateProfiles.empty()) {
+        if (m_wordTemplateProfiles.empty()) {
             showParameterInfoAsError("提示", "请先选择字库模板");
             return;
         }
 
-        bool indexOk = false;
-        const int profileIndex = m_wordTemplateEditComboBox->currentData().toInt(&indexOk);
-        if (!indexOk || profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        const int profileIndex = currentWordTemplateProfileIndex();
+        if (profileIndex < 0) {
             showParameterInfoAsError("提示", "当前编辑模板无效");
             return;
         }
@@ -2989,6 +3313,54 @@ void Widget::on_pushButton_clicked()
  */
 void Widget::on_pushButton_3_clicked()
 {
+    if (ui->comboBox_4->currentIndex() == 1 && m_wordMultiTemplateMode) {
+        if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
+            showParameterWarning("提示", "请先停止检测后再修改模板阈值");
+            return;
+        }
+
+        const int profileIndex = currentWordTemplateProfileIndex();
+        if (profileIndex < 0) {
+            showParameterInfoAsError("提示", "当前阈值模板无效");
+            return;
+        }
+
+        const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
+        bool thresholdOk = false;
+        const int thresholdValue = static_cast<int>(thresholdText.toDouble(&thresholdOk));
+        if (!thresholdOk) {
+            showParameterWarning("参数错误", "图像合格阈值必须是数字");
+            return;
+        }
+
+        WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+        const QString settingsFilePath = QDir(profile.dirPath).filePath("app_settings.appset");
+        if (!QFile::exists(settingsFilePath)) {
+            showParameterCritical("严重警告",
+                                  QString("当前模板 [%1] 缺少 app_settings.appset，无法保存图像阈值。")
+                                  .arg(profile.name));
+            return;
+        }
+
+        QSettings settings(settingsFilePath, QSettings::IniFormat);
+        settings.setValue("lineEdit_yuzhi_value", thresholdText);
+        settings.sync();
+        if (settings.status() != QSettings::NoError) {
+            showParameterCritical("严重警告",
+                                  QString("当前模板 [%1] 的图像阈值写入失败。")
+                                  .arg(profile.name));
+            return;
+        }
+
+        profile.imageThresholdText = thresholdText;
+        emit ssim(thresholdValue);
+        showParameterInfo("提示",
+                          QString("模板 [%1] 图像阈值设置成功：%2")
+                          .arg(profile.name)
+                          .arg(thresholdText));
+        return;
+    }
+
     int number = ui->lineEdit_yuzhi->text().toDouble();
     emit ssim(number);
     showParameterInfo("提示", "阈值设置成功");
@@ -3274,6 +3646,7 @@ void Widget::on_pushButton_4_clicked()
                 QDir templateDir(selectedDirPath);
 
                 QString targetText;
+                QString imageThresholdText;
                 QStringList baseNames;
                 const QString settingsFilePath = templateDir.filePath("app_settings.appset");
                 if (!QFile::exists(settingsFilePath)) {
@@ -3283,6 +3656,10 @@ void Widget::on_pushButton_4_clicked()
                 } else {
                     QSettings settings(settingsFilePath, QSettings::IniFormat);
                     targetText = settings.value("dateEdit_value").toString();
+                    imageThresholdText = settings.value("lineEdit_yuzhi_value", ui->lineEdit_yuzhi->text()).toString();
+                    if (imageThresholdText.trimmed().isEmpty()) {
+                        imageThresholdText = ui->lineEdit_yuzhi->text();
+                    }
                     baseNames = parseWordTemplateBaseNames(targetText);
                     if (targetText.trimmed().isEmpty() || baseNames.isEmpty()) {
                         pendingTargetMessages.append(QString("%1：目标字符为空或解析失败，目标字符待设置").arg(templateDir.dirName()));
@@ -3404,6 +3781,7 @@ void Widget::on_pushButton_4_clicked()
                 profile.trackingTemplate = trackingTemplate;
                 profile.datePoly = calib.date_poly;
                 profile.targetText = targetText;
+                profile.imageThresholdText = imageThresholdText;
                 profile.targetCount = loadedDigitTemplates.size();
                 profile.digitTemplates = loadedDigitTemplates;
                 loadedDirPaths.append(profile.dirPath);
@@ -3571,11 +3949,17 @@ void Widget::on_pushButton_4_clicked()
  */
 void Widget::on_pushButton_6_clicked()
 {
-    selectedDir = QFileDialog::getExistingDirectory(
+    const QString dirPath = QFileDialog::getExistingDirectory(
                 this,
                 "选择目标文件夹",
-                "C:/",
+                selectedDir.isEmpty() ? QString("C:/") : selectedDir,
                 QFileDialog::ShowDirsOnly);
+    if (dirPath.isEmpty()) {
+        return;
+    }
+
+    selectedDir = dirPath;
+    updateSaveDirButtonText();
     qDebug() << "save file path:" << selectedDir;
 }
 
@@ -3689,6 +4073,7 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
     if (settings.contains("saveDirPath")) {
         selectedDir = settings.value("saveDirPath").toString();
     }
+    updateSaveDirButtonText();
 
     // 🔥 加载双框坐标
     if (settings.contains("hasValidBoxes") && settings.value("hasValidBoxes").toBool()) {
@@ -3833,6 +4218,7 @@ void Widget::loadSettings()
     if (settings.contains("saveDirPath")) {
         selectedDir = settings.value("saveDirPath").toString();
     }
+    updateSaveDirButtonText();
 }
 
 /**
@@ -3895,6 +4281,7 @@ void Widget::setupDefaultValues()
     ui->comboBox_2->setCurrentText("无旋转");
     ui->comboBox_3->setCurrentText("间歇触发模式");
     ui->checkBox->setChecked(true);
+    updateSaveDirButtonText();
     applyTissueRoughnessThresholdFromUi(false);
 }
 
@@ -4765,21 +5152,59 @@ void Widget::on_pushButton_11_clicked()
             return;
         }
 
+        QMessageBox thresholdMessageBox(this);
+        thresholdMessageBox.setIcon(QMessageBox::Question);
+        thresholdMessageBox.setWindowTitle("保存参数");
+        thresholdMessageBox.setText("当前处于字库多模板模式。\n保存参数会将当前界面上的参数写入所有模板文件夹。\n\n是否将当前界面的图像合格阈值覆盖到每一个模板？");
+        QPushButton *overwriteThresholdButton = thresholdMessageBox.addButton("覆盖图像阈值", QMessageBox::AcceptRole);
+        QPushButton *skipThresholdButton = thresholdMessageBox.addButton("跳过图像阈值", QMessageBox::ActionRole);
+        QPushButton *cancelButton = thresholdMessageBox.addButton("取消", QMessageBox::RejectRole);
+        thresholdMessageBox.setDefaultButton(skipThresholdButton);
+        thresholdMessageBox.exec();
+
+        if (thresholdMessageBox.clickedButton() == cancelButton) {
+            return;
+        }
+
+        const bool overwriteImageThreshold = (thresholdMessageBox.clickedButton() == overwriteThresholdButton);
+        const QString globalImageThresholdText = ui->lineEdit_yuzhi->text().trimmed();
+        if (overwriteImageThreshold) {
+            bool thresholdOk = false;
+            globalImageThresholdText.toDouble(&thresholdOk);
+            if (!thresholdOk) {
+                QMessageBox::warning(this, "参数错误", "当前界面的图像合格阈值不是有效数字，无法覆盖到所有模板。");
+                return;
+            }
+        }
+
         const QString oldDateEditText = ui->dateEdit->toPlainText();
+        const QString oldImageThresholdText = ui->lineEdit_yuzhi->text();
         const QString oldCurrentTemplateDirPath = currentTemplateDirPath;
+        const int oldProfileIndex = currentWordTemplateProfileIndex();
         int savedCount = 0;
         QStringList failedTemplates;
 
-        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+        for (WordTemplateProfile &profile : m_wordTemplateProfiles) {
             QDir dir(profile.dirPath);
             if (profile.dirPath.isEmpty() || !dir.exists()) {
                 failedTemplates.append(profile.name.isEmpty() ? profile.dirPath : profile.name);
                 continue;
             }
 
+            QString thresholdToSave = profile.imageThresholdText;
+            if (overwriteImageThreshold) {
+                thresholdToSave = globalImageThresholdText;
+                profile.imageThresholdText = globalImageThresholdText;
+            } else if (thresholdToSave.trimmed().isEmpty()) {
+                thresholdToSave = oldImageThresholdText;
+                profile.imageThresholdText = thresholdToSave;
+            }
+
             {
-                QSignalBlocker blocker(ui->dateEdit);
+                QSignalBlocker dateBlocker(ui->dateEdit);
+                QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
                 ui->dateEdit->setPlainText(profile.targetText);
+                ui->lineEdit_yuzhi->setText(thresholdToSave);
                 currentTemplateDirPath = profile.dirPath;
                 saveSettingsToDir(profile.dirPath);
             }
@@ -4787,9 +5212,13 @@ void Widget::on_pushButton_11_clicked()
         }
 
         currentTemplateDirPath = oldCurrentTemplateDirPath;
-        {
+        if (oldProfileIndex >= 0) {
+            setCurrentWordTemplateEditIndex(oldProfileIndex);
+        } else {
             QSignalBlocker blocker(ui->dateEdit);
             ui->dateEdit->setPlainText(oldDateEditText);
+            QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
+            ui->lineEdit_yuzhi->setText(oldImageThresholdText);
         }
 
         saveSettings();
@@ -4805,8 +5234,9 @@ void Widget::on_pushButton_11_clicked()
 
         QMessageBox::information(this,
                                  "成功",
-                                 QString("已将当前参数保存到 %1 个字库模板。\n\n目标字符仍按每个模板自己的配置保存，不会被统一覆盖。")
-                                 .arg(savedCount));
+                                 QString("已将当前参数保存到 %1 个字库模板。\n\n目标字符仍按每个模板自己的配置保存。\n图像阈值处理：%2")
+                                 .arg(savedCount)
+                                 .arg(overwriteImageThreshold ? "已覆盖到所有模板" : "已跳过覆盖，保留每个模板自己的阈值"));
         return;
     }
 

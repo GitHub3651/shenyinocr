@@ -933,7 +933,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>0</number>
+         <number>1</number>
         </property>
         <property name="iconSize">
          <size>
@@ -1110,7 +1110,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-589</y>
+               <y>-343</y>
                <width>586</width>
                <height>1270</height>
               </rect>
@@ -1463,7 +1463,7 @@ QPushButton:pressed {
                     </size>
                    </property>
                    <property name="text">
-                    <string>900</string>
+                    <string>80</string>
                    </property>
                   </widget>
                  </item>
