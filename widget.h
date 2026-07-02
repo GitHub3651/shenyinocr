@@ -234,6 +234,7 @@ private:
     void addConfirmAllParamError(const QString &message);
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
+    void updateTissueRoughnessUiVisibility();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
 
     // ========== UI对象 ==========

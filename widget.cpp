@@ -2108,6 +2108,18 @@ void Widget::updateSaveDirButtonText()
     ui->pushButton_6->setToolTip("点击可设置图像保存路径");
 }
 
+void Widget::updateTissueRoughnessUiVisibility()
+{
+    if (!ui) {
+        return;
+    }
+
+    const bool showTissueThreshold = (ui->comboBox_4->currentIndex() == 3);
+    ui->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
+    ui->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
+    ui->pushButton_tissueRoughnessThreshold->setVisible(showTissueThreshold);
+}
+
 void Widget::setupWordTemplateEditorCombo()
 {
     if (m_wordTemplateEditComboBox || !ui || !ui->dateEdit || !ui->lineEdit_yuzhi) {
@@ -2250,12 +2262,14 @@ void Widget::setupWordTemplateEditorCombo()
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
             [this](int index) {
+                updateTissueRoughnessUiVisibility();
                 if (index != 1 && m_wordMultiTemplateMode) {
                     clearWordMultiTemplateState();
                     return;
                 }
                 refreshWordTemplateEditorCombo();
             });
+    updateTissueRoughnessUiVisibility();
 }
 
 void Widget::clearWordMultiTemplateState()
@@ -4074,6 +4088,7 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
         selectedDir = settings.value("saveDirPath").toString();
     }
     updateSaveDirButtonText();
+    updateTissueRoughnessUiVisibility();
 
     // 🔥 加载双框坐标
     if (settings.contains("hasValidBoxes") && settings.value("hasValidBoxes").toBool()) {
@@ -4219,6 +4234,7 @@ void Widget::loadSettings()
         selectedDir = settings.value("saveDirPath").toString();
     }
     updateSaveDirButtonText();
+    updateTissueRoughnessUiVisibility();
 }
 
 /**
@@ -4282,6 +4298,7 @@ void Widget::setupDefaultValues()
     ui->comboBox_3->setCurrentText("间歇触发模式");
     ui->checkBox->setChecked(true);
     updateSaveDirButtonText();
+    updateTissueRoughnessUiVisibility();
     applyTissueRoughnessThresholdFromUi(false);
 }
 
