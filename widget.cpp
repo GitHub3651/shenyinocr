@@ -1282,7 +1282,7 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
             cv::polylines(displayImg, trackingPolys, true, cv::Scalar(255, 0, 0), boxThickness);
         }
 
-        // ================== 绘制生产日期多边形 ==================
+        // ================== 绘制喷码检测区域 ==================
         if (!g_lastPose.datePoly.empty()) {
             std::vector<std::vector<cv::Point>> datePolys = {g_lastPose.datePoly};
             cv::polylines(displayImg, datePolys, true, cv::Scalar(0, 255, 0), boxThickness);
@@ -2642,7 +2642,7 @@ bool Widget::loadWordDigitTemplatesFromDir(const QString &dirPath,
     QDir directory(dirPath);
     if (!directory.exists()) {
         if (errorMessage) {
-            *errorMessage = "模板文件夹不存在";
+            *errorMessage = "产品模板文件夹不存在";
         }
         return false;
     }
@@ -3285,7 +3285,7 @@ void Widget::on_textsure_btn_clicked()
     {
         // 1. 检查是否存在有效的模板路径
         if (currentTemplateDirPath.isEmpty()) {
-            showParameterInfoAsError("提示", "请先选择模板文件夹");
+            showParameterInfoAsError("提示", "请先选择产品模板文件夹");
             return;
         }
         // 2. 读取当前修改后的目标字符
@@ -3311,7 +3311,7 @@ void Widget::on_textsure_btn_clicked()
                                            includeVariantTemplates)) {
             // 如果有任何图片读取失败或丢失，绝不更新到全局的 digitTemplates，同时给出严厉警告
             showParameterCritical("严重警告",
-                QString("%1\n\n请检查模板文件夹内的图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。")
+                QString("%1\n\n请检查产品模板文件夹内的字符图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。")
                 .arg(loadError));
             return;
         }
@@ -3372,7 +3372,7 @@ void Widget::on_batchTextsure_btn_clicked()
 
         QDir directory(profile.dirPath);
         if (profile.dirPath.isEmpty() || !directory.exists()) {
-            failedMessages.append(QString("%1：模板文件夹不存在").arg(profileName));
+            failedMessages.append(QString("%1：产品模板文件夹不存在").arg(profileName));
             continue;
         }
 
@@ -3650,7 +3650,8 @@ void Widget::on_pushButton_5_clicked()
     }
 
     const QString folderNamePrompt =
-            "请输入新模板文件夹名称：\n\n"
+            "请输入新产品模板文件夹名称：\n\n"
+            "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。\n\n"
             "制作字符模板时，相同字符的不同模板可以这样命名：\n"
             "5.png：字符 5 的主模板图片\n"
             "5_任意名称.png、5(1).png、5-(1).png、5(1)(2).png：字符 5 的额外模板图片";
@@ -3675,7 +3676,11 @@ void Widget::on_pushButton_5_clicked()
     QPolygon uiDetectPoly = imageLabel->getDetectionPoly();
 
     if (uiTrackRect.isNull() || uiDetectPoly.isEmpty() || uiDetectPoly.size() < 3) {
-        QMessageBox::warning(this, "警告", "请在图上画好【追踪锚点】并闭合【生产日期多边形】！");
+        QMessageBox::warning(this, "警告",
+                             "保存模板前，请先在图像上完成以下操作：\n\n"
+                             "1. 框选定位区域\n"
+                             "2. 框选并闭合喷码检测区域\n\n"
+                             "完成后再点击【保存模板】。");
         return;
     }
 
@@ -3878,13 +3883,13 @@ void Widget::initOverlapDetectorFromCurrentDir() {
  * @details 支持带括号的字符格式，如"0(1)"表示0字符的第1个变体
  */
 // 按钮pushButton_4的点击事件槽函数
-// 功能：从用户输入解析模板文件名，选择模板文件夹
+// 功能：从用户输入解析模板文件名，选择产品模板文件夹
 void Widget::on_pushButton_4_clicked()
 {
     QString dirPath;
 
     if (ui->comboBox_4->currentIndex() == 1) {
-        QFileDialog dialog(this, "选择字库模板文件夹", "D:/muban");
+        QFileDialog dialog(this, "选择产品模板文件夹", "D:/muban");
         dialog.setFileMode(QFileDialog::Directory);
         dialog.setOption(QFileDialog::ShowDirsOnly, true);
         dialog.setOption(QFileDialog::DontUseNativeDialog, true);
@@ -4075,7 +4080,7 @@ void Widget::on_pushButton_4_clicked()
 
         dirPath = selectedDirs.first();
     } else {
-        dirPath = QFileDialog::getExistingDirectory(nullptr, "选择模板文件夹",
+        dirPath = QFileDialog::getExistingDirectory(nullptr, "选择产品模板文件夹",
                                                     "D:/muban",
                                                     QFileDialog::ShowDirsOnly);
     }
@@ -4111,7 +4116,7 @@ void Widget::on_pushButton_4_clicked()
         if (m_currentTemplateNameVisible) {
             QMessageBox::information(this, "提示", "模板已选择");
         } else {
-            QMessageBox::warning(this, "提示", "模板加载失败，请检查模板文件夹");
+            QMessageBox::warning(this, "提示", "模板加载失败，请检查产品模板文件夹");
         }
         return;
     }
@@ -4657,13 +4662,18 @@ void Widget::on_plcbtn_clicked()
             : (isWordMultiMode ? QString("字库多模板") : QDir(currentTemplateDirPath).dirName());
 
     if (isWordMode && m_wordMultiTemplateMode && m_wordTemplateProfiles.empty()) {
-        QMessageBox::warning(this, "提示", "当前字库多模板缓存为空，请重新选择模板文件夹。");
+        QMessageBox::warning(this, "提示", "当前字库多模板缓存为空，请重新选择产品模板文件夹。");
         return;
     }
 
     // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
     if (!isTissueMode && !isWordMultiMode && (!hasValidBoxes || m_loadedTrackingTemplate.empty())) {
-        QMessageBox::warning(this, "操作规范", "缺乏追踪模板，无法启动！\n\n1. 如果是新产品：请先【拍照】，画好双框并点击【保存模板】\n2. 如果是换线复用：请先点击【加载模板】");
+        QMessageBox::warning(this, "操作规范",
+                             "缺少可用产品模板，无法启动检测。\n\n"
+                             "如果是新产品：\n"
+                             "请先【拍照】，框选定位区域和喷码检测区域，然后点击【保存模板】。\n\n"
+                             "如果是已有产品：\n"
+                             "请点击【选择模板】，选择对应产品模板文件夹。");
         return;
     }
 
@@ -4731,7 +4741,7 @@ void Widget::on_plcbtn_clicked()
         m_pcMyCamera->SetFloatValue("Gain", gainValue);
 
         if (isCollecting) {
-            QMessageBox::information(this, "提示", "已在采集中，若要停止请点击【取消识别】按钮");
+            QMessageBox::information(this, "提示", "已在采集中，若要停止请点击【停止识别】按钮");
             return;
         }
 
@@ -5256,7 +5266,7 @@ void Widget::loadLastTemplateConfig()
     if (!loaded) {
         digitTemplates.clear();
         digitTemplateTargetIndexes.clear();
-        qDebug() << "[ERROR] 模板文件夹中的图片缺失或读取失败，已清空模板以保护程序！" << loadError;
+        qDebug() << "[ERROR] 产品模板文件夹中的图片缺失或读取失败，已清空模板以保护程序！" << loadError;
     } else {
         digitTemplates = tempTemplates;
         digitTemplateTargetIndexes = tempTemplateTargetIndexes;
@@ -5372,7 +5382,7 @@ void Widget::on_pushButton_11_clicked()
         QMessageBox thresholdMessageBox(this);
         thresholdMessageBox.setIcon(QMessageBox::Question);
         thresholdMessageBox.setWindowTitle("保存参数");
-        thresholdMessageBox.setText("当前处于字库多模板模式。\n保存参数会将当前界面上的参数写入所有模板文件夹。\n\n是否将当前界面的图像合格阈值覆盖到每一个模板？");
+        thresholdMessageBox.setText("当前处于字库多模板模式。\n保存参数会将当前界面上的参数写入所有产品模板文件夹。\n\n是否将当前界面的图像合格阈值覆盖到每一个模板？");
         QPushButton *overwriteThresholdButton = thresholdMessageBox.addButton("覆盖图像阈值", QMessageBox::AcceptRole);
         QPushButton *skipThresholdButton = thresholdMessageBox.addButton("跳过图像阈值", QMessageBox::ActionRole);
         QPushButton *cancelButton = thresholdMessageBox.addButton("取消", QMessageBox::RejectRole);
@@ -5457,16 +5467,16 @@ void Widget::on_pushButton_11_clicked()
         return;
     }
 
-    // 1. 检查是否已经加载了模板文件夹
+    // 1. 检查是否已经加载了产品模板文件夹
     if (currentTemplateDirPath.isEmpty()) {
-        QMessageBox::warning(this, "提示", "当前没有加载任何模板！\n请先点击【加载模板】后再尝试更新参数。");
+        QMessageBox::warning(this, "提示", "当前没有加载任何模板！\n请先点击【选择模板】后再尝试更新参数。");
         return;
     }
 
     // 2. 检查该文件夹在硬盘上是否仍然存在
     QDir dir(currentTemplateDirPath);
     if (!dir.exists()) {
-        QMessageBox::warning(this, "错误", "当前使用的模板文件夹不存在或已被删除，无法更新参数！");
+        QMessageBox::warning(this, "错误", "当前使用的产品模板文件夹不存在或已被删除，无法更新参数！");
         return;
     }
 

@@ -871,7 +871,7 @@
             <string notr="true">border:none; border-top: 1px solid #ebeef5; margin-top: 8px; padding-top: 4px;</string>
            </property>
            <property name="title">
-            <string>当前使用模板文件夹名称</string>
+            <string>当前使用产品模板文件夹名称</string>
            </property>
            <layout class="QVBoxLayout">
             <property name="leftMargin">
