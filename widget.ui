@@ -963,7 +963,7 @@
                <x>0</x>
                <y>0</y>
                <width>586</width>
-               <height>414</height>
+               <height>416</height>
               </rect>
              </property>
              <property name="styleSheet">
@@ -1045,58 +1045,49 @@
                   </widget>
                  </item>
                  <item row="1" column="1" colspan="2">
-                  <widget class="QWidget" name="textConfirmButtonContainer">
-                   <property name="styleSheet">
-                    <string notr="true">#textConfirmButtonContainer {
-    border: none;
-    background: transparent;
-    padding: 0px;
-}</string>
+                  <layout class="QHBoxLayout" name="textConfirmButtonLayout">
+                   <property name="spacing">
+                    <number>6</number>
                    </property>
-                   <layout class="QHBoxLayout" name="textConfirmButtonLayout">
-                    <property name="spacing">
-                     <number>6</number>
-                    </property>
-                    <property name="leftMargin">
-                     <number>0</number>
-                    </property>
-                    <property name="topMargin">
-                     <number>0</number>
-                    </property>
-                    <property name="rightMargin">
-                     <number>0</number>
-                    </property>
-                    <property name="bottomMargin">
-                     <number>0</number>
-                    </property>
-                    <item>
-                     <widget class="QPushButton" name="textsure_btn">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>确认字符</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item>
-                     <widget class="QPushButton" name="batchTextsure_btn">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>批量确认字符</string>
-                      </property>
-                     </widget>
-                    </item>
-                   </layout>
-                  </widget>
+                   <property name="leftMargin">
+                    <number>0</number>
+                   </property>
+                   <property name="topMargin">
+                    <number>0</number>
+                   </property>
+                   <property name="rightMargin">
+                    <number>0</number>
+                   </property>
+                   <property name="bottomMargin">
+                    <number>0</number>
+                   </property>
+                   <item>
+                    <widget class="QPushButton" name="textsure_btn">
+                     <property name="minimumSize">
+                      <size>
+                       <width>0</width>
+                       <height>50</height>
+                      </size>
+                     </property>
+                     <property name="text">
+                      <string>确认字符</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QPushButton" name="batchTextsure_btn">
+                     <property name="minimumSize">
+                      <size>
+                       <width>0</width>
+                       <height>50</height>
+                      </size>
+                     </property>
+                     <property name="text">
+                      <string>批量确认字符</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
                  </item>
                  <item row="5" column="0" colspan="3">
                   <widget class="QPushButton" name="confirmAllParamsButton">
@@ -1151,7 +1142,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>0</y>
+               <y>-162</y>
                <width>586</width>
                <height>1270</height>
               </rect>

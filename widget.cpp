@@ -1374,6 +1374,7 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
                 runWordTemplateDetection(image,
                                          pose,
                                          profile.digitTemplates,
+                                         profile.digitTemplateTargetIndexes,
                                          profile.targetText,
                                          profile.imageThresholdText,
                                          currentUsedTemplateName);
@@ -1667,6 +1668,7 @@ void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
     runWordTemplateDetection(image,
                              pose,
                              digitTemplates,
+                             digitTemplateTargetIndexes,
                              ui->dateEdit->toPlainText(),
                              ui->lineEdit_yuzhi->text(),
                              QDir(currentTemplateDirPath).dirName());
@@ -1675,6 +1677,7 @@ void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
 void Widget::runWordTemplateDetection(cv::Mat *image,
                                       const DetectionPose &pose,
                                       const std::vector<cv::Mat> &templates,
+                                      const std::vector<int> &templateTargetIndexes,
                                       const QString &targetString,
                                       const QString &imageThresholdText,
                                       const QString &templateName)
@@ -1727,7 +1730,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         templatematch->ssimvalue(thresholdValue);
     }
 
-    int detectNum = templatematch->run3(templates);
+    int detectNum = templatematch->run3(templates, templateTargetIndexes);
     QString judgeResult = (detectNum == targetNum ? "ok" : "no");
 
     const QStringList targetUnits = parseWordTemplateBaseNames(targetString);
@@ -1739,10 +1742,10 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         const auto &match = templatematch->lastMatchResults[static_cast<size_t>(i)];
         const cv::Rect rect = std::get<0>(match);
         const double score = std::get<1>(match);
-        const int templateIndex = static_cast<int>(std::get<2>(match));
-        const QString unit = targetUnits.value(templateIndex, QString("#%1").arg(templateIndex));
+        const int targetIndex = static_cast<int>(std::get<2>(match));
+        const QString unit = targetUnits.value(targetIndex, QString("#%1").arg(targetIndex));
         detectedUnits.append(unit);
-        matchDetails.append(QString("%1:%2 score=%3 rect=(%4,%5,%6,%7) templateIndex=%8")
+        matchDetails.append(QString("%1:%2 score=%3 rect=(%4,%5,%6,%7) targetIndex=%8")
                             .arg(i + 1)
                             .arg(unit)
                             .arg(score, 0, 'f', 3)
@@ -1750,7 +1753,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
                             .arg(rect.y)
                             .arg(rect.width)
                             .arg(rect.height)
-                            .arg(templateIndex));
+                            .arg(targetIndex));
     }
 
     QStringList missingUnits;
@@ -2584,6 +2587,128 @@ QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
     return baseNames;
 }
 
+QStringList Widget::wordTemplateImagePathsForKey(const QDir &directory,
+                                                 const QString &searchKey,
+                                                 bool includeVariants) const
+{
+    QStringList exactPaths;
+    QStringList variantPaths;
+    const QString normalizedKey = searchKey.trimmed().toLower();
+    if (normalizedKey.isEmpty() || !directory.exists()) {
+        return QStringList();
+    }
+
+    static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
+    const QFileInfoList fileList = directory.entryInfoList(
+                filters,
+                QDir::Files | QDir::NoDotAndDotDot,
+                QDir::Name | QDir::IgnoreCase);
+
+    for (const QFileInfo &fileInfo : fileList) {
+        const QString baseName = fileInfo.completeBaseName().toLower();
+        if (baseName == normalizedKey) {
+            exactPaths.append(fileInfo.absoluteFilePath());
+        } else if (includeVariants && baseName.startsWith(normalizedKey)) {
+            const QString suffix = baseName.mid(normalizedKey.length());
+            if (suffix.startsWith("_") || suffix.startsWith("-") || suffix.startsWith("(")) {
+                variantPaths.append(fileInfo.absoluteFilePath());
+            }
+        }
+    }
+
+    exactPaths.sort(Qt::CaseInsensitive);
+    variantPaths.sort(Qt::CaseInsensitive);
+    exactPaths.append(variantPaths);
+    return exactPaths;
+}
+
+bool Widget::loadWordDigitTemplatesFromDir(const QString &dirPath,
+                                           const QStringList &baseNames,
+                                           std::vector<cv::Mat> *templates,
+                                           std::vector<int> *templateTargetIndexes,
+                                           QString *errorMessage,
+                                           bool includeVariants) const
+{
+    if (!templates || !templateTargetIndexes) {
+        if (errorMessage) {
+            *errorMessage = "内部参数无效";
+        }
+        return false;
+    }
+
+    templates->clear();
+    templateTargetIndexes->clear();
+
+    QDir directory(dirPath);
+    if (!directory.exists()) {
+        if (errorMessage) {
+            *errorMessage = "模板文件夹不存在";
+        }
+        return false;
+    }
+
+    if (baseNames.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = "目标字符为空或解析失败";
+        }
+        return false;
+    }
+
+    QStringList failedNames;
+    for (int targetIndex = 0; targetIndex < baseNames.size(); ++targetIndex) {
+        const QString searchKey = baseNames.at(targetIndex).trimmed().toLower();
+        const QStringList imagePaths = wordTemplateImagePathsForKey(directory, searchKey, includeVariants);
+        if (imagePaths.isEmpty()) {
+            failedNames.append(searchKey);
+            continue;
+        }
+
+        bool allVariantsLoaded = true;
+        for (const QString &imagePath : imagePaths) {
+            QFile file(imagePath);
+            if (!file.open(QIODevice::ReadOnly)) {
+                failedNames.append(QFileInfo(imagePath).completeBaseName() + "(无法打开)");
+                allVariantsLoaded = false;
+                continue;
+            }
+
+            const QByteArray data = file.readAll();
+            cv::Mat templateImg;
+            try {
+                std::vector<uchar> buf(data.begin(), data.end());
+                templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
+            } catch (...) {
+                qDebug() << "[WORD_TEMPLATE] digit imdecode crashed:" << imagePath;
+            }
+
+            if (templateImg.empty()) {
+                failedNames.append(QFileInfo(imagePath).completeBaseName() + "(读取损坏)");
+                allVariantsLoaded = false;
+                continue;
+            }
+
+            templates->push_back(templateImg);
+            templateTargetIndexes->push_back(targetIndex);
+        }
+
+        if (!allVariantsLoaded) {
+            continue;
+        }
+    }
+
+    if (!failedNames.isEmpty()) {
+        templates->clear();
+        templateTargetIndexes->clear();
+        if (errorMessage) {
+            *errorMessage = QString("以下字符未找到对应图片，或图片读取失败：\n[ %1 ]")
+                    .arg(failedNames.join(" "));
+        }
+        return false;
+    }
+
+    return !templates->empty();
+}
+
 bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
 {
     bool ok = false;
@@ -3105,69 +3230,20 @@ void Widget::on_textsure_btn_clicked()
         const QString newMubiaozifu = ui->dateEdit->toPlainText();
 
         std::vector<cv::Mat> tempTemplates;
-        if (!newMubiaozifu.trimmed().isEmpty()) {
-            const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
-            if (baseNamesToFind.isEmpty()) {
-                showParameterInfoAsError("提示", "目标字符解析失败");
-                return;
-            }
-
-            QDir directory(profile.dirPath);
-            QMap<QString, QString> filePathMap;
-            static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
-            const QFileInfoList fileList = directory.entryInfoList(
-                        filters,
-                        QDir::Files | QDir::NoDotAndDotDot);
-
-            for (const QFileInfo &fileInfo : fileList) {
-                const QString baseName = fileInfo.completeBaseName().toLower();
-                if (!filePathMap.contains(baseName)) {
-                    filePathMap.insert(baseName, fileInfo.absoluteFilePath());
-                }
-            }
-
-            bool hasMissing = false;
-            QString missingNames;
-            for (const QString &searchKey : baseNamesToFind) {
-                if (!filePathMap.contains(searchKey)) {
-                    hasMissing = true;
-                    missingNames += searchKey + " ";
-                    continue;
-                }
-
-                QFile file(filePathMap.value(searchKey));
-                if (!file.open(QIODevice::ReadOnly)) {
-                    hasMissing = true;
-                    missingNames += searchKey + "(无法打开) ";
-                    continue;
-                }
-
-                const QByteArray data = file.readAll();
-                cv::Mat templateImg;
-                try {
-                    std::vector<uchar> buf(data.begin(), data.end());
-                    templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
-                } catch (...) {
-                    qDebug() << "[WORD_MULTI_TEMPLATE] confirm digit imdecode crashed:"
-                             << filePathMap.value(searchKey);
-                }
-
-                if (templateImg.empty()) {
-                    hasMissing = true;
-                    missingNames += searchKey + "(读取损坏) ";
-                    continue;
-                }
-
-                tempTemplates.push_back(templateImg);
-            }
-
-            if (hasMissing) {
-                showParameterCritical("严重警告",
-                    QString("当前模板 [%1] 中以下字符未找到对应图片，或图片读取失败：\n[ %2 ]\n\n本次更新已撤销。")
-                    .arg(profile.name)
-                    .arg(missingNames));
-                return;
-            }
+        std::vector<int> tempTemplateTargetIndexes;
+        QString loadError;
+        const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+        if (!newMubiaozifu.trimmed().isEmpty()
+                && !loadWordDigitTemplatesFromDir(profile.dirPath,
+                                                  baseNamesToFind,
+                                                  &tempTemplates,
+                                                  &tempTemplateTargetIndexes,
+                                                  &loadError)) {
+            showParameterCritical("严重警告",
+                QString("当前模板 [%1] 字符图片加载失败：\n%2\n\n本次更新已撤销。")
+                .arg(profile.name)
+                .arg(loadError));
+            return;
         }
 
         const QString settingsFilePath = QDir(profile.dirPath).filePath("app_settings.appset");
@@ -3189,16 +3265,18 @@ void Widget::on_textsure_btn_clicked()
         }
 
         profile.targetText = newMubiaozifu;
-        profile.targetCount = static_cast<int>(tempTemplates.size());
+        profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
+        profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
 
         if (newMubiaozifu.trimmed().isEmpty()) {
             showParameterInfo("提示", QString("模板 [%1] 的目标字符已清空").arg(profile.name));
         } else {
             showParameterInfo("提示",
-                              QString("模板 [%1] 目标字符确认成功，共加载 %2 个模板！")
+                              QString("模板 [%1] 目标字符确认成功，目标字符 %2 个，字符模板图 %3 张！")
                               .arg(profile.name)
-                              .arg(profile.targetCount));
+                              .arg(profile.targetCount)
+                              .arg(static_cast<int>(profile.digitTemplates.size())));
         }
         return;
     }
@@ -3214,83 +3292,37 @@ void Widget::on_textsure_btn_clicked()
         QString newMubiaozifu = ui->dateEdit->toPlainText();
         if (newMubiaozifu.isEmpty()) {
             digitTemplates.clear();
+            digitTemplateTargetIndexes.clear();
             showParameterInfoAsError("提示", "目标字符为空，已清空模板");
             return;
         }
 
-        // ================== 修复 1：升级正则表达式，加入中文支持 ==================
-        QStringList baseNamesToFind;
-        // 升级正则表达式：允许 [数字、字母、中文] 后面跟带括号的数字作为一个整体
-        QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
-        QRegularExpressionMatchIterator matchIt = regex.globalMatch(newMubiaozifu);
-
-        while (matchIt.hasNext()) {
-            QRegularExpressionMatch match = matchIt.next();
-            QString unit;
-            if (!match.captured(1).isEmpty()) unit = match.captured(1);
-            else if (!match.captured(2).isEmpty()) unit = match.captured(2);
-            else if (!match.captured(3).isEmpty()) unit = match.captured(3);
-            else if (!match.captured(4).isEmpty()) unit = match.captured(4); // 提取到中文字符
-
-            baseNamesToFind.append(unit.toLower());
-        }
-
-        // ================== 修复 2：无视后缀名，建立基础名映射 ==================
-        QDir directory(currentTemplateDirPath);
-        QMap<QString, QString> filePathMap;
-        static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
-
-        QFileInfoList fileList = directory.entryInfoList(
-                    filters,
-                    QDir::Files | QDir::NoDotAndDotDot);
-
-        for (const QFileInfo &fileInfo : fileList) {
-            QString baseName = fileInfo.completeBaseName().toLower();
-            if (!filePathMap.contains(baseName)) {
-                filePathMap.insert(baseName, fileInfo.absoluteFilePath());
-            }
-        }
-
-        // ================== 修复 3：使用内存流解码解决中文路径 BUG ==================
         std::vector<cv::Mat> tempTemplates;
-        bool hasMissing = false;
-        QString missingNames;
+        std::vector<int> tempTemplateTargetIndexes;
+        QString loadError;
+        const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+        const bool includeVariantTemplates = (ui->comboBox_4->currentIndex() == 1);
 
-        for (const QString &searchKey : baseNamesToFind) {
-            if (filePathMap.contains(searchKey)) {
-                QFile file(filePathMap[searchKey]);
-                if (file.open(QIODevice::ReadOnly)) {
-                    QByteArray data = file.readAll();
-                    std::vector<uchar> buf(data.begin(), data.end());
-                    cv::Mat templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
-
-                    if (templateImg.empty()) {
-                        hasMissing = true;
-                        missingNames += searchKey + "(读取损坏) ";
-                    } else {
-                        tempTemplates.push_back(templateImg);
-                    }
-                } else {
-                    hasMissing = true;
-                    missingNames += searchKey + "(无法打开) ";
-                }
-            } else {
-                hasMissing = true;
-                missingNames += searchKey + " ";
-            }
-        }
-
-        // ================== 修复 4：友好的报警和隔离机制 ==================
-        if (hasMissing) {
+        if (!loadWordDigitTemplatesFromDir(currentTemplateDirPath,
+                                           baseNamesToFind,
+                                           &tempTemplates,
+                                           &tempTemplateTargetIndexes,
+                                           &loadError,
+                                           includeVariantTemplates)) {
             // 如果有任何图片读取失败或丢失，绝不更新到全局的 digitTemplates，同时给出严厉警告
             showParameterCritical("严重警告",
-                QString("以下字符未在文件夹中找到对应图片，或图片读取失败：\n[ %1 ]\n\n请检查模板文件夹内的图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。").arg(missingNames));
+                QString("%1\n\n请检查模板文件夹内的图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。")
+                .arg(loadError));
             return;
         }
 
         // 5. 全部成功后，再更新到全局容器
         digitTemplates = tempTemplates;
-        showParameterInfo("提示", QString("目标字符确认成功，共加载 %1 个模板！").arg(digitTemplates.size()));
+        digitTemplateTargetIndexes = tempTemplateTargetIndexes;
+        showParameterInfo("提示",
+                          QString("目标字符确认成功，目标字符 %1 个，字符模板图 %2 张！")
+                          .arg(baseNamesToFind.size())
+                          .arg(static_cast<int>(digitTemplates.size())));
     }
     else{
      showParameterInfo("提示", "目标字符确认成功");
@@ -3351,55 +3383,17 @@ void Widget::on_batchTextsure_btn_clicked()
         }
 
         std::vector<cv::Mat> tempTemplates;
+        std::vector<int> tempTemplateTargetIndexes;
         if (needLoadDigitTemplates) {
-            QMap<QString, QString> filePathMap;
-            static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
-            const QFileInfoList fileList = directory.entryInfoList(
-                        filters,
-                        QDir::Files | QDir::NoDotAndDotDot);
-
-            for (const QFileInfo &fileInfo : fileList) {
-                const QString baseName = fileInfo.completeBaseName().toLower();
-                if (!filePathMap.contains(baseName)) {
-                    filePathMap.insert(baseName, fileInfo.absoluteFilePath());
-                }
-            }
-
-            QStringList missingNames;
-            for (const QString &searchKey : baseNamesToFind) {
-                if (!filePathMap.contains(searchKey)) {
-                    missingNames.append(searchKey);
-                    continue;
-                }
-
-                QFile file(filePathMap.value(searchKey));
-                if (!file.open(QIODevice::ReadOnly)) {
-                    missingNames.append(searchKey + "(无法打开)");
-                    continue;
-                }
-
-                const QByteArray data = file.readAll();
-                cv::Mat templateImg;
-                try {
-                    std::vector<uchar> buf(data.begin(), data.end());
-                    templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
-                } catch (...) {
-                    qDebug() << "[WORD_MULTI_TEMPLATE] batch confirm digit imdecode crashed:"
-                             << filePathMap.value(searchKey);
-                }
-
-                if (templateImg.empty()) {
-                    missingNames.append(searchKey + "(读取损坏)");
-                    continue;
-                }
-
-                tempTemplates.push_back(templateImg);
-            }
-
-            if (!missingNames.isEmpty()) {
-                failedMessages.append(QString("%1：缺少或无法读取字符图片 [ %2 ]")
+            QString loadError;
+            if (!loadWordDigitTemplatesFromDir(profile.dirPath,
+                                               baseNamesToFind,
+                                               &tempTemplates,
+                                               &tempTemplateTargetIndexes,
+                                               &loadError)) {
+                failedMessages.append(QString("%1：%2")
                                       .arg(profileName)
-                                      .arg(missingNames.join(" ")));
+                                      .arg(loadError));
                 continue;
             }
         }
@@ -3413,8 +3407,9 @@ void Widget::on_batchTextsure_btn_clicked()
         }
 
         profile.targetText = newMubiaozifu;
-        profile.targetCount = static_cast<int>(tempTemplates.size());
+        profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
+        profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
         ++successCount;
     }
 
@@ -3654,9 +3649,22 @@ void Widget::on_pushButton_5_clicked()
         return;
     }
 
-    bool ok;
-    QString newFolderName = QInputDialog::getText(this, "保存模板", "请输入文件夹名称：", QLineEdit::Normal, "", &ok);
-    if (!ok || newFolderName.isEmpty()) return;
+    const QString folderNamePrompt =
+            "请输入新模板文件夹名称：\n\n"
+            "制作字符模板时，相同字符的不同模板可以这样命名：\n"
+            "5.png：字符 5 的主模板图片\n"
+            "5_任意名称.png、5(1).png、5-(1).png、5(1)(2).png：字符 5 的额外模板图片";
+
+    QInputDialog inputDialog(this);
+    inputDialog.setWindowTitle("保存模板");
+    inputDialog.setLabelText(folderNamePrompt);
+    inputDialog.setInputMode(QInputDialog::TextInput);
+    inputDialog.setOkButtonText("确定");
+    inputDialog.setCancelButtonText("取消");
+    if (inputDialog.exec() != QDialog::Accepted) return;
+
+    QString newFolderName = inputDialog.textValue().trimmed();
+    if (newFolderName.isEmpty()) return;
 
     QString savePath = QDir("D:/muban/").absoluteFilePath(newFolderName);
     QDir dir(savePath);
@@ -3983,72 +3991,25 @@ void Widget::on_pushButton_4_clicked()
                 }
 
                 std::vector<cv::Mat> loadedDigitTemplates;
+                std::vector<int> loadedDigitTemplateTargetIndexes;
                 if (!baseNames.isEmpty()) {
-                    QMap<QString, QString> filePathMap;
-                    static const QStringList imageFilters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
-                    const QFileInfoList fileList = templateDir.entryInfoList(imageFilters, QDir::Files | QDir::NoDotAndDotDot);
-                    for (const QFileInfo &fileInfo : fileList) {
-                        const QString baseName = fileInfo.completeBaseName().toLower();
-                        if (!filePathMap.contains(baseName)) {
-                            filePathMap.insert(baseName, fileInfo.absoluteFilePath());
-                        }
-                    }
-
-                    int matchedDigitCount = 0;
-                    for (const QString &searchKey : baseNames) {
-                        if (filePathMap.contains(searchKey)) {
-                            ++matchedDigitCount;
-                        }
-                    }
-                    if (matchedDigitCount != baseNames.size()) {
-                        pendingTargetMessages.append(QString("%1：字符图片数量不完整，目标字符待重新确认").arg(templateDir.dirName()));
+                    QString loadError;
+                    if (!loadWordDigitTemplatesFromDir(templateDir.absolutePath(),
+                                                       baseNames,
+                                                       &loadedDigitTemplates,
+                                                       &loadedDigitTemplateTargetIndexes,
+                                                       &loadError)) {
+                        pendingTargetMessages.append(QString("%1：字符图片不完整，目标字符待重新确认：%2")
+                                                     .arg(templateDir.dirName())
+                                                     .arg(loadError));
                         qDebug() << "[WORD_MULTI_TEMPLATE] digit file count mismatch, target pending:"
                                  << selectedDirPath
-                                 << "matched:" << matchedDigitCount
-                                 << "expected:" << baseNames.size();
+                                 << loadError;
                     } else {
-                        bool allDigitFilesOpened = true;
-                        bool allDigitImagesDecoded = true;
-                        qint64 totalDigitBytes = 0;
-                        for (const QString &searchKey : baseNames) {
-                            QFile digitFile(filePathMap.value(searchKey));
-                            if (!digitFile.open(QIODevice::ReadOnly)) {
-                                allDigitFilesOpened = false;
-                                qDebug() << "[WORD_MULTI_TEMPLATE] digit file open failed:"
-                                         << filePathMap.value(searchKey);
-                                break;
-                            }
-                            QByteArray digitData = digitFile.readAll();
-                            totalDigitBytes += digitData.size();
-
-                            cv::Mat digitTemplate;
-                            try {
-                                std::vector<uchar> digitBuffer(digitData.begin(), digitData.end());
-                                digitTemplate = cv::imdecode(digitBuffer, cv::IMREAD_GRAYSCALE);
-                            } catch (...) {
-                                qDebug() << "[WORD_MULTI_TEMPLATE] digit template imdecode crashed:"
-                                         << filePathMap.value(searchKey);
-                            }
-
-                            if (digitTemplate.empty()) {
-                                allDigitImagesDecoded = false;
-                                qDebug() << "[WORD_MULTI_TEMPLATE] digit template decode failed:"
-                                         << filePathMap.value(searchKey);
-                                break;
-                            }
-                            loadedDigitTemplates.push_back(digitTemplate);
-                        }
-                        if (!allDigitFilesOpened) {
-                            loadedDigitTemplates.clear();
-                            pendingTargetMessages.append(QString("%1：字符图片打开失败，目标字符待重新确认").arg(templateDir.dirName()));
-                        } else if (!allDigitImagesDecoded) {
-                            loadedDigitTemplates.clear();
-                            pendingTargetMessages.append(QString("%1：字符图片解码失败，目标字符待重新确认").arg(templateDir.dirName()));
-                        } else {
-                            qDebug() << "[WORD_MULTI_TEMPLATE] digit files read bytes:"
-                                     << selectedDirPath
-                                     << totalDigitBytes;
-                        }
+                        qDebug() << "[WORD_MULTI_TEMPLATE] digit templates loaded:"
+                                 << selectedDirPath
+                                 << "target chars:" << baseNames.size()
+                                 << "template images:" << static_cast<int>(loadedDigitTemplates.size());
                     }
                 }
 
@@ -4059,8 +4020,9 @@ void Widget::on_pushButton_4_clicked()
                 profile.datePoly = calib.date_poly;
                 profile.targetText = targetText;
                 profile.imageThresholdText = imageThresholdText;
-                profile.targetCount = loadedDigitTemplates.size();
+                profile.targetCount = baseNames.size();
                 profile.digitTemplates = loadedDigitTemplates;
+                profile.digitTemplateTargetIndexes = loadedDigitTemplateTargetIndexes;
                 loadedDirPaths.append(profile.dirPath);
                 loadedProfiles.push_back(profile);
             }
@@ -5270,89 +5232,36 @@ void Widget::loadLastTemplateConfig()
     if (newMubiaozifu.isEmpty()) {
         // 若目标字符为空，清空模板列表
         digitTemplates.clear();
+        digitTemplateTargetIndexes.clear();
         return;
     }
     qDebug() << "9.2 loadLastTemplateConfig: newMubiaozifu 不为空";
 
-    // ================== 修复 1：升级正则表达式，加入中文支持 ==================
-    QStringList baseNamesToFind;
-    try {
-        QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
-        QRegularExpressionMatchIterator matchIt = regex.globalMatch(newMubiaozifu);
-
-        while (matchIt.hasNext()) {
-            QRegularExpressionMatch match = matchIt.next();
-            QString unit;
-            if (!match.captured(1).isEmpty()) unit = match.captured(1);
-            else if (!match.captured(2).isEmpty()) unit = match.captured(2);
-            else if (!match.captured(3).isEmpty()) unit = match.captured(3);
-            else if (!match.captured(4).isEmpty()) unit = match.captured(4); // 提取到中文字符
-
-            // 统一转为小写以实现不区分大小写的匹配（对中文无影响）
-            baseNamesToFind.append(unit.toLower());
-        }
-    } catch (...) {
-        qDebug() << "9.X 正则表达式执行异常崩溃！";
-        return;
-    }
+    QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
     qDebug() << "9.3 loadLastTemplateConfig: 正则表达式匹配完成";
 
-    // ================== 修复 2：无视后缀名，建立基础名映射 ==================
-    QDir directory(currentTemplateDirPath);
-    QMap<QString, QString> filePathMap;
-    static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
-
-    QFileInfoList fileList = directory.entryInfoList(
-                filters,
-                QDir::Files | QDir::NoDotAndDotDot);
-
-    for (const QFileInfo &fileInfo : fileList) {
-        // completeBaseName 剥离后缀，如 "A.png" -> "a" 或 "生.jpg" -> "生"
-        QString baseName = fileInfo.completeBaseName().toLower();
-        if (!filePathMap.contains(baseName)) {
-            filePathMap.insert(baseName, fileInfo.absoluteFilePath());
-        }
-    }
-    qDebug() << "9.4 loadLastTemplateConfig: 文件列表读取完成";
-
-    // ================== 修复 3：使用内存流解码解决中文路径 BUG ==================
     std::vector<cv::Mat> tempTemplates;
-    bool hasMissing = false;
-
-    for (const QString &searchKey : baseNamesToFind) {
-        if (filePathMap.contains(searchKey)) {
-            // 严禁使用 cv::imread 读取中文路径，改用 QFile 读成 byte 后再用 OpenCV 解码
-            QFile file(filePathMap[searchKey]);
-            if (file.open(QIODevice::ReadOnly)) {
-                QByteArray data = file.readAll();
-                try {
-                    std::vector<uchar> buf(data.begin(), data.end());
-                    cv::Mat templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
-
-                    if (templateImg.empty()) {
-                        hasMissing = true; // 图像损坏解码失败
-                    } else {
-                        tempTemplates.push_back(templateImg);
-                    }
-                } catch (...) {
-                    qDebug() << "9.X OpenCV imdecode 异常崩溃！";
-                }
-            } else {
-                hasMissing = true; // 文件无法打开
-            }
-        } else {
-            hasMissing = true; // 文件夹里压根没这张图
-        }
-    }
+    std::vector<int> tempTemplateTargetIndexes;
+    QString loadError;
+    const bool includeVariantTemplates = (ui->comboBox_4->currentIndex() == 1);
+    const bool loaded = loadWordDigitTemplatesFromDir(currentTemplateDirPath,
+                                                      baseNamesToFind,
+                                                      &tempTemplates,
+                                                      &tempTemplateTargetIndexes,
+                                                      &loadError,
+                                                      includeVariantTemplates);
     qDebug() << "9.5 loadLastTemplateConfig: 模板图片读取完成";
 
     // ================== 修复 4：防死锁隔离保护 ==================
-    if (hasMissing) {
+    if (!loaded) {
         digitTemplates.clear();
-        qDebug() << "[ERROR] 模板文件夹中的图片缺失或读取失败，已清空模板以保护程序！";
+        digitTemplateTargetIndexes.clear();
+        qDebug() << "[ERROR] 模板文件夹中的图片缺失或读取失败，已清空模板以保护程序！" << loadError;
     } else {
         digitTemplates = tempTemplates;
-        qDebug() << "[INFO] 模板加载成功，数量: " << digitTemplates.size();
+        digitTemplateTargetIndexes = tempTemplateTargetIndexes;
+        qDebug() << "[INFO] 模板加载成功，目标字符数量:" << baseNamesToFind.size()
+                 << "模板图片数量:" << digitTemplates.size();
     }
 
     try {

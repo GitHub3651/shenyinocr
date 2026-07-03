@@ -376,6 +376,7 @@ private:
 
     // ========== 模板匹配相关 ==========
     vector<Mat> digitTemplates;         ///< 数字模板
+    std::vector<int> digitTemplateTargetIndexes; ///< 字库模板图对应的目标字符位置
     vector<Mat> digitRegions;           ///< 数字区域
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
@@ -389,12 +390,22 @@ private:
         QString imageThresholdText;
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
+        std::vector<int> digitTemplateTargetIndexes;
     };
 
     QStringList m_wordTemplateDirPaths; ///< 字库多模板路径缓存
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     bool m_wordMultiTemplateMode = false; ///< 字库多模板模式标志
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
+    QStringList wordTemplateImagePathsForKey(const QDir &directory,
+                                             const QString &searchKey,
+                                             bool includeVariants = true) const;
+    bool loadWordDigitTemplatesFromDir(const QString &dirPath,
+                                       const QStringList &baseNames,
+                                       std::vector<cv::Mat> *templates,
+                                       std::vector<int> *templateTargetIndexes,
+                                       QString *errorMessage,
+                                       bool includeVariants = true) const;
     void setupWordTemplateEditorCombo();
     void clearWordMultiTemplateState();
     void refreshWordTemplateEditorCombo();
@@ -405,6 +416,7 @@ private:
     void runWordTemplateDetection(cv::Mat *image,
                                   const DetectionPose &pose,
                                   const std::vector<cv::Mat> &templates,
+                                  const std::vector<int> &templateTargetIndexes,
                                   const QString &targetText,
                                   const QString &imageThresholdText,
                                   const QString &templateName);

@@ -828,6 +828,15 @@ double TemplateMatch::run2(std::vector<Mat> digitTemplates,std::vector<Mat> digi
 }
 
 int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
+    std::vector<int> templateTargetIndexes;
+    templateTargetIndexes.reserve(digitTemplates.size());
+    for (int i = 0; i < static_cast<int>(digitTemplates.size()); ++i) {
+        templateTargetIndexes.push_back(i);
+    }
+    return run3(digitTemplates, templateTargetIndexes);
+}
+
+int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates, const std::vector<int> &templateTargetIndexes) {
 
     Mat targetImage;
     imgshibie->copyTo(targetImage);
@@ -856,6 +865,18 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
             grayTmpl = tmpl.clone();
         }
         grayTemplates.push_back(grayTmpl);
+    }
+
+    std::vector<int> effectiveTargetIndexes;
+    effectiveTargetIndexes.reserve(grayTemplates.size());
+    if (templateTargetIndexes.size() == grayTemplates.size()) {
+        for (int index : templateTargetIndexes) {
+            effectiveTargetIndexes.push_back(index);
+        }
+    } else {
+        for (int i = 0; i < static_cast<int>(grayTemplates.size()); ++i) {
+            effectiveTargetIndexes.push_back(i);
+        }
     }
 
     // 配置匹配阈值，将其从百分比转换为0-1之间的浮点数
@@ -955,13 +976,52 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
     std::vector<std::vector<double>> filteredScores(grayTemplates.size());
     std::vector<cv::Rect> selectedLocations;  // 存储已选择的矩形
 
-    // 按模板顺序处理（前面模板优先）
-    for (size_t i = 0; i < allMatchLocations.size(); ++i) {
-        bool found = false;
+    int targetGroupCount = 0;
+    for (int targetIndex : effectiveTargetIndexes) {
+        if (targetIndex >= 0) {
+            targetGroupCount = std::max(targetGroupCount, targetIndex + 1);
+        }
+    }
+    if (targetGroupCount <= 0) {
+        targetGroupCount = static_cast<int>(grayTemplates.size());
+    }
 
-        // 遍历当前模板的所有匹配位置（已按分数降序排列）
-        for (size_t j = 0; j < allMatchLocations[i].size(); ++j) {
-            const cv::Rect& candidateRect = allMatchLocations[i][j];
+    std::vector<std::vector<size_t>> templateIndexesByTarget(static_cast<size_t>(targetGroupCount));
+    for (size_t i = 0; i < effectiveTargetIndexes.size(); ++i) {
+        const int targetIndex = effectiveTargetIndexes[i];
+        if (targetIndex >= 0 && targetIndex < targetGroupCount) {
+            templateIndexesByTarget[static_cast<size_t>(targetIndex)].push_back(i);
+        }
+    }
+
+    struct MatchCandidate {
+        double score = 0.0;
+        cv::Rect rect;
+        size_t templateIndex = 0;
+    };
+
+    // 按目标字符位置处理；同一目标位置的多个模板图只会选出一个最佳匹配。
+    for (int targetIndex = 0; targetIndex < targetGroupCount; ++targetIndex) {
+        bool found = false;
+        std::vector<MatchCandidate> candidates;
+
+        for (size_t templateIndex : templateIndexesByTarget[static_cast<size_t>(targetIndex)]) {
+            for (size_t j = 0; j < allMatchLocations[templateIndex].size(); ++j) {
+                MatchCandidate candidate;
+                candidate.score = allMatchScores[templateIndex][j];
+                candidate.rect = allMatchLocations[templateIndex][j];
+                candidate.templateIndex = templateIndex;
+                candidates.push_back(candidate);
+            }
+        }
+
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const MatchCandidate &a, const MatchCandidate &b) {
+                      return a.score > b.score;
+                  });
+
+        for (const MatchCandidate &candidate : candidates) {
+            const cv::Rect& candidateRect = candidate.rect;
             bool overlap = false;
 
             // 检查是否与任何已选位置重叠
@@ -977,8 +1037,8 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
             // 如果没重叠则选择该位置
             if (!overlap) {
                 // 添加到最终结果
-                filteredLocations[i].push_back(candidateRect);
-                filteredScores[i].push_back(allMatchScores[i][j]);
+                filteredLocations[candidate.templateIndex].push_back(candidateRect);
+                filteredScores[candidate.templateIndex].push_back(candidate.score);
 
                 // 加入已选择集合
                 selectedLocations.push_back(candidateRect);
@@ -989,7 +1049,7 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
 
         // 可选：如果当前模板没有找到不重叠的位置，记录日志
         if (!found) {
-            qDebug() << "[INFO] No non-overlapping match found for template index: " << i;
+            qDebug() << "[INFO] No non-overlapping match found for target index: " << targetIndex;
         }
     }
 
@@ -1069,10 +1129,14 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
     std::vector<std::tuple<cv::Rect, double, size_t>> sortedMatches;
     for (size_t i = 0; i < allMatchLocations.size(); ++i) {
         if (!allMatchLocations[i].empty()) {
+            const int targetIndex = (i < effectiveTargetIndexes.size()) ? effectiveTargetIndexes[i] : static_cast<int>(i);
+            if (targetIndex < 0) {
+                continue;
+            }
             sortedMatches.emplace_back(
                 allMatchLocations[i][0],     // 只取第一个匹配矩形
                 allMatchScores[i][0],        // 对应的匹配分数
-                i                            // 原始模板的索引
+                static_cast<size_t>(targetIndex) // 目标字符位置索引
             );
         }
     }

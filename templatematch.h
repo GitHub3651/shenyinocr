@@ -43,7 +43,7 @@ public:
     double getSimilarity(const cv::Mat &img1, const cv::Mat &img2);
     int calculateOverlapArea(const cv::Rect& rect1, const cv::Rect& rect2);
     double calculateIOU(const cv::Rect& rectA, const cv::Rect& rectB);
-    // 新增：用于存储 run3 每次运算完的检测结果 <矩形框, 匹配分数, 模板索引>
+    // 新增：用于存储 run3 每次运算完的检测结果 <矩形框, 匹配分数, 目标字符位置索引>
     std::vector<std::tuple<cv::Rect, double, size_t>> lastMatchResults;
 
 signals:
@@ -56,6 +56,7 @@ public slots:
     double run1(vector<Mat> digitTemplates);
     double run2(vector<Mat> digitTemplates,vector<Mat> digitRigions);
     int run3(std::vector<cv::Mat> digitTemplates);
+    int run3(std::vector<cv::Mat> digitTemplates, const std::vector<int> &templateTargetIndexes);
     void jianceshibiestr(String string1);
     void extractDigits(const Mat &image, vector<Mat> &digitRegions);
     void caijiansize(int a,int b,int c,int d,int e,int i, int j);
