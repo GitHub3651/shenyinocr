@@ -2952,12 +2952,10 @@ void Widget::on_cancel_clicked()
     // Step 2: 请求线程停止，保留当前模板状态，便于再次启动
     if (myThread) {
         myThread->requestStop();
-        myThread->stopTracking();
     }
 
     if (cameraThread) {
         cameraThread->requestStop();
-        cameraThread->stopTracking();
     }
 
     // 🔥 Step 3: myThread - 保持原逻辑
@@ -2969,6 +2967,8 @@ void Widget::on_cancel_clicked()
         if (!myThread->wait(3000)) {
             qDebug() << "WARNING: myThread did not stop";
             myThreadStopped = false;
+        } else {
+            myThread->stopTracking();
         }
     }
 
@@ -2984,6 +2984,8 @@ void Widget::on_cancel_clicked()
             cameraThread->terminate();
             cameraThread->wait();
         }
+
+        cameraThread->stopTracking();
 
         cameraThread->deleteLater();
         cameraThread = nullptr;
