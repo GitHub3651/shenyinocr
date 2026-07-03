@@ -3825,8 +3825,37 @@ void Widget::saveSettingsToDir(const QString &dirPath)
     settings.setValue("lineEdit_value", ui->lineEdit->text()); // 保存IP地址
 
 
-    // 🔥 新增：保存框坐标
-    if (hasValidBoxes) {
+    const bool currentTrackingBoxValid = hasValidBoxes
+            && savedTrackingBox.width > 0
+            && savedTrackingBox.height > 0;
+    const bool shouldWriteCurrentTrackingBox = currentTrackingBoxValid && !m_wordMultiTemplateMode;
+
+    bool trackingTemplateFileValid = false;
+    const QString trackingTemplatePath = dir.absoluteFilePath("tracking_template.bmp");
+    QFile trackingTemplateFile(trackingTemplatePath);
+    if (trackingTemplateFile.open(QIODevice::ReadOnly)) {
+        const QByteArray trackingTemplateBytes = trackingTemplateFile.readAll();
+        if (!trackingTemplateBytes.isEmpty()) {
+            const uchar *trackingTemplateData = reinterpret_cast<const uchar *>(trackingTemplateBytes.constData());
+            std::vector<uchar> trackingTemplateBuffer(trackingTemplateData,
+                                                      trackingTemplateData + trackingTemplateBytes.size());
+            trackingTemplateFileValid = !cv::imdecode(trackingTemplateBuffer, cv::IMREAD_COLOR).empty();
+        }
+    }
+
+    bool datePolyFileValid = false;
+    const QString calibratePath = dir.absoluteFilePath("calibrate_config.yaml");
+    if (QFile::exists(calibratePath)) {
+        CalibrationData calib;
+        if (calib.load(calibratePath.toLocal8Bit().toStdString())) {
+            datePolyFileValid = !calib.date_poly.empty();
+        }
+    }
+
+    const bool existingTemplateFilesValid = trackingTemplateFileValid && datePolyFileValid;
+
+    // 保存框有效标记。多模板批量保存参数时，不使用当前界面的单模板框覆盖每个产品模板。
+    if (shouldWriteCurrentTrackingBox) {
         settings.setValue("trackingBox_x", savedTrackingBox.x);
         settings.setValue("trackingBox_y", savedTrackingBox.y);
         settings.setValue("trackingBox_width", savedTrackingBox.width);
@@ -3834,6 +3863,8 @@ void Widget::saveSettingsToDir(const QString &dirPath)
 
         settings.setValue("hasValidBoxes", true);
 
+    } else if (existingTemplateFilesValid) {
+        settings.setValue("hasValidBoxes", true);
     } else {
         settings.setValue("hasValidBoxes", false);
     }
@@ -4320,25 +4351,47 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
     updateSaveDirButtonText();
     updateTissueRoughnessUiVisibility();
 
-    // 🔥 加载双框坐标
-    if (settings.contains("hasValidBoxes") && settings.value("hasValidBoxes").toBool()) {
-        savedTrackingBox.x = settings.value("trackingBox_x", 0).toDouble();
-        savedTrackingBox.y = settings.value("trackingBox_y", 0).toDouble();
-        savedTrackingBox.width = settings.value("trackingBox_width", 0).toDouble();
-        savedTrackingBox.height = settings.value("trackingBox_height", 0).toDouble();
+    const cv::Rect2d loadedTrackingBox(
+                settings.value("trackingBox_x", 0).toDouble(),
+                settings.value("trackingBox_y", 0).toDouble(),
+                settings.value("trackingBox_width", 0).toDouble(),
+                settings.value("trackingBox_height", 0).toDouble());
+    const bool storedTrackingBoxValid = settings.contains("trackingBox_width")
+            && settings.contains("trackingBox_height")
+            && loadedTrackingBox.width > 0
+            && loadedTrackingBox.height > 0;
+    const bool configSaysValidBoxes = settings.contains("hasValidBoxes")
+            && settings.value("hasValidBoxes").toBool();
 
+    // 🔥 加载双框坐标
+    if (configSaysValidBoxes || storedTrackingBoxValid) {
+        savedTrackingBox = loadedTrackingBox;
         hasValidBoxes = true;
+        if (!configSaysValidBoxes && storedTrackingBoxValid) {
+            qDebug() << "[TEMPLATE_REPAIR] hasValidBoxes=false, but tracking box coordinates are valid. Restoring tracking box:" << dirPath;
+        }
         qDebug() << "box load success";
     } else {
+        savedTrackingBox = cv::Rect2d(0, 0, 0, 0);
         hasValidBoxes = false;
         qDebug() << "no usesful box";
     }
 
     // 🔥 新增：加载局部静态追踪模板 (Anchor Template)
     QString tplPath = dirPath + "/tracking_template.bmp";
-    m_loadedTrackingTemplate = cv::imread(tplPath.toLocal8Bit().toStdString(), cv::IMREAD_COLOR);
+    m_loadedTrackingTemplate.release();
+    QFile trackingTemplateFile(tplPath);
+    if (trackingTemplateFile.open(QIODevice::ReadOnly)) {
+        const QByteArray trackingTemplateBytes = trackingTemplateFile.readAll();
+        if (!trackingTemplateBytes.isEmpty()) {
+            const uchar *trackingTemplateData = reinterpret_cast<const uchar *>(trackingTemplateBytes.constData());
+            std::vector<uchar> trackingTemplateBuffer(trackingTemplateData,
+                                                      trackingTemplateData + trackingTemplateBytes.size());
+            m_loadedTrackingTemplate = cv::imdecode(trackingTemplateBuffer, cv::IMREAD_COLOR);
+        }
+    }
     if (!m_loadedTrackingTemplate.empty()) {
-        qDebug() << "成功加载锚点追踪模板图片：" << tplPath;
+        qDebug() << "成功加载定位模板图片：" << tplPath;
     } else {
         qDebug() << "警告：未找到 tracking_template.bmp";
     }
@@ -4350,6 +4403,20 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
         if (calib.load(yamlPath.toLocal8Bit().toStdString())) {
             savedDatePoly = calib.date_poly;
         }
+    }
+
+    const bool templateFilesValid = !m_loadedTrackingTemplate.empty() && !savedDatePoly.empty();
+    if (templateFilesValid) {
+        if (!hasValidBoxes) {
+            qDebug() << "[TEMPLATE_REPAIR] hasValidBoxes=false, but tracking_template.bmp and calibrate_config.yaml are valid. Repairing template flag:" << dirPath;
+        }
+        hasValidBoxes = true;
+        if (settingsFileExists && settings.status() == QSettings::NoError) {
+            settings.setValue("hasValidBoxes", true);
+            settings.sync();
+        }
+    } else {
+        hasValidBoxes = false;
     }
 
     updateCurrentTemplateName();
@@ -4666,14 +4733,28 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
-    // 🔥 核心修改：不再从界面动态抓取框，而是严格要求有预载的模板
-    if (!isTissueMode && !isWordMultiMode && (!hasValidBoxes || m_loadedTrackingTemplate.empty())) {
+    // 启动检测只检查真实模板文件，不再让历史 hasValidBoxes=false 单独阻止启动。
+    QStringList productTemplateErrors;
+    if (!isTissueMode && !isWordMultiMode) {
+        if (currentTemplateDirPath.trimmed().isEmpty()) {
+            productTemplateErrors.append("未选择产品模板文件夹");
+        }
+        if (m_loadedTrackingTemplate.empty()) {
+            productTemplateErrors.append("定位模板图片 tracking_template.bmp 缺失或读取失败");
+        }
+        if (savedDatePoly.empty()) {
+            productTemplateErrors.append("喷码检测区域 calibrate_config.yaml/date_poly 缺失或读取失败");
+        }
+    }
+    if (!productTemplateErrors.isEmpty()) {
         QMessageBox::warning(this, "操作规范",
-                             "缺少可用产品模板，无法启动检测。\n\n"
-                             "如果是新产品：\n"
-                             "请先【拍照】，框选定位区域和喷码检测区域，然后点击【保存模板】。\n\n"
-                             "如果是已有产品：\n"
-                             "请点击【选择模板】，选择对应产品模板文件夹。");
+                             QString("缺少可用产品模板，无法启动检测。\n\n"
+                                     "具体原因：\n%1\n\n"
+                                     "如果是新产品：\n"
+                                     "请先【拍照】，框选定位区域和喷码检测区域，然后点击【保存模板】。\n\n"
+                                     "如果是已有产品：\n"
+                                     "请点击【选择模板】，选择对应产品模板文件夹。")
+                             .arg(productTemplateErrors.join("\n")));
         return;
     }
 
