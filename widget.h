@@ -84,6 +84,8 @@ class MultiCameraWidget;
 class QLabel;
 class QComboBox;
 class QFrame;
+class QDialog;
+class QPushButton;
 
 /**
  * @brief 主窗口类
@@ -126,6 +128,9 @@ public:
     void saveImage2(QString format, QString savePath);
     void saveImage2(QString format, QString savePath, const QString &fileBaseName);
     void saveRawImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName);
+    bool shouldSaveRecognitionBoxImage() const;
+    bool shouldSaveNoRecognitionBoxImage() const;
+    void saveResultImages(QString format, const QString &resultDirName, const cv::Mat &image);
     void saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image);
     void saveImage2Async(QString format, QString savePath);   ///< 保存图像2
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
@@ -246,6 +251,8 @@ private:
     void hideTemplateGuide();
     void updateTemplateGuideText(const QString &title, const QString &body);
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
+    void setupCharacterSplitSettingsDialog();
+    void showCharacterSplitSettingsDialog();
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -262,6 +269,8 @@ private:
     QFrame *m_templateGuideFrame = nullptr;
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
+    QDialog *m_characterSplitSettingsDialog = nullptr;
+    QPushButton *m_characterSplitSettingsButton = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QStringList m_confirmAllParamErrors;
 

@@ -36,6 +36,7 @@
 #include <QPixmap>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QDialog>
 #include <QDesktopServices>
 #include <QDateTime>
 #include <QApplication>
@@ -53,11 +54,13 @@
 #include <QTreeView>
 #include <QComboBox>
 #include <QGridLayout>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QToolTip>
+#include <QWhatsThis>
 #include <QCursor>
 #include <QFrame>
 
@@ -464,6 +467,7 @@ Widget::Widget(QWidget *parent)
     ui->dateEdit->setWordWrapMode(QTextOption::WordWrap);
     setupWordTemplateEditorCombo();
     setupTemplateGuide();
+    setupCharacterSplitSettingsDialog();
 
     // 禁用焦点滚动调节（防误触）- 遍历全局所有下拉框和数字输入框，一劳永逸
     QList<QComboBox *> comboBoxes = this->findChildren<QComboBox *>();
@@ -1192,10 +1196,30 @@ void Widget::saveRawImage(QString format, QString savePath, const cv::Mat &image
     });
 }
 
-void Widget::saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image)
+bool Widget::shouldSaveRecognitionBoxImage() const
+{
+    if (!ui || !ui->comboBox_saveImageType) {
+        return true;
+    }
+
+    const int index = ui->comboBox_saveImageType->currentIndex();
+    return index == 0 || index == 1;
+}
+
+bool Widget::shouldSaveNoRecognitionBoxImage() const
+{
+    if (!ui || !ui->comboBox_saveImageType) {
+        return false;
+    }
+
+    const int index = ui->comboBox_saveImageType->currentIndex();
+    return index == 0 || index == 2;
+}
+
+void Widget::saveResultImages(QString format, const QString &resultDirName, const cv::Mat &image)
 {
     if (selectedDir.trimmed().isEmpty()) {
-        qDebug() << "字库匹配图像保存失败，图像保存路径为空";
+        qDebug() << "检测图像保存失败，图像保存路径为空";
         return;
     }
 
@@ -1205,8 +1229,17 @@ void Widget::saveWordResultImages(QString format, const QString &resultDirName, 
     }
 
     const QString fileBaseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
-    saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
-    saveRawImage(format, selectedDir + "/" + resultName + "_raw/", image, fileBaseName);
+    if (shouldSaveRecognitionBoxImage()) {
+        saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
+    }
+    if (shouldSaveNoRecognitionBoxImage()) {
+        saveRawImage(format, selectedDir + "/" + resultName + "_raw/", image, fileBaseName);
+    }
+}
+
+void Widget::saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image)
+{
+    saveResultImages(format, resultDirName, image);
 }
 
 /**
@@ -1621,8 +1654,7 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
     if (j % x == 0) {
         if (!charIsOk || !overlapIsOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
-                QString saveDir = selectedDir + "/ng/";
-                saveImage2("png", saveDir);
+                saveResultImages("png", "ng", *image);
             }
             ngImages++;
             totalImages++;
@@ -1636,8 +1668,7 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
         } else {
             totalImages++;
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
-                QString saveDir = selectedDir + "/ok/";
-                saveImage2("png", saveDir);
+                saveResultImages("png", "ok", *image);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font><br>"));
             rightremove();
@@ -1928,7 +1959,7 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
     if (j % x == 0) {
         if (!isOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
-                saveImage2("png", selectedDir + "/ng/");
+                saveResultImages("png", "ng", *image);
             }
             ngImages++;
             totalImages++;
@@ -1941,7 +1972,7 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
         } else {
             totalImages++;
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
-                saveImage2("png", selectedDir + "/ok/");
+                saveResultImages("png", "ok", *image);
             }
             rightremove();
         }
@@ -2325,12 +2356,123 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     }
 }
 
+void Widget::setupCharacterSplitSettingsDialog()
+{
+    if (!ui || m_characterSplitSettingsDialog || !ui->tab2_frame3 || !ui->tab2_frame2) {
+        return;
+    }
+
+    QWidget *settingsParent = ui->tab2_frame3->parentWidget();
+    QGridLayout *settingsLayout = qobject_cast<QGridLayout *>(settingsParent ? settingsParent->layout() : nullptr);
+    QWidget *splitButtonParent = ui->Saveimage ? ui->Saveimage->parentWidget() : nullptr;
+    QFormLayout *splitButtonForm = qobject_cast<QFormLayout *>(splitButtonParent ? splitButtonParent->layout() : nullptr);
+    if (!settingsParent || !settingsLayout || !splitButtonParent || !splitButtonForm || !ui->Saveimage) {
+        return;
+    }
+
+    int saveImageRow = -1;
+    QFormLayout::ItemRole saveImageRole = QFormLayout::FieldRole;
+    splitButtonForm->getWidgetPosition(ui->Saveimage, &saveImageRow, &saveImageRole);
+    if (saveImageRow < 0) {
+        return;
+    }
+
+    settingsLayout->removeWidget(ui->tab2_frame3);
+    settingsLayout->removeWidget(ui->tab2_frame2);
+
+    QWidget *splitButtonRow = new QWidget(splitButtonParent);
+    QHBoxLayout *splitButtonLayout = new QHBoxLayout(splitButtonRow);
+    splitButtonLayout->setContentsMargins(0, 0, 0, 0);
+    splitButtonLayout->setSpacing(8);
+
+    const QString splitToolButtonStyle =
+            "QToolButton {"
+            "background-color: transparent;"
+            "border: 1px solid #ebeef5;"
+            "border-radius: 4px;"
+            "color: #333333;"
+            "padding: 5px 10px;"
+            "}"
+            "QToolButton:hover {"
+            "background-color: #f2f6fc;"
+            "}"
+            "QToolButton:pressed {"
+            "background-color: #ebeef5;"
+            "}";
+    const QString splitPushButtonStyle =
+            "QPushButton {"
+            "background-color: transparent;"
+            "border: 1px solid #ebeef5;"
+            "border-radius: 4px;"
+            "color: #333333;"
+            "padding: 5px 10px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #f2f6fc;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #ebeef5;"
+            "}";
+
+    splitButtonForm->removeWidget(ui->Saveimage);
+    ui->Saveimage->setParent(splitButtonRow);
+    ui->Saveimage->setStyleSheet(splitToolButtonStyle);
+    ui->Saveimage->setToolTip("自动把当前框选的喷码检测区域分割成单个字符模板图片，用于后续字库匹配。");
+    ui->Saveimage->installEventFilter(this);
+    ui->Saveimage->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    splitButtonLayout->addWidget(ui->Saveimage);
+
+    m_characterSplitSettingsButton = new QPushButton("字符自动分割设置", splitButtonRow);
+    m_characterSplitSettingsButton->setStyleSheet(splitPushButtonStyle);
+    m_characterSplitSettingsButton->setMinimumHeight(42);
+    m_characterSplitSettingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    splitButtonLayout->addWidget(m_characterSplitSettingsButton);
+
+    splitButtonForm->setWidget(saveImageRow, saveImageRole, splitButtonRow);
+
+    m_characterSplitSettingsDialog = new QDialog(this);
+    m_characterSplitSettingsDialog->setWindowTitle("字符自动分割设置");
+    m_characterSplitSettingsDialog->setModal(true);
+    m_characterSplitSettingsDialog->setMinimumWidth(760);
+    const QString splitHelpText =
+            "这里用于调整【自动分割】字符模板图片时使用的参数。\n\n"
+            "字符尺寸限制：用于过滤过小或过大的字符区域。\n"
+            "高级形态学参数：用于调整字符粘连、断裂、背景噪声时的分割效果。\n\n"
+            "一般情况下保持默认值即可；只有自动分割出来的字符不完整、粘连或多出杂点时再调整。";
+    m_characterSplitSettingsDialog->setProperty("characterSplitHelpText", splitHelpText);
+    m_characterSplitSettingsDialog->setWhatsThis(splitHelpText);
+    m_characterSplitSettingsDialog->installEventFilter(this);
+
+    QVBoxLayout *dialogLayout = new QVBoxLayout(m_characterSplitSettingsDialog);
+    dialogLayout->setContentsMargins(12, 12, 12, 12);
+    dialogLayout->setSpacing(8);
+
+    dialogLayout->addWidget(ui->tab2_frame3);
+    dialogLayout->addWidget(ui->tab2_frame2);
+    ui->tab2_frame3->setWhatsThis(splitHelpText);
+    ui->tab2_frame2->setWhatsThis(splitHelpText);
+    ui->tab2_frame3->show();
+    ui->tab2_frame2->show();
+
+    connect(m_characterSplitSettingsButton, &QPushButton::clicked,
+            this, &Widget::showCharacterSplitSettingsDialog);
+}
+
+void Widget::showCharacterSplitSettingsDialog()
+{
+    if (!m_characterSplitSettingsDialog) {
+        return;
+    }
+
+    m_characterSplitSettingsDialog->exec();
+}
+
 void Widget::setupWordTemplateEditorCombo()
 {
     if (ui) {
         const QString commonPushButtonStyle =
                 "QPushButton {"
-                "background-color: #ffffff;"
+                "background-color: transparent;"
                 "border: 1px solid #ebeef5;"
                 "border-radius: 4px;"
                 "color: #333333;"
@@ -2385,6 +2527,11 @@ void Widget::setupWordTemplateEditorCombo()
 
     if (ui && ui->pushButton_6) {
         ui->pushButton_6->installEventFilter(this);
+    }
+
+    if (ui && ui->pushButton_7) {
+        ui->pushButton_7->setToolTip("确认当前选择的颜色通道，用于后续图像处理和识别。");
+        ui->pushButton_7->installEventFilter(this);
     }
 
     if (ui && ui->confirmAllParamsButton) {
@@ -4033,6 +4180,7 @@ void Widget::saveSettingsToDir(const QString &dirPath)
     settings.setValue("lineEdit_tissueRoughnessThreshold_value", ui->lineEdit_tissueRoughnessThreshold->text());
     settings.setValue("dateEdit_value", ui->dateEdit->toPlainText());
     settings.setValue("comboBox_value", ui->comboBox->currentText());
+    settings.setValue("comboBox_saveImageType_value", ui->comboBox_saveImageType->currentText());
     settings.setValue("comboBox_2_value", ui->comboBox_2->currentText());
     settings.setValue("comboBox_3_value", ui->comboBox_3->currentText());
     settings.setValue("comboBox_4_value", ui->comboBox_4->currentText());
@@ -4552,6 +4700,11 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
         int index = ui->comboBox->findText(value);
         if (index >= 0) ui->comboBox->setCurrentIndex(index);
     }
+    if (settings.contains("comboBox_saveImageType_value")) {
+        QString value = settings.value("comboBox_saveImageType_value").toString();
+        int index = ui->comboBox_saveImageType->findText(value);
+        if (index >= 0) ui->comboBox_saveImageType->setCurrentIndex(index);
+    }
     if (settings.contains("comboBox_2_value")) {
         QString value = settings.value("comboBox_2_value").toString();
         int index = ui->comboBox_2->findText(value);
@@ -4717,6 +4870,14 @@ void Widget::loadSettings()
             ui->comboBox->setCurrentIndex(index);
     }
 
+    if (settings.contains("comboBox_saveImageType_value"))
+    {
+        QString value = settings.value("comboBox_saveImageType_value").toString();
+        int index = ui->comboBox_saveImageType->findText(value);
+        if (index >= 0)
+            ui->comboBox_saveImageType->setCurrentIndex(index);
+    }
+
     if (settings.contains("comboBox_2_value"))
     {
         QString value = settings.value("comboBox_2_value").toString();
@@ -4784,6 +4945,7 @@ void Widget::saveSettings()
     settings.setValue("lineEdit_tissueRoughnessThreshold_value", ui->lineEdit_tissueRoughnessThreshold->text());
 //    settings.setValue("dateEdit_value", ui->dateEdit->toPlainText());
     settings.setValue("comboBox_value", ui->comboBox->currentText());
+    settings.setValue("comboBox_saveImageType_value", ui->comboBox_saveImageType->currentText());
     settings.setValue("comboBox_2_value", ui->comboBox_2->currentText());
     settings.setValue("comboBox_3_value", ui->comboBox_3->currentText());
     settings.setValue("comboBox_4_value", ui->comboBox_4->currentText());
@@ -4816,6 +4978,7 @@ void Widget::setupDefaultValues()
     ui->spinBox->setValue(800);
     ui->lineEdit_14->setText("1.0"); // 默认增益
     ui->comboBox->setCurrentText("不保存图像");
+    ui->comboBox_saveImageType->setCurrentText("只保存带识别框图像");
     ui->comboBox_4->setCurrentText("字库匹配");
     ui->comboBox_2->setCurrentText("无旋转");
     ui->comboBox_3->setCurrentText("间歇触发模式");
@@ -4828,9 +4991,22 @@ void Widget::setupDefaultValues()
 // ================= 拦截滚轮误操作事件 =================
 bool Widget::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_characterSplitSettingsDialog
+            && event->type() == QEvent::EnterWhatsThisMode) {
+        QString helpText = m_characterSplitSettingsDialog->property("characterSplitHelpText").toString();
+        if (helpText.isEmpty()) {
+            helpText = "这里用于调整自动分割字符模板图片时使用的参数。";
+        }
+        QWhatsThis::showText(QCursor::pos(), helpText, m_characterSplitSettingsDialog);
+        QWhatsThis::leaveWhatsThisMode();
+        return true;
+    }
+
     if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
             || watched == ui->pushButton_6
+            || watched == ui->pushButton_7
+            || watched == ui->Saveimage
             || watched == ui->confirmAllParamsButton
             || watched == ui->VideoShoot) {
         QWidget *button = qobject_cast<QWidget *>(watched);

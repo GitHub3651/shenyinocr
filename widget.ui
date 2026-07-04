@@ -933,7 +933,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>2</number>
+         <number>1</number>
         </property>
         <property name="iconSize">
          <size>
@@ -1213,9 +1213,9 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-969</y>
+               <y>-97</y>
                <width>586</width>
-               <height>1270</height>
+               <height>1326</height>
               </rect>
              </property>
              <property name="styleSheet">
@@ -1306,6 +1306,44 @@ QPushButton:pressed {
                   </widget>
                  </item>
                  <item row="2" column="0">
+                  <widget class="QLabel" name="label_saveImageType">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>50</height>
+                    </size>
+                   </property>
+                   <property name="text">
+                    <string>保存图像类型：</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="1">
+                  <widget class="QComboBox" name="comboBox_saveImageType">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>50</height>
+                    </size>
+                   </property>
+                   <item>
+                    <property name="text">
+                     <string>带识别框和不带识别框图像全部保存</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>只保存带识别框图像</string>
+                    </property>
+                   </item>
+                   <item>
+                    <property name="text">
+                     <string>只保存不带识别框图像</string>
+                    </property>
+                   </item>
+                  </widget>
+                 </item>
+                 <item row="3" column="0">
                   <widget class="QCheckBox" name="checkBox">
                    <property name="minimumSize">
                     <size>
@@ -1318,7 +1356,7 @@ QPushButton:pressed {
                    </property>
                   </widget>
                  </item>
-                 <item row="2" column="1">
+                 <item row="3" column="1">
                   <widget class="QPushButton" name="pushButton_6">
                    <property name="minimumSize">
                     <size>
@@ -1331,7 +1369,7 @@ QPushButton:pressed {
                    </property>
                   </widget>
                  </item>
-                 <item row="3" column="0">
+                 <item row="4" column="0">
                   <widget class="QLabel" name="label_12">
                    <property name="minimumSize">
                     <size>
@@ -1344,7 +1382,7 @@ QPushButton:pressed {
                    </property>
                   </widget>
                  </item>
-                 <item row="3" column="1">
+                 <item row="4" column="1">
                   <widget class="QComboBox" name="comboBox_5">
                    <property name="minimumSize">
                     <size>
@@ -1374,14 +1412,14 @@ QPushButton:pressed {
                    </item>
                   </widget>
                  </item>
-                 <item row="4" column="1">
+                 <item row="5" column="1">
                   <widget class="QPushButton" name="pushButton_7">
                    <property name="text">
                     <string>确认</string>
                    </property>
                   </widget>
                  </item>
-                 <item row="5" column="1">
+                 <item row="6" column="1">
                   <widget class="QToolButton" name="Saveimage">
                    <property name="minimumSize">
                     <size>
@@ -1390,11 +1428,11 @@ QPushButton:pressed {
                     </size>
                    </property>
                    <property name="text">
-                    <string>自动分割</string>
+                    <string>自动分割字符</string>
                    </property>
                   </widget>
                  </item>
-                 <item row="7" column="1">
+                 <item row="8" column="1">
                   <widget class="QPushButton" name="pushButton_11">
                    <property name="font">
                     <font>
@@ -1422,7 +1460,7 @@ QPushButton:pressed {
                    </property>
                   </widget>
                  </item>
-                 <item row="6" column="1">
+                 <item row="7" column="1">
                   <widget class="QPushButton" name="pushButton_5">
                    <property name="minimumSize">
                     <size>
