@@ -54,10 +54,12 @@
 #include <QComboBox>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QToolTip>
 #include <QCursor>
+#include <QFrame>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -461,6 +463,7 @@ Widget::Widget(QWidget *parent)
     // 设置文本框自动换行
     ui->dateEdit->setWordWrapMode(QTextOption::WordWrap);
     setupWordTemplateEditorCombo();
+    setupTemplateGuide();
 
     // 禁用焦点滚动调节（防误触）- 遍历全局所有下拉框和数字输入框，一劳永逸
     QList<QComboBox *> comboBoxes = this->findChildren<QComboBox *>();
@@ -474,11 +477,9 @@ Widget::Widget(QWidget *parent)
 
     // 连接定时器信号
     connect(timer, &QTimer::timeout, this, &Widget::rightremove);
+    connect(imageLabel, &ImageLabel::signal_templateGuideEvent,
+            this, &Widget::handleTemplateGuideEvent);
 
-    connect(imageLabel, &ImageLabel::signal_hintMessage, this, [this](QString msg){
-            ui->statusLabel->setText(msg);
-            // ui->statusLabel->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}"); // 可选：加上这行可以让字体变绿色加粗更醒目
-        });
     qDebug() << "6. 变量初始化与信号连接完毕";
 
     // 设置默认值并加载保存的设置
@@ -2010,8 +2011,15 @@ void Widget::on_VideoShoot_clicked()
     // 在 UI 上显示最新的这一帧
     slot_displayAndDetect(myImage);
 
-    // 注意：这里我们只拍照显示，不强制运行识别。用户可以在这张图上画框。
-    imageLabel->resetDrawingStep();
+    const bool needsTemplateDrawing = (ui->comboBox_4->currentIndex() == 0
+                                       || ui->comboBox_4->currentIndex() == 1);
+    imageLabel->setTemplateDrawingEnabled(needsTemplateDrawing);
+    if (needsTemplateDrawing) {
+        imageLabel->resetDrawingStep();
+        showTemplateGuideForCurrentMode();
+    } else {
+        hideTemplateGuide();
+    }
 }
 /**
  * @brief 连续拍照按钮点击槽函数
@@ -2204,8 +2212,154 @@ void Widget::updateTissueRoughnessUiVisibility()
     ui->pushButton_tissueRoughnessThreshold->setVisible(showTissueThreshold);
 }
 
+void Widget::setupTemplateGuide()
+{
+    if (!ui || m_templateGuideFrame) {
+        return;
+    }
+
+    m_templateGuideFrame = new QFrame(ui->imagedisplayBox);
+    m_templateGuideFrame->setObjectName("templateGuideFrame");
+    m_templateGuideFrame->setFrameShape(QFrame::NoFrame);
+    m_templateGuideFrame->setStyleSheet(
+                "#templateGuideFrame {"
+                "background-color: transparent;"
+                "border: none;"
+                "}");
+    m_templateGuideFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    QVBoxLayout *guideLayout = new QVBoxLayout(m_templateGuideFrame);
+    guideLayout->setContentsMargins(12, 0, 12, 4);
+    guideLayout->setSpacing(0);
+
+    m_templateGuideTitleLabel = new QLabel(m_templateGuideFrame);
+    m_templateGuideTitleLabel->setStyleSheet("color: #1677d2; font-size: 18px; font-weight: bold; border: none; background: transparent;");
+    m_templateGuideTitleLabel->setWordWrap(true);
+    m_templateGuideTitleLabel->hide();
+
+    m_templateGuideBodyLabel = new QLabel(m_templateGuideFrame);
+    m_templateGuideBodyLabel->setStyleSheet("color: #000000; font-size: 18px; font-weight: normal; border: none; background: transparent;");
+    m_templateGuideBodyLabel->setWordWrap(false);
+
+    guideLayout->addWidget(m_templateGuideBodyLabel);
+
+    ui->verticalLayout_InnerImg->insertWidget(0, m_templateGuideFrame);
+    hideTemplateGuide();
+}
+
+void Widget::updateTemplateGuideText(const QString &title, const QString &body)
+{
+    if (!m_templateGuideFrame || !m_templateGuideTitleLabel || !m_templateGuideBodyLabel) {
+        return;
+    }
+
+    Q_UNUSED(title);
+    m_templateGuideTitleLabel->clear();
+    m_templateGuideTitleLabel->hide();
+    QString guideText = body.trimmed();
+    if (!guideText.startsWith("【操作提示】")) {
+        guideText.prepend("【操作提示】");
+    }
+    m_templateGuideBodyLabel->setText(guideText);
+    m_templateGuideFrame->setVisible(true);
+}
+
+void Widget::hideTemplateGuide()
+{
+    if (m_templateGuideFrame) {
+        m_templateGuideFrame->hide();
+    }
+}
+
+void Widget::showTemplateGuideForCurrentMode()
+{
+    const int modeIndex = ui->comboBox_4->currentIndex();
+
+    if (modeIndex == 0) {
+        updateTemplateGuideText("模板匹配模板制作",
+                                "请按住鼠标左键拖动，框选定位区域。");
+        return;
+    }
+
+    if (modeIndex == 1) {
+        updateTemplateGuideText("字库匹配模板制作",
+                                "请按住鼠标左键拖动，框选定位区域。");
+        return;
+    }
+
+    hideTemplateGuide();
+}
+
+void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
+{
+    if (!m_templateGuideFrame || !m_templateGuideFrame->isVisible()) {
+        return;
+    }
+
+    const int modeIndex = ui->comboBox_4->currentIndex();
+    if (modeIndex != 0 && modeIndex != 1) {
+        hideTemplateGuide();
+        return;
+    }
+
+    const QString title = (modeIndex == 1) ? "字库匹配模板制作" : "模板匹配模板制作";
+
+    if (eventName == "tracking_started") {
+        updateTemplateGuideText(title,
+                                "松开鼠标左键完成定位区域。");
+    } else if (eventName == "tracking_too_small") {
+        updateTemplateGuideText(title,
+                                "定位区域太小，请重新框选更大的定位区域。");
+    } else if (eventName == "tracking_done") {
+        updateTemplateGuideText(title,
+                                "请用鼠标左键依次点击喷码区域边缘，右键闭合。");
+    } else if (eventName == "poly_point_added") {
+        updateTemplateGuideText(title,
+                                QString("已选择 %1 个点，继续点击边缘或右键闭合。").arg(pointCount));
+    } else if (eventName == "poly_too_few") {
+        updateTemplateGuideText(title,
+                                QString("至少需要 3 个点，当前 %1 个，请继续点击喷码区域边缘。").arg(pointCount));
+    } else if (eventName == "poly_done") {
+        updateTemplateGuideText(title,
+                                "喷码检测区域已完成，请点击【保存模板】。");
+    }
+}
+
 void Widget::setupWordTemplateEditorCombo()
 {
+    if (ui) {
+        const QString commonPushButtonStyle =
+                "QPushButton {"
+                "background-color: #ffffff;"
+                "border: 1px solid #ebeef5;"
+                "border-radius: 4px;"
+                "color: #333333;"
+                "padding: 5px 10px;"
+                "}"
+                "QPushButton:hover {"
+                "background-color: #f2f6fc;"
+                "}"
+                "QPushButton:pressed {"
+                "background-color: #ebeef5;"
+                "}";
+
+        if (ui->textsure_btn) ui->textsure_btn->setStyleSheet(commonPushButtonStyle);
+        if (ui->batchTextsure_btn) ui->batchTextsure_btn->setStyleSheet(commonPushButtonStyle);
+        if (ui->WriteVDpushButton) ui->WriteVDpushButton->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_7) ui->pushButton_7->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_3) ui->pushButton_3->setStyleSheet(commonPushButtonStyle);
+        if (ui->sureButton) ui->sureButton->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_9) ui->pushButton_9->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_12) ui->pushButton_12->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_tissueRoughnessThreshold) ui->pushButton_tissueRoughnessThreshold->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_2) ui->pushButton_2->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton) ui->pushButton->setStyleSheet(commonPushButtonStyle);
+        if (ui->plcmodebtn) ui->plcmodebtn->setStyleSheet(commonPushButtonStyle);
+        if (ui->ConnectpushButton) ui->ConnectpushButton->setStyleSheet(commonPushButtonStyle);
+        if (ui->DisconnectpushButton) ui->DisconnectpushButton->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_8) ui->pushButton_8->setStyleSheet(commonPushButtonStyle);
+    }
+
     if (ui && ui->textsure_btn && ui->batchTextsure_btn) {
         ui->textsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         ui->batchTextsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -2236,6 +2390,10 @@ void Widget::setupWordTemplateEditorCombo()
     if (ui && ui->confirmAllParamsButton) {
         ui->confirmAllParamsButton->setToolTip("依次确认当前界面上的所有参数；目标字符只按当前确认字符逻辑处理，不会批量覆盖所有模板字符。");
         ui->confirmAllParamsButton->installEventFilter(this);
+    }
+
+    if (ui && ui->VideoShoot) {
+        ui->VideoShoot->installEventFilter(this);
     }
 
     if (ui && ui->batchTextsure_btn) {
@@ -2309,12 +2467,26 @@ void Widget::setupWordTemplateEditorCombo()
 
         m_wordTemplateEditLabel = new QLabel("当前编辑模板:", m_wordTemplateEditWidget);
         m_wordTemplateEditLabel->setFixedHeight(50);
+        m_wordTemplateEditLabel->setStyleSheet(
+                    "background-color: #ffffff;"
+                    "border: 1px solid #ebeef5;"
+                    "border-radius: 4px;"
+                    "color: #333333;"
+                    "padding: 5px 10px;");
         m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
         m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
         m_wordTemplateEditComboBox->setMinimumHeight(50);
         m_wordTemplateEditComboBox->setMaximumHeight(50);
         m_wordTemplateEditComboBox->setMinimumWidth(160);
         m_wordTemplateEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_wordTemplateEditComboBox->setStyleSheet(
+                    "QComboBox {"
+                    "background-color: #ffffff;"
+                    "border: 1px solid #ebeef5;"
+                    "border-radius: 4px;"
+                    "color: #333333;"
+                    "padding: 5px 10px;"
+                    "}");
 
         editorLayout->addWidget(m_wordTemplateEditLabel);
         editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
@@ -2383,6 +2555,10 @@ void Widget::setupWordTemplateEditorCombo()
             this,
             [this](int index) {
                 updateTissueRoughnessUiVisibility();
+                if (imageLabel) {
+                    imageLabel->setTemplateDrawingEnabled(false);
+                }
+                hideTemplateGuide();
                 if (index != 1 && m_wordMultiTemplateMode) {
                     clearWordMultiTemplateState();
                     return;
@@ -2560,9 +2736,11 @@ void Widget::displayWordTemplateRawImage(const QString &dirPath)
     ui->image_undetected->setPixmap(scaledPixmap);
 
     if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearGreenRects();
         imageLabel->clearSelection();
     }
+    hideTemplateGuide();
 }
 
 QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
@@ -3164,10 +3342,12 @@ void Widget::on_cancel_clicked()
     selectionRect1 = QRect();
 
     if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearGreenRects();
         imageLabel->setColor(1);
         imageLabel->clearSelection();
     }
+    hideTemplateGuide();
 
     g_lastDrawResults.clear();
     g_lastPose = DetectionPose();
@@ -3269,15 +3449,12 @@ void Widget::on_textsure_btn_clicked()
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
 
-        if (newMubiaozifu.trimmed().isEmpty()) {
-            showParameterInfo("提示", QString("模板 [%1] 的目标字符已清空").arg(profile.name));
-        } else {
-            showParameterInfo("提示",
-                              QString("模板 [%1] 目标字符确认成功，目标字符 %2 个，字符模板图 %3 张！")
-                              .arg(profile.name)
-                              .arg(profile.targetCount)
-                              .arg(static_cast<int>(profile.digitTemplates.size())));
-        }
+        const QString profileName = profile.name.isEmpty()
+                ? QDir(profile.dirPath).dirName()
+                : profile.name;
+        showParameterInfo("提示",
+                          QString("已更新产品模板 %1 的目标字符。\n其他产品模板未修改。")
+                          .arg(profileName));
         return;
     }
 
@@ -3434,13 +3611,7 @@ void Widget::on_batchTextsure_btn_clicked()
         return;
     }
 
-    if (newMubiaozifu.trimmed().isEmpty()) {
-        showParameterInfo("提示",
-                          QString("已批量清空 %1 个模板的目标字符").arg(successCount));
-    } else {
-        showParameterInfo("提示",
-                          QString("目标字符批量确认成功，已保存到 %1 个模板").arg(successCount));
-    }
+    showParameterInfo("提示", "已将当前目标字符保存到所有已选择的产品模板。");
 }
 
 
@@ -3645,8 +3816,38 @@ void Widget::on_pushButton_3_clicked()
 void Widget::on_pushButton_5_clicked()
 {
     if (!myImage || myImage->empty()) {
-        QMessageBox::warning(this, "提示", "请先拍照获取图像！");
+        QMessageBox::warning(this, "提示", "请先点击【制作模板】拍照获取图像。");
         return;
+    }
+    if (!imageLabel->isTemplateDrawingEnabled()) {
+        QMessageBox::warning(this, "提示",
+                             QStringLiteral("\u8bf7\u5148\u70b9\u51fb\u3010\u5236\u4f5c\u6a21\u677f\u3011\u62cd\u7167\uff0c\u5e76\u5b8c\u6210\u5b9a\u4f4d\u533a\u57df\u548c\u55b7\u7801\u68c0\u6d4b\u533a\u57df\u6846\u9009\u3002"));
+        return;
+    }
+
+    const bool isWordTemplateMode = (ui->comboBox_4->currentIndex() == 1);
+
+    // 字库匹配模式下，保存前先检查框选状态，避免输入名称后才发现无法保存。
+    QRect uiTrackRect = imageLabel->getTrackingRect();
+    QPolygon uiDetectPoly = imageLabel->getDetectionPoly();
+
+    if (isWordTemplateMode) {
+        if (uiTrackRect.isNull()) {
+            QMessageBox::warning(this, "提示", "请先框选定位区域。");
+            return;
+        }
+        if (uiTrackRect.width() <= 5 || uiTrackRect.height() <= 5) {
+            QMessageBox::warning(this, "提示", "定位区域太小，请重新框选。");
+            return;
+        }
+        if (uiDetectPoly.isEmpty()) {
+            QMessageBox::warning(this, "提示", "请先框选喷码检测区域。");
+            return;
+        }
+        if (uiDetectPoly.size() < 3 || !imageLabel->isDetectionPolyComplete()) {
+            QMessageBox::warning(this, "提示", "喷码检测区域未闭合或点数不足，请重新框选。");
+            return;
+        }
     }
 
     const QString folderNamePrompt =
@@ -3669,13 +3870,27 @@ void Widget::on_pushButton_5_clicked()
 
     QString savePath = QDir("D:/muban/").absoluteFilePath(newFolderName);
     QDir dir(savePath);
-    if (!dir.mkpath(".")) return;
+    if (isWordTemplateMode && dir.exists()) {
+        QMessageBox confirmBox(this);
+        confirmBox.setIcon(QMessageBox::Warning);
+        confirmBox.setWindowTitle("确认覆盖");
+        confirmBox.setText(QString("产品模板 [%1] 已存在。\n\n"
+                                   "继续保存会覆盖该产品模板中的定位区域、喷码检测区域和参数配置。\n"
+                                   "是否继续？").arg(newFolderName));
+        QPushButton *overwriteButton = confirmBox.addButton("覆盖", QMessageBox::AcceptRole);
+        QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
+        confirmBox.setDefaultButton(cancelButton);
+        confirmBox.exec();
+        if (confirmBox.clickedButton() != overwriteButton) {
+            return;
+        }
+    }
+    if (!dir.mkpath(".")) {
+        QMessageBox::warning(this, "错误", "产品模板文件夹创建失败，无法保存模板。");
+        return;
+    }
 
-    // 1. 获取标定数据
-    QRect uiTrackRect = imageLabel->getTrackingRect();
-    QPolygon uiDetectPoly = imageLabel->getDetectionPoly();
-
-    if (uiTrackRect.isNull() || uiDetectPoly.isEmpty() || uiDetectPoly.size() < 3) {
+    if (!isWordTemplateMode && (uiTrackRect.isNull() || uiDetectPoly.isEmpty() || uiDetectPoly.size() < 3)) {
         QMessageBox::warning(this, "警告",
                              "保存模板前，请先在图像上完成以下操作：\n\n"
                              "1. 框选定位区域\n"
@@ -3781,6 +3996,8 @@ void Widget::on_pushButton_5_clicked()
 
     // 5. 保存所有配置
     saveSettingsToDir(savePath);
+    imageLabel->setTemplateDrawingEnabled(false);
+    hideTemplateGuide();
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
     QMessageBox::information(this, "成功", "模板及双框配置已全部保存！");
@@ -3956,6 +4173,10 @@ void Widget::on_pushButton_4_clicked()
         }
 
         if (selectedDirs.isEmpty()) return;
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+        }
+        hideTemplateGuide();
 
         if (selectedDirs.size() > 1) {
             std::vector<WordTemplateProfile> loadedProfiles;
@@ -4114,6 +4335,11 @@ void Widget::on_pushButton_4_clicked()
         dirPath = QFileDialog::getExistingDirectory(nullptr, "选择产品模板文件夹",
                                                     "D:/muban",
                                                     QFileDialog::ShowDirsOnly);
+        if (dirPath.isEmpty()) return;
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+        }
+        hideTemplateGuide();
     }
 
     if (dirPath.isEmpty()) return;
@@ -4605,16 +4831,58 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
     if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
             || watched == ui->pushButton_6
-            || watched == ui->confirmAllParamsButton) {
+            || watched == ui->confirmAllParamsButton
+            || watched == ui->VideoShoot) {
         QWidget *button = qobject_cast<QWidget *>(watched);
         if (!button) {
             return QWidget::eventFilter(watched, event);
         }
 
         if (event->type() == QEvent::Enter) {
-            QTimer::singleShot(500, this, [button]() {
-                if (button->underMouse() && !button->toolTip().isEmpty()) {
-                    QToolTip::showText(QCursor::pos(), button->toolTip(), button);
+            QTimer::singleShot(500, this, [this, button, watched]() {
+                if (!button->underMouse()) {
+                    return;
+                }
+
+                QString tooltipText;
+                if (watched == ui->VideoShoot) {
+                    switch (ui->comboBox_4->currentIndex()) {
+                    case 0:
+                        tooltipText =
+                                "制作模板匹配产品模板：\n\n"
+                                "1. 点击后拍摄当前产品图像。\n"
+                                "2. 在图像上框选定位区域和检测区域。\n"
+                                "3. 点击【保存模板】保存产品模板。";
+                        break;
+                    case 1:
+                        tooltipText =
+                                "制作字库产品模板步骤：\n\n"
+                                "1. 点击后拍摄当前产品图像。\n"
+                                "2. 在图像上按住鼠标左键，框选定位区域。\n"
+                                "3. 用鼠标左键依次点击喷码区域边缘。\n"
+                                "4. 点击鼠标右键闭合喷码检测区域。\n"
+                                "5. 点击【保存模板】保存产品模板。";
+                        break;
+                    case 2:
+                        tooltipText =
+                                "深度模型模式通常不需要制作传统产品模板。\n\n"
+                                "请确认模型文件和相关参数已经配置完成。";
+                        break;
+                    case 3:
+                        tooltipText =
+                                "纸巾检测通常不需要制作产品模板。\n\n"
+                                "请设置纸巾检测粗糙度阈值后启动检测。";
+                        break;
+                    default:
+                        tooltipText = "点击后拍摄当前图像，用于制作产品模板。";
+                        break;
+                    }
+                } else {
+                    tooltipText = button->toolTip();
+                }
+
+                if (!tooltipText.isEmpty()) {
+                    QToolTip::showText(QCursor::pos(), tooltipText, button);
                 }
             });
             return false;
@@ -4675,6 +4943,8 @@ void Widget::on_CloseCamera_clicked()
     }
     // 清空文本并将文本置0
     ui->resultlabel->clear();
+    imageLabel->setTemplateDrawingEnabled(false);
+    hideTemplateGuide();
     imageLabel->clear();
     ui->image_undetected->clear();
     ui->imagenum->clear();
@@ -4809,6 +5079,10 @@ void Widget::on_plcbtn_clicked()
         }
     }
     m_allParamsConfirmed = false;
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+    }
+    hideTemplateGuide();
 
     // ==========================================================
     // 以下为原有启动线程逻辑，完全保留你所有的 PLC/相机 流程

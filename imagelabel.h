@@ -41,6 +41,9 @@ public:
     // ================= 🔥 新增：双框追踪专用接口 =================
     QPolygon getDetectionPoly() const { return m_detectionPoly; }
     QRect getTrackingRect() const { return m_trackingRect; }
+    bool isDetectionPolyComplete() const;
+    void setTemplateDrawingEnabled(bool enabled);
+    bool isTemplateDrawingEnabled() const;
     void resetDrawingStep();
 
 signals:
@@ -50,6 +53,7 @@ signals:
 
     // 🔥 新增：发送文本提示信号给 Widget
     void signal_hintMessage(QString msg);
+    void signal_templateGuideEvent(QString eventName, int pointCount);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -90,6 +94,7 @@ private:
     QPoint m_tempPolyPoint;
     QRect m_trackingRect;
     bool m_isInteracting = false;
+    bool m_templateDrawingEnabled = false;
     QPoint m_startPoint;
 };
 

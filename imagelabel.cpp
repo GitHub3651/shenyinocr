@@ -62,6 +62,21 @@ void ImageLabel::addSelectionPolygon(const QPolygonF &polygon, int color) {
 
 bool ImageLabel::isDrawing() const { return drawing; }
 
+bool ImageLabel::isDetectionPolyComplete() const {
+    return m_currentStep == STEP_DONE && m_detectionPoly.size() >= 3;
+}
+
+void ImageLabel::setTemplateDrawingEnabled(bool enabled) {
+    m_templateDrawingEnabled = enabled;
+    if (!m_templateDrawingEnabled) {
+        m_isInteracting = false;
+    }
+}
+
+bool ImageLabel::isTemplateDrawingEnabled() const {
+    return m_templateDrawingEnabled;
+}
+
 // =====================================================================
 // 全左键顺序画双框交互逻辑（带中文提示，不再乱码）
 // =====================================================================
@@ -73,7 +88,6 @@ void ImageLabel::resetDrawingStep() {
     selectionRect = QRect();
     m_isInteracting = false;
     update();
-    emit signal_hintMessage(QStringLiteral("\u7b2c\u4e00\u6b65\uFF1A\u8BF7\u3010\u6309\u4F4F\u5DE6\u952E\u62D6\u52A8\u3011\u6846\u9009\u56FA\u5B9A\u7684\u7279\u5F81(\u951A\u70B9)"));
 }
 
 void ImageLabel::clearSelection() {
@@ -84,6 +98,11 @@ void ImageLabel::clearSelection() {
 }
 
 void ImageLabel::mousePressEvent(QMouseEvent *event) {
+    if (!m_templateDrawingEnabled) {
+        emit mousePressed(event);
+        return;
+    }
+
     if (m_currentStep == STEP_DONE && event->button() == Qt::LeftButton) {
         resetDrawingStep();
     }
@@ -93,18 +112,20 @@ void ImageLabel::mousePressEvent(QMouseEvent *event) {
             m_isInteracting = true;
             m_startPoint = event->pos();
             m_trackingRect = QRect(m_startPoint, m_startPoint);
+            emit signal_templateGuideEvent("tracking_started", 0);
         }
     } else if (m_currentStep == STEP_DETECTION_POLY) {
         if (event->button() == Qt::LeftButton) {
             m_detectionPoly << event->pos();
             m_tempPolyPoint = event->pos();
+            emit signal_templateGuideEvent("poly_point_added", m_detectionPoly.size());
             update();
         } else if (event->button() == Qt::RightButton) {
             if (m_detectionPoly.size() >= 3) {
                 m_currentStep = STEP_DONE;
-                emit signal_hintMessage(QStringLiteral("\u591A\u8FB9\u5F62\u5DF2\u95ED\u5408\uFF01\u8BF7\u70B9\u51FB\u53F3\u4FA7\u3010\u4FDD\u5B58\u6A21\u677F\u3011"));
+                emit signal_templateGuideEvent("poly_done", m_detectionPoly.size());
             } else {
-                emit signal_hintMessage(QStringLiteral("\u591A\u8FB9\u5F62\u9876\u70B9\u592A\u5C11\uFF0C\u8BF7\u7EE7\u7EED\u70B9\u51FB\u5DE6\u952E\uFF01"));
+                emit signal_templateGuideEvent("poly_too_few", m_detectionPoly.size());
             }
             update();
         }
@@ -113,6 +134,11 @@ void ImageLabel::mousePressEvent(QMouseEvent *event) {
 }
 
 void ImageLabel::mouseMoveEvent(QMouseEvent *event) {
+    if (!m_templateDrawingEnabled) {
+        emit mouseMoved(event);
+        return;
+    }
+
     if (m_currentStep == STEP_TRACKING && m_isInteracting) {
         m_trackingRect.setBottomRight(event->pos());
         update();
@@ -124,16 +150,21 @@ void ImageLabel::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void ImageLabel::mouseReleaseEvent(QMouseEvent *event) {
+    if (!m_templateDrawingEnabled) {
+        emit mouseReleased(event);
+        return;
+    }
+
     if (m_currentStep == STEP_TRACKING && event->button() == Qt::LeftButton && m_isInteracting) {
         m_isInteracting = false;
         m_trackingRect = m_trackingRect.normalized();
         if (m_trackingRect.width() > 5) {
             m_currentStep = STEP_DETECTION_POLY;
             m_detectionPoly.clear();
-            emit signal_hintMessage(QStringLiteral("\u951A\u70B9\u9009\u597D\u4E86\uFF01\u7B2C\u4E8C\u6B65\uFF1A\u8BF7\u3010\u8FDE\u7EED\u70B9\u51FB\u5DE6\u952E\u3011\u63CF\u7ED8\u5B8C\u6574\u7684\u65E5\u671F\u8FB9\u7F18\uFF0C\u3010\u53F3\u952E\u3011\u5B8C\u6210\u95ED\u5408"));
+            emit signal_templateGuideEvent("tracking_done", 0);
         } else {
             m_trackingRect = QRect();
-            emit signal_hintMessage(QStringLiteral("\u6846\u592A\u5C0F\uFF01\u8BF7\u91CD\u65B0\u3010\u6309\u4F4F\u5DE6\u952E\u3011\u6846\u9009\u951A\u70B9"));
+            emit signal_templateGuideEvent("tracking_too_small", 0);
         }
         update();
     }

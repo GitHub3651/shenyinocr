@@ -343,7 +343,7 @@
           <number>2</number>
          </property>
          <property name="topMargin">
-          <number>25</number>
+          <number>10</number>
          </property>
          <property name="rightMargin">
           <number>2</number>
@@ -933,7 +933,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>0</number>
+         <number>2</number>
         </property>
         <property name="iconSize">
          <size>
@@ -981,6 +981,13 @@
                  </property>
                  <item row="2" column="0">
                   <widget class="QLabel" name="label_8">
+                   <property name="styleSheet">
+                    <string notr="true">background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;</string>
+                   </property>
                    <property name="text">
                     <string>拍照距离(mm):</string>
                    </property>
@@ -993,6 +1000,13 @@
                      <width>0</width>
                      <height>50</height>
                     </size>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;</string>
                    </property>
                    <property name="text">
                     <string>50</string>
@@ -1020,7 +1034,12 @@
                     </size>
                    </property>
                    <property name="styleSheet">
-                    <string notr="true">font: 16pt &quot;黑体&quot;;</string>
+                    <string notr="true">font: 16pt &quot;黑体&quot;;
+background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;</string>
                    </property>
                   </widget>
                  </item>
@@ -1032,6 +1051,21 @@
                      <height>50</height>
                     </size>
                    </property>
+                   <property name="styleSheet">
+                    <string notr="true">QPushButton {
+background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;
+}
+QPushButton:hover {
+background-color: #f2f6fc;
+}
+QPushButton:pressed {
+background-color: #ebeef5;
+}</string>
+                   </property>
                    <property name="text">
                     <string>确认</string>
                    </property>
@@ -1039,6 +1073,13 @@
                  </item>
                  <item row="0" column="0">
                   <widget class="QLabel" name="label">
+                   <property name="styleSheet">
+                    <string notr="true">background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;</string>
+                   </property>
                    <property name="text">
                     <string>目标字符内容:</string>
                    </property>
@@ -1069,6 +1110,21 @@
                        <height>50</height>
                       </size>
                      </property>
+                     <property name="styleSheet">
+                      <string notr="true">QPushButton {
+background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;
+}
+QPushButton:hover {
+background-color: #f2f6fc;
+}
+QPushButton:pressed {
+background-color: #ebeef5;
+}</string>
+                     </property>
                      <property name="text">
                       <string>确认字符</string>
                      </property>
@@ -1081,6 +1137,21 @@
                        <width>0</width>
                        <height>50</height>
                       </size>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">QPushButton {
+background-color: #ffffff;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;
+}
+QPushButton:hover {
+background-color: #f2f6fc;
+}
+QPushButton:pressed {
+background-color: #ebeef5;
+}</string>
                      </property>
                      <property name="text">
                       <string>批量确认字符</string>
@@ -1142,7 +1213,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-162</y>
+               <y>-969</y>
                <width>586</width>
                <height>1270</height>
               </rect>
@@ -1851,7 +1922,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>0</y>
+               <y>-472</y>
                <width>586</width>
                <height>773</height>
               </rect>

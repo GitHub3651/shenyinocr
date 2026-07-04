@@ -83,6 +83,7 @@ class Widget;
 class MultiCameraWidget;
 class QLabel;
 class QComboBox;
+class QFrame;
 
 /**
  * @brief 主窗口类
@@ -240,6 +241,11 @@ private:
     void updateSaveDirButtonText();
     void updateTissueRoughnessUiVisibility();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
+    void setupTemplateGuide();
+    void showTemplateGuideForCurrentMode();
+    void hideTemplateGuide();
+    void updateTemplateGuideText(const QString &title, const QString &body);
+    void handleTemplateGuideEvent(const QString &eventName, int pointCount);
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -253,6 +259,9 @@ private:
     QWidget *m_wordThresholdEditWidget = nullptr;
     QLabel *m_wordThresholdEditLabel = nullptr;
     QComboBox *m_wordThresholdEditComboBox = nullptr;
+    QFrame *m_templateGuideFrame = nullptr;
+    QLabel *m_templateGuideTitleLabel = nullptr;
+    QLabel *m_templateGuideBodyLabel = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QStringList m_confirmAllParamErrors;
 
