@@ -1360,6 +1360,9 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
     ui->image_undetected->setScaledContents(false);
     ui->image_undetected->setAlignment(Qt::AlignCenter);
     ui->image_undetected->setPixmap(scaledPixmap);
+    if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
+        updateImageDisplayStatusText("正在显示相机采集图像...");
+    }
 }
 
 
@@ -2291,6 +2294,9 @@ void Widget::updateTemplateGuideText(const QString &title, const QString &body)
     if (!guideText.startsWith("【操作提示】")) {
         guideText.prepend("【操作提示】");
     }
+    if (!guideText.contains("【按下esc退出当前模板制作】")) {
+        guideText.append("  【按下esc退出当前模板制作】");
+    }
     m_templateGuideBodyLabel->setText(guideText);
     m_templateGuideFrame->setVisible(true);
 }
@@ -2300,6 +2306,18 @@ void Widget::hideTemplateGuide()
     if (m_templateGuideFrame) {
         m_templateGuideFrame->hide();
     }
+}
+
+void Widget::updateImageDisplayStatusText(const QString &body)
+{
+    if (!m_templateGuideFrame || !m_templateGuideTitleLabel || !m_templateGuideBodyLabel) {
+        return;
+    }
+
+    m_templateGuideTitleLabel->clear();
+    m_templateGuideTitleLabel->hide();
+    m_templateGuideBodyLabel->setText(body.trimmed());
+    m_templateGuideFrame->setVisible(true);
 }
 
 void Widget::showTemplateGuideForCurrentMode()
@@ -2338,6 +2356,9 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     if (eventName == "tracking_started") {
         updateTemplateGuideText(title,
                                 "松开鼠标左键完成定位区域。");
+    } else if (eventName == "template_reset") {
+        updateTemplateGuideText(title,
+                                "已清空当前框线，请重新按住鼠标左键拖动，框选定位区域。");
     } else if (eventName == "tracking_too_small") {
         updateTemplateGuideText(title,
                                 "定位区域太小，请重新框选更大的定位区域。");
@@ -2353,6 +2374,24 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     } else if (eventName == "poly_done") {
         updateTemplateGuideText(title,
                                 "喷码检测区域已完成，请点击【保存模板】。");
+        QTimer::singleShot(0, this, [this]() {
+            if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
+                return;
+            }
+
+            QMessageBox saveMessageBox(this);
+            saveMessageBox.setIcon(QMessageBox::Question);
+            saveMessageBox.setWindowTitle("保存模板");
+            saveMessageBox.setText("喷码检测区域已闭合。\n\n是否立即保存当前产品模板？");
+            QPushButton *saveButton = saveMessageBox.addButton("保存", QMessageBox::AcceptRole);
+            saveMessageBox.addButton("取消", QMessageBox::RejectRole);
+            saveMessageBox.setDefaultButton(saveButton);
+            saveMessageBox.exec();
+
+            if (saveMessageBox.clickedButton() == saveButton) {
+                on_pushButton_5_clicked();
+            }
+        });
     }
 }
 
@@ -2532,6 +2571,53 @@ void Widget::setupWordTemplateEditorCombo()
     if (ui && ui->pushButton_7) {
         ui->pushButton_7->setToolTip("确认当前选择的颜色通道，用于后续图像处理和识别。");
         ui->pushButton_7->installEventFilter(this);
+    }
+
+    if (ui) {
+        if (ui->pushButton_10) {
+            ui->pushButton_10->setToolTip("清空当前尚未发出的剔除队列。\n适用于异常停机、误判、手动停止后，防止之前累计的剔除信号继续输出。");
+            ui->pushButton_10->installEventFilter(this);
+        }
+        if (ui->label_4) {
+            ui->label_4->setToolTip("图像判定合格的分数阈值。\n识别匹配分数低于该值时，通常判为不合格；数值越高，判定越严格。");
+            ui->label_4->installEventFilter(this);
+        }
+        if (ui->label_27) {
+            ui->label_27->setToolTip("设置图像进入识别前的旋转方向。\n当相机安装方向、产品摆放方向和模板方向不一致时，需要调整这里。");
+            ui->label_27->installEventFilter(this);
+        }
+        if (ui->label_16) {
+            ui->label_16->setToolTip("设置相机增益。\n增益越高画面越亮，但噪声也可能增加；一般先调曝光，曝光不足时再调增益。");
+            ui->label_16->installEventFilter(this);
+        }
+        if (ui->label_14) {
+            ui->label_14->setToolTip("PLC拍照信号保持多久。\n相机偶尔漏拍、触发不稳定时可适当加大；正常不要过大，避免影响下一次触发节拍。");
+            ui->label_14->installEventFilter(this);
+        }
+        if (ui->label_13) {
+            ui->label_13->setToolTip("相机收到 PLC 拍照信号后，再等待多久才真正曝光采图。\n通常在拍照距离基本正确后，用它做小范围微调。\n画面中产品还没到合适位置就加大；产品已经走过或喷码偏后就减小。");
+            ui->label_13->installEventFilter(this);
+        }
+        if (ui->label_6) {
+            ui->label_6->setToolTip("检测拍照点到剔除机构中心的实际产线距离。\n剔除太早通常加大；剔除太晚通常减小。");
+            ui->label_6->installEventFilter(this);
+        }
+        if (ui->label_10) {
+            ui->label_10->setToolTip("剔除机构保持动作的时长。\n不合格品剔不干净就加大；影响相邻合格品或动作拖尾就减小。");
+            ui->label_10->installEventFilter(this);
+        }
+        if (ui->label_17) {
+            ui->label_17->setToolTip("选择第几路剔除输出或第几个剔除口。\n现场有多个气嘴、推杆或剔除工位时使用；填错会从错误位置剔除。");
+            ui->label_17->installEventFilter(this);
+        }
+        if (ui->label_8) {
+            ui->label_8->setToolTip("上游传感器触发点到相机拍照中心的实际产线距离。\nPLC 根据这个距离判断产品走到相机位置后再发出拍照信号。\n画面中产品还没到拍照位置，说明触发偏早，适当加大；产品已经走过拍照位置，说明触发偏晚，适当减小。");
+            ui->label_8->installEventFilter(this);
+        }
+        if (ui->comboBox_3) {
+            ui->comboBox_3->setToolTip("PLC触发工作模式。\n连续触发模式：产线连续经过时，PLC按连续节拍触发相机采图和检测。\n间歇触发模式：产品分批、停顿或按间隔到位时，PLC按间歇方式触发采图和检测。");
+            ui->comboBox_3->installEventFilter(this);
+        }
     }
 
     if (ui && ui->confirmAllParamsButton) {
@@ -2887,7 +2973,8 @@ void Widget::displayWordTemplateRawImage(const QString &dirPath)
         imageLabel->clearGreenRects();
         imageLabel->clearSelection();
     }
-    hideTemplateGuide();
+    updateImageDisplayStatusText(QString("正在显示模板【%1】的产品图像")
+                                 .arg(QDir(dirPath).dirName()));
 }
 
 QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
@@ -4144,6 +4231,7 @@ void Widget::on_pushButton_5_clicked()
     // 5. 保存所有配置
     saveSettingsToDir(savePath);
     imageLabel->setTemplateDrawingEnabled(false);
+    imageLabel->clearSelection();
     hideTemplateGuide();
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
@@ -4501,6 +4589,13 @@ void Widget::on_pushButton_4_clicked()
     saveSettings(); // 保存路径
     m_currentTemplateNameVisible = loadSettingsFromDir(dirPath);
     updateCurrentTemplateName();
+    if (ui->comboBox_4->currentIndex() == 1 && imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+        imageLabel->clearGreenRects();
+        imageLabel->clearSelection();
+        hideTemplateGuide();
+        displayWordTemplateRawImage(dirPath);
+    }
     wrongindex = ui->lineEdit_12->text().toInt();
 
     qDebug()<<"currentTemplate"<<currentTemplateDirPath;
@@ -5006,6 +5101,17 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
             || watched == ui->batchTextsure_btn
             || watched == ui->pushButton_6
             || watched == ui->pushButton_7
+            || watched == ui->pushButton_10
+            || watched == ui->label_4
+            || watched == ui->label_27
+            || watched == ui->label_16
+            || watched == ui->label_14
+            || watched == ui->label_13
+            || watched == ui->label_6
+            || watched == ui->label_10
+            || watched == ui->label_17
+            || watched == ui->label_8
+            || watched == ui->comboBox_3
             || watched == ui->Saveimage
             || watched == ui->confirmAllParamsButton
             || watched == ui->VideoShoot) {

@@ -249,6 +249,7 @@ private:
     void setupTemplateGuide();
     void showTemplateGuideForCurrentMode();
     void hideTemplateGuide();
+    void updateImageDisplayStatusText(const QString &body);
     void updateTemplateGuideText(const QString &title, const QString &body);
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
     void setupCharacterSplitSettingsDialog();

@@ -7,6 +7,7 @@
 
 ImageLabel::ImageLabel(QWidget *parent) : QLabel(parent) {
     m_currentStep = STEP_TRACKING;
+    setFocusPolicy(Qt::StrongFocus);
 }
 
 void ImageLabel::setPixmap(const QPixmap &pixmap) {
@@ -70,6 +71,8 @@ void ImageLabel::setTemplateDrawingEnabled(bool enabled) {
     m_templateDrawingEnabled = enabled;
     if (!m_templateDrawingEnabled) {
         m_isInteracting = false;
+    } else {
+        setFocus(Qt::OtherFocusReason);
     }
 }
 
@@ -102,6 +105,8 @@ void ImageLabel::mousePressEvent(QMouseEvent *event) {
         emit mousePressed(event);
         return;
     }
+
+    setFocus(Qt::MouseFocusReason);
 
     if (m_currentStep == STEP_DONE && event->button() == Qt::LeftButton) {
         resetDrawingStep();
@@ -169,6 +174,17 @@ void ImageLabel::mouseReleaseEvent(QMouseEvent *event) {
         update();
     }
     emit mouseReleased(event);
+}
+
+void ImageLabel::keyPressEvent(QKeyEvent *event) {
+    if (m_templateDrawingEnabled && event->key() == Qt::Key_Escape) {
+        resetDrawingStep();
+        emit signal_templateGuideEvent("template_reset", 0);
+        event->accept();
+        return;
+    }
+
+    QLabel::keyPressEvent(event);
 }
 
 void ImageLabel::paintEvent(QPaintEvent *event) {

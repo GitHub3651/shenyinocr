@@ -333,7 +333,7 @@
          </sizepolicy>
         </property>
         <property name="title">
-         <string>相机图像</string>
+         <string>图像显示区</string>
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_InnerImg">
          <property name="spacing">
@@ -933,7 +933,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>1</number>
+         <number>0</number>
         </property>
         <property name="iconSize">
          <size>
@@ -1213,7 +1213,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-97</y>
+               <y>-425</y>
                <width>586</width>
                <height>1326</height>
               </rect>
@@ -1960,7 +1960,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-472</y>
+               <y>0</y>
                <width>586</width>
                <height>773</height>
               </rect>

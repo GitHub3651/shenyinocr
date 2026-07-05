@@ -6,6 +6,7 @@
 #include <QVector>
 #include <QList>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPolygonF>
 
@@ -59,6 +60,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
 
 private:
