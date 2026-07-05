@@ -61,6 +61,9 @@ void CameraThread::clearWordTemplateTrackingProfiles() {
 }
 
 void CameraThread::run() {
+    m_running = true;
+    m_stopRequested.store(false);
+
     std::unique_ptr<cv::Mat> image = std::make_unique<cv::Mat>();
     m_pcMyCamera->setnonblocking(true); //
 

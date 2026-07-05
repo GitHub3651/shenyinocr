@@ -527,57 +527,80 @@ Widget::~Widget()
 {
     qDebug() << "Widget destructor called";
 
-    if (client) {
-            if (client->Connected()) {
-                client->Disconnect();
+    // 先停止线程并断开信号，避免窗口销毁时 queued signal 再访问 ui。
+    bool myThreadStopped = true;
+    bool cameraThreadStopped = true;
+    if (myThread) {
+        disconnect(myThread, nullptr, this, nullptr);
+        disconnect(this, nullptr, myThread, nullptr);
+        if (myThread->isRunning()) {
+            myThread->requestStop();
+            myThread->stop();
+            if (!myThread->wait(3000)) {
+                qDebug() << "WARNING: myThread did not stop in destructor";
+                myThreadStopped = false;
             }
-            // 如果 client 是在构造函数 new 出来的，记得 delete 防止内存泄漏
-            delete client;
-            client = nullptr;
         }
+        if (myThreadStopped && !myThread->isRunning()) {
+            delete myThread;
+        } else {
+            myThread->setParent(nullptr);
+        }
+        myThread = nullptr;
+    }
 
-    // 先关闭所有窗口
+    if (cameraThread) {
+        disconnect(cameraThread, nullptr, this, nullptr);
+        disconnect(this, nullptr, cameraThread, nullptr);
+        if (cameraThread->isRunning()) {
+            cameraThread->requestStop();
+            if (!cameraThread->wait(3000)) {
+                qDebug() << "WARNING: cameraThread did not stop in destructor";
+                cameraThreadStopped = false;
+            }
+        }
+        if (cameraThreadStopped && !cameraThread->isRunning()) {
+            delete cameraThread;
+        } else {
+            cameraThread->setParent(nullptr);
+        }
+        cameraThread = nullptr;
+    }
+
+    // 线程退出后再关闭相机，避免工作线程仍在访问相机对象。
+    if (m_pcMyCamera && myThreadStopped && cameraThreadStopped)
+    {
+        m_pcMyCamera->Close();
+        delete m_pcMyCamera;
+        m_pcMyCamera = nullptr;
+    } else if (m_pcMyCamera) {
+        qDebug() << "WARNING: camera not released because worker thread is still running";
+    }
+
+    if (client) {
+        if (client->Connected()) {
+            client->Disconnect();
+        }
+        delete client;
+        client = nullptr;
+    }
+
+    delete templatematch;
+    templatematch = nullptr;
+
+    if (myThreadStopped) {
+        delete myImage;
+        myImage = nullptr;
+    } else {
+        qDebug() << "WARNING: myImage not released because myThread is still running";
+    }
+
     try {
         cv::destroyAllWindows();
     } catch (...) {}
 
     delete ui;
-    delete myImage;
-
-    // 关闭相机
-    if (m_pcMyCamera)
-    {
-        m_pcMyCamera->Close();
-        delete m_pcMyCamera;
-        m_pcMyCamera = NULL;
-    }
-
-    // 停止 myThread（不使用terminate）
-    if (myThread) {
-        if (myThread->isRunning()) {
-            myThread->requestStop();
-            myThread->stop();
-            if (!myThread->wait(2000)) {
-                qDebug() << "WARNING: myThread did not stop in destructor";
-                // 不调用 terminate，让它自然结束
-            }
-        }
-        delete myThread;
-    }
-
-    // 停止 cameraThread（不使用terminate）
-    if (cameraThread) {
-        if (cameraThread->isRunning()) {
-            cameraThread->requestStop();
-            if (!cameraThread->wait(2000)) {
-                qDebug() << "WARNING: cameraThread did not stop in destructor";
-                // 不调用 terminate
-            }
-        }
-        delete cameraThread;
-    }
-
-    delete templatematch;
+    ui = nullptr;
 
     QString filePath = "muban.png";
     QFile file(filePath);
@@ -3511,24 +3534,24 @@ void Widget::on_cancel_clicked()
 
     // 🔥 Step 4: cameraThread - 停止逻辑
     bool needRestartCamera = false;
+    bool cameraThreadStopped = true;
     if (cameraThread != nullptr) {
         needRestartCamera = true;
         disconnect(cameraThread, nullptr, this, nullptr);
         disconnect(this, nullptr, cameraThread, nullptr);
 
         cameraThread->requestStop();
-        if (!cameraThread->wait(500)) {
-            cameraThread->terminate();
-            cameraThread->wait();
+        if (!cameraThread->wait(3000)) {
+            qDebug() << "WARNING: cameraThread did not stop";
+            cameraThreadStopped = false;
+        } else {
+            cameraThread->stopTracking();
+            cameraThread->deleteLater();
+            cameraThread = nullptr;
         }
-
-        cameraThread->stopTracking();
-
-        cameraThread->deleteLater();
-        cameraThread = nullptr;
     }
 
-    if (!myThreadStopped) {
+    if (!myThreadStopped || !cameraThreadStopped) {
         ui->statusLabel->setText("停止中，请稍后再关闭相机");
         ui->plcbtn->setText("停止中...");
         ui->plcbtn->setEnabled(false);
@@ -3701,7 +3724,29 @@ void Widget::on_textsure_btn_clicked()
         }
         // 2. 读取当前修改后的目标字符
         QString newMubiaozifu = ui->dateEdit->toPlainText();
+        const bool shouldWriteSingleWordTarget = (ui->comboBox_4->currentIndex() == 1 && !m_wordMultiTemplateMode);
+        auto writeSingleWordTargetText = [this, &newMubiaozifu]() -> bool {
+            const QString settingsFilePath = QDir(currentTemplateDirPath).filePath("app_settings.appset");
+            if (!QFile::exists(settingsFilePath)) {
+                showParameterCritical("严重警告", "当前产品模板缺少 app_settings.appset，无法保存目标字符。");
+                return false;
+            }
+
+            QSettings settings(settingsFilePath, QSettings::IniFormat);
+            settings.setValue("dateEdit_value", newMubiaozifu);
+            settings.sync();
+            if (settings.status() != QSettings::NoError) {
+                showParameterCritical("严重警告", "当前产品模板的目标字符写入失败。");
+                return false;
+            }
+
+            return true;
+        };
+
         if (newMubiaozifu.isEmpty()) {
+            if (shouldWriteSingleWordTarget && !writeSingleWordTargetText()) {
+                return;
+            }
             digitTemplates.clear();
             digitTemplateTargetIndexes.clear();
             showParameterInfoAsError("提示", "目标字符为空，已清空模板");
@@ -3724,6 +3769,10 @@ void Widget::on_textsure_btn_clicked()
             showParameterCritical("严重警告",
                 QString("%1\n\n请检查产品模板文件夹内的字符图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。")
                 .arg(loadError));
+            return;
+        }
+
+        if (shouldWriteSingleWordTarget && !writeSingleWordTargetText()) {
             return;
         }
 
