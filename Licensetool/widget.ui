@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>760</width>
-    <height>430</height>
+    <height>330</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,40 +20,13 @@
       <enum>QFormLayout::ExpandingFieldsGrow</enum>
      </property>
      <item row="0" column="0">
-      <widget class="QLabel" name="requestLabel">
-       <property name="text">
-        <string>请求文件</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <layout class="QHBoxLayout" name="requestLayout">
-       <item>
-        <widget class="QLineEdit" name="requestEdit"/>
-       </item>
-       <item>
-        <widget class="QPushButton" name="browseRequestButton">
-         <property name="minimumSize">
-          <size>
-           <width>96</width>
-           <height>0</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>浏览</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </item>
-     <item row="1" column="0">
       <widget class="QLabel" name="expiresLabel">
        <property name="text">
         <string>到期日期</string>
        </property>
       </widget>
      </item>
-     <item row="1" column="1">
+     <item row="0" column="1">
       <widget class="QDateEdit" name="expiresEdit">
        <property name="displayFormat">
         <string>yyyy-MM-dd</string>
@@ -63,28 +36,14 @@
        </property>
       </widget>
      </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="machineHashLabel">
-       <property name="text">
-        <string>机器标识</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="machineHashEdit">
-       <property name="readOnly">
-        <bool>true</bool>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
+     <item row="1" column="0">
       <widget class="QLabel" name="outputLabel">
        <property name="text">
         <string>输出文件</string>
        </property>
       </widget>
      </item>
-     <item row="3" column="1">
+     <item row="1" column="1">
       <layout class="QHBoxLayout" name="outputLayout">
        <item>
         <widget class="QLineEdit" name="outputEdit"/>
@@ -111,7 +70,7 @@
      <item>
       <widget class="QLabel" name="statusLabel">
        <property name="text">
-        <string>请选择请求文件并生成 syscache.dat。</string>
+        <string>请选择有效期并生成 license.ini。</string>
        </property>
       </widget>
      </item>
@@ -161,7 +120,7 @@
      <item row="0" column="0">
       <widget class="QLabel" name="datLabel">
        <property name="text">
-        <string>dat文件</string>
+        <string>读取文件</string>
        </property>
       </widget>
      </item>

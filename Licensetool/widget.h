@@ -19,14 +19,11 @@ public:
     ~Widget();
 
 private:
-    void refreshRequestInfo();
-    void browseRequestFile();
     void browseOutputFile();
     void generateLicenseFile();
     void browseDatFile();
     void readDatFile();
-    QString defaultCachePath(const QString &fileName) const;
-    QString requestDirOutputPath(const QString &requestPath) const;
+    QString defaultLicensePath() const;
 
 private:
     Ui::Widget *ui;
