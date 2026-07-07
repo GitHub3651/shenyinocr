@@ -50,7 +50,7 @@
 #include <QTextCodec>
 #include <QElapsedTimer>
 #include <QDir>
-#include <QInputDialog>
+#include <QStandardPaths>
 #include <QTreeView>
 #include <QComboBox>
 #include <QGridLayout>
@@ -4133,25 +4133,90 @@ void Widget::on_pushButton_5_clicked()
         }
     }
 
-    const QString folderNamePrompt =
-            "请输入新产品模板文件夹名称：\n\n"
-            "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。\n\n"
-            "制作字符模板时，相同字符的不同模板可以这样命名：\n"
-            "5.png：字符 5 的主模板图片\n"
-            "5_任意名称.png、5(1).png、5-(1).png、5(1)(2).png：字符 5 的额外模板图片";
+    auto defaultTemplateBaseDir = [this]() -> QString {
+        if (!templateBaseDirPath.trimmed().isEmpty() && QDir(templateBaseDirPath).exists()) {
+            return QDir(templateBaseDirPath).absolutePath();
+        }
 
-    QInputDialog inputDialog(this);
+        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        if (desktopPath.trimmed().isEmpty()) {
+            desktopPath = QDir::homePath();
+        }
+        return QDir(desktopPath).absolutePath();
+    };
+
+    QDialog inputDialog(this);
     inputDialog.setWindowTitle("保存模板");
-    inputDialog.setLabelText(folderNamePrompt);
-    inputDialog.setInputMode(QInputDialog::TextInput);
-    inputDialog.setOkButtonText("确定");
-    inputDialog.setCancelButtonText("取消");
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(&inputDialog);
+    QFormLayout *formLayout = new QFormLayout();
+
+    QLineEdit *nameEdit = new QLineEdit(&inputDialog);
+    formLayout->addRow("产品模板文件夹名称：", nameEdit);
+    QLabel *nameErrorLabel = new QLabel("模板文件夹名称不能为空", &inputDialog);
+    nameErrorLabel->setStyleSheet("color: #d93025;");
+    formLayout->addRow("", nameErrorLabel);
+
+    QLineEdit *baseDirEdit = new QLineEdit(defaultTemplateBaseDir(), &inputDialog);
+    QPushButton *browseButton = new QPushButton("浏览", &inputDialog);
+    QHBoxLayout *baseDirLayout = new QHBoxLayout();
+    baseDirLayout->addWidget(baseDirEdit);
+    baseDirLayout->addWidget(browseButton);
+    formLayout->addRow("模板文件夹保存目录：", baseDirLayout);
+
+    QLabel *hintLabel = new QLabel(
+                "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。\n\n"
+                "制作字符模板时，相同字符的不同模板可以这样命名：\n"
+                "5.png：字符 5 的主模板图片\n"
+                "5_任意名称.png、5(1).png、5-(1).png、5(1)(2).png：字符 5 的额外模板图片",
+                &inputDialog);
+    hintLabel->setWordWrap(true);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *okButton = new QPushButton("确定", &inputDialog);
+    QPushButton *cancelButton = new QPushButton("取消", &inputDialog);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+
+    mainLayout->addLayout(formLayout);
+    mainLayout->addWidget(hintLabel);
+    mainLayout->addLayout(buttonLayout);
+
+    connect(browseButton, &QPushButton::clicked, this, [this, baseDirEdit]() {
+        const QString selectedBaseDir = QFileDialog::getExistingDirectory(
+                    this,
+                    "选择模板文件夹保存目录",
+                    baseDirEdit->text().trimmed().isEmpty() ? QDir::homePath() : baseDirEdit->text(),
+                    QFileDialog::ShowDirsOnly);
+        if (!selectedBaseDir.isEmpty()) {
+            baseDirEdit->setText(QDir(selectedBaseDir).absolutePath());
+        }
+    });
+    auto updateNameState = [nameEdit, nameErrorLabel, okButton]() {
+        const bool isEmpty = nameEdit->text().trimmed().isEmpty();
+        okButton->setEnabled(!isEmpty);
+        nameErrorLabel->setVisible(isEmpty);
+        nameEdit->setStyleSheet(isEmpty ? "QLineEdit { border: 1px solid #d93025; }" : "");
+    };
+    connect(nameEdit, &QLineEdit::textChanged, &inputDialog, updateNameState);
+    updateNameState();
+    connect(okButton, &QPushButton::clicked, &inputDialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &inputDialog, &QDialog::reject);
+
     if (inputDialog.exec() != QDialog::Accepted) return;
 
-    QString newFolderName = inputDialog.textValue().trimmed();
+    QString newFolderName = nameEdit->text().trimmed();
     if (newFolderName.isEmpty()) return;
 
-    QString savePath = QDir("D:/muban/").absoluteFilePath(newFolderName);
+    QString baseDirPath = baseDirEdit->text().trimmed();
+    if (baseDirPath.isEmpty()) {
+        QMessageBox::warning(this, "提示", "请选择模板文件夹保存目录。");
+        return;
+    }
+    baseDirPath = QDir(baseDirPath).absolutePath();
+
+    QString savePath = QDir(baseDirPath).absoluteFilePath(newFolderName);
     QDir dir(savePath);
     if (isWordTemplateMode && dir.exists()) {
         QMessageBox confirmBox(this);
@@ -4172,6 +4237,7 @@ void Widget::on_pushButton_5_clicked()
         QMessageBox::warning(this, "错误", "产品模板文件夹创建失败，无法保存模板。");
         return;
     }
+    templateBaseDirPath = baseDirPath;
 
     if (!isWordTemplateMode && (uiTrackRect.isNull() || uiDetectPoly.isEmpty() || uiDetectPoly.size() < 3)) {
         QMessageBox::warning(this, "警告",
@@ -4279,6 +4345,7 @@ void Widget::on_pushButton_5_clicked()
 
     // 5. 保存所有配置
     saveSettingsToDir(savePath);
+    saveSettings();
     imageLabel->setTemplateDrawingEnabled(false);
     imageLabel->clearSelection();
     hideTemplateGuide();
@@ -4420,9 +4487,20 @@ void Widget::initOverlapDetectorFromCurrentDir() {
 void Widget::on_pushButton_4_clicked()
 {
     QString dirPath;
+    auto templateDialogStartDir = [this]() -> QString {
+        if (!templateBaseDirPath.trimmed().isEmpty() && QDir(templateBaseDirPath).exists()) {
+            return QDir(templateBaseDirPath).absolutePath();
+        }
+
+        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        if (desktopPath.trimmed().isEmpty()) {
+            desktopPath = QDir::homePath();
+        }
+        return QDir(desktopPath).absolutePath();
+    };
 
     if (ui->comboBox_4->currentIndex() == 1) {
-        QFileDialog dialog(this, "选择产品模板文件夹", "D:/muban");
+        QFileDialog dialog(this, "选择产品模板文件夹", templateDialogStartDir());
         dialog.setFileMode(QFileDialog::Directory);
         dialog.setOption(QFileDialog::ShowDirsOnly, true);
         dialog.setOption(QFileDialog::DontUseNativeDialog, true);
@@ -4458,6 +4536,10 @@ void Widget::on_pushButton_4_clicked()
         }
 
         if (selectedDirs.isEmpty()) return;
+        const QFileInfo firstSelectedDirInfo(selectedDirs.first());
+        if (firstSelectedDirInfo.dir().exists()) {
+            templateBaseDirPath = firstSelectedDirInfo.dir().absolutePath();
+        }
         if (imageLabel) {
             imageLabel->setTemplateDrawingEnabled(false);
         }
@@ -4595,6 +4677,7 @@ void Widget::on_pushButton_4_clicked()
             m_currentTemplateNameVisible = false;
             updateCurrentTemplateName();
             refreshWordTemplateEditorCombo();
+            saveSettings();
 
             qDebug() << "[WORD_MULTI_TEMPLATE] selected dirs:" << m_wordTemplateDirPaths;
             if (!skippedMessages.isEmpty() || !pendingTargetMessages.isEmpty()) {
@@ -4618,9 +4701,13 @@ void Widget::on_pushButton_4_clicked()
         dirPath = selectedDirs.first();
     } else {
         dirPath = QFileDialog::getExistingDirectory(nullptr, "选择产品模板文件夹",
-                                                    "D:/muban",
+                                                    templateDialogStartDir(),
                                                     QFileDialog::ShowDirsOnly);
         if (dirPath.isEmpty()) return;
+        const QFileInfo selectedDirInfo(dirPath);
+        if (selectedDirInfo.dir().exists()) {
+            templateBaseDirPath = selectedDirInfo.dir().absolutePath();
+        }
         if (imageLabel) {
             imageLabel->setTemplateDrawingEnabled(false);
         }
@@ -5058,6 +5145,10 @@ void Widget::loadSettings()
         currentTemplateDirPath = settings.value("TemplateDirPath").toString();
     }
 
+    if (settings.contains("templateBaseDirPath")) {
+        templateBaseDirPath = settings.value("templateBaseDirPath").toString();
+    }
+
     if (settings.contains("saveDirPath")) {
         selectedDir = settings.value("saveDirPath").toString();
     }
@@ -5097,6 +5188,7 @@ void Widget::saveSettings()
     // 新增：保存模板路径
     settings.setValue("saveDirPath", selectedDir);
     settings.setValue("TemplateDirPath", m_wordMultiTemplateMode ? QString() : currentTemplateDirPath);
+    settings.setValue("templateBaseDirPath", templateBaseDirPath);
     settings.setValue("lineEdit_value", ui->lineEdit->text()); // 保存IP地址
 }
 

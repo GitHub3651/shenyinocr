@@ -447,6 +447,7 @@ private:
     void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
     void loadLastTemplateConfig();        // 新增：加载模板图像
     QString currentTemplateDirPath;       // 新增：持久化模板路径
+    QString templateBaseDirPath;          // 产品模板父目录
     void initStyle();  // 声明后才能在 cpp 中实现和调用
     /**
          * @brief 重新初始化 myThread（软触发线程）
