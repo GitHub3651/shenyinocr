@@ -15,6 +15,7 @@
 #include "choosebarcodedialog.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
+#include "charactertemplatecropdialog.h"
 
 
 // Qt核心组件
@@ -2490,6 +2491,14 @@ void Widget::setupCharacterSplitSettingsDialog()
     m_characterSplitSettingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     splitButtonLayout->addWidget(m_characterSplitSettingsButton);
 
+    m_manualCharacterCropButton = new QPushButton("分割字符模板", splitButtonRow);
+    m_manualCharacterCropButton->setStyleSheet(splitPushButtonStyle);
+    m_manualCharacterCropButton->setMinimumHeight(42);
+    m_manualCharacterCropButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_manualCharacterCropButton->setToolTip("打开当前产品模板的喷码区域图，手动框选字符并批量保存字符模板图片。");
+    m_manualCharacterCropButton->installEventFilter(this);
+    splitButtonLayout->addWidget(m_manualCharacterCropButton);
+
     splitButtonForm->setWidget(saveImageRow, saveImageRole, splitButtonRow);
 
     m_characterSplitSettingsDialog = new QDialog(this);
@@ -2518,6 +2527,8 @@ void Widget::setupCharacterSplitSettingsDialog()
 
     connect(m_characterSplitSettingsButton, &QPushButton::clicked,
             this, &Widget::showCharacterSplitSettingsDialog);
+    connect(m_manualCharacterCropButton, &QPushButton::clicked,
+            this, &Widget::showManualCharacterTemplateCropDialog);
 }
 
 void Widget::showCharacterSplitSettingsDialog()
@@ -2527,6 +2538,121 @@ void Widget::showCharacterSplitSettingsDialog()
     }
 
     m_characterSplitSettingsDialog->exec();
+}
+
+void Widget::showManualCharacterTemplateCropDialog()
+{
+    if (!ui || ui->comboBox_4->currentIndex() != 1) {
+        showParameterInfoAsError("提示", "手动切割字符模板只用于字库匹配模式。");
+        return;
+    }
+
+    QString templateDirPath;
+    int profileIndex = -1;
+    if (m_wordMultiTemplateMode) {
+        profileIndex = currentWordTemplateProfileIndex();
+        if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+            showParameterInfoAsError("提示", "请先选择当前编辑的产品模板。");
+            return;
+        }
+        templateDirPath = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].dirPath;
+    } else {
+        templateDirPath = currentTemplateDirPath;
+    }
+
+    if (templateDirPath.trimmed().isEmpty() || !QDir(templateDirPath).exists()) {
+        showParameterInfoAsError("提示", "请先选择产品模板文件夹。");
+        return;
+    }
+
+    const QString rawImagePath = QDir(templateDirPath).filePath("template_raw.png");
+    QImage rawImage(rawImagePath);
+    if (rawImage.isNull()) {
+        showParameterCritical("严重警告", "当前产品模板缺少 template_raw.png，无法手动切割字符模板。");
+        return;
+    }
+
+    const QString settingsFilePath = QDir(templateDirPath).filePath("app_settings.appset");
+    QSettings templateSettings(settingsFilePath, QSettings::IniFormat);
+    cv::Rect2d trackingBox(
+                templateSettings.value("trackingBox_x", 0).toDouble(),
+                templateSettings.value("trackingBox_y", 0).toDouble(),
+                templateSettings.value("trackingBox_width", 0).toDouble(),
+                templateSettings.value("trackingBox_height", 0).toDouble());
+    bool trackingBoxValid = trackingBox.width > 0 && trackingBox.height > 0;
+    if (!trackingBoxValid
+            && QDir(templateDirPath).absolutePath() == QDir(currentTemplateDirPath).absolutePath()
+            && hasValidBoxes
+            && savedTrackingBox.width > 0
+            && savedTrackingBox.height > 0) {
+        trackingBox = savedTrackingBox;
+        trackingBoxValid = true;
+    }
+    if (!trackingBoxValid) {
+        showParameterCritical("严重警告", "当前产品模板缺少有效定位区域，无法还原喷码检测区域。");
+        return;
+    }
+
+    const QString yamlPath = QDir(templateDirPath).filePath("calibrate_config.yaml");
+    CalibrationData calib;
+    if (!QFile::exists(yamlPath)
+            || !calib.load(yamlPath.toLocal8Bit().toStdString())
+            || calib.date_poly.empty()) {
+        showParameterCritical("严重警告", "当前产品模板缺少有效喷码检测区域，无法手动切割字符模板。");
+        return;
+    }
+
+    QPolygonF datePolygon;
+    const QPointF trackingCenter(trackingBox.x + trackingBox.width / 2.0,
+                                 trackingBox.y + trackingBox.height / 2.0);
+    for (const cv::Point2f &point : calib.date_poly) {
+        datePolygon << QPointF(trackingCenter.x() + point.x,
+                               trackingCenter.y() + point.y);
+    }
+
+    QRect cropRect = datePolygon.boundingRect().toAlignedRect()
+            .intersected(QRect(0, 0, rawImage.width(), rawImage.height()));
+    if (cropRect.width() <= 0 || cropRect.height() <= 0) {
+        showParameterCritical("严重警告", "喷码检测区域超出模板图像范围，无法手动切割字符模板。");
+        return;
+    }
+
+    CharacterTemplateCropDialog dialog(rawImage.copy(cropRect), templateDirPath, this);
+    if (dialog.exec() != QDialog::Accepted || dialog.savedCount() <= 0) {
+        return;
+    }
+
+    const QString targetText = ui->dateEdit->toPlainText();
+    QString reloadMessage;
+    if (!targetText.trimmed().isEmpty()) {
+        const QStringList baseNames = parseWordTemplateBaseNames(targetText);
+        std::vector<cv::Mat> reloadedTemplates;
+        std::vector<int> reloadedTemplateTargetIndexes;
+        QString loadError;
+        if (loadWordDigitTemplatesFromDir(templateDirPath,
+                                          baseNames,
+                                          &reloadedTemplates,
+                                          &reloadedTemplateTargetIndexes,
+                                          &loadError,
+                                          true)) {
+            if (m_wordMultiTemplateMode && profileIndex >= 0
+                    && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
+                WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+                profile.digitTemplates = reloadedTemplates;
+                profile.digitTemplateTargetIndexes = reloadedTemplateTargetIndexes;
+            } else {
+                digitTemplates = reloadedTemplates;
+                digitTemplateTargetIndexes = reloadedTemplateTargetIndexes;
+            }
+        } else {
+            reloadMessage = QString("\n\n字符模板已保存，但当前目标字符仍有图片未加载成功：\n%1").arg(loadError);
+        }
+    }
+
+    showParameterInfo("提示",
+                      QString("已保存 %1 张字符模板图片。%2")
+                      .arg(dialog.savedCount())
+                      .arg(reloadMessage));
 }
 
 void Widget::setupWordTemplateEditorCombo()
@@ -4147,6 +4273,7 @@ void Widget::on_pushButton_5_clicked()
 
     QDialog inputDialog(this);
     inputDialog.setWindowTitle("保存模板");
+    inputDialog.setWindowFlags(inputDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(&inputDialog);
     QFormLayout *formLayout = new QFormLayout();
@@ -4165,10 +4292,7 @@ void Widget::on_pushButton_5_clicked()
     formLayout->addRow("模板文件夹保存目录：", baseDirLayout);
 
     QLabel *hintLabel = new QLabel(
-                "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。\n\n"
-                "制作字符模板时，相同字符的不同模板可以这样命名：\n"
-                "5.png：字符 5 的主模板图片\n"
-                "5_任意名称.png、5(1).png、5-(1).png、5(1)(2).png：字符 5 的额外模板图片",
+                "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。",
                 &inputDialog);
     hintLabel->setWordWrap(true);
 
@@ -4351,7 +4475,22 @@ void Widget::on_pushButton_5_clicked()
     hideTemplateGuide();
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
-    QMessageBox::information(this, "成功", "模板及双框配置已全部保存！");
+    if (isWordTemplateMode) {
+        QMessageBox splitMessageBox(this);
+        splitMessageBox.setIcon(QMessageBox::Information);
+        splitMessageBox.setWindowTitle("保存成功");
+        splitMessageBox.setText("产品模板已保存成功。\n\n是否立即切割字符模板？");
+        QPushButton *splitButton = splitMessageBox.addButton("确定", QMessageBox::AcceptRole);
+        splitMessageBox.addButton("取消", QMessageBox::RejectRole);
+        splitMessageBox.setDefaultButton(splitButton);
+        splitMessageBox.exec();
+
+        if (splitMessageBox.clickedButton() == splitButton) {
+            showManualCharacterTemplateCropDialog();
+        }
+    } else {
+        QMessageBox::information(this, "成功", "模板及双框配置已全部保存！");
+    }
 }
 
 // 先定义一个保存参数到指定文件夹的函数（可放在Widget类中）
@@ -5254,6 +5393,7 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
             || watched == ui->label_8
             || watched == ui->comboBox_3
             || watched == ui->Saveimage
+            || watched == m_manualCharacterCropButton
             || watched == ui->confirmAllParamsButton
             || watched == ui->VideoShoot) {
         QWidget *button = qobject_cast<QWidget *>(watched);

@@ -62,6 +62,7 @@ SOURCES += \
     RuntimeGuard.cpp \
     TissueRollDetector.cpp \
     Zhuizong.cpp \
+    charactertemplatecropdialog.cpp \
     ccrashstack.cpp \
     cmvcamera.cpp \
     imagelabel.cpp \
@@ -94,6 +95,7 @@ HEADERS += \
     RuntimeGuard.h \
     TissueRollDetector.h \
     Zhuizong.h \
+    charactertemplatecropdialog.h \
     ccrashstack.h \
     cmvcamera.h \
     imageManipulator.h \

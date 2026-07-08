@@ -12,6 +12,7 @@ OpenCV/
 PaddleOCR/
 release/
 SDK/
+industrial_char_segmenter/
 
 # Qt / QMake 编译生成文件
 Makefile

@@ -254,6 +254,7 @@ private:
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
     void setupCharacterSplitSettingsDialog();
     void showCharacterSplitSettingsDialog();
+    void showManualCharacterTemplateCropDialog();
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -272,6 +273,7 @@ private:
     QLabel *m_templateGuideBodyLabel = nullptr;
     QDialog *m_characterSplitSettingsDialog = nullptr;
     QPushButton *m_characterSplitSettingsButton = nullptr;
+    QPushButton *m_manualCharacterCropButton = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QStringList m_confirmAllParamErrors;
 
