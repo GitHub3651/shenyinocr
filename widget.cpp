@@ -2423,7 +2423,7 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
 
 void Widget::setupCharacterSplitSettingsDialog()
 {
-    if (!ui || m_characterSplitSettingsDialog || !ui->tab2_frame3 || !ui->tab2_frame2) {
+    if (!ui || m_manualCharacterCropButton || !ui->tab2_frame3 || !ui->tab2_frame2) {
         return;
     }
 
@@ -2444,26 +2444,14 @@ void Widget::setupCharacterSplitSettingsDialog()
 
     settingsLayout->removeWidget(ui->tab2_frame3);
     settingsLayout->removeWidget(ui->tab2_frame2);
+    ui->tab2_frame3->hide();
+    ui->tab2_frame2->hide();
 
     QWidget *splitButtonRow = new QWidget(splitButtonParent);
     QHBoxLayout *splitButtonLayout = new QHBoxLayout(splitButtonRow);
     splitButtonLayout->setContentsMargins(0, 0, 0, 0);
     splitButtonLayout->setSpacing(8);
 
-    const QString splitToolButtonStyle =
-            "QToolButton {"
-            "background-color: transparent;"
-            "border: 1px solid #ebeef5;"
-            "border-radius: 4px;"
-            "color: #333333;"
-            "padding: 5px 10px;"
-            "}"
-            "QToolButton:hover {"
-            "background-color: #f2f6fc;"
-            "}"
-            "QToolButton:pressed {"
-            "background-color: #ebeef5;"
-            "}";
     const QString splitPushButtonStyle =
             "QPushButton {"
             "background-color: transparent;"
@@ -2480,18 +2468,7 @@ void Widget::setupCharacterSplitSettingsDialog()
             "}";
 
     splitButtonForm->removeWidget(ui->Saveimage);
-    ui->Saveimage->setParent(splitButtonRow);
-    ui->Saveimage->setStyleSheet(splitToolButtonStyle);
-    ui->Saveimage->setToolTip("自动把当前框选的喷码检测区域分割成单个字符模板图片，用于后续字库匹配。");
-    ui->Saveimage->installEventFilter(this);
-    ui->Saveimage->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    splitButtonLayout->addWidget(ui->Saveimage);
-
-    m_characterSplitSettingsButton = new QPushButton("字符自动分割设置", splitButtonRow);
-    m_characterSplitSettingsButton->setStyleSheet(splitPushButtonStyle);
-    m_characterSplitSettingsButton->setMinimumHeight(42);
-    m_characterSplitSettingsButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    splitButtonLayout->addWidget(m_characterSplitSettingsButton);
+    ui->Saveimage->hide();
 
     m_manualCharacterCropButton = new QPushButton("分割字符模板", splitButtonRow);
     m_manualCharacterCropButton->setStyleSheet(splitPushButtonStyle);
@@ -2502,33 +2479,6 @@ void Widget::setupCharacterSplitSettingsDialog()
     splitButtonLayout->addWidget(m_manualCharacterCropButton);
 
     splitButtonForm->setWidget(saveImageRow, saveImageRole, splitButtonRow);
-
-    m_characterSplitSettingsDialog = new QDialog(this);
-    m_characterSplitSettingsDialog->setWindowTitle("字符自动分割设置");
-    m_characterSplitSettingsDialog->setModal(true);
-    m_characterSplitSettingsDialog->setMinimumWidth(760);
-    const QString splitHelpText =
-            "这里用于调整【自动分割】字符模板图片时使用的参数。\n\n"
-            "字符尺寸限制：用于过滤过小或过大的字符区域。\n"
-            "高级形态学参数：用于调整字符粘连、断裂、背景噪声时的分割效果。\n\n"
-            "一般情况下保持默认值即可；只有自动分割出来的字符不完整、粘连或多出杂点时再调整。";
-    m_characterSplitSettingsDialog->setProperty("characterSplitHelpText", splitHelpText);
-    m_characterSplitSettingsDialog->setWhatsThis(splitHelpText);
-    m_characterSplitSettingsDialog->installEventFilter(this);
-
-    QVBoxLayout *dialogLayout = new QVBoxLayout(m_characterSplitSettingsDialog);
-    dialogLayout->setContentsMargins(12, 12, 12, 12);
-    dialogLayout->setSpacing(8);
-
-    dialogLayout->addWidget(ui->tab2_frame3);
-    dialogLayout->addWidget(ui->tab2_frame2);
-    ui->tab2_frame3->setWhatsThis(splitHelpText);
-    ui->tab2_frame2->setWhatsThis(splitHelpText);
-    ui->tab2_frame3->show();
-    ui->tab2_frame2->show();
-
-    connect(m_characterSplitSettingsButton, &QPushButton::clicked,
-            this, &Widget::showCharacterSplitSettingsDialog);
     connect(m_manualCharacterCropButton, &QPushButton::clicked,
             this, &Widget::showManualCharacterTemplateCropDialog);
 }
