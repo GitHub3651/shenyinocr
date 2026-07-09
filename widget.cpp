@@ -2242,20 +2242,22 @@ void Widget::updateCurrentTemplateName()
 
 void Widget::updateSaveDirButtonText()
 {
-    if (!ui || !ui->pushButton_6) {
+    if (!ui || !ui->lineEdit_imageSavePath || !ui->pushButton_browseImageSavePath) {
         return;
     }
 
     const QString saveDir = selectedDir.trimmed();
+    ui->pushButton_browseImageSavePath->setText("浏览");
+    ui->pushButton_browseImageSavePath->setToolTip("点击选择图像保存路径");
+
     if (saveDir.isEmpty()) {
-        ui->pushButton_6->setText("图像保存路径");
-        ui->pushButton_6->setToolTip("");
+        ui->lineEdit_imageSavePath->clear();
+        ui->lineEdit_imageSavePath->setToolTip("");
         return;
     }
 
-    const QString displayText = QString("图像保存路径：%1").arg(saveDir);
-    ui->pushButton_6->setText(displayText);
-    ui->pushButton_6->setToolTip("点击可设置图像保存路径");
+    ui->lineEdit_imageSavePath->setText(saveDir);
+    ui->lineEdit_imageSavePath->setToolTip(saveDir);
 }
 
 void Widget::updateTissueRoughnessUiVisibility()
@@ -2688,6 +2690,7 @@ void Widget::setupWordTemplateEditorCombo()
         if (ui->ConnectpushButton) ui->ConnectpushButton->setStyleSheet(commonPushButtonStyle);
         if (ui->DisconnectpushButton) ui->DisconnectpushButton->setStyleSheet(commonPushButtonStyle);
         if (ui->pushButton_8) ui->pushButton_8->setStyleSheet(commonPushButtonStyle);
+        if (ui->pushButton_browseImageSavePath) ui->pushButton_browseImageSavePath->setStyleSheet(commonPushButtonStyle);
     }
 
     if (ui && ui->textsure_btn && ui->batchTextsure_btn) {
@@ -2713,8 +2716,13 @@ void Widget::setupWordTemplateEditorCombo()
         ui->batchTextsure_btn->installEventFilter(this);
     }
 
-    if (ui && ui->pushButton_6) {
-        ui->pushButton_6->installEventFilter(this);
+    if (ui && ui->pushButton_browseImageSavePath) {
+        ui->pushButton_browseImageSavePath->installEventFilter(this);
+    }
+
+    if (ui && ui->pushButton_11) {
+        ui->pushButton_11->setToolTip("保存当前界面上的设置。\n单模板时：写入当前产品模板文件夹，同时保存为软件下次启动的默认设置。\n多模板时：按提示写入已选择的产品模板文件夹，同时保存为软件下次启动的默认设置。");
+        ui->pushButton_11->installEventFilter(this);
     }
 
     if (ui && ui->pushButton_7) {
@@ -2889,8 +2897,25 @@ void Widget::setupWordTemplateEditorCombo()
     QWidget *thresholdParentWidget = ui->lineEdit_yuzhi->parentWidget();
     if (thresholdParentWidget) {
         QGridLayout *thresholdLayout = qobject_cast<QGridLayout *>(thresholdParentWidget->layout());
+        int thresholdInsertRow = 2;
+        int thresholdInsertColumn = 1;
         if (thresholdLayout) {
-            shiftGridRowsDown(thresholdLayout, 2);
+            for (int i = 0; i < thresholdLayout->count(); ++i) {
+                QLayoutItem *item = thresholdLayout->itemAt(i);
+                if (!item || item->widget() != ui->lineEdit_yuzhi) {
+                    continue;
+                }
+
+                int row = 0;
+                int column = 0;
+                int rowSpan = 1;
+                int columnSpan = 1;
+                thresholdLayout->getItemPosition(i, &row, &column, &rowSpan, &columnSpan);
+                thresholdInsertRow = row + rowSpan;
+                thresholdInsertColumn = column;
+                break;
+            }
+            shiftGridRowsDown(thresholdLayout, thresholdInsertRow);
         }
 
         m_wordThresholdEditWidget = new QWidget(thresholdParentWidget);
@@ -2912,7 +2937,7 @@ void Widget::setupWordTemplateEditorCombo()
         thresholdLayoutBox->addWidget(m_wordThresholdEditLabel);
         thresholdLayoutBox->addWidget(m_wordThresholdEditComboBox, 1);
         if (thresholdLayout) {
-            thresholdLayout->addWidget(m_wordThresholdEditWidget, 2, 1);
+            thresholdLayout->addWidget(m_wordThresholdEditWidget, thresholdInsertRow, thresholdInsertColumn);
         }
 
         connect(m_wordThresholdEditComboBox,
@@ -4966,11 +4991,11 @@ void Widget::on_pushButton_4_clicked()
 /**
  * @brief 选择保存文件夹按钮点击槽函数
  */
-void Widget::on_pushButton_6_clicked()
+void Widget::on_pushButton_browseImageSavePath_clicked()
 {
     const QString dirPath = QFileDialog::getExistingDirectory(
                 this,
-                "选择目标文件夹",
+                "选择图像保存路径",
                 selectedDir.isEmpty() ? QString("C:/") : selectedDir,
                 QFileDialog::ShowDirsOnly);
     if (dirPath.isEmpty()) {
@@ -5379,7 +5404,8 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
 
     if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
-            || watched == ui->pushButton_6
+            || watched == ui->pushButton_browseImageSavePath
+            || watched == ui->pushButton_11
             || watched == ui->pushButton_7
             || watched == ui->pushButton_10
             || watched == ui->label_4
@@ -6299,8 +6325,8 @@ void Widget::on_pushButton_11_clicked()
 
         QMessageBox thresholdMessageBox(this);
         thresholdMessageBox.setIcon(QMessageBox::Question);
-        thresholdMessageBox.setWindowTitle("保存参数");
-        thresholdMessageBox.setText("当前处于字库多模板模式。\n保存参数会将当前界面上的参数写入所有产品模板文件夹。\n\n是否将当前界面的图像合格阈值覆盖到每一个模板？");
+        thresholdMessageBox.setWindowTitle("保存当前界面设置");
+        thresholdMessageBox.setText("当前处于字库多模板模式。\n保存当前界面设置会将界面上的设置写入所有产品模板文件夹。\n\n是否将当前界面的图像合格阈值覆盖到每一个模板？");
         QPushButton *overwriteThresholdButton = thresholdMessageBox.addButton("覆盖图像阈值", QMessageBox::AcceptRole);
         QPushButton *skipThresholdButton = thresholdMessageBox.addButton("跳过图像阈值", QMessageBox::ActionRole);
         QPushButton *cancelButton = thresholdMessageBox.addButton("取消", QMessageBox::RejectRole);
@@ -6371,7 +6397,7 @@ void Widget::on_pushButton_11_clicked()
         if (!failedTemplates.isEmpty()) {
             QMessageBox::warning(this,
                                  "提示",
-                                 QString("已将当前参数保存到 %1 个字库模板。\n\n以下模板保存失败：\n%2")
+                                 QString("已将当前界面设置保存到 %1 个字库模板。\n\n以下模板保存失败：\n%2")
                                  .arg(savedCount)
                                  .arg(failedTemplates.join("\n")));
             return;
@@ -6379,7 +6405,7 @@ void Widget::on_pushButton_11_clicked()
 
         QMessageBox::information(this,
                                  "成功",
-                                 QString("已将当前参数保存到 %1 个字库模板。\n\n目标字符仍按每个模板自己的配置保存。\n图像阈值处理：%2")
+                                 QString("已将当前界面设置保存到 %1 个字库模板。\n\n目标字符仍按每个模板自己的配置保存。\n图像阈值处理：%2")
                                  .arg(savedCount)
                                  .arg(overwriteImageThreshold ? "已覆盖到所有模板" : "已跳过覆盖，保留每个模板自己的阈值"));
         return;
@@ -6387,7 +6413,7 @@ void Widget::on_pushButton_11_clicked()
 
     // 1. 检查是否已经加载了产品模板文件夹
     if (currentTemplateDirPath.isEmpty()) {
-        QMessageBox::warning(this, "提示", "当前没有加载任何模板！\n请先点击【选择模板】后再尝试更新参数。");
+        QMessageBox::warning(this, "提示", "当前没有加载任何模板！\n请先点击【选择模板】后再尝试保存当前界面设置。");
         return;
     }
 
@@ -6411,7 +6437,7 @@ void Widget::on_pushButton_11_clicked()
     // 以防止仅仅修改了字库却因为没有重新加载导致无法生效
     loadLastTemplateConfig();
 
-    QMessageBox::information(this, "成功", QString("已成功更新当前模板的参数配置！\n(模板：%1)\n注：原始追踪框与识别框坐标保持不变。").arg(dir.dirName()));
+    QMessageBox::information(this, "成功", QString("已成功保存当前界面设置！\n(模板：%1)\n注：原始定位区域与喷码检测区域保持不变。").arg(dir.dirName()));
 }
 
 
