@@ -2221,22 +2221,22 @@ void Widget::showParameterCritical(const QString &title, const QString &message)
 
 void Widget::updateCurrentTemplateName()
 {
-    if (!m_currentTemplateNameVisible || currentTemplateDirPath.isEmpty()) {
-        ui->currentTemplateName->setText("--");
-        return;
+    QString templateName = "--";
+
+    if (m_currentTemplateNameVisible && !currentTemplateDirPath.isEmpty()) {
+        QDir templateDir(currentTemplateDirPath);
+        if (templateDir.exists() && !templateDir.dirName().isEmpty()) {
+            templateName = templateDir.dirName();
+        }
     }
 
-    QDir templateDir(currentTemplateDirPath);
-    if (!templateDir.exists()) {
-        ui->currentTemplateName->setText("--");
-        return;
-    }
+    ui->currentTemplateName->setText(templateName);
 
-    const QString templateName = templateDir.dirName();
-    if (!templateName.isEmpty()) {
-        ui->currentTemplateName->setText(templateName);
-    } else {
-        ui->currentTemplateName->setText("--");
+    if (m_wordTemplateDisplayLineEdit && !m_wordMultiTemplateMode) {
+        m_wordTemplateDisplayLineEdit->setText(templateName);
+        m_wordTemplateDisplayLineEdit->setToolTip(templateName == "--"
+                                                  ? QString()
+                                                  : currentTemplateDirPath);
     }
 }
 
@@ -2423,34 +2423,34 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
 
 void Widget::setupCharacterSplitSettingsDialog()
 {
-    if (!ui || m_manualCharacterCropButton || !ui->tab2_frame3 || !ui->tab2_frame2) {
+    if (!ui || m_manualCharacterCropButton) {
         return;
     }
 
-    QWidget *settingsParent = ui->tab2_frame3->parentWidget();
+    QWidget *settingsParent = ui->tab2_frame3 ? ui->tab2_frame3->parentWidget() : nullptr;
     QGridLayout *settingsLayout = qobject_cast<QGridLayout *>(settingsParent ? settingsParent->layout() : nullptr);
-    QWidget *splitButtonParent = ui->Saveimage ? ui->Saveimage->parentWidget() : nullptr;
-    QFormLayout *splitButtonForm = qobject_cast<QFormLayout *>(splitButtonParent ? splitButtonParent->layout() : nullptr);
-    if (!settingsParent || !settingsLayout || !splitButtonParent || !splitButtonForm || !ui->Saveimage) {
-        return;
+    if (settingsLayout) {
+        if (ui->tab2_frame3) {
+            settingsLayout->removeWidget(ui->tab2_frame3);
+            ui->tab2_frame3->hide();
+        }
+        if (ui->tab2_frame2) {
+            settingsLayout->removeWidget(ui->tab2_frame2);
+            ui->tab2_frame2->hide();
+        }
     }
 
-    int saveImageRow = -1;
-    QFormLayout::ItemRole saveImageRole = QFormLayout::FieldRole;
-    splitButtonForm->getWidgetPosition(ui->Saveimage, &saveImageRow, &saveImageRole);
-    if (saveImageRow < 0) {
-        return;
+    if (ui->Saveimage) {
+        QWidget *autoSplitParent = ui->Saveimage->parentWidget();
+        if (autoSplitParent && autoSplitParent->layout()) {
+            autoSplitParent->layout()->removeWidget(ui->Saveimage);
+        }
+        ui->Saveimage->hide();
     }
 
-    settingsLayout->removeWidget(ui->tab2_frame3);
-    settingsLayout->removeWidget(ui->tab2_frame2);
-    ui->tab2_frame3->hide();
-    ui->tab2_frame2->hide();
-
-    QWidget *splitButtonRow = new QWidget(splitButtonParent);
-    QHBoxLayout *splitButtonLayout = new QHBoxLayout(splitButtonRow);
-    splitButtonLayout->setContentsMargins(0, 0, 0, 0);
-    splitButtonLayout->setSpacing(8);
+    if (!ui->manualCharacterCropButton) {
+        return;
+    }
 
     const QString splitPushButtonStyle =
             "QPushButton {"
@@ -2467,20 +2467,16 @@ void Widget::setupCharacterSplitSettingsDialog()
             "background-color: #ebeef5;"
             "}";
 
-    splitButtonForm->removeWidget(ui->Saveimage);
-    ui->Saveimage->hide();
-
-    m_manualCharacterCropButton = new QPushButton("分割字符模板", splitButtonRow);
+    m_manualCharacterCropButton = ui->manualCharacterCropButton;
     m_manualCharacterCropButton->setStyleSheet(splitPushButtonStyle);
     m_manualCharacterCropButton->setMinimumHeight(42);
     m_manualCharacterCropButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     m_manualCharacterCropButton->setToolTip("打开当前产品模板的喷码区域图，手动框选字符并批量保存字符模板图片。");
     m_manualCharacterCropButton->installEventFilter(this);
-    splitButtonLayout->addWidget(m_manualCharacterCropButton);
 
-    splitButtonForm->setWidget(saveImageRow, saveImageRole, splitButtonRow);
     connect(m_manualCharacterCropButton, &QPushButton::clicked,
             this, &Widget::showManualCharacterTemplateCropDialog);
+    refreshWordTemplateEditorCombo();
 }
 
 void Widget::showCharacterSplitSettingsDialog()
@@ -2647,11 +2643,6 @@ void Widget::setupWordTemplateEditorCombo()
         ui->textsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         ui->batchTextsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-        if (ui->textsure_btn->parentWidget()) {
-            ui->textsure_btn->parentWidget()->setStyleSheet(
-                        "#textConfirmButtonContainer { border: none; background: transparent; padding: 0px; }");
-        }
-
         QHBoxLayout *buttonLayout = qobject_cast<QHBoxLayout *>(ui->textsure_btn->parentWidget()
                 ? ui->textsure_btn->parentWidget()->layout()
                 : nullptr);
@@ -2795,7 +2786,7 @@ void Widget::setupWordTemplateEditorCombo()
     if (parentWidget) {
         QGridLayout *targetLayout = qobject_cast<QGridLayout *>(parentWidget->layout());
         if (targetLayout) {
-            shiftGridRowsDown(targetLayout, 2);
+            shiftGridRowsDown(targetLayout, 0);
         }
 
         m_wordTemplateEditWidget = new QWidget(parentWidget);
@@ -2805,14 +2796,26 @@ void Widget::setupWordTemplateEditorCombo()
         editorLayout->setContentsMargins(0, 0, 0, 0);
         editorLayout->setSpacing(6);
 
-        m_wordTemplateEditLabel = new QLabel("当前编辑模板:", m_wordTemplateEditWidget);
+        const QString editorBoxStyle =
+                "background-color: transparent;"
+                "border: 1px solid #ebeef5;"
+                "border-radius: 4px;"
+                "color: #333333;"
+                "padding: 5px 10px;";
+
+        m_wordTemplateEditLabel = new QLabel("当前产品模板:", m_wordTemplateEditWidget);
         m_wordTemplateEditLabel->setFixedHeight(50);
-        m_wordTemplateEditLabel->setStyleSheet(
-                    "background-color: #ffffff;"
-                    "border: 1px solid #ebeef5;"
-                    "border-radius: 4px;"
-                    "color: #333333;"
-                    "padding: 5px 10px;");
+        m_wordTemplateEditLabel->setStyleSheet(editorBoxStyle);
+
+        m_wordTemplateDisplayLineEdit = new QLineEdit(m_wordTemplateEditWidget);
+        m_wordTemplateDisplayLineEdit->setObjectName("wordTemplateDisplayLineEdit");
+        m_wordTemplateDisplayLineEdit->setMinimumHeight(50);
+        m_wordTemplateDisplayLineEdit->setMaximumHeight(50);
+        m_wordTemplateDisplayLineEdit->setReadOnly(true);
+        m_wordTemplateDisplayLineEdit->setText("--");
+        m_wordTemplateDisplayLineEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_wordTemplateDisplayLineEdit->setStyleSheet(editorBoxStyle);
+
         m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
         m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
         m_wordTemplateEditComboBox->setMinimumHeight(50);
@@ -2821,7 +2824,7 @@ void Widget::setupWordTemplateEditorCombo()
         m_wordTemplateEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         m_wordTemplateEditComboBox->setStyleSheet(
                     "QComboBox {"
-                    "background-color: #ffffff;"
+                    "background-color: transparent;"
                     "border: 1px solid #ebeef5;"
                     "border-radius: 4px;"
                     "color: #333333;"
@@ -2829,9 +2832,10 @@ void Widget::setupWordTemplateEditorCombo()
                     "}");
 
         editorLayout->addWidget(m_wordTemplateEditLabel);
+        editorLayout->addWidget(m_wordTemplateDisplayLineEdit, 1);
         editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
         if (targetLayout) {
-            targetLayout->addWidget(m_wordTemplateEditWidget, 2, 1, 1, 2);
+            targetLayout->addWidget(m_wordTemplateEditWidget, 0, 0, 1, 3);
         }
 
         connect(m_wordTemplateEditComboBox,
@@ -2841,70 +2845,8 @@ void Widget::setupWordTemplateEditorCombo()
                     applyWordTemplateEditorSelection(index);
                 });
 
+        m_wordTemplateEditComboBox->hide();
         m_wordTemplateEditWidget->hide();
-    }
-
-    QWidget *thresholdParentWidget = ui->lineEdit_yuzhi->parentWidget();
-    if (thresholdParentWidget) {
-        QGridLayout *thresholdLayout = qobject_cast<QGridLayout *>(thresholdParentWidget->layout());
-        int thresholdInsertRow = 2;
-        int thresholdInsertColumn = 1;
-        if (thresholdLayout) {
-            for (int i = 0; i < thresholdLayout->count(); ++i) {
-                QLayoutItem *item = thresholdLayout->itemAt(i);
-                if (!item || item->widget() != ui->lineEdit_yuzhi) {
-                    continue;
-                }
-
-                int row = 0;
-                int column = 0;
-                int rowSpan = 1;
-                int columnSpan = 1;
-                thresholdLayout->getItemPosition(i, &row, &column, &rowSpan, &columnSpan);
-                thresholdInsertRow = row + rowSpan;
-                thresholdInsertColumn = column;
-                break;
-            }
-            shiftGridRowsDown(thresholdLayout, thresholdInsertRow);
-        }
-
-        m_wordThresholdEditWidget = new QWidget(thresholdParentWidget);
-        m_wordThresholdEditWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_wordThresholdEditWidget->setFixedHeight(50);
-        QHBoxLayout *thresholdLayoutBox = new QHBoxLayout(m_wordThresholdEditWidget);
-        thresholdLayoutBox->setContentsMargins(0, 0, 0, 0);
-        thresholdLayoutBox->setSpacing(6);
-
-        m_wordThresholdEditLabel = new QLabel("当前阈值模板:", m_wordThresholdEditWidget);
-        m_wordThresholdEditLabel->setFixedHeight(50);
-        m_wordThresholdEditComboBox = new QComboBox(m_wordThresholdEditWidget);
-        m_wordThresholdEditComboBox->setObjectName("wordThresholdTemplateComboBox");
-        m_wordThresholdEditComboBox->setMinimumHeight(50);
-        m_wordThresholdEditComboBox->setMaximumHeight(50);
-        m_wordThresholdEditComboBox->setMinimumWidth(160);
-        m_wordThresholdEditComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-
-        thresholdLayoutBox->addWidget(m_wordThresholdEditLabel);
-        thresholdLayoutBox->addWidget(m_wordThresholdEditComboBox, 1);
-        if (thresholdLayout) {
-            thresholdLayout->addWidget(m_wordThresholdEditWidget, thresholdInsertRow, thresholdInsertColumn);
-        }
-
-        connect(m_wordThresholdEditComboBox,
-                static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
-                this,
-                [this](int index) {
-                    if (!m_wordThresholdEditComboBox || index < 0 || !m_wordMultiTemplateMode) {
-                        return;
-                    }
-                    bool ok = false;
-                    const int profileIndex = m_wordThresholdEditComboBox->itemData(index).toInt(&ok);
-                    if (ok) {
-                        setCurrentWordTemplateEditIndex(profileIndex);
-                    }
-                });
-
-        m_wordThresholdEditWidget->hide();
     }
 
     connect(ui->comboBox_4,
@@ -2938,19 +2880,28 @@ void Widget::clearWordMultiTemplateState()
 
 void Widget::refreshWordTemplateEditorCombo()
 {
-    const bool shouldShow = m_wordMultiTemplateMode
-            && ui->comboBox_4->currentIndex() == 1
+    if (!ui) {
+        return;
+    }
+
+    const bool isWordMode = (ui->comboBox_4->currentIndex() == 1);
+    const bool shouldShowMultiCombo = m_wordMultiTemplateMode
+            && isWordMode
             && !m_wordTemplateProfiles.empty();
 
     if (ui->batchTextsure_btn) {
-        ui->batchTextsure_btn->setVisible(shouldShow);
+        ui->batchTextsure_btn->setVisible(shouldShowMultiCombo);
+    }
+
+    if (m_manualCharacterCropButton) {
+        m_manualCharacterCropButton->setVisible(isWordMode);
     }
 
     if (!m_wordTemplateEditComboBox || !m_wordTemplateEditWidget) {
         return;
     }
 
-    auto fillCombo = [this, shouldShow](QComboBox *comboBox) {
+    auto fillCombo = [this, shouldShowMultiCombo](QComboBox *comboBox) {
         if (!comboBox) {
             return;
         }
@@ -2958,7 +2909,7 @@ void Widget::refreshWordTemplateEditorCombo()
         QSignalBlocker blocker(comboBox);
         comboBox->clear();
 
-        if (shouldShow) {
+        if (shouldShowMultiCombo) {
             for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
                 const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
                 const QString displayName = profile.name.isEmpty()
@@ -2970,14 +2921,22 @@ void Widget::refreshWordTemplateEditorCombo()
     };
 
     fillCombo(m_wordTemplateEditComboBox);
-    fillCombo(m_wordThresholdEditComboBox);
 
-    m_wordTemplateEditWidget->setVisible(shouldShow);
-    if (m_wordThresholdEditWidget) {
-        m_wordThresholdEditWidget->setVisible(shouldShow);
+    m_wordTemplateEditWidget->setVisible(isWordMode);
+    if (m_wordTemplateEditLabel) {
+        m_wordTemplateEditLabel->setText(shouldShowMultiCombo ? "当前编辑模板:" : "当前产品模板:");
+    }
+    m_wordTemplateEditComboBox->setVisible(shouldShowMultiCombo);
+    if (m_wordTemplateDisplayLineEdit) {
+        m_wordTemplateDisplayLineEdit->setVisible(!shouldShowMultiCombo);
     }
 
-    if (shouldShow) {
+    if (!isWordMode) {
+        m_currentWordTemplateEditIndex = -1;
+        return;
+    }
+
+    if (shouldShowMultiCombo) {
         int profileIndex = m_currentWordTemplateEditIndex;
         if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
             profileIndex = 0;
@@ -2985,6 +2944,19 @@ void Widget::refreshWordTemplateEditorCombo()
         setCurrentWordTemplateEditIndex(profileIndex);
     } else {
         m_currentWordTemplateEditIndex = -1;
+        if (m_wordTemplateDisplayLineEdit) {
+            QString templateName = "--";
+            if (m_currentTemplateNameVisible && !currentTemplateDirPath.trimmed().isEmpty()) {
+                QDir templateDir(currentTemplateDirPath);
+                if (templateDir.exists() && !templateDir.dirName().isEmpty()) {
+                    templateName = templateDir.dirName();
+                }
+            }
+            m_wordTemplateDisplayLineEdit->setText(templateName);
+            m_wordTemplateDisplayLineEdit->setToolTip(templateName == "--"
+                                                      ? QString()
+                                                      : currentTemplateDirPath);
+        }
     }
 }
 
@@ -3033,7 +3005,6 @@ void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
     };
 
     syncCombo(m_wordTemplateEditComboBox);
-    syncCombo(m_wordThresholdEditComboBox);
 
     const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
     {
@@ -4148,7 +4119,7 @@ void Widget::on_pushButton_3_clicked()
 
         const int profileIndex = currentWordTemplateProfileIndex();
         if (profileIndex < 0) {
-            showParameterInfoAsError("提示", "当前阈值模板无效");
+            showParameterInfoAsError("提示", "当前产品模板无效");
             return;
         }
 

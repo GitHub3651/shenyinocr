@@ -21,6 +21,7 @@
 #include <QMetaType>
 #include <QTranslator>
 #include <QSettings>
+#include <QLineEdit>
 #include <QStringList>
 #include <QStandardItemModel>
 #include "waitting.h"
@@ -265,9 +266,7 @@ private:
     QWidget *m_wordTemplateEditWidget = nullptr;
     QLabel *m_wordTemplateEditLabel = nullptr;
     QComboBox *m_wordTemplateEditComboBox = nullptr;
-    QWidget *m_wordThresholdEditWidget = nullptr;
-    QLabel *m_wordThresholdEditLabel = nullptr;
-    QComboBox *m_wordThresholdEditComboBox = nullptr;
+    QLineEdit *m_wordTemplateDisplayLineEdit = nullptr;
     QFrame *m_templateGuideFrame = nullptr;
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
