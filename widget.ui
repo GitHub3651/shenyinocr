@@ -1251,33 +1251,6 @@ background-color: #ebeef5;
                  </layout>
                 </item>
                 <item>
-                 <widget class="QPushButton" name="confirmAllParamsButton">
-                  <property name="minimumSize">
-                   <size>
-                    <width>0</width>
-                    <height>56</height>
-                   </size>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">QPushButton {
-    background-color: #0078D7; /* 醒目的蓝色 */
-    color: white;              /* 白色文字 */
-    border-radius: 4px;        /* 圆角边缘 */
-    border: 1px solid #005A9E;
-}
-QPushButton:hover {
-    background-color: #1084D0; /* 鼠标悬停时稍微变亮 */
-}
-QPushButton:pressed {
-    background-color: #005A9E; /* 按下时变暗 */
-}</string>
-                  </property>
-                  <property name="text">
-                   <string>确认所有参数</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
                  <spacer name="tab1Frame2BottomSpacer">
                   <property name="orientation">
                    <enum>Qt::Vertical</enum>

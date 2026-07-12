@@ -230,7 +230,6 @@ private slots:
 
     void on_pushButton_tissueRoughnessThreshold_clicked();
 
-    void on_confirmAllParamsButton_clicked();
     void on_MultiCameraMode_clicked();
 
 protected:
@@ -242,7 +241,12 @@ private:
     void showParameterInfoAsError(const QString &title, const QString &message);
     void showParameterWarning(const QString &title, const QString &message);
     void showParameterCritical(const QString &title, const QString &message);
-    void addConfirmAllParamError(const QString &message);
+    bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
     void updateTissueRoughnessUiVisibility();
@@ -267,8 +271,6 @@ private:
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
     MultiCameraWidget *m_multiCameraWidget = nullptr;
-    bool m_confirmAllParamsRunning = false;
-    bool m_allParamsConfirmed = false;
     bool m_currentTemplateNameVisible = false;
     QWidget *m_wordTemplateEditWidget = nullptr;
     QLabel *m_wordTemplateEditLabel = nullptr;
@@ -281,7 +283,6 @@ private:
     QPushButton *m_manualCharacterCropButton = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
-    QStringList m_confirmAllParamErrors;
     QMap<QString, QStringList> m_templateDirPathsByMode;
     QString m_currentDetectModeId = "word_detection";
     bool m_applyingGlobalSettings = false;

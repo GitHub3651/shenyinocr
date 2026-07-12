@@ -2147,52 +2147,23 @@ void Widget::showscreen()
     this->show();
 }
 
-void Widget::addConfirmAllParamError(const QString &message)
-{
-    const QString normalizedMessage = message.trimmed();
-    if (normalizedMessage.isEmpty() || m_confirmAllParamErrors.contains(normalizedMessage)) {
-        return;
-    }
-
-    m_confirmAllParamErrors.append(normalizedMessage);
-}
-
 void Widget::showParameterInfo(const QString &title, const QString &message)
 {
-    if (m_confirmAllParamsRunning) {
-        return;
-    }
-
     QMessageBox::information(this, title, message);
 }
 
 void Widget::showParameterInfoAsError(const QString &title, const QString &message)
 {
-    if (m_confirmAllParamsRunning) {
-        addConfirmAllParamError(message);
-        return;
-    }
-
     QMessageBox::information(this, title, message);
 }
 
 void Widget::showParameterWarning(const QString &title, const QString &message)
 {
-    if (m_confirmAllParamsRunning) {
-        addConfirmAllParamError(message);
-        return;
-    }
-
     QMessageBox::warning(this, title, message);
 }
 
 void Widget::showParameterCritical(const QString &title, const QString &message)
 {
-    if (m_confirmAllParamsRunning) {
-        addConfirmAllParamError(message);
-        return;
-    }
-
     QMessageBox::critical(this, title, message);
 }
 
@@ -2750,11 +2721,6 @@ void Widget::setupWordTemplateEditorCombo()
             ui->comboBox_3->setToolTip("PLC触发工作模式。\n连续触发模式：产线连续经过时，PLC按连续节拍触发相机采图和检测。\n间歇触发模式：产品分批、停顿或按间隔到位时，PLC按间歇方式触发采图和检测。");
             ui->comboBox_3->installEventFilter(this);
         }
-    }
-
-    if (ui && ui->confirmAllParamsButton) {
-        ui->confirmAllParamsButton->setToolTip("依次确认当前界面上的所有参数；目标字符只按当前确认字符逻辑处理，不会批量覆盖所有模板字符。");
-        ui->confirmAllParamsButton->installEventFilter(this);
     }
 
     if (ui && ui->VideoShoot) {
@@ -3519,23 +3485,282 @@ bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
     return true;
 }
 
+bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage)
+{
+    if (m_pcMyCamera == nullptr || !m_bOpenDevice) {
+        const QString message = "未打开相机，无法设置曝光！";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("警告", message);
+        return false;
+    }
+
+    const int exposureValue = ui->spinBox->value();
+    const int ret = m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
+    if (ret != MV_OK) {
+        const QString message = QString("相机曝光设置失败！错误码：%1").arg(ret);
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("提示", message);
+        return false;
+    }
+
+    qDebug() << "SetExposureTime success:" << exposureValue;
+    if (showSuccessMessage) {
+        showParameterInfo("提示", "相机曝光设置成功！");
+    }
+    return true;
+}
+
+bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
+{
+    if (m_pcMyCamera == nullptr || !m_bOpenDevice) {
+        const QString message = "相机未初始化或未打开，无法设置增益！";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("提示", message);
+        return false;
+    }
+
+    MVCC_FLOATVALUE stParam = {0};
+    int ret = m_pcMyCamera->GetFloatValue("Gain", &stParam);
+    if (ret != MV_OK) {
+        const QString message = QString("无法获取相机增益支持的范围！错误码：%1").arg(ret);
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("提示", message);
+        return false;
+    }
+
+    bool isOk = false;
+    const float gainValue = ui->lineEdit_14->text().trimmed().toFloat(&isOk);
+    if (!isOk) {
+        const QString message = QString("请输入有效的增益数字！当前相机允许范围：%1 ~ %2")
+                .arg(stParam.fMin)
+                .arg(stParam.fMax);
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("提示", message);
+        return false;
+    }
+
+    if (gainValue < stParam.fMin || gainValue > stParam.fMax) {
+        const QString message = QString("输入的增益值超出限制！当前相机允许范围：%1 ~ %2")
+                .arg(stParam.fMin)
+                .arg(stParam.fMax);
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("提示", message);
+        return false;
+    }
+
+    ret = m_pcMyCamera->SetFloatValue("Gain", gainValue);
+    if (ret != MV_OK) {
+        const QString message = QString("相机增益设置失败！错误码：%1").arg(ret);
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("提示", message);
+        return false;
+    }
+
+    qDebug() << "SetGain success:" << gainValue;
+    if (showSuccessMessage) {
+        showParameterInfo("提示", "相机增益设置成功！");
+    }
+    return true;
+}
+
+bool Widget::applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage)
+{
+    bool ok = true;
+    ok = applyCameraExposureFromUi(errors, showSuccessMessage) && ok;
+    ok = applyCameraGainFromUi(errors, showSuccessMessage) && ok;
+
+    if (ok) {
+        saveSettings(false);
+    }
+    return ok;
+}
+
+bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage)
+{
+    bool thresholdOk = false;
+    const double thresholdValue = ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk);
+    if (!thresholdOk) {
+        const QString message = "图像合格阈值必须是数字";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("参数错误", message);
+        return false;
+    }
+
+    bool tissueThresholdOk = false;
+    const double tissueThreshold = ui->lineEdit_tissueRoughnessThreshold->text().trimmed().toDouble(&tissueThresholdOk);
+    if (!tissueThresholdOk || tissueThreshold <= 0.0) {
+        const QString message = "纸巾检测粗糙度阈值必须是大于0的数字";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("参数错误", message);
+        return false;
+    }
+
+    switch (ui->comboBox_2->currentIndex()) {
+    case 1:
+        angleValue = 1;
+        break;
+    case 2:
+        angleValue = 2;
+        break;
+    case 3:
+        angleValue = 3;
+        break;
+    default:
+        angleValue = 0;
+        break;
+    }
+
+    switch (ui->comboBox_5->currentIndex()) {
+    case 1:
+        colorchannel = 1;
+        break;
+    case 2:
+        colorchannel = 2;
+        break;
+    case 3:
+        colorchannel = 3;
+        break;
+    default:
+        colorchannel = 0;
+        break;
+    }
+
+    TissueRollDetector::setDefaultRoughnessThreshold(tissueThreshold);
+    ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(tissueThreshold, 'f', 3));
+
+    emit rotate(angleValue);
+    emit choosechannel(colorchannel);
+    emit sendDataTo(ui->lineEdit_4->text());
+    emit ssim(static_cast<int>(thresholdValue));
+
+    if (showSuccessMessage) {
+        showParameterInfo("提示", "运行参数设置成功");
+    }
+    saveSettings(false);
+    return true;
+}
+
+bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage)
+{
+    PLCmode = ui->comboBox_3->currentIndex();
+
+    if (!client || !client->Connected()) {
+        const QString message = "PLC未连接！";
+        if (showSuccessMessage) {
+            if (errors) errors->append(message);
+            showParameterWarning("警告", message);
+            return false;
+        }
+        return true;
+    }
+
+    if (PLCmode != 0 && PLCmode != 1) {
+        const QString message = "PLC触发模式无效";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        return false;
+    }
+
+    const uint8_t value = static_cast<uint8_t>(PLCmode == 0 ? 0 : 1);
+    byte mode_data[1] = {0};
+    mode_data[0] = static_cast<unsigned char>(0xFF & value);
+
+    const int ret = client->WriteArea(S7AreaDB, 1, 1032, 1, S7WLByte, mode_data);
+    if (ret != 0) {
+        const QString message = PLCmode == 0 ? "设置连续模式失败" : "设置间歇模式失败";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        return false;
+    }
+
+    if (showSuccessMessage) {
+        showParameterInfo("提示", PLCmode == 0 ? "连续模式设置成功" : "间歇模式设置成功");
+    }
+    saveSettings(false);
+    return true;
+}
+
+bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
+{
+    if (!client || !client->Connected()) {
+        const QString message = "PLC未连接！";
+        if (showSuccessMessage) {
+            if (errors) errors->append(message);
+            showParameterWarning("警告", message);
+            return false;
+        }
+        return true;
+    }
+
+    wrongindex = ui->lineEdit_12->text().toInt();
+
+    uint16_t rejectTime = ui->lineEdit_8->text().toUInt();
+    byte rejectTimeData[2] = {0};
+    rejectTimeData[1] = static_cast<unsigned char>(0xFF & rejectTime);
+    rejectTimeData[0] = static_cast<unsigned char>((0xFF00 & rejectTime) >> 8);
+    int ret = client->WriteArea(S7AreaDB, 1, 980, 2, S7WLWord, rejectTimeData);
+    if (ret != 0) {
+        const QString message = "设置剔除时间失败";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        return false;
+    }
+
+    uint32_t rejectDistance = ui->lineEdit_7->text().toUInt();
+    byte rejectDistanceData[4] = {0};
+    rejectDistanceData[3] = static_cast<unsigned char>(0xFF & rejectDistance);
+    rejectDistanceData[2] = static_cast<unsigned char>((0xFF00 & rejectDistance) >> 8);
+    rejectDistanceData[1] = static_cast<unsigned char>((0xFF0000 & rejectDistance) >> 16);
+    rejectDistanceData[0] = static_cast<unsigned char>((0xFF000000 & rejectDistance) >> 24);
+    ret = client->WriteArea(S7AreaDB, 1, 920, 4, S7WLDWord, rejectDistanceData);
+    if (ret != 0) {
+        const QString message = "设置剔除距离失败";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        return false;
+    }
+
+    uint16_t photoTime = ui->lineEdit_20->text().toUInt();
+    byte photoTimeData[2] = {0};
+    photoTimeData[1] = static_cast<unsigned char>(0xFF & photoTime);
+    photoTimeData[0] = static_cast<unsigned char>((0xFF00 & photoTime) >> 8);
+    ret = client->WriteArea(S7AreaDB, 1, 982, 2, S7WLWord, photoTimeData);
+    if (ret != 0) {
+        const QString message = "设置拍照时间失败";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        return false;
+    }
+
+    uint32_t photoDistance = ui->lineEdit_6->text().toUInt();
+    byte photoDistanceData[4] = {0};
+    photoDistanceData[3] = static_cast<unsigned char>(0xFF & photoDistance);
+    photoDistanceData[2] = static_cast<unsigned char>((0xFF00 & photoDistance) >> 8);
+    photoDistanceData[1] = static_cast<unsigned char>((0xFF0000 & photoDistance) >> 16);
+    photoDistanceData[0] = static_cast<unsigned char>((0xFF000000 & photoDistance) >> 24);
+    ret = client->WriteArea(S7AreaDB, 1, 924, 4, S7WLDWord, photoDistanceData);
+    if (ret != 0) {
+        const QString message = "设置拍照距离失败";
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        return false;
+    }
+
+    if (showSuccessMessage) {
+        showParameterInfo("提示", "所有设置已经完成！");
+    }
+    saveSettings(false);
+    return true;
+}
+
 /**
  * @brief 曝光确定按钮点击槽函数
  * @details 设置相机曝光值
  */
 void Widget::on_sureButton_clicked()
 {
-    if (m_bOpenDevice == false)
-    {
-        showParameterWarning("警告", "未打开相机，无法设置曝光！");
-        return;
-    }
-    else
-    {
-        int exposureValue = ui->spinBox->value();
-        qDebug() << "SetExposureTime:" <<exposureValue<<m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-        showParameterInfo("提示", "相机曝光设置成功！");
-    }
+    QStringList errors;
+    applyCameraExposureFromUi(&errors, true);
 }
 
 /**
@@ -3735,96 +3960,8 @@ void Widget::on_DisconnectpushButton_clicked()
  */
 void Widget::on_pushButton_8_clicked()
 {
-if (!client->Connected())
-{
-    showParameterWarning("警告", "PLC未连接！");
-    return;
-}
-
-//剔除位置
-wrongindex = ui->lineEdit_12->text().toInt();
-//    QMessageBox::information(this, "提示", "剔除位置设置成功");
-
-
-//剔除时间
-uint16_t value4 = ui->lineEdit_8->text().toUInt();
-byte delay_time[2] = {0};
-
-// 大小端转换
-delay_time[1] = (unsigned char)(0xFF & value4);
-delay_time[0] = (unsigned char)((0xFF00 & value4) >> 8);
-
-// 写入DB1.980
-int tmp4 = client->WriteArea(S7AreaDB, 1, 980, 2, S7WLWord, delay_time);
-if (tmp4 != 0)
-{
-    showParameterWarning("error", "设置剔除时间失败");
-    return;
-}
-
-
-
-//剔除距离
-uint32_t value2 = ui->lineEdit_7->text().toUInt();
-byte delay_data[4] = {0};
-
-// 大小端转换
-delay_data[3] = (unsigned char)(0xFF & value2);
-delay_data[2] = (unsigned char)((0xFF00 & value2) >> 8);
-delay_data[1] = (unsigned char)((0xFF0000 & value2) >> 16);
-delay_data[0] = (unsigned char)((0xFF000000 & value2) >> 24);
-
-// 写入DB1.920
-int tmp2 = client->WriteArea(S7AreaDB, 1, 920, 4, S7WLDWord, delay_data);
-if (tmp2 != 0)
-{
-    showParameterWarning("error", "设置剔除距离失败");
-    return;
-}
-
-
-
-
-//拍照时间
-uint16_t value5 = ui->lineEdit_20->text().toUInt();
-byte pz_time[2] = {0};
-
-// 大小端转换
-pz_time[1] = (unsigned char)(0xFF & value5);
-pz_time[0] = (unsigned char)((0xFF00 & value5) >> 8);
-
-// 写入DB1.982
-int tmp5 = client->WriteArea(S7AreaDB, 1, 982, 2, S7WLWord, pz_time);
-if (tmp5 != 0)
-{
-    showParameterWarning("error", "设置拍照时间失败");
-    return;
-}
-
-//相机延时
-QString text = ui->lineEdit_4->text();
-emit sendDataTo(text);
-
-//拍照距离
-
-uint32_t value = ui->lineEdit_6->text().toUInt();
-byte v_data[4] = {0};
-
-// 大小端转换
-v_data[3] = (unsigned char)(0xFF & value);
-v_data[2] = (unsigned char)((0xFF00 & value) >> 8);
-v_data[1] = (unsigned char)((0xFF0000 & value) >> 16);
-v_data[0] = (unsigned char)((0xFF000000 & value) >> 24);
-
-// 写入DB1.924
-int tmp = client->WriteArea(S7AreaDB, 1, 924, 4, S7WLDWord, v_data);
-if (tmp != 0)
-{
-    showParameterWarning("error", "设置拍照距离失败");
-    return;
-}
-
-showParameterInfo("提示", "所有设置已经完成！");
+    QStringList errors;
+    applyPlcRunSettingsFromUi(&errors, true);
 }
 
 /**
@@ -4985,89 +5122,6 @@ void Widget::on_pushButton_4_clicked()
 
     initOverlapDetectorFromCurrentDir();
 
-    //设置PLC参数
-    if (!ui->checkBox->isChecked())
-    {
-        QMessageBox::information(this, "提示", "模板已选择");
-        return;
-    }
-
-    //判断plc是否连接
-    if (!client->Connected())
-    {
-        QMessageBox::warning(this, "警告", "已启用触发，但PLC未连接！");
-        if (m_currentTemplateNameVisible) {
-            QMessageBox::information(this, "提示", "模板已选择");
-        } else {
-            QMessageBox::warning(this, "提示", "模板加载失败，请检查产品模板文件夹");
-        }
-        return;
-    }
-
-    uint32_t value = ui->lineEdit_6->text().toUInt();
-    byte v_data[4] = {0};
-
-    // 大小端转换
-    v_data[3] = (unsigned char)(0xFF & value);
-    v_data[2] = (unsigned char)((0xFF00 & value) >> 8);
-    v_data[1] = (unsigned char)((0xFF0000 & value) >> 16);
-    v_data[0] = (unsigned char)((0xFF000000 & value) >> 24);
-
-    // 写入DB1.924
-    int tmp = client->WriteArea(S7AreaDB, 1, 924, 4, S7WLDWord, v_data);
-    if (tmp != 0)
-    {
-        QMessageBox::warning(this, "error", "设置失败");
-    }
-
-
-    uint32_t value2 = ui->lineEdit_7->text().toUInt();
-    byte delay_data[4] = {0};
-
-    // 大小端转换
-    delay_data[3] = (unsigned char)(0xFF & value2);
-    delay_data[2] = (unsigned char)((0xFF00 & value2) >> 8);
-    delay_data[1] = (unsigned char)((0xFF0000 & value2) >> 16);
-    delay_data[0] = (unsigned char)((0xFF000000 & value2) >> 24);
-
-    // 写入DB1.920
-    int tmp2 = client->WriteArea(S7AreaDB, 1, 920, 4, S7WLDWord, delay_data);
-    if (tmp2 != 0)
-    {
-        QMessageBox::warning(this, "error", "设置失败");
-    }
-
-    uint16_t value4 = ui->lineEdit_8->text().toUInt();
-    byte delay_time[2] = {0};
-
-    // 大小端转换
-    delay_time[1] = (unsigned char)(0xFF & value4);
-    delay_time[0] = (unsigned char)((0xFF00 & value4) >> 8);
-
-    // 写入DB1.980
-    int tmp4 = client->WriteArea(S7AreaDB, 1, 980, 2, S7WLWord, delay_time);
-    if (tmp4 != 0)
-    {
-        QMessageBox::warning(this, "error", "设置失败");
-    }
-
-
-    uint16_t value5 = ui->lineEdit_20->text().toUInt();
-    byte pz_time[2] = {0};
-
-    // 大小端转换
-    pz_time[1] = (unsigned char)(0xFF & value5);
-    pz_time[0] = (unsigned char)((0xFF00 & value5) >> 8);
-
-    // 写入DB1.982
-    int tmp5 = client->WriteArea(S7AreaDB, 1, 982, 2, S7WLWord, pz_time);
-    if (tmp5 != 0)
-    {
-        QMessageBox::warning(this, "error", "设置失败");
-    }
-
-
-
     QMessageBox::information(this, "提示", "模板已选择");
 }
 
@@ -5423,7 +5477,6 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
             || watched == ui->comboBox_3
             || watched == ui->Saveimage
             || watched == m_manualCharacterCropButton
-            || watched == ui->confirmAllParamsButton
             || watched == ui->VideoShoot) {
         QWidget *button = qobject_cast<QWidget *>(watched);
         if (!button) {
@@ -5659,22 +5712,6 @@ void Widget::on_plcbtn_clicked()
         }
     }
 
-    if (!m_allParamsConfirmed) {
-        QMessageBox messageBox(this);
-        messageBox.setIcon(QMessageBox::Warning);
-        messageBox.setWindowTitle("操作确认");
-        messageBox.setText("当前没有点击“确认所有参数”按钮，是否继续运行");
-
-        QPushButton *continueButton = messageBox.addButton("继续运行", QMessageBox::AcceptRole);
-        QPushButton *cancelButton = messageBox.addButton("取消", QMessageBox::RejectRole);
-        messageBox.setDefaultButton(cancelButton);
-        messageBox.exec();
-
-        if (messageBox.clickedButton() != continueButton) {
-            return;
-        }
-    }
-    m_allParamsConfirmed = false;
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
     }
@@ -5686,15 +5723,19 @@ void Widget::on_plcbtn_clicked()
     if (ui->checkBox->isChecked())
     {
         // 外部触发/硬触发模式逻辑
-        int exposureValue = ui->spinBox->value();
-        float gainValue = ui->lineEdit_14->text().toFloat();
-        m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-        m_pcMyCamera->SetFloatValue("Gain", gainValue);
-
         if (isCollecting) {
             QMessageBox::information(this, "提示", "已在采集中，若要停止请点击【停止识别】按钮");
             return;
         }
+
+        QStringList applyErrors;
+        if (!applyCameraHardwareSettingsFromUi(&applyErrors, false)) {
+            QMessageBox::warning(this, "启动失败",
+                                 QString("启动识别前相机参数应用失败：\n") + applyErrors.join("\n"));
+            return;
+        }
+        const int exposureValue = ui->spinBox->value();
+        const float gainValue = ui->lineEdit_14->text().toFloat();
 
         j = 1;
         ui->image_undetected->clear();
@@ -5755,6 +5796,7 @@ void Widget::on_plcbtn_clicked()
         // 连接所有功能信号
         connect(this, &Widget::rotate, cameraThread, &CameraThread::receiveangle1);
         connect(this, &Widget::choosechannel,cameraThread,&CameraThread::receivecolorchannel);
+        connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
         connect(cameraThread, &CameraThread::signal_cleanlabel, this, &Widget::slot_clearResultLabel, Qt::QueuedConnection);
         connect(cameraThread, &CameraThread::signal_messImage, this, [this](cv::Mat img) {
             this->slot_displayAndDetect(&img);
@@ -5767,15 +5809,26 @@ void Widget::on_plcbtn_clicked()
             this->slot_handleTissueResult(&img, result);
         }, Qt::QueuedConnection);
 
-        // 发送各项参数
-        emit rotate(ui->comboBox_2->currentIndex() == 1 ? 1 : (ui->comboBox_2->currentIndex() == 2 ? 2 : (ui->comboBox_2->currentIndex() == 3 ? 3 : 0)));
-        emit choosechannel(ui->comboBox_5->currentIndex() == 1 ? 1 : (ui->comboBox_5->currentIndex() == 2 ? 2 : (ui->comboBox_5->currentIndex() == 3 ? 3 : 0)));
-        emit sendDataTo(ui->lineEdit_4->text());
+        applyErrors.clear();
+        if (!applyRuntimeThreadSettingsFromUi(&applyErrors, false)) {
+            QMessageBox::warning(this, "启动失败",
+                                 QString("启动识别前运行参数应用失败：\n") + applyErrors.join("\n"));
+            return;
+        }
+
+        applyErrors.clear();
+        if (!applyPlcTriggerModeFromUi(&applyErrors, false)
+                || !applyPlcRunSettingsFromUi(&applyErrors, false)) {
+            QMessageBox::warning(this, "启动失败",
+                                 QString("启动识别前 PLC 参数下发失败：\n") + applyErrors.join("\n"));
+            return;
+        }
+
+        // 发送模板匹配相关参数
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
         emit caijianchicun(ui->lineEdit_5->text().toInt(), ui->lineEdit_9->text().toInt(), ui->lineEdit_10->text().toInt(), ui->lineEdit_11->text().toInt(), ui->lineEdit_13->text().toInt(), ui->lineEdit_18->text().toInt(), ui->lineEdit_19->text().toInt());
         emit kernal(ui->lineEdit_15->text().toInt());
-        emit ssim(ui->lineEdit_yuzhi->text().toDouble());
 
         cameraThread->start();
         if (!cameraThread->wait(100)) {
@@ -5792,10 +5845,13 @@ void Widget::on_plcbtn_clicked()
     else
     {
         // 软触发/连续模式逻辑
-        int exposureValue = ui->spinBox->value();
-        float gainValue = ui->lineEdit_14->text().toFloat();
-        m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-        m_pcMyCamera->SetFloatValue("Gain", gainValue); // 软触发切入时也保持增益同步
+        QStringList applyErrors;
+        if (!applyCameraHardwareSettingsFromUi(&applyErrors, false)) {
+            QMessageBox::warning(this, "启动失败",
+                                 QString("启动识别前相机参数应用失败：\n") + applyErrors.join("\n"));
+            return;
+        }
+        const float gainValue = ui->lineEdit_14->text().toFloat();
 
         ensureThreadsReady();
         if (!myThread) reinitializeMyThread();
@@ -5815,11 +5871,20 @@ void Widget::on_plcbtn_clicked()
 
         connect(myThread, &MyThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
 
-        // 发送参数
-        emit ssim(ui->lineEdit_yuzhi->text().toDouble());
-        emit rotate(ui->comboBox_2->currentIndex() == 1 ? 1 : (ui->comboBox_2->currentIndex() == 2 ? 2 : (ui->comboBox_2->currentIndex() == 3 ? 3 : 0)));
-        emit choosechannel(ui->comboBox_5->currentIndex() == 1 ? 1 : (ui->comboBox_5->currentIndex() == 2 ? 2 : (ui->comboBox_5->currentIndex() == 3 ? 3 : 0)));
-        emit sendDataTo(ui->lineEdit_4->text());
+        applyErrors.clear();
+        if (!applyRuntimeThreadSettingsFromUi(&applyErrors, false)) {
+            QMessageBox::warning(this, "启动失败",
+                                 QString("启动识别前运行参数应用失败：\n") + applyErrors.join("\n"));
+            return;
+        }
+
+        applyErrors.clear();
+        if (!applyPlcTriggerModeFromUi(&applyErrors, false)
+                || !applyPlcRunSettingsFromUi(&applyErrors, false)) {
+            QMessageBox::warning(this, "启动失败",
+                                 QString("启动识别前 PLC 参数下发失败：\n") + applyErrors.join("\n"));
+            return;
+        }
 
         m_pcMyCamera->SetEnumValue("TriggerSource", 7); // 软触发
         m_pcMyCamera->SetFloatValue("Gain", gainValue); // 软触发重新设置增益
@@ -5916,49 +5981,8 @@ void Widget::on_HandwareDetect_clicked()
 // PLC模式选择
 void Widget::on_plcmodebtn_clicked()
 {
-    PLCmode = ui->comboBox_3->currentIndex();
-    if (!client->Connected())
-    { // 未连接则不执行
-        showParameterWarning("警告", "PLC未连接！");
-        return;
-    }
-
-    if (PLCmode == 0)
-    {
-        uint8_t value = 0;
-
-        byte mode_data[1] = {0}; // Buffer to hold the data to write to PLC
-
-        // 设置要写入的字节
-        mode_data[0] = (unsigned char)(0xFF & value);
-
-        // 写入DB1的1032位置，写入1个字节
-        int tmp2 = client->WriteArea(S7AreaDB, 1, 1032, 1, S7WLByte, mode_data); // 使用S7WLByte确保只写入1个字节
-        if (tmp2 != 0)
-        {
-            showParameterWarning("error", "设置连续模式失败");
-            return;
-        }
-        showParameterInfo("提示", "连续模式设置成功");
-    }
-    else if (PLCmode == 1)
-    {
-        uint8_t value = 1;
-
-        byte mode_data[1] = {0}; // Buffer to hold the data to write to PLC
-
-        // 设置要写入的字节
-        mode_data[0] = (unsigned char)(0xFF & value);
-
-        // 写入DB1的1032位置，写入1个字节
-        int tmp2 = client->WriteArea(S7AreaDB, 1, 1032, 1, S7WLByte, mode_data); // 使用S7WLByte确保只写入1个字节
-        if (tmp2 != 0)
-        {
-            showParameterWarning("error", "设置间歇模式失败");
-            return;
-        }
-        showParameterInfo("提示", "间歇模式设置成功");
-    }
+    QStringList errors;
+    applyPlcTriggerModeFromUi(&errors, true);
 }
 
 // 模板匹配参数设置
@@ -6283,47 +6307,8 @@ void Widget::on_pushButton_11_clicked()
 //设置相机增益
 void Widget::on_pushButton_12_clicked()
 {
-    if (m_pcMyCamera == nullptr || m_bOpenDevice == false) {
-        showParameterWarning("提示", "相机未初始化或未打开，无法设置增益！");
-        return;
-    }
-
-    // 首先获取当前相机允许的增益范围
-    MVCC_FLOATVALUE stParam = {0};
-    int nRet = m_pcMyCamera->GetFloatValue("Gain", &stParam);
-    if (nRet != MV_OK) {
-        showParameterWarning("提示", QString::fromLocal8Bit("无法获取相机增益支持的范围！错误码：%1").arg(nRet));
-        return;
-    }
-
-    // 获取lineEdit_14中设置的增益值
-    QString gainStr = ui->lineEdit_14->text();
-    bool isOk = false;
-    float gainValue = gainStr.toFloat(&isOk);
-
-    if (!isOk) {
-        showParameterWarning("提示", QString::fromLocal8Bit("请输入有效的增益数字！\n当前相机允许范围：%1 ~ %2").arg(stParam.fMin).arg(stParam.fMax));
-        return;
-    }
-
-    // 检查输入值是否在支持的范围内
-    if (gainValue < stParam.fMin || gainValue > stParam.fMax) {
-        showParameterWarning("提示", QString::fromLocal8Bit("输入的增益值超出限制！\n当前相机允许范围：%1 ~ %2").arg(stParam.fMin).arg(stParam.fMax));
-        // 可以选择自动规整到最大或最小值
-        // gainValue = qBound(stParam.fMin, gainValue, stParam.fMax);
-        // ui->lineEdit_14->setText(QString::number(gainValue));
-        return;
-    }
-
-    // 调用SDK接口设置增益
-    nRet = m_pcMyCamera->SetFloatValue("Gain", gainValue);
-    if (nRet == MV_OK) {
-        qDebug() << "SetGain success:" << gainValue;
-        showParameterInfo("提示", "相机增益设置成功！");
-    } else {
-        qDebug() << "SetGain failed! Ret:" << nRet;
-        showParameterWarning("提示", QString::fromLocal8Bit("相机增益设置失败！错误码：%1").arg(nRet));
-    }
+    QStringList errors;
+    applyCameraGainFromUi(&errors, true);
 }
 
 void Widget::on_pushButton_tissueRoughnessThreshold_clicked()
@@ -6362,34 +6347,5 @@ void Widget::on_WriteVDpushButton_clicked()
     {
         // 写入成功
         showParameterInfo("提示", "拍照距离设置成功");
-    }
-}
-
-void Widget::on_confirmAllParamsButton_clicked()
-{
-    m_confirmAllParamsRunning = true;
-    m_confirmAllParamErrors.clear();
-
-    ui->textsure_btn->click();
-    ui->WriteVDpushButton->click();
-    ui->plcmodebtn->click();
-    ui->pushButton_7->click();
-    ui->pushButton_3->click();
-    ui->pushButton_tissueRoughnessThreshold->click();
-    ui->sureButton->click();
-    ui->pushButton_12->click();
-    ui->pushButton_9->click();
-    ui->pushButton_2->click();
-    ui->pushButton->click();
-    ui->pushButton_8->click();
-
-    m_confirmAllParamsRunning = false;
-    m_allParamsConfirmed = true;
-
-    if (m_confirmAllParamErrors.isEmpty()) {
-        QMessageBox::information(this, "提示", "所有参数设置成功！");
-    } else {
-        QMessageBox::warning(this, "设置失败",
-                             QString("以下参数设置失败：\n%1").arg(m_confirmAllParamErrors.join("\n")));
     }
 }
