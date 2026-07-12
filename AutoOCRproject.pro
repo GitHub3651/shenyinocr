@@ -44,6 +44,7 @@ CONFIG(release, debug|release) {
 }
 
 SOURCES += \
+    appsettingsmanager.cpp \
     CameraThread.cpp \
     Detector.cpp \
     ImageManipulator.cpp \
@@ -74,6 +75,7 @@ SOURCES += \
         widget.cpp
 
 HEADERS += \
+    appsettingsmanager.h \
     CameraThread.h \
     CryptoUtils.h \
     Detector.h \

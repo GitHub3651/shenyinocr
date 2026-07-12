@@ -165,7 +165,7 @@ private:
         bool ready = false;
     };
     std::vector<WordTrackingState> m_wordTrackingProfiles;
-    bool m_wordMultiTemplateMode = false;
+    bool m_wordTemplateProfileMode = false;
 
     // 相机相关
     CMvCamera *cameraPtr;               // 相机指针

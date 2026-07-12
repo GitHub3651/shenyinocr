@@ -38,7 +38,7 @@ void MyThread::setBypassTracking(bool enabled) { bypassTracking = enabled; }
 
 void MyThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles) {
     m_wordTrackingProfiles.clear();
-    m_wordMultiTemplateMode = false;
+    m_wordTemplateProfileMode = false;
     m_tracking.store(false);
     m_poseMatcher.clear();
     if (!m_trackingTemplate.empty()) {
@@ -60,8 +60,8 @@ void MyThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingPro
         }
     }
 
-    m_wordMultiTemplateMode = !m_wordTrackingProfiles.empty();
-    qDebug() << "[WORD_MULTI_TEMPLATE] MyThread tracking profiles ready:"
+    m_wordTemplateProfileMode = !m_wordTrackingProfiles.empty();
+    qDebug() << "[WORD_TEMPLATE_PROFILE] MyThread tracking profiles ready:"
              << static_cast<int>(m_wordTrackingProfiles.size());
 }
 
@@ -71,7 +71,7 @@ void MyThread::clearWordTemplateTrackingProfiles() {
         state.ready = false;
     }
     m_wordTrackingProfiles.clear();
-    m_wordMultiTemplateMode = false;
+    m_wordTemplateProfileMode = false;
 }
 
 void MyThread::receiveangle(int a) { angle1 = a; }
@@ -149,7 +149,7 @@ void MyThread::run() {
                 }
             } else {
                 cv::Mat displayImage = imagePtr->clone();
-                if (m_wordMultiTemplateMode && !m_wordTrackingProfiles.empty()) {
+                if (m_wordTemplateProfileMode && !m_wordTrackingProfiles.empty()) {
                     DetectionPose bestPose;
                     QString bestName;
                     for (const WordTrackingState &state : m_wordTrackingProfiles) {
@@ -171,7 +171,7 @@ void MyThread::run() {
 
                     emit signal_boxesSelected(bestPose);
                     if (bestPose.valid) {
-                        qDebug() << "[WORD_MULTI_TEMPLATE] MyThread selected profile:"
+                        qDebug() << "[WORD_TEMPLATE_PROFILE] MyThread selected profile:"
                                  << bestPose.wordTemplateProfileIndex
                                  << bestName
                                  << "score:" << bestPose.score;

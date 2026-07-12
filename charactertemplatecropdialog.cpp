@@ -1,4 +1,5 @@
 #include "charactertemplatecropdialog.h"
+#include "appsettingsmanager.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -16,7 +17,6 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
-#include <QSettings>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -496,29 +496,23 @@ void CharacterTemplateCropDialog::loadSavedCharacterBoxes()
 {
     m_initialBoxes.clear();
 
-    QDir targetDir(m_templateDirPath);
-    const QString settingsPath = targetDir.filePath("app_settings.appset");
-    if (!QFileInfo::exists(settingsPath)) {
+    TemplatePrivateSettings privateSettings;
+    QString errorMessage;
+    if (!AppSettingsManager::loadTemplatePrivateSettings(m_templateDirPath,
+                                                         &privateSettings,
+                                                         &errorMessage)) {
         return;
     }
 
-    QSettings settings(settingsPath, QSettings::IniFormat);
-    settings.beginGroup("CharacterTemplateBoxes");
-    const int count = settings.value("count", 0).toInt();
     const QRect imageBounds(0, 0, m_sourceImage.width(), m_sourceImage.height());
-    for (int i = 0; i < count; ++i) {
+    for (const CharacterTemplateBox &savedBox : privateSettings.characterBoxes) {
         CharacterBox item;
-        item.name = settings.value(QString("box_%1_name").arg(i)).toString();
-        const int x = settings.value(QString("box_%1_x").arg(i), -1).toInt();
-        const int y = settings.value(QString("box_%1_y").arg(i), -1).toInt();
-        const int w = settings.value(QString("box_%1_w").arg(i), 0).toInt();
-        const int h = settings.value(QString("box_%1_h").arg(i), 0).toInt();
-        item.rect = QRect(x, y, w, h).normalized().intersected(imageBounds);
+        item.name = savedBox.name;
+        item.rect = savedBox.rect.normalized().intersected(imageBounds);
         if (item.rect.width() > 2 && item.rect.height() > 2) {
             m_initialBoxes.append(item);
         }
     }
-    settings.endGroup();
 }
 
 void CharacterTemplateCropDialog::refreshCharacterPreviewList()
@@ -689,10 +683,12 @@ bool CharacterTemplateCropDialog::saveTemplates()
         return false;
     }
 
-    if (!saveCharacterBoxesToSettings(m_sortedBoxes)) {
+    QString settingsSaveError;
+    if (!saveCharacterBoxesToSettings(m_sortedBoxes, &settingsSaveError)) {
         QMessageBox::warning(this,
                              QStringLiteral("\u63D0\u793A"),
-                             QStringLiteral("\u5B57\u7B26\u6846\u5750\u6807\u4FDD\u5B58\u5931\u8D25\u3002"));
+                             QStringLiteral("\u5B57\u7B26\u6846\u5750\u6807\u4FDD\u5B58\u5931\u8D25\uFF1A\n%1")
+                             .arg(settingsSaveError));
         return false;
     }
 
@@ -731,27 +727,31 @@ bool CharacterTemplateCropDialog::saveTemplates()
     return true;
 }
 
-bool CharacterTemplateCropDialog::saveCharacterBoxesToSettings(const QList<CharacterBox> &boxes) const
+bool CharacterTemplateCropDialog::saveCharacterBoxesToSettings(const QList<CharacterBox> &boxes,
+                                                                QString *errorMessage) const
 {
-    QDir targetDir(m_templateDirPath);
-    QSettings settings(targetDir.filePath("app_settings.appset"), QSettings::IniFormat);
-    settings.beginGroup("CharacterTemplateBoxes");
-    settings.remove("");
-    settings.setValue("source_width", m_sourceImage.width());
-    settings.setValue("source_height", m_sourceImage.height());
-    settings.setValue("count", boxes.size());
+    TemplatePrivateSettings privateSettings;
+    QString managerError;
+    if (!AppSettingsManager::loadTemplatePrivateSettings(m_templateDirPath,
+                                                         &privateSettings,
+                                                         &managerError)) {
+        if (errorMessage) *errorMessage = managerError;
+        return false;
+    }
+
+    privateSettings.characterBoxes.clear();
+    privateSettings.characterSourceImageSize = QSize(m_sourceImage.width(), m_sourceImage.height());
     for (int i = 0; i < boxes.size(); ++i) {
         const CharacterBox box = boxes.at(i);
         const QRect rect = box.rect.normalized().intersected(QRect(0, 0, m_sourceImage.width(), m_sourceImage.height()));
-        settings.setValue(QString("box_%1_name").arg(i), box.name);
-        settings.setValue(QString("box_%1_x").arg(i), rect.x());
-        settings.setValue(QString("box_%1_y").arg(i), rect.y());
-        settings.setValue(QString("box_%1_w").arg(i), rect.width());
-        settings.setValue(QString("box_%1_h").arg(i), rect.height());
+        CharacterTemplateBox savedBox;
+        savedBox.name = box.name;
+        savedBox.rect = rect;
+        privateSettings.characterBoxes.append(savedBox);
     }
-    settings.endGroup();
-    settings.sync();
-    return settings.status() == QSettings::NoError;
+    return AppSettingsManager::saveTemplatePrivateSettings(m_templateDirPath,
+                                                           privateSettings,
+                                                           errorMessage);
 }
 
 bool CharacterTemplateCropDialog::removeOldCharacterTemplateImages() const

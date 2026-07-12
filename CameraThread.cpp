@@ -24,7 +24,7 @@ void CameraThread::setBypassTracking(bool enabled) {
 
 void CameraThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles) {
     m_wordTrackingProfiles.clear();
-    m_wordMultiTemplateMode = false;
+    m_wordTemplateProfileMode = false;
     tracking = false;
     m_poseMatcher.clear();
     if (!m_trackingTemplate.empty()) {
@@ -46,8 +46,8 @@ void CameraThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackin
         }
     }
 
-    m_wordMultiTemplateMode = !m_wordTrackingProfiles.empty();
-    qDebug() << "[WORD_MULTI_TEMPLATE] CameraThread tracking profiles ready:"
+    m_wordTemplateProfileMode = !m_wordTrackingProfiles.empty();
+    qDebug() << "[WORD_TEMPLATE_PROFILE] CameraThread tracking profiles ready:"
              << static_cast<int>(m_wordTrackingProfiles.size());
 }
 
@@ -57,7 +57,7 @@ void CameraThread::clearWordTemplateTrackingProfiles() {
         state.ready = false;
     }
     m_wordTrackingProfiles.clear();
-    m_wordMultiTemplateMode = false;
+    m_wordTemplateProfileMode = false;
 }
 
 void CameraThread::run() {
@@ -130,7 +130,7 @@ void CameraThread::run() {
                     }
                 } else {
                     cv::Mat displayImage = image->clone();
-                    if (m_wordMultiTemplateMode && !m_wordTrackingProfiles.empty()) {
+                    if (m_wordTemplateProfileMode && !m_wordTrackingProfiles.empty()) {
                         DetectionPose bestPose;
                         QString bestName;
                         for (const WordTrackingState &state : m_wordTrackingProfiles) {
@@ -152,7 +152,7 @@ void CameraThread::run() {
 
                         emit signal_boxesSelected(bestPose);
                         if (bestPose.valid) {
-                            qDebug() << "[WORD_MULTI_TEMPLATE] CameraThread selected profile:"
+                            qDebug() << "[WORD_TEMPLATE_PROFILE] CameraThread selected profile:"
                                      << bestPose.wordTemplateProfileIndex
                                      << bestName
                                      << "score:" << bestPose.score;

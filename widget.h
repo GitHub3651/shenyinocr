@@ -20,8 +20,8 @@
 #include <vector>
 #include <QMetaType>
 #include <QTranslator>
-#include <QSettings>
 #include <QLineEdit>
+#include <QMap>
 #include <QStringList>
 #include <QStandardItemModel>
 #include "waitting.h"
@@ -73,6 +73,7 @@
 #include <templatematch.h>
 #include <Detector.h>
 #include "TrackingTypes.h"
+#include "appsettingsmanager.h"
 
 using namespace cv;
 using namespace PaddleOCR;
@@ -136,8 +137,8 @@ public:
     void saveImage2Async(QString format, QString savePath);   ///< 保存图像2
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
     void display(const Mat* image);     ///< 显示图像
-    void saveSettingsToDir(const QString &dirPath);
-    bool loadSettingsFromDir(const QString &dirPath);
+    bool saveSettingsToDir(const QString &dirPath);
+    bool loadSettingsFromDir(const QString &dirPath, bool showErrorMessage = true);
 
 signals:
     // ========== 信号定义 ==========
@@ -162,7 +163,6 @@ private slots:
     // ========== 检测相关槽函数 ==========
     void slot_readAndDetect(cv::Mat *image, DetectionPose pose);   ///< 读取并检测（主检测框）
     void slot_readAndDetect3(cv::Mat *image, DetectionPose pose);  ///< 读取并检测3（模板匹配）
-    void slot_readAndDetect4(cv::Mat *image, DetectionPose pose); ///< 读取并检测4（字库匹配）
     void slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResult); ///< 处理纸巾检测结果
 
     // ❌ 已移除：void slot_readAndDetect2() - 额外检测框处理函数（简化版不支持）
@@ -256,6 +256,13 @@ private:
     void setupCharacterSplitSettingsDialog();
     void showCharacterSplitSettingsDialog();
     void showManualCharacterTemplateCropDialog();
+    void setupSoftwareSettingsPage();
+    void clearCurrentSoftwareData();
+    QString detectModeIdForIndex(int index) const;
+    QString currentDetectModeId() const;
+    QStringList currentTemplatePathsForMode(const QString &modeId) const;
+    void storeCurrentTemplatePathsForMode(const QString &modeId);
+    void restoreTemplatesForMode(const QString &modeId, bool showMessage);
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -266,15 +273,18 @@ private:
     QWidget *m_wordTemplateEditWidget = nullptr;
     QLabel *m_wordTemplateEditLabel = nullptr;
     QComboBox *m_wordTemplateEditComboBox = nullptr;
-    QLineEdit *m_wordTemplateDisplayLineEdit = nullptr;
     QFrame *m_templateGuideFrame = nullptr;
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
     QDialog *m_characterSplitSettingsDialog = nullptr;
     QPushButton *m_characterSplitSettingsButton = nullptr;
     QPushButton *m_manualCharacterCropButton = nullptr;
+    QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QStringList m_confirmAllParamErrors;
+    QMap<QString, QStringList> m_templateDirPathsByMode;
+    QString m_currentDetectModeId = "word_detection";
+    bool m_applyingGlobalSettings = false;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器
@@ -406,16 +416,13 @@ private:
         QString dirPath;
         cv::Mat trackingTemplate;
         std::vector<cv::Point2f> datePoly;
-        QString targetText;
-        QString imageThresholdText;
+        TemplatePrivateSettings settings;
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
         std::vector<int> digitTemplateTargetIndexes;
     };
 
-    QStringList m_wordTemplateDirPaths; ///< 字库多模板路径缓存
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
-    bool m_wordMultiTemplateMode = false; ///< 字库多模板模式标志
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
     QStringList wordTemplateImagePathsForKey(const QDir &directory,
                                              const QString &searchKey,
@@ -426,6 +433,9 @@ private:
                                        std::vector<int> *templateTargetIndexes,
                                        QString *errorMessage,
                                        bool includeVariants = true) const;
+    bool loadWordTemplateProfileFromDir(const QString &dirPath,
+                                        WordTemplateProfile *profile,
+                                        QString *errorMessage);
     void setupWordTemplateEditorCombo();
     void clearWordMultiTemplateState();
     void refreshWordTemplateEditorCombo();
@@ -443,11 +453,13 @@ private:
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置
-    void saveSettings();                ///< 保存设置
+    bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
+    GlobalSettings collectGlobalSettingsFromUi() const;
+    void applyGlobalSettingsToUi(const GlobalSettings &settings);
+    void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupDefaultValues();          ///< 设置默认值
     void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
-    void loadLastTemplateConfig();        // 新增：加载模板图像
-    QString currentTemplateDirPath;       // 新增：持久化模板路径
+    QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生
     QString templateBaseDirPath;          // 产品模板父目录
     void initStyle();  // 声明后才能在 cpp 中实现和调用
     /**

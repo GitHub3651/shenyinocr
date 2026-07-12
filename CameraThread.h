@@ -191,7 +191,7 @@ private:
         bool ready = false;
     };
     std::vector<WordTrackingState> m_wordTrackingProfiles;
-    bool m_wordMultiTemplateMode = false;
+    bool m_wordTemplateProfileMode = false;
 
     // ========== 配置参数 ==========
     int angle2 = 0;  ///< 图像旋转角度 (默认0，不旋转)

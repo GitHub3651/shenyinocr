@@ -933,7 +933,7 @@
       <item>
        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
-         <number>1</number>
+         <number>0</number>
         </property>
         <property name="iconSize">
          <size>
@@ -1315,7 +1315,7 @@ QPushButton:pressed {
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-401</y>
+               <y>0</y>
                <width>586</width>
                <height>1320</height>
               </rect>
@@ -2434,6 +2434,80 @@ QPushButton:pressed {
              </layout>
             </widget>
            </widget>
+          </item>
+         </layout>
+        </widget>
+        <widget class="QWidget" name="tabSoftwareSettings">
+         <attribute name="title">
+          <string> 软件设置 </string>
+         </attribute>
+         <layout class="QVBoxLayout" name="softwareSettingsPageLayout">
+          <property name="topMargin">
+           <number>20</number>
+          </property>
+          <item>
+           <widget class="QGroupBox" name="softwareDataGroupBox">
+            <property name="styleSheet">
+             <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
+            </property>
+            <property name="title">
+             <string>软件数据</string>
+            </property>
+            <layout class="QFormLayout" name="softwareDataFormLayout">
+             <item row="0" column="0">
+              <widget class="QLabel" name="label_softwareDataDir">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>50</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>当前软件数据文件夹：</string>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <widget class="QLineEdit" name="lineEdit_softwareDataDir">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>50</height>
+                </size>
+               </property>
+               <property name="readOnly">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="0" colspan="2">
+              <widget class="QPushButton" name="pushButton_clearSoftwareData">
+               <property name="minimumSize">
+                <size>
+                 <width>0</width>
+                 <height>50</height>
+                </size>
+               </property>
+               <property name="text">
+                <string>清空当前软件数据</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <spacer name="softwareSettingsVerticalSpacer">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
           </item>
          </layout>
         </widget>

@@ -39,6 +39,7 @@
 #include <QPushButton>
 #include <QDialog>
 #include <QDesktopServices>
+#include <QUrl>
 #include <QDateTime>
 #include <QApplication>
 #include <QTranslator>
@@ -46,7 +47,6 @@
 #include <QCamera>
 #include <QCameraInfo>
 #include <QDesktopWidget>
-#include <QSettings>
 #include <QSplashScreen>
 #include <QTextCodec>
 #include <QElapsedTimer>
@@ -469,6 +469,7 @@ Widget::Widget(QWidget *parent)
     setupWordTemplateEditorCombo();
     setupTemplateGuide();
     setupCharacterSplitSettingsDialog();
+    setupSoftwareSettingsPage();
 
     // 禁用焦点滚动调节（防误触）- 遍历全局所有下拉框和数字输入框，一劳永逸
     QList<QComboBox *> comboBoxes = this->findChildren<QComboBox *>();
@@ -494,7 +495,6 @@ Widget::Widget(QWidget *parent)
     loadSettings();
     qDebug() << "8. loadSettings 执行完毕";
 
-    loadLastTemplateConfig(); // 加载模板图像
     updateCurrentTemplateName();
 
     QTimer::singleShot(1000, this, [this]() {
@@ -517,7 +517,7 @@ Widget::Widget(QWidget *parent)
     });
 
 
-    qDebug() << "9. loadLastTemplateConfig 执行完毕 (Widget构造结束!)";
+    qDebug() << "9. Widget构造结束，产品模板等待用户选择";
 }
 
 /**
@@ -1410,17 +1410,16 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
     } else if (mode == 1) {
         if (pose.wordTemplateProfileIndex >= 0) {
             const int profileIndex = pose.wordTemplateProfileIndex;
-            if (m_wordMultiTemplateMode
-                    && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
+            if (profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
                 const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-                if (profile.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
-                    qDebug() << "[WORD_MULTI_TEMPLATE] Selected profile has no target text/templates:"
+                if (profile.settings.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
+                    qDebug() << "[WORD_TEMPLATE_PROFILE] Selected profile has no target text/templates:"
                              << profileIndex
                              << profile.name;
                     return;
                 }
 
-                qDebug() << "[WORD_MULTI_TEMPLATE] Widget dispatch profile:"
+                qDebug() << "[WORD_TEMPLATE_PROFILE] Widget dispatch profile:"
                          << profileIndex
                          << profile.name
                          << "score:" << pose.score;
@@ -1436,19 +1435,19 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
                                          pose,
                                          profile.digitTemplates,
                                          profile.digitTemplateTargetIndexes,
-                                         profile.targetText,
-                                         profile.imageThresholdText,
+                                         profile.settings.targetText,
+                                         QString::number(profile.settings.imageThreshold),
                                          currentUsedTemplateName);
                 return;
             }
 
-            qDebug() << "[WORD_MULTI_TEMPLATE] Invalid profile index from pose:"
+            qDebug() << "[WORD_TEMPLATE_PROFILE] Invalid profile index from pose:"
                      << profileIndex
                      << "profile count:" << static_cast<int>(m_wordTemplateProfiles.size());
             return;
         }
 
-        slot_readAndDetect4(image, pose);
+        qDebug() << "[WORD_TEMPLATE] Detection pose did not contain a valid profile index.";
     } else if (mode == 3) {
         qDebug() << "[DETECTION_DISPATCH] Tissue mode is handled in worker thread.";
     } else {
@@ -1715,23 +1714,6 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
 }
 
 
-
-/**
- * @brief 字库匹配检测槽函数
- * @param image 输入图像指针
- * @param diffbox 检测区域
- * @details 使用字符模板库进行字符数量匹配检测
- */
-void Widget::slot_readAndDetect4(cv::Mat *image, DetectionPose pose)
-{
-    runWordTemplateDetection(image,
-                             pose,
-                             digitTemplates,
-                             digitTemplateTargetIndexes,
-                             ui->dateEdit->toPlainText(),
-                             ui->lineEdit_yuzhi->text(),
-                             QDir(currentTemplateDirPath).dirName());
-}
 
 void Widget::runWordTemplateDetection(cv::Mat *image,
                                       const DetectionPose &pose,
@@ -2160,11 +2142,6 @@ void Widget::onSpinBoxValueChanged(int value)
  */
 void Widget::showscreen()
 {
-    // 读取配置文件
-    QSettings *configIniRead = new QSettings("D:\\SystemInifiles\\ConfigName.ini", QSettings::IniFormat);
-    configIniRead->setIniCodec("GBK");
-    delete configIniRead;
-
     setWindowIcon(QIcon(":/2.png"));
     setWindowTitle(tr("识别系统"));
     this->show();
@@ -2232,12 +2209,6 @@ void Widget::updateCurrentTemplateName()
 
     ui->currentTemplateName->setText(templateName);
 
-    if (m_wordTemplateDisplayLineEdit && !m_wordMultiTemplateMode) {
-        m_wordTemplateDisplayLineEdit->setText(templateName);
-        m_wordTemplateDisplayLineEdit->setToolTip(templateName == "--"
-                                                  ? QString()
-                                                  : currentTemplateDirPath);
-    }
 }
 
 void Widget::updateSaveDirButtonText()
@@ -2488,6 +2459,76 @@ void Widget::showCharacterSplitSettingsDialog()
     m_characterSplitSettingsDialog->exec();
 }
 
+void Widget::setupSoftwareSettingsPage()
+{
+    if (!ui || !ui->lineEdit_softwareDataDir || !ui->pushButton_clearSoftwareData) {
+        return;
+    }
+
+    m_softwareDataDirLineEdit = ui->lineEdit_softwareDataDir;
+    m_softwareDataDirLineEdit->setReadOnly(true);
+    m_softwareDataDirLineEdit->setCursor(Qt::PointingHandCursor);
+    m_softwareDataDirLineEdit->setText(AppSettingsManager::globalDataDirPath());
+    m_softwareDataDirLineEdit->setToolTip("软件公共设置保存在此文件夹。双击可打开目录；产品模板、识别图片、授权和日志不在清空范围内。");
+    m_softwareDataDirLineEdit->installEventFilter(this);
+
+    ui->pushButton_clearSoftwareData->setStyleSheet(
+                "QPushButton {"
+                "background-color: transparent;"
+                "border: 1px solid #ebeef5;"
+                "border-radius: 4px;"
+                "color: #d93025;"
+                "padding: 5px 10px;"
+                "}"
+                "QPushButton:hover { background-color: #fff2f0; }"
+                "QPushButton:pressed { background-color: #fde2e0; }");
+    ui->pushButton_clearSoftwareData->setToolTip(
+                "只清除当前 Windows 用户的软件公共界面设置，不删除产品模板、识别图片、授权文件或日志。");
+    connect(ui->pushButton_clearSoftwareData,
+            &QPushButton::clicked,
+            this,
+            &Widget::clearCurrentSoftwareData);
+}
+
+void Widget::clearCurrentSoftwareData()
+{
+    const QMessageBox::StandardButton answer = QMessageBox::question(
+                this,
+                "清空当前软件数据",
+                "将清空当前 Windows 用户保存的软件界面设置和路径记录，并恢复默认设置。\n\n"
+                "产品模板、识别图片、授权文件和日志不会被删除。\n\n"
+                "是否继续？",
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    QString errorMessage;
+    if (!AppSettingsManager::clearGlobalSettings(&errorMessage)) {
+        showParameterCritical("严重警告", QString("清空软件公共数据失败：\n%1").arg(errorMessage));
+        return;
+    }
+
+    applyGlobalSettingsToUi(AppSettingsManager::defaultGlobalSettings());
+    clearWordMultiTemplateState();
+    currentTemplateDirPath.clear();
+    m_loadedTrackingTemplate.release();
+    savedDatePoly.clear();
+    savedTrackingBox = cv::Rect2d();
+    hasValidBoxes = false;
+    digitTemplates.clear();
+    digitTemplateTargetIndexes.clear();
+    m_currentTemplateNameVisible = false;
+    updateCurrentTemplateName();
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+        imageLabel->clearSelection();
+        imageLabel->clearGreenRects();
+    }
+    showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
+}
+
 void Widget::showManualCharacterTemplateCropDialog()
 {
     if (!ui || ui->comboBox_4->currentIndex() != 1) {
@@ -2496,17 +2537,12 @@ void Widget::showManualCharacterTemplateCropDialog()
     }
 
     QString templateDirPath;
-    int profileIndex = -1;
-    if (m_wordMultiTemplateMode) {
-        profileIndex = currentWordTemplateProfileIndex();
-        if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
-            showParameterInfoAsError("提示", "请先选择当前编辑的产品模板。");
-            return;
-        }
-        templateDirPath = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].dirPath;
-    } else {
-        templateDirPath = currentTemplateDirPath;
+    const int profileIndex = currentWordTemplateProfileIndex();
+    if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        showParameterInfoAsError("提示", "请先选择当前编辑的产品模板。");
+        return;
     }
+    templateDirPath = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].dirPath;
 
     if (templateDirPath.trimmed().isEmpty() || !QDir(templateDirPath).exists()) {
         showParameterInfoAsError("提示", "请先选择产品模板文件夹。");
@@ -2520,22 +2556,10 @@ void Widget::showManualCharacterTemplateCropDialog()
         return;
     }
 
-    const QString settingsFilePath = QDir(templateDirPath).filePath("app_settings.appset");
-    QSettings templateSettings(settingsFilePath, QSettings::IniFormat);
-    cv::Rect2d trackingBox(
-                templateSettings.value("trackingBox_x", 0).toDouble(),
-                templateSettings.value("trackingBox_y", 0).toDouble(),
-                templateSettings.value("trackingBox_width", 0).toDouble(),
-                templateSettings.value("trackingBox_height", 0).toDouble());
+    const TemplatePrivateSettings &privateSettings =
+            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].settings;
+    cv::Rect2d trackingBox = privateSettings.trackingBox;
     bool trackingBoxValid = trackingBox.width > 0 && trackingBox.height > 0;
-    if (!trackingBoxValid
-            && QDir(templateDirPath).absolutePath() == QDir(currentTemplateDirPath).absolutePath()
-            && hasValidBoxes
-            && savedTrackingBox.width > 0
-            && savedTrackingBox.height > 0) {
-        trackingBox = savedTrackingBox;
-        trackingBoxValid = true;
-    }
     if (!trackingBoxValid) {
         showParameterCritical("严重警告", "当前产品模板缺少有效定位区域，无法还原喷码检测区域。");
         return;
@@ -2570,6 +2594,19 @@ void Widget::showManualCharacterTemplateCropDialog()
         return;
     }
 
+    TemplatePrivateSettings refreshedSettings;
+    QString refreshedSettingsError;
+    if (AppSettingsManager::loadTemplatePrivateSettings(templateDirPath,
+                                                        &refreshedSettings,
+                                                        &refreshedSettingsError)) {
+        m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].settings = refreshedSettings;
+    } else {
+        showParameterCritical("严重警告",
+                              QString("字符模板图片已生成，但字符框配置重新读取失败：\n%1")
+                              .arg(refreshedSettingsError));
+        return;
+    }
+
     const QString targetText = ui->dateEdit->toPlainText();
     QString reloadMessage;
     if (!targetText.trimmed().isEmpty()) {
@@ -2583,14 +2620,11 @@ void Widget::showManualCharacterTemplateCropDialog()
                                           &reloadedTemplateTargetIndexes,
                                           &loadError,
                                           true)) {
-            if (m_wordMultiTemplateMode && profileIndex >= 0
+            if (profileIndex >= 0
                     && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
                 WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
                 profile.digitTemplates = reloadedTemplates;
                 profile.digitTemplateTargetIndexes = reloadedTemplateTargetIndexes;
-            } else {
-                digitTemplates = reloadedTemplates;
-                digitTemplateTargetIndexes = reloadedTemplateTargetIndexes;
             }
         } else {
             reloadMessage = QString("\n\n字符模板已保存，但当前目标字符仍有图片未加载成功：\n%1").arg(loadError);
@@ -2662,7 +2696,7 @@ void Widget::setupWordTemplateEditorCombo()
     }
 
     if (ui && ui->pushButton_11) {
-        ui->pushButton_11->setToolTip("保存当前界面上的设置。\n单模板时：写入当前产品模板文件夹，同时保存为软件下次启动的默认设置。\n多模板时：按提示写入已选择的产品模板文件夹，同时保存为软件下次启动的默认设置。");
+        ui->pushButton_11->setToolTip("把相机、PLC、触发、图像保存和识别模式等公共界面设置保存到当前 Windows 用户的软件数据文件夹。\n不会修改任何产品模板的目标字符、图像阈值或字符框配置。");
         ui->pushButton_11->installEventFilter(this);
     }
 
@@ -2807,15 +2841,6 @@ void Widget::setupWordTemplateEditorCombo()
         m_wordTemplateEditLabel->setFixedHeight(50);
         m_wordTemplateEditLabel->setStyleSheet(editorBoxStyle);
 
-        m_wordTemplateDisplayLineEdit = new QLineEdit(m_wordTemplateEditWidget);
-        m_wordTemplateDisplayLineEdit->setObjectName("wordTemplateDisplayLineEdit");
-        m_wordTemplateDisplayLineEdit->setMinimumHeight(50);
-        m_wordTemplateDisplayLineEdit->setMaximumHeight(50);
-        m_wordTemplateDisplayLineEdit->setReadOnly(true);
-        m_wordTemplateDisplayLineEdit->setText("--");
-        m_wordTemplateDisplayLineEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_wordTemplateDisplayLineEdit->setStyleSheet(editorBoxStyle);
-
         m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
         m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
         m_wordTemplateEditComboBox->setMinimumHeight(50);
@@ -2832,7 +2857,6 @@ void Widget::setupWordTemplateEditorCombo()
                     "}");
 
         editorLayout->addWidget(m_wordTemplateEditLabel);
-        editorLayout->addWidget(m_wordTemplateDisplayLineEdit, 1);
         editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
         if (targetLayout) {
             targetLayout->addWidget(m_wordTemplateEditWidget, 0, 0, 1, 3);
@@ -2853,29 +2877,209 @@ void Widget::setupWordTemplateEditorCombo()
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
             [this](int index) {
+                if (m_applyingGlobalSettings) {
+                    updateTissueRoughnessUiVisibility();
+                    refreshWordTemplateEditorCombo();
+                    return;
+                }
+
+                storeCurrentTemplatePathsForMode(m_currentDetectModeId);
+                m_currentDetectModeId = detectModeIdForIndex(index);
                 updateTissueRoughnessUiVisibility();
                 if (imageLabel) {
                     imageLabel->setTemplateDrawingEnabled(false);
                 }
                 hideTemplateGuide();
-                if (index != 1 && m_wordMultiTemplateMode) {
+                if (index != 1 && !m_wordTemplateProfiles.empty()) {
                     clearWordMultiTemplateState();
-                    return;
+                } else {
+                    refreshWordTemplateEditorCombo();
                 }
-                refreshWordTemplateEditorCombo();
+                restoreTemplatesForMode(m_currentDetectModeId, false);
+                saveSettings();
             });
     updateTissueRoughnessUiVisibility();
 }
 
 void Widget::clearWordMultiTemplateState()
 {
-    m_wordTemplateDirPaths.clear();
     m_wordTemplateProfiles.clear();
-    m_wordMultiTemplateMode = false;
     m_currentWordTemplateEditIndex = -1;
+    currentTemplateDirPath.clear();
+    m_loadedTrackingTemplate.release();
+    savedDatePoly.clear();
+    savedTrackingBox = cv::Rect2d();
+    hasValidBoxes = false;
+    if (ui) {
+        QSignalBlocker targetBlocker(ui->dateEdit);
+        QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
+        ui->dateEdit->clear();
+        ui->lineEdit_yuzhi->setText("70");
+    }
     m_currentTemplateNameVisible = false;
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
+}
+
+QString Widget::detectModeIdForIndex(int index) const
+{
+    static const QStringList detectModeIds = {
+        "stamp_detection",
+        "word_detection",
+        "ocr_detection",
+        "tissue_detection"
+    };
+    return (index >= 0 && index < detectModeIds.size())
+            ? detectModeIds.at(index)
+            : QString("word_detection");
+}
+
+QString Widget::currentDetectModeId() const
+{
+    return detectModeIdForIndex(ui ? ui->comboBox_4->currentIndex() : 1);
+}
+
+QStringList Widget::currentTemplatePathsForMode(const QString &modeId) const
+{
+    QStringList paths;
+
+    if (modeId == "word_detection") {
+        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+            if (profile.dirPath.trimmed().isEmpty()) {
+                continue;
+            }
+            const QString path = QDir(profile.dirPath).absolutePath();
+            if (!paths.contains(path)) {
+                paths.append(path);
+            }
+        }
+        return paths;
+    }
+
+    if (!currentTemplateDirPath.trimmed().isEmpty()) {
+        paths.append(QDir(currentTemplateDirPath).absolutePath());
+    }
+    return paths;
+}
+
+void Widget::storeCurrentTemplatePathsForMode(const QString &modeId)
+{
+    if (modeId.trimmed().isEmpty()) {
+        return;
+    }
+    m_templateDirPathsByMode.insert(modeId, currentTemplatePathsForMode(modeId));
+}
+
+void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
+{
+    const QStringList paths = m_templateDirPathsByMode.value(modeId);
+    if (paths.isEmpty()) {
+        return;
+    }
+
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+        imageLabel->clearGreenRects();
+        imageLabel->clearSelection();
+    }
+    hideTemplateGuide();
+
+    if (modeId == "word_detection") {
+        std::vector<WordTemplateProfile> loadedProfiles;
+        QStringList validPaths;
+        QStringList skippedMessages;
+        QStringList userMessages;
+
+        for (const QString &path : paths) {
+            QDir templateDir(path);
+            if (!templateDir.exists()) {
+                skippedMessages.append(QString("%1：产品模板文件夹不存在").arg(path));
+                userMessages.append(QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。").arg(path));
+                continue;
+            }
+
+            WordTemplateProfile profile;
+            QString message;
+            if (!loadWordTemplateProfileFromDir(templateDir.absolutePath(), &profile, &message)) {
+                skippedMessages.append(QString("%1：%2")
+                                       .arg(templateDir.dirName())
+                                       .arg(message));
+                userMessages.append(QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
+                                    .arg(templateDir.absolutePath()));
+                continue;
+            }
+            validPaths.append(templateDir.absolutePath());
+            loadedProfiles.push_back(profile);
+        }
+
+        if (loadedProfiles.empty()) {
+            qDebug() << "[TEMPLATE_RESTORE] word templates restore failed:" << skippedMessages;
+            clearWordMultiTemplateState();
+            if (!userMessages.isEmpty()) {
+                m_templateDirPathsByMode.insert(modeId, QStringList());
+                saveSettings(false);
+                showParameterWarning("提示", userMessages.join("\n"));
+            }
+            return;
+        }
+
+        m_wordTemplateProfiles.swap(loadedProfiles);
+        if (validPaths != paths) {
+            m_templateDirPathsByMode.insert(modeId, validPaths);
+            saveSettings(false);
+            if (!userMessages.isEmpty()) {
+                showParameterWarning("提示", userMessages.join("\n"));
+            }
+        }
+        currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
+        m_currentTemplateNameVisible = false;
+        updateCurrentTemplateName();
+        refreshWordTemplateEditorCombo();
+        qDebug() << "[TEMPLATE_RESTORE] restored word templates:"
+                 << static_cast<int>(m_wordTemplateProfiles.size());
+        return;
+    }
+
+    const QString firstPath = QDir(paths.first()).absolutePath();
+    if (!QDir(firstPath).exists()) {
+        qDebug() << "[TEMPLATE_RESTORE] template path not exists:" << firstPath;
+        currentTemplateDirPath.clear();
+        m_currentTemplateNameVisible = false;
+        updateCurrentTemplateName();
+        m_templateDirPathsByMode.insert(modeId, QStringList());
+        saveSettings(false);
+        showParameterWarning("提示",
+                             QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
+                             .arg(firstPath));
+        return;
+    }
+
+    if (!m_wordTemplateProfiles.empty()) {
+        m_wordTemplateProfiles.clear();
+        refreshWordTemplateEditorCombo();
+    }
+
+    currentTemplateDirPath = firstPath;
+    m_currentTemplateNameVisible = loadSettingsFromDir(firstPath, showMessage);
+    if (!m_currentTemplateNameVisible) {
+        currentTemplateDirPath.clear();
+        updateCurrentTemplateName();
+        m_templateDirPathsByMode.insert(modeId, QStringList());
+        saveSettings(false);
+        showParameterWarning("提示",
+                             QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
+                             .arg(firstPath));
+        return;
+    }
+    if (paths.size() != 1 || paths.first() != firstPath) {
+        m_templateDirPathsByMode.insert(modeId, QStringList() << firstPath);
+        saveSettings(false);
+    }
+    updateCurrentTemplateName();
+    if (m_currentTemplateNameVisible) {
+        initOverlapDetectorFromCurrentDir();
+    }
+    qDebug() << "[TEMPLATE_RESTORE] restored template for mode:" << modeId << firstPath;
 }
 
 void Widget::refreshWordTemplateEditorCombo()
@@ -2885,12 +3089,10 @@ void Widget::refreshWordTemplateEditorCombo()
     }
 
     const bool isWordMode = (ui->comboBox_4->currentIndex() == 1);
-    const bool shouldShowMultiCombo = m_wordMultiTemplateMode
-            && isWordMode
-            && !m_wordTemplateProfiles.empty();
+    const bool hasWordProfiles = isWordMode && !m_wordTemplateProfiles.empty();
 
     if (ui->batchTextsure_btn) {
-        ui->batchTextsure_btn->setVisible(shouldShowMultiCombo);
+        ui->batchTextsure_btn->setVisible(isWordMode && m_wordTemplateProfiles.size() > 1);
     }
 
     if (m_manualCharacterCropButton) {
@@ -2901,7 +3103,7 @@ void Widget::refreshWordTemplateEditorCombo()
         return;
     }
 
-    auto fillCombo = [this, shouldShowMultiCombo](QComboBox *comboBox) {
+    auto fillCombo = [this, hasWordProfiles](QComboBox *comboBox) {
         if (!comboBox) {
             return;
         }
@@ -2909,7 +3111,7 @@ void Widget::refreshWordTemplateEditorCombo()
         QSignalBlocker blocker(comboBox);
         comboBox->clear();
 
-        if (shouldShowMultiCombo) {
+        if (hasWordProfiles) {
             for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
                 const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
                 const QString displayName = profile.name.isEmpty()
@@ -2924,19 +3126,16 @@ void Widget::refreshWordTemplateEditorCombo()
 
     m_wordTemplateEditWidget->setVisible(isWordMode);
     if (m_wordTemplateEditLabel) {
-        m_wordTemplateEditLabel->setText(shouldShowMultiCombo ? "当前编辑模板:" : "当前产品模板:");
+        m_wordTemplateEditLabel->setText("当前编辑模板:");
     }
-    m_wordTemplateEditComboBox->setVisible(shouldShowMultiCombo);
-    if (m_wordTemplateDisplayLineEdit) {
-        m_wordTemplateDisplayLineEdit->setVisible(!shouldShowMultiCombo);
-    }
+    m_wordTemplateEditComboBox->setVisible(isWordMode);
 
     if (!isWordMode) {
         m_currentWordTemplateEditIndex = -1;
         return;
     }
 
-    if (shouldShowMultiCombo) {
+    if (hasWordProfiles) {
         int profileIndex = m_currentWordTemplateEditIndex;
         if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
             profileIndex = 0;
@@ -2944,25 +3143,12 @@ void Widget::refreshWordTemplateEditorCombo()
         setCurrentWordTemplateEditIndex(profileIndex);
     } else {
         m_currentWordTemplateEditIndex = -1;
-        if (m_wordTemplateDisplayLineEdit) {
-            QString templateName = "--";
-            if (m_currentTemplateNameVisible && !currentTemplateDirPath.trimmed().isEmpty()) {
-                QDir templateDir(currentTemplateDirPath);
-                if (templateDir.exists() && !templateDir.dirName().isEmpty()) {
-                    templateName = templateDir.dirName();
-                }
-            }
-            m_wordTemplateDisplayLineEdit->setText(templateName);
-            m_wordTemplateDisplayLineEdit->setToolTip(templateName == "--"
-                                                      ? QString()
-                                                      : currentTemplateDirPath);
-        }
     }
 }
 
 void Widget::applyWordTemplateEditorSelection(int comboIndex)
 {
-    if (!m_wordTemplateEditComboBox || comboIndex < 0 || !m_wordMultiTemplateMode) {
+    if (!m_wordTemplateEditComboBox || comboIndex < 0) {
         return;
     }
 
@@ -2977,8 +3163,7 @@ void Widget::applyWordTemplateEditorSelection(int comboIndex)
 
 void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
 {
-    if (!m_wordMultiTemplateMode
-            || profileIndex < 0
+    if (profileIndex < 0
             || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
         return;
     }
@@ -3007,28 +3192,30 @@ void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
     syncCombo(m_wordTemplateEditComboBox);
 
     const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+    currentTemplateDirPath = profile.dirPath;
+    savedTrackingBox = profile.settings.trackingBox;
+    hasValidBoxes = profile.settings.hasValidBoxes;
     {
         QSignalBlocker blocker(ui->dateEdit);
-        ui->dateEdit->setPlainText(profile.targetText);
+        ui->dateEdit->setPlainText(profile.settings.targetText);
     }
     {
         QSignalBlocker blocker(ui->lineEdit_yuzhi);
-        ui->lineEdit_yuzhi->setText(profile.imageThresholdText);
+        ui->lineEdit_yuzhi->setText(QString::number(profile.settings.imageThreshold));
     }
 
-    qDebug() << "[WORD_MULTI_TEMPLATE] editing profile:"
+    qDebug() << "[WORD_TEMPLATE_PROFILE] editing profile:"
              << profileIndex
              << profile.name
              << profile.dirPath
-             << "threshold:" << profile.imageThresholdText;
+             << "threshold:" << profile.settings.imageThreshold;
 
     displayWordTemplateRawImage(profile.dirPath);
 }
 
 int Widget::currentWordTemplateProfileIndex() const
 {
-    if (!m_wordMultiTemplateMode
-            || m_currentWordTemplateEditIndex < 0
+    if (m_currentWordTemplateEditIndex < 0
             || m_currentWordTemplateEditIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
         return -1;
     }
@@ -3043,13 +3230,13 @@ void Widget::displayWordTemplateRawImage(const QString &dirPath)
 
     const QString rawImagePath = QDir(dirPath).filePath("template_raw.png");
     if (!QFile::exists(rawImagePath)) {
-        qDebug() << "[WORD_MULTI_TEMPLATE] template_raw.png not found:" << rawImagePath;
+        qDebug() << "[WORD_TEMPLATE_PROFILE] template_raw.png not found:" << rawImagePath;
         return;
     }
 
     QPixmap rawPixmap;
     if (!rawPixmap.load(rawImagePath)) {
-        qDebug() << "[WORD_MULTI_TEMPLATE] template_raw.png load failed:" << rawImagePath;
+        qDebug() << "[WORD_TEMPLATE_PROFILE] template_raw.png load failed:" << rawImagePath;
         return;
     }
 
@@ -3214,6 +3401,103 @@ bool Widget::loadWordDigitTemplatesFromDir(const QString &dirPath,
     }
 
     return !templates->empty();
+}
+
+bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
+                                            WordTemplateProfile *profile,
+                                            QString *errorMessage)
+{
+    if (!profile) {
+        if (errorMessage) *errorMessage = "内部模板对象为空";
+        return false;
+    }
+
+    QDir templateDir(dirPath);
+    if (!templateDir.exists()) {
+        if (errorMessage) *errorMessage = "产品模板文件夹不存在";
+        return false;
+    }
+
+    TemplatePrivateSettings privateSettings;
+    QString privateError;
+    if (!AppSettingsManager::loadTemplatePrivateSettings(templateDir.absolutePath(),
+                                                         &privateSettings,
+                                                         &privateError)) {
+        if (errorMessage) *errorMessage = privateError;
+        return false;
+    }
+
+    const QString yamlPath = templateDir.filePath("calibrate_config.yaml");
+    CalibrationData calib;
+    if (!QFileInfo::exists(yamlPath)
+            || !calib.load(yamlPath.toLocal8Bit().toStdString())
+            || calib.date_poly.empty()) {
+        if (errorMessage) *errorMessage = "calibrate_config.yaml 中缺少有效喷码检测区域";
+        return false;
+    }
+
+    const QString trackingPath = templateDir.filePath("tracking_template.bmp");
+    QFile trackingFile(trackingPath);
+    cv::Mat trackingTemplate;
+    if (trackingFile.open(QIODevice::ReadOnly)) {
+        const QByteArray data = trackingFile.readAll();
+        try {
+            std::vector<uchar> buffer(data.begin(), data.end());
+            trackingTemplate = cv::imdecode(buffer, cv::IMREAD_COLOR);
+        } catch (...) {
+            qDebug() << "[WORD_TEMPLATE] tracking template decode failed:" << trackingPath;
+        }
+    }
+    if (trackingTemplate.empty()) {
+        if (errorMessage) *errorMessage = "tracking_template.bmp 缺失或无法读取";
+        return false;
+    }
+
+    const bool trackingBoxValid = privateSettings.trackingBox.width > 0
+            && privateSettings.trackingBox.height > 0;
+    if (!trackingBoxValid) {
+        if (errorMessage) *errorMessage = "模板私有配置中的定位区域无效";
+        return false;
+    }
+    if (!privateSettings.hasValidBoxes) {
+        privateSettings.hasValidBoxes = true;
+        QString repairError;
+        if (!AppSettingsManager::saveTemplatePrivateSettings(templateDir.absolutePath(),
+                                                             privateSettings,
+                                                             &repairError)) {
+            if (errorMessage) {
+                *errorMessage = QString("定位区域有效，但 hasValidBoxes 自动修复失败：%1").arg(repairError);
+            }
+            return false;
+        }
+    }
+
+    WordTemplateProfile loadedProfile;
+    loadedProfile.name = templateDir.dirName();
+    loadedProfile.dirPath = templateDir.absolutePath();
+    loadedProfile.trackingTemplate = trackingTemplate;
+    loadedProfile.datePoly = calib.date_poly;
+    loadedProfile.settings = privateSettings;
+
+    const QStringList baseNames = parseWordTemplateBaseNames(privateSettings.targetText);
+    loadedProfile.targetCount = baseNames.size();
+    QString pendingMessage;
+    if (privateSettings.targetText.trimmed().isEmpty() || baseNames.isEmpty()) {
+        pendingMessage = "目标字符为空或解析失败，目标字符待设置";
+    } else {
+        QString digitError;
+        if (!loadWordDigitTemplatesFromDir(loadedProfile.dirPath,
+                                           baseNames,
+                                           &loadedProfile.digitTemplates,
+                                           &loadedProfile.digitTemplateTargetIndexes,
+                                           &digitError)) {
+            pendingMessage = QString("字符图片不完整，目标字符待重新确认：%1").arg(digitError);
+        }
+    }
+
+    *profile = loadedProfile;
+    if (errorMessage) *errorMessage = pendingMessage;
+    return true;
 }
 
 bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
@@ -3717,7 +4001,7 @@ bool Widget::isAlnumOrChinese(char c)
 
 void Widget::on_textsure_btn_clicked()
 {
-    if (ui->comboBox_4->currentIndex() == 1 && m_wordMultiTemplateMode)
+    if (ui->comboBox_4->currentIndex() == 1)
     {
         if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
             showParameterWarning("提示", "请先停止检测后再修改模板字符");
@@ -3755,25 +4039,20 @@ void Widget::on_textsure_btn_clicked()
             return;
         }
 
-        const QString settingsFilePath = QDir(profile.dirPath).filePath("app_settings.appset");
-        if (!QFile::exists(settingsFilePath)) {
+        TemplatePrivateSettings updatedSettings = profile.settings;
+        updatedSettings.targetText = newMubiaozifu;
+        QString saveError;
+        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
+                                                             updatedSettings,
+                                                             &saveError)) {
             showParameterCritical("严重警告",
-                                  QString("当前模板 [%1] 缺少 app_settings.appset，无法保存目标字符。")
-                                  .arg(profile.name));
+                                  QString("当前模板 [%1] 的目标字符写入失败：\n%2")
+                                  .arg(profile.name)
+                                  .arg(saveError));
             return;
         }
 
-        QSettings settings(settingsFilePath, QSettings::IniFormat);
-        settings.setValue("dateEdit_value", newMubiaozifu);
-        settings.sync();
-        if (settings.status() != QSettings::NoError) {
-            showParameterCritical("严重警告",
-                                  QString("当前模板 [%1] 的目标字符写入失败。")
-                                  .arg(profile.name));
-            return;
-        }
-
-        profile.targetText = newMubiaozifu;
+        profile.settings = updatedSettings;
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
@@ -3787,7 +4066,7 @@ void Widget::on_textsure_btn_clicked()
         return;
     }
 
-    if((ui->comboBox_4->currentIndex() == 0)||(ui->comboBox_4->currentIndex() == 1))
+    if (ui->comboBox_4->currentIndex() == 0)
     {
         // 1. 检查是否存在有效的模板路径
         if (currentTemplateDirPath.isEmpty()) {
@@ -3796,29 +4075,7 @@ void Widget::on_textsure_btn_clicked()
         }
         // 2. 读取当前修改后的目标字符
         QString newMubiaozifu = ui->dateEdit->toPlainText();
-        const bool shouldWriteSingleWordTarget = (ui->comboBox_4->currentIndex() == 1 && !m_wordMultiTemplateMode);
-        auto writeSingleWordTargetText = [this, &newMubiaozifu]() -> bool {
-            const QString settingsFilePath = QDir(currentTemplateDirPath).filePath("app_settings.appset");
-            if (!QFile::exists(settingsFilePath)) {
-                showParameterCritical("严重警告", "当前产品模板缺少 app_settings.appset，无法保存目标字符。");
-                return false;
-            }
-
-            QSettings settings(settingsFilePath, QSettings::IniFormat);
-            settings.setValue("dateEdit_value", newMubiaozifu);
-            settings.sync();
-            if (settings.status() != QSettings::NoError) {
-                showParameterCritical("严重警告", "当前产品模板的目标字符写入失败。");
-                return false;
-            }
-
-            return true;
-        };
-
         if (newMubiaozifu.isEmpty()) {
-            if (shouldWriteSingleWordTarget && !writeSingleWordTargetText()) {
-                return;
-            }
             digitTemplates.clear();
             digitTemplateTargetIndexes.clear();
             showParameterInfoAsError("提示", "目标字符为空，已清空模板");
@@ -3829,7 +4086,7 @@ void Widget::on_textsure_btn_clicked()
         std::vector<int> tempTemplateTargetIndexes;
         QString loadError;
         const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
-        const bool includeVariantTemplates = (ui->comboBox_4->currentIndex() == 1);
+        const bool includeVariantTemplates = false;
 
         if (!loadWordDigitTemplatesFromDir(currentTemplateDirPath,
                                            baseNamesToFind,
@@ -3841,10 +4098,6 @@ void Widget::on_textsure_btn_clicked()
             showParameterCritical("严重警告",
                 QString("%1\n\n请检查产品模板文件夹内的字符图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。")
                 .arg(loadError));
-            return;
-        }
-
-        if (shouldWriteSingleWordTarget && !writeSingleWordTargetText()) {
             return;
         }
 
@@ -3867,7 +4120,7 @@ void Widget::on_textsure_btn_clicked()
 
 void Widget::on_batchTextsure_btn_clicked()
 {
-    if (ui->comboBox_4->currentIndex() != 1 || !m_wordMultiTemplateMode) {
+    if (ui->comboBox_4->currentIndex() != 1) {
         on_textsure_btn_clicked();
         return;
     }
@@ -3908,12 +4161,6 @@ void Widget::on_batchTextsure_btn_clicked()
             continue;
         }
 
-        const QString settingsFilePath = directory.filePath("app_settings.appset");
-        if (!QFile::exists(settingsFilePath)) {
-            failedMessages.append(QString("%1：缺少 app_settings.appset").arg(profileName));
-            continue;
-        }
-
         std::vector<cv::Mat> tempTemplates;
         std::vector<int> tempTemplateTargetIndexes;
         if (needLoadDigitTemplates) {
@@ -3930,15 +4177,17 @@ void Widget::on_batchTextsure_btn_clicked()
             }
         }
 
-        QSettings settings(settingsFilePath, QSettings::IniFormat);
-        settings.setValue("dateEdit_value", newMubiaozifu);
-        settings.sync();
-        if (settings.status() != QSettings::NoError) {
-            failedMessages.append(QString("%1：目标字符写入失败").arg(profileName));
+        TemplatePrivateSettings updatedSettings = profile.settings;
+        updatedSettings.targetText = newMubiaozifu;
+        QString saveError;
+        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
+                                                             updatedSettings,
+                                                             &saveError)) {
+            failedMessages.append(QString("%1：目标字符写入失败，%2").arg(profileName).arg(saveError));
             continue;
         }
 
-        profile.targetText = newMubiaozifu;
+        profile.settings = updatedSettings;
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
@@ -4111,7 +4360,7 @@ void Widget::on_pushButton_clicked()
  */
 void Widget::on_pushButton_3_clicked()
 {
-    if (ui->comboBox_4->currentIndex() == 1 && m_wordMultiTemplateMode) {
+    if (ui->comboBox_4->currentIndex() == 1) {
         if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
             showParameterWarning("提示", "请先停止检测后再修改模板阈值");
             return;
@@ -4132,25 +4381,20 @@ void Widget::on_pushButton_3_clicked()
         }
 
         WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        const QString settingsFilePath = QDir(profile.dirPath).filePath("app_settings.appset");
-        if (!QFile::exists(settingsFilePath)) {
+        TemplatePrivateSettings updatedSettings = profile.settings;
+        updatedSettings.imageThreshold = thresholdText.toDouble();
+        QString saveError;
+        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
+                                                             updatedSettings,
+                                                             &saveError)) {
             showParameterCritical("严重警告",
-                                  QString("当前模板 [%1] 缺少 app_settings.appset，无法保存图像阈值。")
-                                  .arg(profile.name));
+                                  QString("当前模板 [%1] 的图像阈值写入失败：\n%2")
+                                  .arg(profile.name)
+                                  .arg(saveError));
             return;
         }
 
-        QSettings settings(settingsFilePath, QSettings::IniFormat);
-        settings.setValue("lineEdit_yuzhi_value", thresholdText);
-        settings.sync();
-        if (settings.status() != QSettings::NoError) {
-            showParameterCritical("严重警告",
-                                  QString("当前模板 [%1] 的图像阈值写入失败。")
-                                  .arg(profile.name));
-            return;
-        }
-
-        profile.imageThresholdText = thresholdText;
+        profile.settings = updatedSettings;
         emit ssim(thresholdValue);
         showParameterInfo("提示",
                           QString("模板 [%1] 图像阈值设置成功：%2")
@@ -4414,8 +4658,26 @@ void Widget::on_pushButton_5_clicked()
     }
 
     // 5. 保存所有配置
-    saveSettingsToDir(savePath);
+    if (!saveSettingsToDir(savePath)) {
+        return;
+    }
     saveSettings();
+    if (isWordTemplateMode) {
+        WordTemplateProfile savedProfile;
+        QString profileMessage;
+        if (!loadWordTemplateProfileFromDir(savePath, &savedProfile, &profileMessage)) {
+            showParameterCritical("严重警告",
+                                  QString("产品模板文件已保存，但重新加载模板失败：\n%1")
+                                  .arg(profileMessage));
+            return;
+        }
+        m_wordTemplateProfiles.clear();
+        m_wordTemplateProfiles.push_back(savedProfile);
+        m_currentWordTemplateEditIndex = 0;
+        refreshWordTemplateEditorCombo();
+        storeCurrentTemplatePathsForMode(currentDetectModeId());
+        saveSettings();
+    }
     imageLabel->setTemplateDrawingEnabled(false);
     imageLabel->clearSelection();
     hideTemplateGuide();
@@ -4440,49 +4702,35 @@ void Widget::on_pushButton_5_clicked()
 }
 
 // 先定义一个保存参数到指定文件夹的函数（可放在Widget类中）
-void Widget::saveSettingsToDir(const QString &dirPath)
+bool Widget::saveSettingsToDir(const QString &dirPath)
 {
-    // 确保目标文件夹存在，不存在则创建
     QDir dir(dirPath);
-    if (!dir.exists()) {
-        dir.mkpath("."); // 创建文件夹（包括多级目录）
+    if (!dir.exists() && !QDir().mkpath(dir.absolutePath())) {
+        showParameterCritical("严重警告", QString("无法创建产品模板文件夹：%1").arg(dirPath));
+        return false;
     }
 
-    // 配置文件路径：用户选择的文件夹 + "app_settings.appset"
-    QString settingsFilePath = dirPath + "/app_settings.appset";
-    QSettings settings(settingsFilePath, QSettings::IniFormat); // 强制使用INI格式
+    TemplatePrivateSettings privateSettings = AppSettingsManager::defaultTemplatePrivateSettings();
+    QString loadError;
+    if (QFileInfo::exists(dir.filePath("app_settings.appset"))) {
+        TemplatePrivateSettings existingSettings;
+        if (AppSettingsManager::loadTemplatePrivateSettings(dirPath, &existingSettings, &loadError)) {
+            privateSettings = existingSettings;
+        }
+    }
 
-    // 保存所有参数（与原逻辑一致，只是路径改为指定文件夹）
-    settings.setValue("spinbox_value", ui->spinBox->text());
-    settings.setValue("lineEdit_14_value", ui->lineEdit_14->text()); // 相机增益
-    settings.setValue("lineEdit_6_value", ui->lineEdit_6->text());
-    settings.setValue("lineEdit_7_value", ui->lineEdit_7->text());
-    settings.setValue("lineEdit_8_value", ui->lineEdit_8->text());
-    settings.setValue("lineEdit_20_value", ui->lineEdit_20->text());
-    settings.setValue("lineEdit_12_value", ui->lineEdit_12->text());
-    settings.setValue("lineEdit_4_value", ui->lineEdit_4->text());
-    settings.setValue("lineEdit_13_value", ui->lineEdit_13->text());
-    settings.setValue("lineEdit_15_value", ui->lineEdit_15->text());
-    settings.setValue("lineEdit_18_value", ui->lineEdit_18->text());
-    settings.setValue("lineEdit_19_value", ui->lineEdit_19->text());
-    settings.setValue("lineEdit_yuzhi_value", ui->lineEdit_yuzhi->text());
-    settings.setValue("lineEdit_tissueRoughnessThreshold_value", ui->lineEdit_tissueRoughnessThreshold->text());
-    settings.setValue("dateEdit_value", ui->dateEdit->toPlainText());
-    settings.setValue("comboBox_value", ui->comboBox->currentText());
-    settings.setValue("comboBox_saveImageType_value", ui->comboBox_saveImageType->currentText());
-    settings.setValue("comboBox_2_value", ui->comboBox_2->currentText());
-    settings.setValue("comboBox_3_value", ui->comboBox_3->currentText());
-    settings.setValue("comboBox_4_value", ui->comboBox_4->currentText());
-    // 新增：保存模板路径
-    settings.setValue("saveDirPath", selectedDir);
-    settings.setValue("TemplateDirPath", currentTemplateDirPath);
-    settings.setValue("lineEdit_value", ui->lineEdit->text()); // 保存IP地址
-
+    bool thresholdOk = false;
+    const double imageThreshold = ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk);
+    if (!thresholdOk) {
+        showParameterWarning("参数错误", "图像合格阈值必须是数字，模板配置未保存。");
+        return false;
+    }
+    privateSettings.targetText = ui->dateEdit->toPlainText();
+    privateSettings.imageThreshold = imageThreshold;
 
     const bool currentTrackingBoxValid = hasValidBoxes
             && savedTrackingBox.width > 0
             && savedTrackingBox.height > 0;
-    const bool shouldWriteCurrentTrackingBox = currentTrackingBoxValid && !m_wordMultiTemplateMode;
 
     bool trackingTemplateFileValid = false;
     const QString trackingTemplatePath = dir.absoluteFilePath("tracking_template.bmp");
@@ -4508,20 +4756,23 @@ void Widget::saveSettingsToDir(const QString &dirPath)
 
     const bool existingTemplateFilesValid = trackingTemplateFileValid && datePolyFileValid;
 
-    // 保存框有效标记。多模板批量保存参数时，不使用当前界面的单模板框覆盖每个产品模板。
-    if (shouldWriteCurrentTrackingBox) {
-        settings.setValue("trackingBox_x", savedTrackingBox.x);
-        settings.setValue("trackingBox_y", savedTrackingBox.y);
-        settings.setValue("trackingBox_width", savedTrackingBox.width);
-        settings.setValue("trackingBox_height", savedTrackingBox.height);
-
-        settings.setValue("hasValidBoxes", true);
-
+    if (currentTrackingBoxValid) {
+        privateSettings.trackingBox = savedTrackingBox;
+        privateSettings.hasValidBoxes = true;
     } else if (existingTemplateFilesValid) {
-        settings.setValue("hasValidBoxes", true);
+        privateSettings.hasValidBoxes = true;
     } else {
-        settings.setValue("hasValidBoxes", false);
+        privateSettings.hasValidBoxes = false;
     }
+
+    QString saveError;
+    if (!AppSettingsManager::saveTemplatePrivateSettings(dirPath, privateSettings, &saveError)) {
+        showParameterCritical("严重警告",
+                              QString("产品模板配置保存失败：\n%1\n\n原配置未被覆盖。")
+                              .arg(saveError));
+        return false;
+    }
+    return true;
 }
 void Widget::initOverlapDetectorFromCurrentDir() {
     if (currentTemplateDirPath.isEmpty()) {
@@ -4630,121 +4881,33 @@ void Widget::on_pushButton_4_clicked()
         }
         hideTemplateGuide();
 
-        if (selectedDirs.size() > 1) {
+        if (!selectedDirs.isEmpty()) {
             std::vector<WordTemplateProfile> loadedProfiles;
-            QStringList loadedDirPaths;
             QStringList skippedMessages;
             QStringList pendingTargetMessages;
 
             for (const QString &selectedDirPath : selectedDirs) {
                 QDir templateDir(selectedDirPath);
-
-                QString targetText;
-                QString imageThresholdText;
-                QStringList baseNames;
-                const QString settingsFilePath = templateDir.filePath("app_settings.appset");
-                if (!QFile::exists(settingsFilePath)) {
-                    skippedMessages.append(QString("%1：缺少 app_settings.appset").arg(templateDir.dirName()));
-                    qDebug() << "[WORD_MULTI_TEMPLATE] skip app_settings missing:" << selectedDirPath;
-                    continue;
-                } else {
-                    QSettings settings(settingsFilePath, QSettings::IniFormat);
-                    targetText = settings.value("dateEdit_value").toString();
-                    imageThresholdText = settings.value("lineEdit_yuzhi_value", ui->lineEdit_yuzhi->text()).toString();
-                    if (imageThresholdText.trimmed().isEmpty()) {
-                        imageThresholdText = ui->lineEdit_yuzhi->text();
-                    }
-                    baseNames = parseWordTemplateBaseNames(targetText);
-                    if (targetText.trimmed().isEmpty() || baseNames.isEmpty()) {
-                        pendingTargetMessages.append(QString("%1：目标字符为空或解析失败，目标字符待设置").arg(templateDir.dirName()));
-                        qDebug() << "[WORD_MULTI_TEMPLATE] target text pending:" << selectedDirPath;
-                    }
-                }
-
-                const QString yamlPath = templateDir.filePath("calibrate_config.yaml");
-                if (!QFile::exists(yamlPath)) {
-                    skippedMessages.append(QString("%1：缺少 calibrate_config.yaml").arg(templateDir.dirName()));
-                    qDebug() << "[WORD_MULTI_TEMPLATE] skip calibrate_config missing:" << selectedDirPath;
-                    continue;
-                }
-
-                CalibrationData calib;
-                if (!calib.load(yamlPath.toLocal8Bit().toStdString()) || calib.date_poly.empty()) {
-                    skippedMessages.append(QString("%1：date_poly 读取失败").arg(templateDir.dirName()));
-                    qDebug() << "[WORD_MULTI_TEMPLATE] skip date_poly invalid:" << selectedDirPath;
-                    continue;
-                }
-
-                const QString trackingPath = templateDir.filePath("tracking_template.bmp");
-                if (!QFile::exists(trackingPath)) {
-                    skippedMessages.append(QString("%1：缺少 tracking_template.bmp").arg(templateDir.dirName()));
-                    qDebug() << "[WORD_MULTI_TEMPLATE] skip tracking_template missing:" << selectedDirPath;
-                    continue;
-                }
-
-                cv::Mat trackingTemplate;
-                QFile trackingFile(trackingPath);
-                if (trackingFile.open(QIODevice::ReadOnly)) {
-                    QByteArray trackingData = trackingFile.readAll();
-                    try {
-                        std::vector<uchar> trackingBuffer(trackingData.begin(), trackingData.end());
-                        trackingTemplate = cv::imdecode(trackingBuffer, cv::IMREAD_COLOR);
-                    } catch (...) {
-                        qDebug() << "[WORD_MULTI_TEMPLATE] tracking_template imdecode crashed:" << selectedDirPath;
-                    }
-                }
-                if (trackingTemplate.empty()) {
-                    skippedMessages.append(QString("%1：tracking_template.bmp 读取失败").arg(templateDir.dirName()));
-                    qDebug() << "[WORD_MULTI_TEMPLATE] skip tracking_template empty:" << selectedDirPath;
-                    continue;
-                }
-
-                std::vector<cv::Mat> loadedDigitTemplates;
-                std::vector<int> loadedDigitTemplateTargetIndexes;
-                if (!baseNames.isEmpty()) {
-                    QString loadError;
-                    if (!loadWordDigitTemplatesFromDir(templateDir.absolutePath(),
-                                                       baseNames,
-                                                       &loadedDigitTemplates,
-                                                       &loadedDigitTemplateTargetIndexes,
-                                                       &loadError)) {
-                        pendingTargetMessages.append(QString("%1：字符图片不完整，目标字符待重新确认：%2")
-                                                     .arg(templateDir.dirName())
-                                                     .arg(loadError));
-                        qDebug() << "[WORD_MULTI_TEMPLATE] digit file count mismatch, target pending:"
-                                 << selectedDirPath
-                                 << loadError;
-                    } else {
-                        qDebug() << "[WORD_MULTI_TEMPLATE] digit templates loaded:"
-                                 << selectedDirPath
-                                 << "target chars:" << baseNames.size()
-                                 << "template images:" << static_cast<int>(loadedDigitTemplates.size());
-                    }
-                }
-
                 WordTemplateProfile profile;
-                profile.name = templateDir.dirName();
-                profile.dirPath = templateDir.absolutePath();
-                profile.trackingTemplate = trackingTemplate;
-                profile.datePoly = calib.date_poly;
-                profile.targetText = targetText;
-                profile.imageThresholdText = imageThresholdText;
-                profile.targetCount = baseNames.size();
-                profile.digitTemplates = loadedDigitTemplates;
-                profile.digitTemplateTargetIndexes = loadedDigitTemplateTargetIndexes;
-                loadedDirPaths.append(profile.dirPath);
+                QString profileMessage;
+                if (!loadWordTemplateProfileFromDir(templateDir.absolutePath(),
+                                                    &profile,
+                                                    &profileMessage)) {
+                    skippedMessages.append(QString("%1：%2")
+                                           .arg(templateDir.dirName())
+                                           .arg(profileMessage));
+                    continue;
+                }
+                if (!profileMessage.trimmed().isEmpty()) {
+                    pendingTargetMessages.append(QString("%1：%2")
+                                                 .arg(profile.name)
+                                                 .arg(profileMessage));
+                }
                 loadedProfiles.push_back(profile);
             }
 
             if (loadedProfiles.empty()) {
-                m_wordTemplateDirPaths.clear();
-                m_wordTemplateProfiles.clear();
-                m_wordMultiTemplateMode = false;
-                currentTemplateDirPath.clear();
-                m_currentTemplateNameVisible = false;
-                updateCurrentTemplateName();
-                refreshWordTemplateEditorCombo();
-                QString detailMessage = "所选字库模板配置全部无效，未进入多模板模式。";
+                QString detailMessage = "所选产品模板配置全部无效，已保留当前加载的模板。";
                 if (!skippedMessages.isEmpty()) {
                     detailMessage += "\n\n具体原因：\n" + skippedMessages.join("\n");
                 }
@@ -4755,16 +4918,15 @@ void Widget::on_pushButton_4_clicked()
                 return;
             }
 
-            m_wordTemplateDirPaths = loadedDirPaths;
             m_wordTemplateProfiles.swap(loadedProfiles);
-            m_wordMultiTemplateMode = true;
-            currentTemplateDirPath.clear();
+            currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
             m_currentTemplateNameVisible = false;
             updateCurrentTemplateName();
             refreshWordTemplateEditorCombo();
             saveSettings();
 
-            qDebug() << "[WORD_MULTI_TEMPLATE] selected dirs:" << m_wordTemplateDirPaths;
+            qDebug() << "[WORD_TEMPLATE] loaded profile count:"
+                     << static_cast<int>(m_wordTemplateProfiles.size());
             if (!skippedMessages.isEmpty() || !pendingTargetMessages.isEmpty()) {
                 QString detailMessage = QString("已加载 %1 个字库模板").arg(static_cast<int>(m_wordTemplateProfiles.size()));
                 if (!pendingTargetMessages.isEmpty()) {
@@ -4782,8 +4944,6 @@ void Widget::on_pushButton_4_clicked()
             }
             return;
         }
-
-        dirPath = selectedDirs.first();
     } else {
         dirPath = QFileDialog::getExistingDirectory(nullptr, "选择产品模板文件夹",
                                                     templateDialogStartDir(),
@@ -4801,14 +4961,16 @@ void Widget::on_pushButton_4_clicked()
 
     if (dirPath.isEmpty()) return;
 
-    m_wordTemplateDirPaths.clear();
     m_wordTemplateProfiles.clear();
-    m_wordMultiTemplateMode = false;
     refreshWordTemplateEditorCombo();
     currentTemplateDirPath = dirPath;
 
     saveSettings(); // 保存路径
     m_currentTemplateNameVisible = loadSettingsFromDir(dirPath);
+    if (!m_currentTemplateNameVisible) {
+        updateCurrentTemplateName();
+        return;
+    }
     updateCurrentTemplateName();
     if (ui->comboBox_4->currentIndex() == 1 && imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -4978,99 +5140,25 @@ void Widget::on_pushButton_9_clicked()
 
 
 
-bool Widget::loadSettingsFromDir(const QString &dirPath)
+bool Widget::loadSettingsFromDir(const QString &dirPath, bool showErrorMessage)
 {
-    // 配置文件路径：用户选择的文件夹 + "app_settings.appset"
-    QString settingsFilePath = dirPath + "/app_settings.appset";
-    const bool settingsFileExists = QFile::exists(settingsFilePath);
-    QSettings settings(settingsFilePath, QSettings::IniFormat); // 对应保存时的INI格式
-
-    if (settings.contains("spinbox_value")) ui->spinBox->setValue(settings.value("spinbox_value").toInt());
-    if (settings.contains("lineEdit_14_value")) ui->lineEdit_14->setText(settings.value("lineEdit_14_value").toString()); // 初始化增益显示
-    if (settings.contains("lineEdit_6_value")) ui->lineEdit_6->setText(settings.value("lineEdit_6_value").toString());
-    if (settings.contains("lineEdit_7_value")) ui->lineEdit_7->setText(settings.value("lineEdit_7_value").toString());
-    if (settings.contains("lineEdit_8_value")) ui->lineEdit_8->setText(settings.value("lineEdit_8_value").toString());
-    if (settings.contains("lineEdit_20_value")) ui->lineEdit_20->setText(settings.value("lineEdit_20_value").toString());
-    if (settings.contains("lineEdit_12_value")) ui->lineEdit_12->setText(settings.value("lineEdit_12_value").toString());
-    if (settings.contains("lineEdit_4_value")) ui->lineEdit_4->setText(settings.value("lineEdit_4_value").toString());
-    if (settings.contains("lineEdit_13_value")) ui->lineEdit_13->setText(settings.value("lineEdit_13_value").toString());
-    if (settings.contains("lineEdit_15_value")) ui->lineEdit_15->setText(settings.value("lineEdit_15_value").toString());
-    if (settings.contains("lineEdit_18_value")) ui->lineEdit_18->setText(settings.value("lineEdit_18_value").toString());
-    if (settings.contains("lineEdit_19_value")) ui->lineEdit_19->setText(settings.value("lineEdit_19_value").toString());
-    if (settings.contains("lineEdit_yuzhi_value")) ui->lineEdit_yuzhi->setText(settings.value("lineEdit_yuzhi_value").toString());
-    if (settings.contains("lineEdit_tissueRoughnessThreshold_value")) {
-        ui->lineEdit_tissueRoughnessThreshold->setText(settings.value("lineEdit_tissueRoughnessThreshold_value").toString());
-    }
-    applyTissueRoughnessThresholdFromUi(false);
-
-    if (settings.contains("lineEdit_value")) {
-        ui->lineEdit->setText(settings.value("lineEdit_value").toString());
-    }
-
-    if (settings.contains("dateEdit_value")) {
-        ui->dateEdit->setPlainText(settings.value("dateEdit_value").toString());
-    }
-
-    if (settings.contains("comboBox_value")) {
-        QString value = settings.value("comboBox_value").toString();
-        int index = ui->comboBox->findText(value);
-        if (index >= 0) ui->comboBox->setCurrentIndex(index);
-    }
-    if (settings.contains("comboBox_saveImageType_value")) {
-        QString value = settings.value("comboBox_saveImageType_value").toString();
-        int index = ui->comboBox_saveImageType->findText(value);
-        if (index >= 0) ui->comboBox_saveImageType->setCurrentIndex(index);
-    }
-    if (settings.contains("comboBox_2_value")) {
-        QString value = settings.value("comboBox_2_value").toString();
-        int index = ui->comboBox_2->findText(value);
-        if (index >= 0) ui->comboBox_2->setCurrentIndex(index);
-    }
-    if (settings.contains("comboBox_3_value")) {
-        QString value1 = settings.value("comboBox_3_value").toString();
-        int index = ui->comboBox_3->findText(value1);
-        if (index >= 0) ui->comboBox_3->setCurrentIndex(index);
-    }
-    if (settings.contains("comboBox_4_value")) {
-        QString value2 = settings.value("comboBox_4_value").toString();
-        int index = ui->comboBox_4->findText(value2);
-        if (index >= 0) ui->comboBox_4->setCurrentIndex(index);
-    }
-
-    if (settings.contains("TemplateDirPath")) {
-        currentTemplateDirPath = settings.value("TemplateDirPath").toString();
-    }
-    if (settings.contains("saveDirPath")) {
-        selectedDir = settings.value("saveDirPath").toString();
-    }
-    updateSaveDirButtonText();
-    updateTissueRoughnessUiVisibility();
-
-    const cv::Rect2d loadedTrackingBox(
-                settings.value("trackingBox_x", 0).toDouble(),
-                settings.value("trackingBox_y", 0).toDouble(),
-                settings.value("trackingBox_width", 0).toDouble(),
-                settings.value("trackingBox_height", 0).toDouble());
-    const bool storedTrackingBoxValid = settings.contains("trackingBox_width")
-            && settings.contains("trackingBox_height")
-            && loadedTrackingBox.width > 0
-            && loadedTrackingBox.height > 0;
-    const bool configSaysValidBoxes = settings.contains("hasValidBoxes")
-            && settings.value("hasValidBoxes").toBool();
-
-    // 🔥 加载双框坐标
-    if (configSaysValidBoxes || storedTrackingBoxValid) {
-        savedTrackingBox = loadedTrackingBox;
-        hasValidBoxes = true;
-        if (!configSaysValidBoxes && storedTrackingBoxValid) {
-            qDebug() << "[TEMPLATE_REPAIR] hasValidBoxes=false, but tracking box coordinates are valid. Restoring tracking box:" << dirPath;
+    TemplatePrivateSettings privateSettings;
+    QString loadError;
+    if (!AppSettingsManager::loadTemplatePrivateSettings(dirPath, &privateSettings, &loadError)) {
+        qDebug() << "[TEMPLATE_PRIVATE_SETTINGS] load failed:" << dirPath << loadError;
+        if (showErrorMessage) {
+            showParameterCritical("严重警告",
+                                  QString("产品模板 [%1] 的私有配置无效：\n%2")
+                                  .arg(QDir(dirPath).dirName())
+                                  .arg(loadError));
         }
-        qDebug() << "box load success";
-    } else {
-        savedTrackingBox = cv::Rect2d(0, 0, 0, 0);
-        hasValidBoxes = false;
-        qDebug() << "no usesful box";
+        return false;
     }
+
+    applyTemplatePrivateSettingsToUi(privateSettings);
+    savedTrackingBox = privateSettings.trackingBox;
+    hasValidBoxes = privateSettings.hasValidBoxes
+            || (savedTrackingBox.width > 0 && savedTrackingBox.height > 0);
 
     // 🔥 新增：加载局部静态追踪模板 (Anchor Template)
     QString tplPath = dirPath + "/tracking_template.bmp";
@@ -5101,180 +5189,155 @@ bool Widget::loadSettingsFromDir(const QString &dirPath)
     }
 
     const bool templateFilesValid = !m_loadedTrackingTemplate.empty() && !savedDatePoly.empty();
-    if (templateFilesValid) {
+    const bool trackingBoxValid = savedTrackingBox.width > 0 && savedTrackingBox.height > 0;
+    if (templateFilesValid && trackingBoxValid) {
         if (!hasValidBoxes) {
-            qDebug() << "[TEMPLATE_REPAIR] hasValidBoxes=false, but tracking_template.bmp and calibrate_config.yaml are valid. Repairing template flag:" << dirPath;
+            qDebug() << "[TEMPLATE_REPAIR] repairing hasValidBoxes:" << dirPath;
+            privateSettings.hasValidBoxes = true;
+            QString repairError;
+            if (!AppSettingsManager::saveTemplatePrivateSettings(dirPath, privateSettings, &repairError)) {
+                qDebug() << "[TEMPLATE_REPAIR] save failed:" << repairError;
+                return false;
+            }
         }
         hasValidBoxes = true;
-        if (settingsFileExists && settings.status() == QSettings::NoError) {
-            settings.setValue("hasValidBoxes", true);
-            settings.sync();
-        }
     } else {
         hasValidBoxes = false;
     }
 
     updateCurrentTemplateName();
-    return settingsFileExists && settings.status() == QSettings::NoError;
+    return true;
 }
 
 
 /**
  * @brief 加载设置
- * @details 从QSettings加载所有参数设置
+ * @details 从当前用户 AppData 加载软件公共设置
  */
 void Widget::loadSettings()
 {
-    QSettings settings("YourCompany", "YourApplication");
-
-    if (settings.contains("spinbox_value"))
-        ui->spinBox->setValue(settings.value("spinbox_value").toInt());
-        
-    if (settings.contains("lineEdit_14_value"))
-        ui->lineEdit_14->setText(settings.value("lineEdit_14_value").toString());
-
-    if (settings.contains("lineEdit_6_value"))
-        ui->lineEdit_6->setText(settings.value("lineEdit_6_value").toString());
-
-    if (settings.contains("lineEdit_7_value"))
-        ui->lineEdit_7->setText(settings.value("lineEdit_7_value").toString());
-
-    if (settings.contains("lineEdit_8_value"))
-        ui->lineEdit_8->setText(settings.value("lineEdit_8_value").toString());
-
-    if (settings.contains("lineEdit_20_value"))
-        ui->lineEdit_20->setText(settings.value("lineEdit_20_value").toString());
-
-    if (settings.contains("lineEdit_12_value"))
-        ui->lineEdit_12->setText(settings.value("lineEdit_12_value").toString());
-
-    if (settings.contains("lineEdit_4_value"))
-        ui->lineEdit_4->setText(settings.value("lineEdit_4_value").toString());
-
-    if (settings.contains("lineEdit_13_value"))
-        ui->lineEdit_13->setText(settings.value("lineEdit_13_value").toString());
-
-    if (settings.contains("lineEdit_15_value"))
-        ui->lineEdit_15->setText(settings.value("lineEdit_15_value").toString());
-
-    if (settings.contains("lineEdit_18_value"))
-        ui->lineEdit_18->setText(settings.value("lineEdit_18_value").toString());
-
-    if (settings.contains("lineEdit_19_value"))
-        ui->lineEdit_19->setText(settings.value("lineEdit_19_value").toString());
-
-    if (settings.contains("lineEdit_yuzhi_value"))
-        ui->lineEdit_yuzhi->setText(settings.value("lineEdit_yuzhi_value").toString());
-
-    if (settings.contains("lineEdit_tissueRoughnessThreshold_value"))
-        ui->lineEdit_tissueRoughnessThreshold->setText(settings.value("lineEdit_tissueRoughnessThreshold_value").toString());
-
-    applyTissueRoughnessThresholdFromUi(false);
-
-    if (settings.contains("dateEdit_value"))
-        ui->dateEdit->setPlainText(settings.value("dateEdit_value").toString());
-
-    if (settings.contains("lineEdit_value")) {
-        ui->lineEdit->setText(settings.value("lineEdit_value").toString());
+    GlobalSettings settings;
+    QString errorMessage;
+    if (!AppSettingsManager::loadGlobalSettings(&settings, &errorMessage)) {
+        qDebug() << "[GLOBAL_SETTINGS] load failed, using defaults:" << errorMessage;
+        settings = AppSettingsManager::defaultGlobalSettings();
     }
-
-    if (settings.contains("comboBox_value"))
-    {
-        QString value = settings.value("comboBox_value").toString();
-        int index = ui->comboBox->findText(value);
-        if (index >= 0)
-            ui->comboBox->setCurrentIndex(index);
-    }
-
-    if (settings.contains("comboBox_saveImageType_value"))
-    {
-        QString value = settings.value("comboBox_saveImageType_value").toString();
-        int index = ui->comboBox_saveImageType->findText(value);
-        if (index >= 0)
-            ui->comboBox_saveImageType->setCurrentIndex(index);
-    }
-
-    if (settings.contains("comboBox_2_value"))
-    {
-        QString value = settings.value("comboBox_2_value").toString();
-        int index = ui->comboBox_2->findText(value);
-        if (index >= 0)
-            ui->comboBox_2->setCurrentIndex(index);
-    }
-
-    if (settings.contains("comboBox_3_value"))
-    {
-        QString value1 = settings.value("comboBox_3_value").toString();
-        int index = ui->comboBox_3->findText(value1);
-        if (index >= 0)
-            ui->comboBox_3->setCurrentIndex(index);
-    }
-
-    if (settings.contains("comboBox_4_value"))
-    {
-        QString value2 = settings.value("comboBox_4_value").toString();
-        int index = ui->comboBox_4->findText(value2);
-        if (index >= 0)
-            ui->comboBox_4->setCurrentIndex(index);
-    }
-
-    if (settings.contains("comboBox_5_value"))
-    {
-        QString value3 = settings.value("comboBox_5_value").toString();
-        int index = ui->comboBox_5->findText(value3);
-        if (index >= 0)
-            ui->comboBox_5->setCurrentIndex(index);
-    }
-
-    if (settings.contains("TemplateDirPath")) {
-        currentTemplateDirPath = settings.value("TemplateDirPath").toString();
-    }
-
-    if (settings.contains("templateBaseDirPath")) {
-        templateBaseDirPath = settings.value("templateBaseDirPath").toString();
-    }
-
-    if (settings.contains("saveDirPath")) {
-        selectedDir = settings.value("saveDirPath").toString();
-    }
-    updateSaveDirButtonText();
-    updateTissueRoughnessUiVisibility();
+    applyGlobalSettingsToUi(settings);
 }
 
 /**
  * @brief 保存设置
- * @details 保存所有参数设置到QSettings
+ * @details 将软件公共设置保存到当前用户 AppData
  */
-void Widget::saveSettings()
+bool Widget::saveSettings(bool showErrorMessage)
 {
-    QSettings settings("YourCompany", "YourApplication");
+    QString errorMessage;
+    if (!AppSettingsManager::saveGlobalSettings(collectGlobalSettingsFromUi(), &errorMessage)) {
+        if (showErrorMessage) {
+            showParameterCritical("严重警告", QString("当前界面设置保存失败：\n%1").arg(errorMessage));
+        } else {
+            qDebug() << "[GLOBAL_SETTINGS] silent save failed:" << errorMessage;
+        }
+        return false;
+    }
+    return true;
+}
 
-    settings.setValue("spinbox_value", ui->spinBox->text());
-    settings.setValue("lineEdit_14_value", ui->lineEdit_14->text()); // 固化全局相机增益
-    settings.setValue("lineEdit_6_value", ui->lineEdit_6->text());
-    settings.setValue("lineEdit_7_value", ui->lineEdit_7->text());
-    settings.setValue("lineEdit_8_value", ui->lineEdit_8->text());
-    settings.setValue("lineEdit_20_value", ui->lineEdit_20->text());
-    settings.setValue("lineEdit_12_value", ui->lineEdit_12->text());
-    settings.setValue("lineEdit_4_value", ui->lineEdit_4->text());
-    settings.setValue("lineEdit_13_value", ui->lineEdit_13->text());
-    settings.setValue("lineEdit_15_value", ui->lineEdit_15->text());
-    settings.setValue("lineEdit_18_value", ui->lineEdit_18->text());
-    settings.setValue("lineEdit_19_value", ui->lineEdit_19->text());
-    settings.setValue("lineEdit_yuzhi_value", ui->lineEdit_yuzhi->text());
-    settings.setValue("lineEdit_tissueRoughnessThreshold_value", ui->lineEdit_tissueRoughnessThreshold->text());
-//    settings.setValue("dateEdit_value", ui->dateEdit->toPlainText());
-    settings.setValue("comboBox_value", ui->comboBox->currentText());
-    settings.setValue("comboBox_saveImageType_value", ui->comboBox_saveImageType->currentText());
-    settings.setValue("comboBox_2_value", ui->comboBox_2->currentText());
-    settings.setValue("comboBox_3_value", ui->comboBox_3->currentText());
-    settings.setValue("comboBox_4_value", ui->comboBox_4->currentText());
-    settings.setValue("comboBox_5_value", ui->comboBox_5->currentText());
-    // 新增：保存模板路径
-    settings.setValue("saveDirPath", selectedDir);
-    settings.setValue("TemplateDirPath", m_wordMultiTemplateMode ? QString() : currentTemplateDirPath);
-    settings.setValue("templateBaseDirPath", templateBaseDirPath);
-    settings.setValue("lineEdit_value", ui->lineEdit->text()); // 保存IP地址
+GlobalSettings Widget::collectGlobalSettingsFromUi() const
+{
+    static const QStringList detectModeIds = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList imageSaveModeIds = {"save_none", "save_ng", "save_ok", "save_all"};
+    static const QStringList imageSaveTypeIds = {"save_both", "save_annotated_only", "save_raw_only"};
+    static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
+    static const QStringList rotationIds = {"rotate_none", "rotate_clockwise_90", "rotate_counterclockwise_90", "rotate_180"};
+    static const QStringList triggerModeIds = {"trigger_continuous", "trigger_interval"};
+
+    auto idAt = [](const QStringList &ids, int index, const QString &fallback) {
+        return (index >= 0 && index < ids.size()) ? ids.at(index) : fallback;
+    };
+
+    GlobalSettings settings = AppSettingsManager::defaultGlobalSettings();
+    settings.detectModeId = idAt(detectModeIds, ui->comboBox_4->currentIndex(), settings.detectModeId);
+    settings.imageSaveModeId = idAt(imageSaveModeIds, ui->comboBox->currentIndex(), settings.imageSaveModeId);
+    settings.imageSaveTypeId = idAt(imageSaveTypeIds, ui->comboBox_saveImageType->currentIndex(), settings.imageSaveTypeId);
+    settings.imageSavePath = selectedDir;
+    settings.templateBaseDirPath = templateBaseDirPath;
+    settings.cameraExposure = ui->spinBox->value();
+    settings.cameraGain = ui->lineEdit_14->text().toDouble();
+    settings.colorChannelId = idAt(colorChannelIds, ui->comboBox_5->currentIndex(), settings.colorChannelId);
+    settings.imageRotationId = idAt(rotationIds, ui->comboBox_2->currentIndex(), settings.imageRotationId);
+    settings.triggerEnabled = ui->checkBox->isChecked();
+    settings.triggerModeId = idAt(triggerModeIds, ui->comboBox_3->currentIndex(), settings.triggerModeId);
+    settings.plcModeId = settings.triggerModeId;
+    settings.plcIp = ui->lineEdit->text().trimmed();
+    settings.plcRack = ui->lineEdit_2->text().toInt();
+    settings.plcSlot = ui->lineEdit_3->text().toInt();
+    settings.photoDistance = ui->lineEdit_6->text().toInt();
+    settings.photoTime = ui->lineEdit_20->text().toInt();
+    settings.cameraDelay = ui->lineEdit_4->text().toInt();
+    settings.rejectDistance = ui->lineEdit_7->text().toInt();
+    settings.rejectTime = ui->lineEdit_8->text().toInt();
+    settings.rejectPosition = ui->lineEdit_12->text().toInt();
+    settings.tissueRoughnessThreshold = ui->lineEdit_tissueRoughnessThreshold->text().toDouble();
+    settings.templateDirPathsByMode = m_templateDirPathsByMode;
+    settings.templateDirPathsByMode.insert(settings.detectModeId,
+                                           currentTemplatePathsForMode(settings.detectModeId));
+    return settings;
+}
+
+void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
+{
+    static const QStringList detectModeIds = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList imageSaveModeIds = {"save_none", "save_ng", "save_ok", "save_all"};
+    static const QStringList imageSaveTypeIds = {"save_both", "save_annotated_only", "save_raw_only"};
+    static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
+    static const QStringList rotationIds = {"rotate_none", "rotate_clockwise_90", "rotate_counterclockwise_90", "rotate_180"};
+    static const QStringList triggerModeIds = {"trigger_continuous", "trigger_interval"};
+
+    auto indexOf = [](const QStringList &ids, const QString &id, int fallback) {
+        const int index = ids.indexOf(id);
+        return index >= 0 ? index : fallback;
+    };
+
+    const bool oldApplyingGlobalSettings = m_applyingGlobalSettings;
+    m_applyingGlobalSettings = true;
+    m_templateDirPathsByMode = settings.templateDirPathsByMode;
+
+    ui->comboBox_4->setCurrentIndex(indexOf(detectModeIds, settings.detectModeId, 1));
+    ui->comboBox->setCurrentIndex(indexOf(imageSaveModeIds, settings.imageSaveModeId, 0));
+    ui->comboBox_saveImageType->setCurrentIndex(indexOf(imageSaveTypeIds, settings.imageSaveTypeId, 1));
+    ui->comboBox_5->setCurrentIndex(indexOf(colorChannelIds, settings.colorChannelId, 0));
+    ui->comboBox_2->setCurrentIndex(indexOf(rotationIds, settings.imageRotationId, 0));
+    ui->comboBox_3->setCurrentIndex(indexOf(triggerModeIds, settings.triggerModeId, 1));
+    ui->checkBox->setChecked(settings.triggerEnabled);
+    ui->spinBox->setValue(settings.cameraExposure);
+    ui->lineEdit_14->setText(QString::number(settings.cameraGain));
+    ui->lineEdit->setText(settings.plcIp);
+    ui->lineEdit_2->setText(QString::number(settings.plcRack));
+    ui->lineEdit_3->setText(QString::number(settings.plcSlot));
+    ui->lineEdit_6->setText(QString::number(settings.photoDistance));
+    ui->lineEdit_20->setText(QString::number(settings.photoTime));
+    ui->lineEdit_4->setText(QString::number(settings.cameraDelay));
+    ui->lineEdit_7->setText(QString::number(settings.rejectDistance));
+    ui->lineEdit_8->setText(QString::number(settings.rejectTime));
+    ui->lineEdit_12->setText(QString::number(settings.rejectPosition));
+    ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(settings.tissueRoughnessThreshold, 'f', 3));
+    selectedDir = settings.imageSavePath;
+    templateBaseDirPath = settings.templateBaseDirPath;
+    updateSaveDirButtonText();
+    updateTissueRoughnessUiVisibility();
+    applyTissueRoughnessThresholdFromUi(false);
+    m_currentDetectModeId = currentDetectModeId();
+    m_applyingGlobalSettings = oldApplyingGlobalSettings;
+    restoreTemplatesForMode(m_currentDetectModeId, false);
+}
+
+void Widget::applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings)
+{
+    QSignalBlocker targetBlocker(ui->dateEdit);
+    QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
+    ui->dateEdit->setPlainText(settings.targetText);
+    ui->lineEdit_yuzhi->setText(QString::number(settings.imageThreshold));
 }
 
 /**
@@ -5312,6 +5375,25 @@ void Widget::setupDefaultValues()
 // ================= 拦截滚轮误操作事件 =================
 bool Widget::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_softwareDataDirLineEdit) {
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            const QString dirPath = m_softwareDataDirLineEdit->text().trimmed();
+            if (dirPath.isEmpty()) {
+                return true;
+            }
+
+            QDir dir(dirPath);
+            if (!dir.exists() && !QDir().mkpath(dir.absolutePath())) {
+                showParameterWarning("提示", QString("无法打开软件数据文件夹：\n%1").arg(dir.absolutePath()));
+                return true;
+            }
+
+            QDesktopServices::openUrl(QUrl::fromLocalFile(dir.absolutePath()));
+            return true;
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
     if (watched == m_characterSplitSettingsDialog
             && event->type() == QEvent::EnterWhatsThisMode) {
         QString helpText = m_characterSplitSettingsDialog->property("characterSplitHelpText").toString();
@@ -5501,21 +5583,25 @@ void Widget::on_plcbtn_clicked()
     updateCurrentTemplateName();
     const bool isWordMode = (ui->comboBox_4->currentIndex() == 1);
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
-    const bool isWordMultiMode = isWordMode
-            && m_wordMultiTemplateMode
-            && !m_wordTemplateProfiles.empty();
+    const bool isWordProfileMode = isWordMode && !m_wordTemplateProfiles.empty();
+    QString wordRunningTemplateName;
+    if (isWordProfileMode) {
+        wordRunningTemplateName = m_wordTemplateProfiles.size() == 1
+                ? m_wordTemplateProfiles.front().name
+                : QString("字库多模板");
+    }
     const QString runningTemplateName = isTissueMode
             ? QString("无")
-            : (isWordMultiMode ? QString("字库多模板") : QDir(currentTemplateDirPath).dirName());
+            : (isWordProfileMode ? wordRunningTemplateName : QDir(currentTemplateDirPath).dirName());
 
-    if (isWordMode && m_wordMultiTemplateMode && m_wordTemplateProfiles.empty()) {
-        QMessageBox::warning(this, "提示", "当前字库多模板缓存为空，请重新选择产品模板文件夹。");
+    if (isWordMode && m_wordTemplateProfiles.empty()) {
+        QMessageBox::warning(this, "提示", "当前没有加载产品模板，请重新选择产品模板文件夹。");
         return;
     }
 
     // 启动检测只检查真实模板文件，不再让历史 hasValidBoxes=false 单独阻止启动。
     QStringList productTemplateErrors;
-    if (!isTissueMode && !isWordMultiMode) {
+    if (!isTissueMode && !isWordProfileMode) {
         if (currentTemplateDirPath.trimmed().isEmpty()) {
             productTemplateErrors.append("未选择产品模板文件夹");
         }
@@ -5539,7 +5625,7 @@ void Widget::on_plcbtn_clicked()
     }
 
     std::vector<WordTrackingProfile> wordTrackingProfilesForRun;
-    if (isWordMultiMode) {
+    if (isWordProfileMode) {
         QStringList pendingProfiles;
         for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
             const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
@@ -5547,7 +5633,7 @@ void Widget::on_plcbtn_clicked()
                     ? QDir(profile.dirPath).dirName()
                     : profile.name;
 
-            if (profile.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
+            if (profile.settings.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
                 pendingProfiles.append(profileName);
                 continue;
             }
@@ -5563,12 +5649,12 @@ void Widget::on_plcbtn_clicked()
         if (!pendingProfiles.isEmpty()) {
             QMessageBox::warning(this,
                                  "提示",
-                                 QString("以下字库模板还没有确认目标字符，不能启动多模板检测：\n%1")
+                                 QString("以下产品模板还没有确认目标字符，不能启动检测：\n%1")
                                  .arg(pendingProfiles.join("\n")));
             return;
         }
         if (wordTrackingProfilesForRun.empty()) {
-            QMessageBox::warning(this, "提示", "没有可用的字库多模板定位配置。");
+            QMessageBox::warning(this, "提示", "没有可用的字库定位配置。");
             return;
         }
     }
@@ -5657,7 +5743,7 @@ void Widget::on_plcbtn_clicked()
         if (isTissueMode) {
             cameraThread->clearPresetBoxes();
             cameraThread->clearWordTemplateTrackingProfiles();
-        } else if (isWordMultiMode) {
+        } else if (isWordProfileMode) {
             cameraThread->clearPresetBoxes();
             cameraThread->setWordTemplateTrackingProfiles(wordTrackingProfilesForRun);
         } else {
@@ -5718,7 +5804,7 @@ void Widget::on_plcbtn_clicked()
         if (isTissueMode) {
             myThread->clearPresetBoxes();
             myThread->clearWordTemplateTrackingProfiles();
-        } else if (isWordMultiMode) {
+        } else if (isWordProfileMode) {
             myThread->clearPresetBoxes();
             myThread->setWordTemplateTrackingProfiles(wordTrackingProfilesForRun);
         } else {
@@ -6095,59 +6181,6 @@ void Widget::ensureThreadsReady()
     qDebug() << "✓ Threads readiness check completed";
 }
 
-//启动时预加载字符模板图像
-void Widget::loadLastTemplateConfig()
-{
-    if (currentTemplateDirPath.isEmpty()) {
-        return; // 无历史路径，直接返回
-    }
-    qDebug() << "9.1 loadLastTemplateConfig: currentTemplateDirPath 不为空";
-
-    QString newMubiaozifu = ui->dateEdit->toPlainText();
-    if (newMubiaozifu.isEmpty()) {
-        // 若目标字符为空，清空模板列表
-        digitTemplates.clear();
-        digitTemplateTargetIndexes.clear();
-        return;
-    }
-    qDebug() << "9.2 loadLastTemplateConfig: newMubiaozifu 不为空";
-
-    QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
-    qDebug() << "9.3 loadLastTemplateConfig: 正则表达式匹配完成";
-
-    std::vector<cv::Mat> tempTemplates;
-    std::vector<int> tempTemplateTargetIndexes;
-    QString loadError;
-    const bool includeVariantTemplates = (ui->comboBox_4->currentIndex() == 1);
-    const bool loaded = loadWordDigitTemplatesFromDir(currentTemplateDirPath,
-                                                      baseNamesToFind,
-                                                      &tempTemplates,
-                                                      &tempTemplateTargetIndexes,
-                                                      &loadError,
-                                                      includeVariantTemplates);
-    qDebug() << "9.5 loadLastTemplateConfig: 模板图片读取完成";
-
-    // ================== 修复 4：防死锁隔离保护 ==================
-    if (!loaded) {
-        digitTemplates.clear();
-        digitTemplateTargetIndexes.clear();
-        qDebug() << "[ERROR] 产品模板文件夹中的图片缺失或读取失败，已清空模板以保护程序！" << loadError;
-    } else {
-        digitTemplates = tempTemplates;
-        digitTemplateTargetIndexes = tempTemplateTargetIndexes;
-        qDebug() << "[INFO] 模板加载成功，目标字符数量:" << baseNamesToFind.size()
-                 << "模板图片数量:" << digitTemplates.size();
-    }
-
-    try {
-        initOverlapDetectorFromCurrentDir();
-    } catch (...) {
-        qDebug() << "9.X initOverlapDetectorFromCurrentDir 内部崩溃！";
-    }
-    qDebug() << "9.6 loadLastTemplateConfig: 防重叠模型加载完成";
-}
-
-
 /**
  * @brief 接收线程发射的框坐标信号并保存
  */
@@ -6238,127 +6271,12 @@ void Widget::on_pushButton_7_clicked()
 
 void Widget::on_pushButton_11_clicked()
 {
-    if (ui->comboBox_4->currentIndex() == 1 && m_wordMultiTemplateMode) {
-        if (m_wordTemplateProfiles.empty()) {
-            QMessageBox::warning(this, "提示", "当前没有加载任何字库多模板！");
-            return;
-        }
-
-        QMessageBox thresholdMessageBox(this);
-        thresholdMessageBox.setIcon(QMessageBox::Question);
-        thresholdMessageBox.setWindowTitle("保存当前界面设置");
-        thresholdMessageBox.setText("当前处于字库多模板模式。\n保存当前界面设置会将界面上的设置写入所有产品模板文件夹。\n\n是否将当前界面的图像合格阈值覆盖到每一个模板？");
-        QPushButton *overwriteThresholdButton = thresholdMessageBox.addButton("覆盖图像阈值", QMessageBox::AcceptRole);
-        QPushButton *skipThresholdButton = thresholdMessageBox.addButton("跳过图像阈值", QMessageBox::ActionRole);
-        QPushButton *cancelButton = thresholdMessageBox.addButton("取消", QMessageBox::RejectRole);
-        thresholdMessageBox.setDefaultButton(skipThresholdButton);
-        thresholdMessageBox.exec();
-
-        if (thresholdMessageBox.clickedButton() == cancelButton) {
-            return;
-        }
-
-        const bool overwriteImageThreshold = (thresholdMessageBox.clickedButton() == overwriteThresholdButton);
-        const QString globalImageThresholdText = ui->lineEdit_yuzhi->text().trimmed();
-        if (overwriteImageThreshold) {
-            bool thresholdOk = false;
-            globalImageThresholdText.toDouble(&thresholdOk);
-            if (!thresholdOk) {
-                QMessageBox::warning(this, "参数错误", "当前界面的图像合格阈值不是有效数字，无法覆盖到所有模板。");
-                return;
-            }
-        }
-
-        const QString oldDateEditText = ui->dateEdit->toPlainText();
-        const QString oldImageThresholdText = ui->lineEdit_yuzhi->text();
-        const QString oldCurrentTemplateDirPath = currentTemplateDirPath;
-        const int oldProfileIndex = currentWordTemplateProfileIndex();
-        int savedCount = 0;
-        QStringList failedTemplates;
-
-        for (WordTemplateProfile &profile : m_wordTemplateProfiles) {
-            QDir dir(profile.dirPath);
-            if (profile.dirPath.isEmpty() || !dir.exists()) {
-                failedTemplates.append(profile.name.isEmpty() ? profile.dirPath : profile.name);
-                continue;
-            }
-
-            QString thresholdToSave = profile.imageThresholdText;
-            if (overwriteImageThreshold) {
-                thresholdToSave = globalImageThresholdText;
-                profile.imageThresholdText = globalImageThresholdText;
-            } else if (thresholdToSave.trimmed().isEmpty()) {
-                thresholdToSave = oldImageThresholdText;
-                profile.imageThresholdText = thresholdToSave;
-            }
-
-            {
-                QSignalBlocker dateBlocker(ui->dateEdit);
-                QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
-                ui->dateEdit->setPlainText(profile.targetText);
-                ui->lineEdit_yuzhi->setText(thresholdToSave);
-                currentTemplateDirPath = profile.dirPath;
-                saveSettingsToDir(profile.dirPath);
-            }
-            ++savedCount;
-        }
-
-        currentTemplateDirPath = oldCurrentTemplateDirPath;
-        if (oldProfileIndex >= 0) {
-            setCurrentWordTemplateEditIndex(oldProfileIndex);
-        } else {
-            QSignalBlocker blocker(ui->dateEdit);
-            ui->dateEdit->setPlainText(oldDateEditText);
-            QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
-            ui->lineEdit_yuzhi->setText(oldImageThresholdText);
-        }
-
-        saveSettings();
-
-        if (!failedTemplates.isEmpty()) {
-            QMessageBox::warning(this,
-                                 "提示",
-                                 QString("已将当前界面设置保存到 %1 个字库模板。\n\n以下模板保存失败：\n%2")
-                                 .arg(savedCount)
-                                 .arg(failedTemplates.join("\n")));
-            return;
-        }
-
+    if (saveSettings()) {
         QMessageBox::information(this,
                                  "成功",
-                                 QString("已将当前界面设置保存到 %1 个字库模板。\n\n目标字符仍按每个模板自己的配置保存。\n图像阈值处理：%2")
-                                 .arg(savedCount)
-                                 .arg(overwriteImageThreshold ? "已覆盖到所有模板" : "已跳过覆盖，保留每个模板自己的阈值"));
-        return;
+                                 QString("当前界面设置已保存到：\n%1")
+                                 .arg(AppSettingsManager::globalSettingsFilePath()));
     }
-
-    // 1. 检查是否已经加载了产品模板文件夹
-    if (currentTemplateDirPath.isEmpty()) {
-        QMessageBox::warning(this, "提示", "当前没有加载任何模板！\n请先点击【选择模板】后再尝试保存当前界面设置。");
-        return;
-    }
-
-    // 2. 检查该文件夹在硬盘上是否仍然存在
-    QDir dir(currentTemplateDirPath);
-    if (!dir.exists()) {
-        QMessageBox::warning(this, "错误", "当前使用的产品模板文件夹不存在或已被删除，无法更新参数！");
-        return;
-    }
-
-    // 3. 复用保存参数逻辑
-    // 此时不会去读取 ImageLabel 上可能新画的框，
-    // 内存中的 savedTrackingBox 依然是原模板的坐标。
-    // 因此调用此函数会用最新的 UI 参数覆盖 app_settings.appset，但完美保留原始框坐标。
-    saveSettingsToDir(currentTemplateDirPath);
-
-    // 4. 同时更新全局配置记录（软件下次启动时的默认参数）
-    saveSettings();
-
-    // 5. 如果修改了目标字符，需要触发一次内存模板的重新加载机制
-    // 以防止仅仅修改了字库却因为没有重新加载导致无法生效
-    loadLastTemplateConfig();
-
-    QMessageBox::information(this, "成功", QString("已成功保存当前界面设置！\n(模板：%1)\n注：原始定位区域与喷码检测区域保持不变。").arg(dir.dirName()));
 }
 
 

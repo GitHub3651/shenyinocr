@@ -41,7 +41,7 @@ private:
     QString nextAvailableFileName(const QString &baseName, const QStringList &reservedFileNames = QStringList()) const;
     void refreshSaveNamePreviews();
     bool saveTemplates();
-    bool saveCharacterBoxesToSettings(const QList<CharacterBox> &boxes) const;
+    bool saveCharacterBoxesToSettings(const QList<CharacterBox> &boxes, QString *errorMessage) const;
     bool removeOldCharacterTemplateImages() const;
 
     QImage m_sourceImage;
