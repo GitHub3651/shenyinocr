@@ -546,6 +546,7 @@ Widget::Widget(QWidget *parent)
 
     // 设置文本框自动换行
     ui->dateEdit->setWordWrapMode(QTextOption::WordWrap);
+    setupTemplatePrivateSettingDirtyTracking();
     setupWordTemplateEditorCombo();
     setupTemplateGuide();
     setupCharacterSplitSettingsDialog();
@@ -578,7 +579,6 @@ Widget::Widget(QWidget *parent)
 
     setupDetectModeChangeTracking();
     setupGlobalSettingBindings();
-    setupTemplatePrivateSettingDirtyTracking();
     clearAllGlobalSettingDirty();
     clearTemplatePrivateSettingDirty();
     updateHardwareParameterUiEnabled();
@@ -2698,21 +2698,9 @@ void Widget::restoreDefaultGlobalSettings()
         return;
     }
 
-    QStringList skippedGroups;
-    if (!cameraOpen) {
-        skippedGroups.append("相机未打开，已保留当前相机参数");
-    }
-    if (!plcConnected) {
-        skippedGroups.append("PLC未连接，已保留当前PLC运行参数");
-    } else {
-        skippedGroups.append("PLC已连接，已保留当前PLC连接参数");
-    }
-
-    QString message = "当前可设置参数已恢复为默认值。带 * 的参数需要点击对应【设置】后才会生效。";
-    if (!skippedGroups.isEmpty()) {
-        message += "\n\n" + skippedGroups.join("\n");
-    }
-    showParameterInfo("提示", message);
+    showParameterInfo(
+        "提示",
+        "当前可设置参数已恢复为默认值。带 * 的参数需要点击对应【设置】后才会生效。");
 }
 
 void Widget::restoreCameraHardwareUiFromApplied()
@@ -3692,6 +3680,7 @@ void Widget::setupWordTemplateEditorCombo()
 
         if (ui->textsure_btn) ui->textsure_btn->setStyleSheet(commonPushButtonStyle);
         if (ui->batchTextsure_btn) ui->batchTextsure_btn->setStyleSheet(commonPushButtonStyle);
+        if (ui->batchImageThresholdButton) ui->batchImageThresholdButton->setStyleSheet(commonPushButtonStyle);
         if (ui->WriteVDpushButton) ui->WriteVDpushButton->setStyleSheet(commonPushButtonStyle);
         if (ui->pushButton_7) ui->pushButton_7->setStyleSheet(commonPushButtonStyle);
         if (ui->pushButton_3) ui->pushButton_3->setStyleSheet(commonPushButtonStyle);
@@ -3789,64 +3778,20 @@ void Widget::setupWordTemplateEditorCombo()
     if (ui && ui->batchTextsure_btn) {
         ui->batchTextsure_btn->hide();
     }
+    if (ui && ui->batchImageThresholdButton) {
+        ui->batchImageThresholdButton->setToolTip(
+                    "把当前图像合格阈值保存到所有已选择的产品模板。");
+        ui->batchImageThresholdButton->installEventFilter(this);
+        ui->batchImageThresholdButton->hide();
+    }
 
     if (m_wordTemplateEditComboBox || !ui || !ui->dateEdit || !ui->lineEdit_yuzhi) {
         return;
     }
 
-    auto shiftGridRowsDown = [](QGridLayout *gridLayout, int firstRow) {
-        struct MovedWidget {
-            QWidget *widget = nullptr;
-            int row = 0;
-            int column = 0;
-            int rowSpan = 1;
-            int columnSpan = 1;
-            Qt::Alignment alignment;
-        };
-
-        std::vector<MovedWidget> movedWidgets;
-        for (int i = gridLayout->count() - 1; i >= 0; --i) {
-            QLayoutItem *item = gridLayout->itemAt(i);
-            if (!item || !item->widget()) {
-                continue;
-            }
-
-            int row = 0;
-            int column = 0;
-            int rowSpan = 1;
-            int columnSpan = 1;
-            gridLayout->getItemPosition(i, &row, &column, &rowSpan, &columnSpan);
-            if (row < firstRow) {
-                continue;
-            }
-
-            MovedWidget moved;
-            moved.widget = item->widget();
-            moved.row = row;
-            moved.column = column;
-            moved.rowSpan = rowSpan;
-            moved.columnSpan = columnSpan;
-            moved.alignment = item->alignment();
-            movedWidgets.push_back(moved);
-            gridLayout->removeWidget(moved.widget);
-        }
-
-        for (auto it = movedWidgets.rbegin(); it != movedWidgets.rend(); ++it) {
-            gridLayout->addWidget(it->widget,
-                                  it->row + 1,
-                                  it->column,
-                                  it->rowSpan,
-                                  it->columnSpan,
-                                  it->alignment);
-        }
-    };
-
     QWidget *parentWidget = ui->dateEdit->parentWidget();
     if (parentWidget) {
         QGridLayout *targetLayout = qobject_cast<QGridLayout *>(parentWidget->layout());
-        if (targetLayout) {
-            shiftGridRowsDown(targetLayout, 0);
-        }
 
         m_wordTemplateEditWidget = new QWidget(parentWidget);
         m_wordTemplateEditWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -4123,6 +4068,10 @@ void Widget::refreshWordTemplateEditorCombo()
 
     if (ui->batchTextsure_btn) {
         ui->batchTextsure_btn->setVisible(isWordMode && m_wordTemplateProfiles.size() > 1);
+    }
+    if (ui->batchImageThresholdButton) {
+        ui->batchImageThresholdButton->setVisible(
+                    isWordMode && m_wordTemplateProfiles.size() > 1);
     }
 
     if (m_manualCharacterCropButton) {
@@ -5462,6 +5411,98 @@ void Widget::on_batchTextsure_btn_clicked()
     showParameterInfo("提示", "已将当前目标字符保存到所有已选择的产品模板。");
 }
 
+void Widget::on_batchImageThresholdButton_clicked()
+{
+    if (ui->comboBox_4->currentIndex() != 1) {
+        on_pushButton_3_clicked();
+        return;
+    }
+
+    if ((myThread && myThread->isRunning())
+            || (cameraThread && cameraThread->isRunning())
+            || isCollecting) {
+        showParameterWarning("提示", "请先停止检测后再批量修改模板阈值");
+        return;
+    }
+
+    if (m_wordTemplateProfiles.empty()) {
+        showParameterInfoAsError("提示", "请先选择字库模板");
+        return;
+    }
+
+    const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
+    int thresholdValue = 0;
+    if (!parseIntValue(thresholdText, &thresholdValue)) {
+        showParameterWarning("参数错误", "图像合格阈值必须是整数");
+        return;
+    }
+
+    const int currentProfileIndex = currentWordTemplateProfileIndex();
+    bool currentProfileUpdated = false;
+    int successCount = 0;
+    QStringList failedMessages;
+
+    for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
+        WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
+        const QString profileName = profile.name.isEmpty()
+                ? QDir(profile.dirPath).dirName()
+                : profile.name;
+
+        QDir directory(profile.dirPath);
+        if (profile.dirPath.isEmpty() || !directory.exists()) {
+            failedMessages.append(QString("%1：产品模板文件夹不存在").arg(profileName));
+            continue;
+        }
+
+        TemplatePrivateSettings updatedSettings = profile.settings;
+        updatedSettings.imageThreshold = thresholdValue;
+        QString saveError;
+        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
+                                                             updatedSettings,
+                                                             &saveError)) {
+            failedMessages.append(
+                        QString("%1：图像合格阈值写入失败，%2")
+                        .arg(profileName)
+                        .arg(saveError));
+            continue;
+        }
+
+        profile.settings = updatedSettings;
+        if (i == currentProfileIndex) {
+            currentProfileUpdated = true;
+        }
+        ++successCount;
+    }
+
+    if (currentProfileUpdated) {
+        emit ssim(thresholdValue);
+    }
+    refreshTemplateImageThresholdDirty();
+
+    if (successCount == 0) {
+        showParameterCritical(
+                    "严重警告",
+                    QString("所有模板的图像合格阈值批量设置失败：\n%1")
+                    .arg(failedMessages.join("\n")));
+        return;
+    }
+
+    if (!failedMessages.isEmpty()) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    QString("已成功设置 %1 个模板，失败 %2 个：\n%3")
+                    .arg(successCount)
+                    .arg(failedMessages.size())
+                    .arg(failedMessages.join("\n")));
+        return;
+    }
+
+    showParameterInfo(
+                "提示",
+                "已将当前图像合格阈值保存到所有已选择的产品模板。");
+}
+
 
 
 
@@ -6587,6 +6628,7 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
 
     if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
+            || watched == ui->batchImageThresholdButton
             || watched == ui->pushButton_browseImageSavePath
             || watched == ui->pushButton_7
             || watched == ui->pushButton_10

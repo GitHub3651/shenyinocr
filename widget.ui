@@ -961,9 +961,9 @@
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>0</y>
+               <y>-138</y>
                <width>586</width>
-               <height>415</height>
+               <height>547</height>
               </rect>
              </property>
              <property name="styleSheet">
@@ -999,47 +999,16 @@
                    <property name="verticalSpacing">
                     <number>15</number>
                    </property>
-                   <item row="0" column="1" colspan="2">
-                    <widget class="QTextEdit" name="dateEdit">
-                     <property name="sizePolicy">
-                      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-                       <horstretch>0</horstretch>
-                       <verstretch>100</verstretch>
-                      </sizepolicy>
-                     </property>
+                   <item row="5" column="1" colspan="2">
+                    <widget class="QPushButton" name="manualCharacterCropButton">
                      <property name="minimumSize">
                       <size>
                        <width>0</width>
-                       <height>100</height>
+                       <height>42</height>
                       </size>
-                     </property>
-                     <property name="maximumSize">
-                      <size>
-                       <width>16777215</width>
-                       <height>100</height>
-                      </size>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">font: 16pt &quot;黑体&quot;;
-background-color: transparent;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="0" column="0">
-                    <widget class="QLabel" name="label">
-                     <property name="styleSheet">
-                      <string notr="true">background-color: transparent;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;</string>
                      </property>
                      <property name="text">
-                      <string>目标字符内容:</string>
+                      <string>分割字符模板</string>
                      </property>
                     </widget>
                    </item>
@@ -1118,8 +1087,64 @@ background-color: #ebeef5;
                      </item>
                     </layout>
                    </item>
-                   <item row="2" column="0">
+                   <item row="1" column="0">
+                    <widget class="QLabel" name="label">
+                     <property name="minimumSize">
+                      <size>
+                       <width>180</width>
+                       <height>0</height>
+                      </size>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">background-color: transparent;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;</string>
+                     </property>
+                     <property name="text">
+                      <string>目标字符内容:</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1" colspan="2">
+                    <widget class="QTextEdit" name="dateEdit">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                       <horstretch>0</horstretch>
+                       <verstretch>100</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="minimumSize">
+                      <size>
+                       <width>0</width>
+                       <height>100</height>
+                      </size>
+                     </property>
+                     <property name="maximumSize">
+                      <size>
+                       <width>16777215</width>
+                       <height>100</height>
+                      </size>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">font: 16pt &quot;黑体&quot;;
+background-color: transparent;
+border: 1px solid #ebeef5;
+border-radius: 4px;
+color: #333333;
+padding: 5px 10px;</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="0">
                     <widget class="QLabel" name="label_4">
+                     <property name="minimumSize">
+                      <size>
+                       <width>180</width>
+                       <height>0</height>
+                      </size>
+                     </property>
                      <property name="styleSheet">
                       <string notr="true">background-color: transparent;
 border: 1px solid #ebeef5;
@@ -1132,7 +1157,7 @@ padding: 5px 10px;</string>
                      </property>
                     </widget>
                    </item>
-                   <item row="2" column="1">
+                   <item row="3" column="1">
                     <widget class="QLineEdit" name="lineEdit_yuzhi">
                      <property name="minimumSize">
                       <size>
@@ -1152,31 +1177,62 @@ padding: 5px 10px;</string>
                      </property>
                     </widget>
                    </item>
-                   <item row="2" column="2">
-                    <widget class="QPushButton" name="pushButton_3">
-                     <property name="minimumSize">
-                      <size>
-                       <width>0</width>
-                       <height>50</height>
-                      </size>
+                   <item row="4" column="1">
+                    <layout class="QHBoxLayout" name="imageThresholdButtonLayout">
+                     <property name="spacing">
+                      <number>6</number>
                      </property>
-                     <property name="text">
-                      <string>设置</string>
+                     <property name="leftMargin">
+                      <number>0</number>
                      </property>
-                    </widget>
-                   </item>
-                   <item row="3" column="1" colspan="2">
-                    <widget class="QPushButton" name="manualCharacterCropButton">
-                     <property name="minimumSize">
-                      <size>
-                       <width>0</width>
-                       <height>42</height>
-                      </size>
+                     <property name="topMargin">
+                      <number>0</number>
                      </property>
-                     <property name="text">
-                      <string>分割字符模板</string>
+                     <property name="rightMargin">
+                      <number>0</number>
                      </property>
-                    </widget>
+                     <property name="bottomMargin">
+                      <number>0</number>
+                     </property>
+                     <item>
+                      <widget class="QPushButton" name="pushButton_3">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>50</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>设置</string>
+                       </property>
+                      </widget>
+                     </item>
+                     <item>
+                      <widget class="QPushButton" name="batchImageThresholdButton">
+                       <property name="sizePolicy">
+                        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                         <horstretch>0</horstretch>
+                         <verstretch>0</verstretch>
+                        </sizepolicy>
+                       </property>
+                       <property name="minimumSize">
+                        <size>
+                         <width>0</width>
+                         <height>50</height>
+                        </size>
+                       </property>
+                       <property name="text">
+                        <string>批量设置阈值</string>
+                       </property>
+                      </widget>
+                     </item>
+                    </layout>
                    </item>
                   </layout>
                  </widget>
@@ -1288,7 +1344,7 @@ background-color: #ebeef5;
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-468</y>
+               <y>0</y>
                <width>586</width>
                <height>1320</height>
               </rect>
