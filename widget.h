@@ -21,6 +21,7 @@
 #include <QMetaType>
 #include <QTranslator>
 #include <QLineEdit>
+#include <QList>
 #include <QMap>
 #include <QStringList>
 #include <QStandardItemModel>
@@ -224,8 +225,6 @@ private slots:
     void on_pushButton_7_clicked();
 
 
-    void on_pushButton_11_clicked();
-
     void on_pushButton_12_clicked();
 
     void on_pushButton_tissueRoughnessThreshold_clicked();
@@ -247,6 +246,69 @@ private:
     bool applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    enum class HardwareDependency {
+        None,
+        Camera,
+        PlcConnection,
+        PlcRuntime
+    };
+    struct GlobalSettingBinding {
+        QString key;
+        QWidget *editor = nullptr;
+        QLabel *label = nullptr;
+        QString originalLabelText;
+        bool requireApply = false;
+        bool dirty = false;
+        HardwareDependency hardwareDependency = HardwareDependency::None;
+    };
+    struct HardwareActionBinding {
+        QWidget *control = nullptr;
+        HardwareDependency hardwareDependency = HardwareDependency::None;
+    };
+    void setupGlobalSettingBindings();
+    void registerGlobalSetting(const QString &key,
+                               QWidget *editor,
+                               QLabel *label,
+                               bool requireApply,
+                               HardwareDependency hardwareDependency = HardwareDependency::None);
+    void registerHardwareAction(QWidget *control,
+                                HardwareDependency hardwareDependency);
+    void setupNumericInputValidators();
+    bool isGlobalSettingDirtyByValue(const QString &key) const;
+    void refreshGlobalSettingDirty(const QString &key);
+    void refreshGlobalSettingsDirty(const QStringList &keys);
+    void refreshAllGlobalSettingDirty();
+    void markGlobalSettingDirty(const QString &key);
+    void clearGlobalSettingDirty(const QString &key);
+    void clearGlobalSettingsDirty(const QStringList &keys);
+    void clearAllGlobalSettingDirty();
+    void updateGlobalSettingDirtyUi(const QString &key);
+    void updateAppliedGlobalSettingFromUi(const QString &key);
+    void updateAppliedGlobalSettingsFromUi(const QStringList &keys);
+    void syncImmediateGlobalSettingsFromUi();
+    QStringList dirtyGlobalSettingNames() const;
+    QStringList dirtyTemplateSettingNames() const;
+    QStringList dirtySettingNames() const;
+    bool hasDirtySettings() const;
+    QString dirtySettingsMessage() const;
+    void setupTemplatePrivateSettingDirtyTracking();
+    void refreshTemplateTargetTextDirty();
+    void refreshTemplateImageThresholdDirty();
+    void refreshTemplatePrivateSettingDirty();
+    void markTemplateTargetTextDirty();
+    void markTemplateImageThresholdDirty();
+    void clearTemplateTargetTextDirty();
+    void clearTemplateImageThresholdDirty();
+    void clearTemplatePrivateSettingDirty();
+    void updateTemplatePrivateSettingDirtyUi();
+    void restoreCameraHardwareUiFromApplied();
+    void restorePlcRunUiFromApplied();
+    QString hardwareDisabledStyle(QWidget *widget) const;
+    void setHardwareControlEnabled(QWidget *widget,
+                                   bool enabled,
+                                   const QString &disabledReason,
+                                   bool showDisabledReason = true);
+    void updateHardwareParameterUiEnabled();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
     void updateTissueRoughnessUiVisibility();
@@ -262,6 +324,7 @@ private:
     void showManualCharacterTemplateCropDialog();
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
+    void restoreDefaultGlobalSettings();
     QString detectModeIdForIndex(int index) const;
     QString currentDetectModeId() const;
     QStringList currentTemplatePathsForMode(const QString &modeId) const;
@@ -284,8 +347,17 @@ private:
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QMap<QString, QStringList> m_templateDirPathsByMode;
+    QMap<QString, GlobalSettingBinding> m_globalSettingBindings;
+    QList<HardwareActionBinding> m_hardwareActionBindings;
+    GlobalSettings m_appliedGlobalSettings;
     QString m_currentDetectModeId = "word_detection";
+    bool m_globalSettingsLoaded = false;
     bool m_applyingGlobalSettings = false;
+    bool m_updatingGlobalSettingsUi = false;
+    bool m_templateTargetTextDirty = false;
+    bool m_templateImageThresholdDirty = false;
+    QString m_templateTargetLabelText;
+    QString m_templateThresholdLabelText;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器
@@ -438,6 +510,7 @@ private:
                                         WordTemplateProfile *profile,
                                         QString *errorMessage);
     void setupWordTemplateEditorCombo();
+    void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
@@ -458,7 +531,7 @@ private:
     GlobalSettings collectGlobalSettingsFromUi() const;
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
-    void setupDefaultValues();          ///< 设置默认值
+    void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
     void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
     QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生
     QString templateBaseDirPath;          // 产品模板父目录

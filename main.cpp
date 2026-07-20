@@ -149,11 +149,11 @@ int main(int argc, char *argv[])
     // 创建共享内存，长度为1字节，用于标记程序的运行状态
     shared.create(1);
 
-    Widget w;
+    setupLogging();
 #ifdef Q_OS_WIN
     SetUnhandledExceptionFilter(callback);
 #endif
-    setupLogging();
+    Widget w;
     w.showMaximized();
     //return a.exec();
     int result = a.exec();

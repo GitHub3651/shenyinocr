@@ -54,16 +54,21 @@
 #include <QStandardPaths>
 #include <QTreeView>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QGridLayout>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QToolTip>
 #include <QWhatsThis>
 #include <QCursor>
 #include <QFrame>
+#include <QTextEdit>
+#include <QIntValidator>
+#include <QDoubleValidator>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -79,9 +84,84 @@
 #include <memory>
 #include <queue>
 #include <utility>
+#include <cmath>
 
 #pragma execution_character_set("utf-8")
 using namespace std;
+
+namespace {
+const QStringList &detectModeIds()
+{
+    static const QStringList ids = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    return ids;
+}
+
+const QStringList &imageSaveModeIds()
+{
+    static const QStringList ids = {"save_none", "save_ng", "save_ok", "save_all"};
+    return ids;
+}
+
+const QStringList &imageSaveTypeIds()
+{
+    static const QStringList ids = {"save_both", "save_annotated_only", "save_raw_only"};
+    return ids;
+}
+
+const QStringList &colorChannelIds()
+{
+    static const QStringList ids = {"color", "red", "green", "blue"};
+    return ids;
+}
+
+const QStringList &rotationIds()
+{
+    static const QStringList ids = {"rotate_none", "rotate_clockwise_90", "rotate_counterclockwise_90", "rotate_180"};
+    return ids;
+}
+
+const QStringList &triggerModeIds()
+{
+    static const QStringList ids = {"trigger_continuous", "trigger_interval"};
+    return ids;
+}
+
+QString idAt(const QStringList &ids, int index, const QString &fallback)
+{
+    return (index >= 0 && index < ids.size()) ? ids.at(index) : fallback;
+}
+
+bool parseIntValue(const QString &text, int *value)
+{
+    bool ok = false;
+    const int parsed = text.trimmed().toInt(&ok);
+    if (!ok) {
+        return false;
+    }
+    if (value) {
+        *value = parsed;
+    }
+    return true;
+}
+
+bool parseDoubleValue(const QString &text, double *value)
+{
+    bool ok = false;
+    const double parsed = text.trimmed().toDouble(&ok);
+    if (!ok) {
+        return false;
+    }
+    if (value) {
+        *value = parsed;
+    }
+    return true;
+}
+
+bool fuzzyEqual(double left, double right)
+{
+    return std::fabs(left - right) < 0.000001;
+}
+}
 
 // OpenCV全局变量
 cv::Point pt1, pt2;
@@ -488,12 +568,20 @@ Widget::Widget(QWidget *parent)
 
     qDebug() << "6. 变量初始化与信号连接完毕";
 
-    // 设置默认值并加载保存的设置
-    setupDefaultValues();
-    qDebug() << "7. setupDefaultValues 执行完毕";
+    // 公共配置的默认值统一由 AppSettingsManager 提供。
+    setupNumericInputValidators();
+    setupNonPersistentDefaults();
+    qDebug() << "7. setupNonPersistentDefaults 执行完毕";
 
     loadSettings();
     qDebug() << "8. loadSettings 执行完毕";
+
+    setupDetectModeChangeTracking();
+    setupGlobalSettingBindings();
+    setupTemplatePrivateSettingDirtyTracking();
+    clearAllGlobalSettingDirty();
+    clearTemplatePrivateSettingDirty();
+    updateHardwareParameterUiEnabled();
 
     updateCurrentTemplateName();
 
@@ -504,8 +592,13 @@ Widget::Widget(QWidget *parent)
         QByteArray ad = targetIp.toUtf8();
         Address = ad.data();
 
-        int tmp = client->ConnectTo(Address, 0, 1);
+        int tmp = client->ConnectTo(Address,
+                                    ui->lineEdit_2->text().toInt(),
+                                    ui->lineEdit_3->text().toInt());
         if (tmp == 0) {
+            updateAppliedGlobalSettingsFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+            refreshGlobalSettingsDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+            saveSettings(false);
             QMessageBox::information(this, "提示", "PLC 自动连接成功");
         } else {
             // 2. 使用 QString::arg() 动态拼接字符串
@@ -514,6 +607,7 @@ Widget::Widget(QWidget *parent)
 
             QMessageBox::warning(this, "警告", errorMsg);
         }
+        updateHardwareParameterUiEnabled();
     });
 
 
@@ -1762,10 +1856,10 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     while (matchIt.hasNext()) { matchIt.next(); targetNum++; }
     if (targetNum == 0 && !targetString.isEmpty()) targetNum = targetString.length();
 
-    bool thresholdOk = false;
-    int thresholdValue = static_cast<int>(imageThresholdText.trimmed().toDouble(&thresholdOk));
+    int thresholdValue = 0;
+    bool thresholdOk = parseIntValue(imageThresholdText, &thresholdValue);
     if (!thresholdOk) {
-        thresholdValue = static_cast<int>(ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk));
+        thresholdOk = parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue);
     }
     if (thresholdOk) {
         templatematch->ssimvalue(thresholdValue);
@@ -2432,7 +2526,8 @@ void Widget::showCharacterSplitSettingsDialog()
 
 void Widget::setupSoftwareSettingsPage()
 {
-    if (!ui || !ui->lineEdit_softwareDataDir || !ui->pushButton_clearSoftwareData) {
+    if (!ui || !ui->lineEdit_softwareDataDir || !ui->pushButton_clearSoftwareData
+            || !ui->pushButton_restoreDefaultSettings) {
         return;
     }
 
@@ -2459,6 +2554,23 @@ void Widget::setupSoftwareSettingsPage()
             &QPushButton::clicked,
             this,
             &Widget::clearCurrentSoftwareData);
+
+    ui->pushButton_restoreDefaultSettings->setStyleSheet(
+                "QPushButton {"
+                "background-color: transparent;"
+                "border: 1px solid #ebeef5;"
+                "border-radius: 4px;"
+                "color: #333333;"
+                "padding: 5px 10px;"
+                "}"
+                "QPushButton:hover { background-color: #f2f6fc; }"
+                "QPushButton:pressed { background-color: #ebeef5; }");
+    ui->pushButton_restoreDefaultSettings->setToolTip(
+                "将软件公共界面设置恢复为默认值，不删除产品模板、识别图片、授权文件或日志。");
+    connect(ui->pushButton_restoreDefaultSettings,
+            &QPushButton::clicked,
+            this,
+            &Widget::restoreDefaultGlobalSettings);
 }
 
 void Widget::clearCurrentSoftwareData()
@@ -2481,7 +2593,9 @@ void Widget::clearCurrentSoftwareData()
         return;
     }
 
-    applyGlobalSettingsToUi(AppSettingsManager::defaultGlobalSettings());
+    const GlobalSettings defaultSettings = AppSettingsManager::defaultGlobalSettings();
+    m_appliedGlobalSettings = defaultSettings;
+    applyGlobalSettingsToUi(defaultSettings);
     clearWordMultiTemplateState();
     currentTemplateDirPath.clear();
     m_loadedTrackingTemplate.release();
@@ -2497,7 +2611,957 @@ void Widget::clearCurrentSoftwareData()
         imageLabel->clearSelection();
         imageLabel->clearGreenRects();
     }
+    clearAllGlobalSettingDirty();
+    clearTemplatePrivateSettingDirty();
+    updateHardwareParameterUiEnabled();
     showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
+}
+
+void Widget::restoreDefaultGlobalSettings()
+{
+    const QMessageBox::StandardButton answer = QMessageBox::question(
+                this,
+                "恢复默认设置",
+                "将恢复软件公共设置为默认值。\n"
+                "不会删除产品模板、识别图片、授权文件或日志。\n\n"
+                "是否继续？",
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+
+    const GlobalSettings defaultSettings = AppSettingsManager::defaultGlobalSettings();
+    GlobalSettings editableDefaults = m_appliedGlobalSettings;
+    const bool cameraOpen = (m_pcMyCamera != nullptr && m_bOpenDevice);
+    const bool plcConnected = (client != nullptr && client->Connected());
+
+    // 始终可以修改的软件参数。
+    editableDefaults.detectModeId = defaultSettings.detectModeId;
+    editableDefaults.imageSaveModeId = defaultSettings.imageSaveModeId;
+    editableDefaults.imageSaveTypeId = defaultSettings.imageSaveTypeId;
+    editableDefaults.imageSavePath = defaultSettings.imageSavePath;
+    editableDefaults.templateBaseDirPath = defaultSettings.templateBaseDirPath;
+    editableDefaults.colorChannelId = defaultSettings.colorChannelId;
+    editableDefaults.imageRotationId = defaultSettings.imageRotationId;
+    editableDefaults.triggerEnabled = defaultSettings.triggerEnabled;
+    editableDefaults.tissueRoughnessThreshold = defaultSettings.tissueRoughnessThreshold;
+    editableDefaults.templateDirPathsByMode.clear();
+
+    // 相机参数只有在相机已打开、控件可设置时才恢复。
+    if (cameraOpen) {
+        editableDefaults.cameraExposure = defaultSettings.cameraExposure;
+        editableDefaults.cameraGain = defaultSettings.cameraGain;
+    }
+
+    // PLC连接参数只在PLC未连接、控件可编辑时恢复。
+    if (!plcConnected) {
+        editableDefaults.plcIp = defaultSettings.plcIp;
+        editableDefaults.plcRack = defaultSettings.plcRack;
+        editableDefaults.plcSlot = defaultSettings.plcSlot;
+    }
+
+    // PLC运行参数只有在PLC已连接、控件可设置时才恢复。
+    if (plcConnected) {
+        editableDefaults.triggerModeId = defaultSettings.triggerModeId;
+        editableDefaults.plcModeId = defaultSettings.plcModeId;
+        editableDefaults.photoDistance = defaultSettings.photoDistance;
+        editableDefaults.photoTime = defaultSettings.photoTime;
+        editableDefaults.cameraDelay = defaultSettings.cameraDelay;
+        editableDefaults.rejectDistance = defaultSettings.rejectDistance;
+        editableDefaults.rejectTime = defaultSettings.rejectTime;
+        editableDefaults.rejectPosition = defaultSettings.rejectPosition;
+    }
+
+    applyGlobalSettingsToUi(editableDefaults);
+    clearWordMultiTemplateState();
+    currentTemplateDirPath.clear();
+    m_loadedTrackingTemplate.release();
+    savedDatePoly.clear();
+    savedTrackingBox = cv::Rect2d();
+    hasValidBoxes = false;
+    digitTemplates.clear();
+    digitTemplateTargetIndexes.clear();
+    m_currentTemplateNameVisible = false;
+    updateCurrentTemplateName();
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+        imageLabel->clearSelection();
+        imageLabel->clearGreenRects();
+    }
+    clearTemplatePrivateSettingDirty();
+    updateHardwareParameterUiEnabled();
+    refreshAllGlobalSettingDirty();
+
+    if (!saveSettings(false)) {
+        showParameterCritical("严重警告", "恢复默认设置失败：公共配置保存失败。");
+        return;
+    }
+
+    QStringList skippedGroups;
+    if (!cameraOpen) {
+        skippedGroups.append("相机未打开，已保留当前相机参数");
+    }
+    if (!plcConnected) {
+        skippedGroups.append("PLC未连接，已保留当前PLC运行参数");
+    } else {
+        skippedGroups.append("PLC已连接，已保留当前PLC连接参数");
+    }
+
+    QString message = "当前可设置参数已恢复为默认值。带 * 的参数需要点击对应【设置】后才会生效。";
+    if (!skippedGroups.isEmpty()) {
+        message += "\n\n" + skippedGroups.join("\n");
+    }
+    showParameterInfo("提示", message);
+}
+
+void Widget::restoreCameraHardwareUiFromApplied()
+{
+    const bool oldUpdating = m_updatingGlobalSettingsUi;
+    m_updatingGlobalSettingsUi = true;
+
+    QSignalBlocker exposureBlocker(ui->spinBox);
+    QSignalBlocker gainBlocker(ui->lineEdit_14);
+    ui->spinBox->setValue(m_appliedGlobalSettings.cameraExposure);
+    ui->lineEdit_14->setText(QString::number(static_cast<int>(m_appliedGlobalSettings.cameraGain)));
+
+    m_updatingGlobalSettingsUi = oldUpdating;
+    refreshGlobalSettingsDirty(QStringList() << "camera.exposure" << "camera.gain");
+}
+
+void Widget::restorePlcRunUiFromApplied()
+{
+    const bool oldUpdating = m_updatingGlobalSettingsUi;
+    m_updatingGlobalSettingsUi = true;
+
+    const int triggerModeIndex =
+            (m_appliedGlobalSettings.triggerModeId == "trigger_continuous") ? 0 : 1;
+
+    QSignalBlocker triggerModeBlocker(ui->comboBox_3);
+    QSignalBlocker photoDistanceBlocker(ui->lineEdit_6);
+    QSignalBlocker photoTimeBlocker(ui->lineEdit_20);
+    QSignalBlocker cameraDelayBlocker(ui->lineEdit_4);
+    QSignalBlocker rejectDistanceBlocker(ui->lineEdit_7);
+    QSignalBlocker rejectTimeBlocker(ui->lineEdit_8);
+    QSignalBlocker rejectPositionBlocker(ui->lineEdit_12);
+
+    ui->comboBox_3->setCurrentIndex(triggerModeIndex);
+    ui->lineEdit_6->setText(QString::number(m_appliedGlobalSettings.photoDistance));
+    ui->lineEdit_20->setText(QString::number(m_appliedGlobalSettings.photoTime));
+    ui->lineEdit_4->setText(QString::number(m_appliedGlobalSettings.cameraDelay));
+    ui->lineEdit_7->setText(QString::number(m_appliedGlobalSettings.rejectDistance));
+    ui->lineEdit_8->setText(QString::number(m_appliedGlobalSettings.rejectTime));
+    ui->lineEdit_12->setText(QString::number(m_appliedGlobalSettings.rejectPosition));
+
+    m_updatingGlobalSettingsUi = oldUpdating;
+    refreshGlobalSettingsDirty(QStringList()
+                               << "plc.trigger_mode"
+                               << "plc.photo_distance"
+                               << "plc.photo_time"
+                               << "plc.camera_delay"
+                               << "plc.reject_distance"
+                               << "plc.reject_time"
+                               << "plc.reject_position");
+}
+
+QString Widget::hardwareDisabledStyle(QWidget *widget) const
+{
+    if (qobject_cast<QPushButton *>(widget)) {
+        return QString(
+                    "QPushButton {"
+                    "background-color: #f5f7fa;"
+                    "color: #a8abb2;"
+                    "border: 1px solid #e4e7ed;"
+                    "border-radius: 4px;"
+                    "}"
+                    "QPushButton:hover { background-color: #f5f7fa; }"
+                    "QPushButton:pressed { background-color: #f5f7fa; }");
+    }
+    if (qobject_cast<QComboBox *>(widget)) {
+        return QString(
+                    "QComboBox {"
+                    "background-color: #f5f7fa;"
+                    "color: #a8abb2;"
+                    "border: 1px solid #e4e7ed;"
+                    "border-radius: 4px;"
+                    "}"
+                    "QComboBox::drop-down {"
+                    "background-color: #eef0f3;"
+                    "border-left: 1px solid #e4e7ed;"
+                    "}");
+    }
+    if (qobject_cast<QAbstractSpinBox *>(widget)) {
+        return QString(
+                    "QAbstractSpinBox {"
+                    "background-color: #f5f7fa;"
+                    "color: #a8abb2;"
+                    "border: 1px solid #e4e7ed;"
+                    "border-radius: 4px;"
+                    "}"
+                    "QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {"
+                    "background-color: #eef0f3;"
+                    "}");
+    }
+    if (qobject_cast<QLineEdit *>(widget)) {
+        return QString(
+                    "QLineEdit {"
+                    "background-color: #f5f7fa;"
+                    "color: #a8abb2;"
+                    "border: 1px solid #e4e7ed;"
+                    "border-radius: 4px;"
+                    "padding: 5px 10px;"
+                    "}");
+    }
+    if (qobject_cast<QLabel *>(widget)) {
+        return QString(
+                    "QLabel {"
+                    "background-color: #f5f7fa;"
+                    "color: #a8abb2;"
+                    "border: 1px solid #e4e7ed;"
+                    "border-radius: 4px;"
+                    "padding: 5px 10px;"
+                    "}");
+    }
+    return QString();
+}
+
+void Widget::setHardwareControlEnabled(QWidget *widget,
+                                       bool enabled,
+                                       const QString &disabledReason,
+                                       bool showDisabledReason)
+{
+    if (!widget) {
+        return;
+    }
+
+    static const char originalStyleProperty[] = "_hardwareOriginalStyleSheet";
+    static const char originalToolTipProperty[] = "_hardwareOriginalToolTip";
+    if (!widget->property(originalStyleProperty).isValid()) {
+        widget->setProperty(originalStyleProperty, widget->styleSheet());
+    }
+    if (!widget->property(originalToolTipProperty).isValid()) {
+        widget->setProperty(originalToolTipProperty, widget->toolTip());
+    }
+
+    const QString originalStyle = widget->property(originalStyleProperty).toString();
+    const QString originalToolTip = widget->property(originalToolTipProperty).toString();
+    const bool isLabel = qobject_cast<QLabel *>(widget) != nullptr;
+    widget->setEnabled(isLabel ? true : enabled);
+
+    if (enabled) {
+        widget->setStyleSheet(originalStyle);
+        widget->setToolTip(originalToolTip);
+        widget->unsetCursor();
+        return;
+    }
+
+    const QString disabledStyle = hardwareDisabledStyle(widget);
+    widget->setStyleSheet(disabledStyle.isEmpty()
+                          ? originalStyle
+                          : disabledStyle);
+    widget->setToolTip(showDisabledReason ? disabledReason : originalToolTip);
+    if (showDisabledReason) {
+        widget->setCursor(Qt::ForbiddenCursor);
+    } else {
+        widget->unsetCursor();
+    }
+}
+
+void Widget::updateHardwareParameterUiEnabled()
+{
+    const bool cameraOpen = (m_pcMyCamera != nullptr && m_bOpenDevice);
+    const bool plcConnected = (client != nullptr && client->Connected());
+    const QString cameraDisabledReason = "请先打开相机后再设置该参数。";
+    const QString plcRunDisabledReason = "请先连接 PLC 后再设置该参数。";
+    const QString plcConnectDisabledReason = "PLC 已连接。如需修改连接参数，请先断开 PLC。";
+
+    if (!cameraOpen) {
+        restoreCameraHardwareUiFromApplied();
+    }
+    if (!plcConnected) {
+        restorePlcRunUiFromApplied();
+    }
+
+    auto dependencyState = [&](HardwareDependency dependency,
+                               bool *enabled,
+                               QString *disabledReason) {
+        if (!enabled || !disabledReason) {
+            return;
+        }
+        switch (dependency) {
+        case HardwareDependency::Camera:
+            *enabled = cameraOpen;
+            *disabledReason = cameraDisabledReason;
+            break;
+        case HardwareDependency::PlcConnection:
+            *enabled = !plcConnected;
+            *disabledReason = plcConnectDisabledReason;
+            break;
+        case HardwareDependency::PlcRuntime:
+            *enabled = plcConnected;
+            *disabledReason = plcRunDisabledReason;
+            break;
+        case HardwareDependency::None:
+            *enabled = true;
+            disabledReason->clear();
+            break;
+        }
+    };
+
+    for (auto it = m_globalSettingBindings.constBegin();
+         it != m_globalSettingBindings.constEnd();
+         ++it) {
+        const GlobalSettingBinding &binding = it.value();
+        if (binding.hardwareDependency == HardwareDependency::None) {
+            continue;
+        }
+
+        bool enabled = true;
+        QString disabledReason;
+        dependencyState(binding.hardwareDependency, &enabled, &disabledReason);
+        setHardwareControlEnabled(binding.editor, enabled, disabledReason, true);
+        setHardwareControlEnabled(binding.label, enabled, disabledReason, false);
+    }
+
+    for (const HardwareActionBinding &binding : m_hardwareActionBindings) {
+        bool enabled = true;
+        QString disabledReason;
+        dependencyState(binding.hardwareDependency, &enabled, &disabledReason);
+        setHardwareControlEnabled(binding.control, enabled, disabledReason, true);
+    }
+}
+
+void Widget::setupNumericInputValidators()
+{
+    auto setIntValidator = [this](QLineEdit *lineEdit) {
+        if (lineEdit) {
+            lineEdit->setValidator(new QIntValidator(0, 2147483647, lineEdit));
+        }
+    };
+
+    setIntValidator(ui->lineEdit_14);
+    setIntValidator(ui->lineEdit_yuzhi);
+    setIntValidator(ui->lineEdit_2);
+    setIntValidator(ui->lineEdit_3);
+    setIntValidator(ui->lineEdit_6);
+    setIntValidator(ui->lineEdit_20);
+    setIntValidator(ui->lineEdit_4);
+    setIntValidator(ui->lineEdit_7);
+    setIntValidator(ui->lineEdit_8);
+    setIntValidator(ui->lineEdit_12);
+
+    if (ui->lineEdit_tissueRoughnessThreshold) {
+        QDoubleValidator *validator = new QDoubleValidator(0.001, 1000000.0, 3, ui->lineEdit_tissueRoughnessThreshold);
+        validator->setNotation(QDoubleValidator::StandardNotation);
+        ui->lineEdit_tissueRoughnessThreshold->setValidator(validator);
+    }
+}
+
+void Widget::setupGlobalSettingBindings()
+{
+    m_globalSettingBindings.clear();
+    m_hardwareActionBindings.clear();
+
+    registerGlobalSetting("camera.exposure",
+                          ui->spinBox,
+                          ui->label_19,
+                          true,
+                          HardwareDependency::Camera);
+    registerGlobalSetting("camera.gain",
+                          ui->lineEdit_14,
+                          ui->label_16,
+                          true,
+                          HardwareDependency::Camera);
+    registerGlobalSetting("image.color_channel", ui->comboBox_5, ui->label_12, true);
+    registerGlobalSetting("image.rotation", ui->comboBox_2, ui->label_27, true);
+    registerGlobalSetting("tissue.roughness_threshold",
+                          ui->lineEdit_tissueRoughnessThreshold,
+                          ui->label_tissueRoughnessThreshold,
+                          true);
+    registerGlobalSetting("plc.trigger_mode",
+                          ui->comboBox_3,
+                          ui->label_15,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.photo_distance",
+                          ui->lineEdit_6,
+                          ui->label_8,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.photo_time",
+                          ui->lineEdit_20,
+                          ui->label_14,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.camera_delay",
+                          ui->lineEdit_4,
+                          ui->label_13,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.reject_distance",
+                          ui->lineEdit_7,
+                          ui->label_6,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.reject_time",
+                          ui->lineEdit_8,
+                          ui->label_10,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.reject_position",
+                          ui->lineEdit_12,
+                          ui->label_17,
+                          true,
+                          HardwareDependency::PlcRuntime);
+    registerGlobalSetting("plc.ip",
+                          ui->lineEdit,
+                          ui->label_2,
+                          false,
+                          HardwareDependency::PlcConnection);
+    registerGlobalSetting("plc.rack",
+                          ui->lineEdit_2,
+                          ui->label_3,
+                          false,
+                          HardwareDependency::PlcConnection);
+    registerGlobalSetting("plc.slot",
+                          ui->lineEdit_3,
+                          ui->label_3,
+                          false,
+                          HardwareDependency::PlcConnection);
+
+    registerGlobalSetting("detect.mode", ui->comboBox_4, ui->label_18, false);
+    registerGlobalSetting("image.save_mode", ui->comboBox, ui->label_11, false);
+    registerGlobalSetting("image.save_type", ui->comboBox_saveImageType, ui->label_saveImageType, false);
+    registerGlobalSetting("image.save_path", ui->lineEdit_imageSavePath, ui->label_imageSavePath, false);
+    registerGlobalSetting("trigger.enabled", ui->checkBox, nullptr, false);
+
+    registerHardwareAction(ui->sureButton, HardwareDependency::Camera);
+    registerHardwareAction(ui->pushButton_12, HardwareDependency::Camera);
+    registerHardwareAction(ui->ConnectpushButton, HardwareDependency::PlcConnection);
+    registerHardwareAction(ui->DisconnectpushButton, HardwareDependency::PlcRuntime);
+    registerHardwareAction(ui->plcmodebtn, HardwareDependency::PlcRuntime);
+    registerHardwareAction(ui->WriteVDpushButton, HardwareDependency::PlcRuntime);
+    registerHardwareAction(ui->pushButton_8, HardwareDependency::PlcRuntime);
+}
+
+void Widget::registerGlobalSetting(const QString &key,
+                                   QWidget *editor,
+                                   QLabel *label,
+                                   bool requireApply,
+                                   HardwareDependency hardwareDependency)
+{
+    if (key.trimmed().isEmpty() || !editor) {
+        return;
+    }
+
+    GlobalSettingBinding binding;
+    binding.key = key;
+    binding.editor = editor;
+    binding.label = label;
+    binding.originalLabelText = label ? label->text() : QString();
+    binding.requireApply = requireApply;
+    binding.dirty = false;
+    binding.hardwareDependency = hardwareDependency;
+    m_globalSettingBindings.insert(key, binding);
+
+    auto onChanged = [this, key]() {
+        if (m_updatingGlobalSettingsUi || m_applyingGlobalSettings) {
+            return;
+        }
+
+        auto it = m_globalSettingBindings.find(key);
+        if (it == m_globalSettingBindings.end()) {
+            return;
+        }
+
+        if (it.value().requireApply) {
+            refreshGlobalSettingDirty(key);
+        } else {
+            if (QLineEdit *lineEdit = qobject_cast<QLineEdit *>(it.value().editor)) {
+                if (!lineEdit->hasAcceptableInput()) {
+                    return;
+                }
+            }
+            updateAppliedGlobalSettingFromUi(key);
+            saveSettings(false);
+        }
+    };
+
+    if (QLineEdit *lineEdit = qobject_cast<QLineEdit *>(editor)) {
+        connect(lineEdit, &QLineEdit::textChanged, this, [onChanged](const QString &) {
+            onChanged();
+        });
+    } else if (QSpinBox *spinBox = qobject_cast<QSpinBox *>(editor)) {
+        connect(spinBox,
+                static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged),
+                this,
+                [onChanged](int) {
+            onChanged();
+        });
+    } else if (QComboBox *comboBox = qobject_cast<QComboBox *>(editor)) {
+        connect(comboBox,
+                static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
+                this,
+                [onChanged](int) {
+            onChanged();
+        });
+    } else if (QCheckBox *checkBox = qobject_cast<QCheckBox *>(editor)) {
+        connect(checkBox, &QCheckBox::toggled, this, [onChanged](bool) {
+            onChanged();
+        });
+    }
+}
+
+void Widget::registerHardwareAction(QWidget *control,
+                                    HardwareDependency hardwareDependency)
+{
+    if (!control || hardwareDependency == HardwareDependency::None) {
+        return;
+    }
+
+    HardwareActionBinding binding;
+    binding.control = control;
+    binding.hardwareDependency = hardwareDependency;
+    m_hardwareActionBindings.append(binding);
+}
+
+bool Widget::isGlobalSettingDirtyByValue(const QString &key) const
+{
+    const auto it = m_globalSettingBindings.constFind(key);
+    if (it == m_globalSettingBindings.constEnd() || !it.value().requireApply) {
+        return false;
+    }
+
+    auto lineEditIntDirty = [](QLineEdit *lineEdit, int appliedValue) {
+        int value = 0;
+        return !lineEdit || !parseIntValue(lineEdit->text(), &value) || value != appliedValue;
+    };
+    auto lineEditDoubleDirty = [](QLineEdit *lineEdit, double appliedValue) {
+        double value = 0.0;
+        return !lineEdit || !parseDoubleValue(lineEdit->text(), &value) || !fuzzyEqual(value, appliedValue);
+    };
+    auto comboDirty = [](QComboBox *comboBox, const QStringList &ids, const QString &appliedId) {
+        if (!comboBox) {
+            return true;
+        }
+        return idAt(ids, comboBox->currentIndex(), QString()) != appliedId;
+    };
+
+    if (key == "camera.exposure") {
+        return ui->spinBox->value() != m_appliedGlobalSettings.cameraExposure;
+    }
+    if (key == "camera.gain") {
+        return lineEditIntDirty(ui->lineEdit_14, static_cast<int>(m_appliedGlobalSettings.cameraGain));
+    }
+    if (key == "image.color_channel") {
+        return comboDirty(ui->comboBox_5, colorChannelIds(), m_appliedGlobalSettings.colorChannelId);
+    }
+    if (key == "image.rotation") {
+        return comboDirty(ui->comboBox_2, rotationIds(), m_appliedGlobalSettings.imageRotationId);
+    }
+    if (key == "tissue.roughness_threshold") {
+        return lineEditDoubleDirty(ui->lineEdit_tissueRoughnessThreshold,
+                                   m_appliedGlobalSettings.tissueRoughnessThreshold);
+    }
+    if (key == "plc.trigger_mode") {
+        return comboDirty(ui->comboBox_3, triggerModeIds(), m_appliedGlobalSettings.triggerModeId);
+    }
+    if (key == "plc.photo_distance") {
+        return lineEditIntDirty(ui->lineEdit_6, m_appliedGlobalSettings.photoDistance);
+    }
+    if (key == "plc.photo_time") {
+        return lineEditIntDirty(ui->lineEdit_20, m_appliedGlobalSettings.photoTime);
+    }
+    if (key == "plc.camera_delay") {
+        return lineEditIntDirty(ui->lineEdit_4, m_appliedGlobalSettings.cameraDelay);
+    }
+    if (key == "plc.reject_distance") {
+        return lineEditIntDirty(ui->lineEdit_7, m_appliedGlobalSettings.rejectDistance);
+    }
+    if (key == "plc.reject_time") {
+        return lineEditIntDirty(ui->lineEdit_8, m_appliedGlobalSettings.rejectTime);
+    }
+    if (key == "plc.reject_position") {
+        return lineEditIntDirty(ui->lineEdit_12, m_appliedGlobalSettings.rejectPosition);
+    }
+    if (key == "plc.ip") {
+        return ui->lineEdit->text().trimmed() != m_appliedGlobalSettings.plcIp.trimmed();
+    }
+    if (key == "plc.rack") {
+        return lineEditIntDirty(ui->lineEdit_2, m_appliedGlobalSettings.plcRack);
+    }
+    if (key == "plc.slot") {
+        return lineEditIntDirty(ui->lineEdit_3, m_appliedGlobalSettings.plcSlot);
+    }
+
+    return false;
+}
+
+void Widget::refreshGlobalSettingDirty(const QString &key)
+{
+    auto it = m_globalSettingBindings.find(key);
+    if (it == m_globalSettingBindings.end()) {
+        return;
+    }
+
+    it.value().dirty = isGlobalSettingDirtyByValue(key);
+    updateGlobalSettingDirtyUi(key);
+}
+
+void Widget::refreshGlobalSettingsDirty(const QStringList &keys)
+{
+    for (const QString &key : keys) {
+        refreshGlobalSettingDirty(key);
+    }
+}
+
+void Widget::refreshAllGlobalSettingDirty()
+{
+    for (auto it = m_globalSettingBindings.constBegin();
+         it != m_globalSettingBindings.constEnd();
+         ++it) {
+        refreshGlobalSettingDirty(it.key());
+    }
+}
+
+void Widget::markGlobalSettingDirty(const QString &key)
+{
+    auto it = m_globalSettingBindings.find(key);
+    if (it == m_globalSettingBindings.end()) {
+        return;
+    }
+
+    it.value().dirty = true;
+    updateGlobalSettingDirtyUi(key);
+}
+
+void Widget::clearGlobalSettingDirty(const QString &key)
+{
+    auto it = m_globalSettingBindings.find(key);
+    if (it == m_globalSettingBindings.end()) {
+        return;
+    }
+
+    it.value().dirty = false;
+    updateGlobalSettingDirtyUi(key);
+}
+
+void Widget::clearGlobalSettingsDirty(const QStringList &keys)
+{
+    for (const QString &key : keys) {
+        clearGlobalSettingDirty(key);
+    }
+}
+
+void Widget::clearAllGlobalSettingDirty()
+{
+    for (auto it = m_globalSettingBindings.begin(); it != m_globalSettingBindings.end(); ++it) {
+        it.value().dirty = false;
+    }
+
+    for (auto it = m_globalSettingBindings.constBegin(); it != m_globalSettingBindings.constEnd(); ++it) {
+        updateGlobalSettingDirtyUi(it.key());
+    }
+}
+
+void Widget::updateGlobalSettingDirtyUi(const QString &key)
+{
+    auto it = m_globalSettingBindings.find(key);
+    if (it == m_globalSettingBindings.end() || !it.value().label) {
+        return;
+    }
+
+    QLabel *targetLabel = it.value().label;
+    const QString originalText = it.value().originalLabelText;
+    bool anyDirtyOnSameLabel = false;
+    for (auto scan = m_globalSettingBindings.constBegin();
+         scan != m_globalSettingBindings.constEnd();
+         ++scan) {
+        if (scan.value().label == targetLabel && scan.value().dirty) {
+            anyDirtyOnSameLabel = true;
+            break;
+        }
+    }
+
+    targetLabel->setText(anyDirtyOnSameLabel ? originalText + " *" : originalText);
+}
+
+void Widget::updateAppliedGlobalSettingFromUi(const QString &key)
+{
+    static const QStringList detectModeIds = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList imageSaveModeIds = {"save_none", "save_ng", "save_ok", "save_all"};
+    static const QStringList imageSaveTypeIds = {"save_both", "save_annotated_only", "save_raw_only"};
+    static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
+    static const QStringList rotationIds = {"rotate_none", "rotate_clockwise_90", "rotate_counterclockwise_90", "rotate_180"};
+    static const QStringList triggerModeIds = {"trigger_continuous", "trigger_interval"};
+
+    auto idAt = [](const QStringList &ids, int index, const QString &fallback) {
+        return (index >= 0 && index < ids.size()) ? ids.at(index) : fallback;
+    };
+
+    if (key == "detect.mode") {
+        m_appliedGlobalSettings.detectModeId = idAt(detectModeIds,
+                                                    ui->comboBox_4->currentIndex(),
+                                                    m_appliedGlobalSettings.detectModeId);
+        m_appliedGlobalSettings.plcModeId = m_appliedGlobalSettings.triggerModeId;
+    } else if (key == "image.save_mode") {
+        m_appliedGlobalSettings.imageSaveModeId = idAt(imageSaveModeIds,
+                                                       ui->comboBox->currentIndex(),
+                                                       m_appliedGlobalSettings.imageSaveModeId);
+    } else if (key == "image.save_type") {
+        m_appliedGlobalSettings.imageSaveTypeId = idAt(imageSaveTypeIds,
+                                                       ui->comboBox_saveImageType->currentIndex(),
+                                                       m_appliedGlobalSettings.imageSaveTypeId);
+    } else if (key == "image.save_path") {
+        m_appliedGlobalSettings.imageSavePath = selectedDir;
+    } else if (key == "trigger.enabled") {
+        m_appliedGlobalSettings.triggerEnabled = ui->checkBox->isChecked();
+    } else if (key == "template.base_dir") {
+        m_appliedGlobalSettings.templateBaseDirPath = templateBaseDirPath;
+    } else if (key == "template.history_paths") {
+        m_appliedGlobalSettings.templateDirPathsByMode = m_templateDirPathsByMode;
+        m_appliedGlobalSettings.templateDirPathsByMode.insert(currentDetectModeId(),
+                                                              currentTemplatePathsForMode(currentDetectModeId()));
+    } else if (key == "camera.exposure") {
+        m_appliedGlobalSettings.cameraExposure = ui->spinBox->value();
+    } else if (key == "camera.gain") {
+        m_appliedGlobalSettings.cameraGain = ui->lineEdit_14->text().toInt();
+    } else if (key == "image.color_channel") {
+        m_appliedGlobalSettings.colorChannelId = idAt(colorChannelIds,
+                                                      ui->comboBox_5->currentIndex(),
+                                                      m_appliedGlobalSettings.colorChannelId);
+    } else if (key == "image.rotation") {
+        m_appliedGlobalSettings.imageRotationId = idAt(rotationIds,
+                                                       ui->comboBox_2->currentIndex(),
+                                                       m_appliedGlobalSettings.imageRotationId);
+    } else if (key == "tissue.roughness_threshold") {
+        m_appliedGlobalSettings.tissueRoughnessThreshold = ui->lineEdit_tissueRoughnessThreshold->text().toDouble();
+    } else if (key == "plc.trigger_mode") {
+        m_appliedGlobalSettings.triggerModeId = idAt(triggerModeIds,
+                                                     ui->comboBox_3->currentIndex(),
+                                                     m_appliedGlobalSettings.triggerModeId);
+        m_appliedGlobalSettings.plcModeId = m_appliedGlobalSettings.triggerModeId;
+    } else if (key == "plc.photo_distance") {
+        m_appliedGlobalSettings.photoDistance = ui->lineEdit_6->text().toInt();
+    } else if (key == "plc.photo_time") {
+        m_appliedGlobalSettings.photoTime = ui->lineEdit_20->text().toInt();
+    } else if (key == "plc.camera_delay") {
+        m_appliedGlobalSettings.cameraDelay = ui->lineEdit_4->text().toInt();
+    } else if (key == "plc.reject_distance") {
+        m_appliedGlobalSettings.rejectDistance = ui->lineEdit_7->text().toInt();
+    } else if (key == "plc.reject_time") {
+        m_appliedGlobalSettings.rejectTime = ui->lineEdit_8->text().toInt();
+    } else if (key == "plc.reject_position") {
+        m_appliedGlobalSettings.rejectPosition = ui->lineEdit_12->text().toInt();
+    } else if (key == "plc.ip") {
+        m_appliedGlobalSettings.plcIp = ui->lineEdit->text().trimmed();
+    } else if (key == "plc.rack") {
+        m_appliedGlobalSettings.plcRack = ui->lineEdit_2->text().toInt();
+    } else if (key == "plc.slot") {
+        m_appliedGlobalSettings.plcSlot = ui->lineEdit_3->text().toInt();
+    }
+}
+
+void Widget::updateAppliedGlobalSettingsFromUi(const QStringList &keys)
+{
+    for (const QString &key : keys) {
+        updateAppliedGlobalSettingFromUi(key);
+    }
+}
+
+void Widget::syncImmediateGlobalSettingsFromUi()
+{
+    updateAppliedGlobalSettingsFromUi(QStringList()
+                                      << "detect.mode"
+                                      << "image.save_mode"
+                                      << "image.save_type"
+                                      << "image.save_path"
+                                      << "trigger.enabled"
+                                      << "plc.ip"
+                                      << "plc.rack"
+                                      << "plc.slot"
+                                      << "template.base_dir"
+                                      << "template.history_paths");
+}
+
+QStringList Widget::dirtyGlobalSettingNames() const
+{
+    QStringList names;
+    for (auto it = m_globalSettingBindings.constBegin();
+         it != m_globalSettingBindings.constEnd();
+         ++it) {
+        if (!it.value().dirty) {
+            continue;
+        }
+
+        QString name = it.value().originalLabelText.trimmed();
+        name.remove(":");
+        name.remove("：");
+        if (name.isEmpty()) {
+            name = it.key();
+        }
+        if (!names.contains(name)) {
+            names.append(name);
+        }
+    }
+    return names;
+}
+
+QStringList Widget::dirtyTemplateSettingNames() const
+{
+    QStringList names;
+    if (m_templateTargetTextDirty) {
+        names.append("目标字符内容");
+    }
+    if (m_templateImageThresholdDirty) {
+        names.append("图像合格阈值");
+    }
+    return names;
+}
+
+QStringList Widget::dirtySettingNames() const
+{
+    QStringList names = dirtyGlobalSettingNames();
+    const QStringList templateNames = dirtyTemplateSettingNames();
+    for (const QString &name : templateNames) {
+        if (!names.contains(name)) {
+            names.append(name);
+        }
+    }
+    return names;
+}
+
+bool Widget::hasDirtySettings() const
+{
+    return !dirtySettingNames().isEmpty();
+}
+
+QString Widget::dirtySettingsMessage() const
+{
+    const QStringList names = dirtySettingNames();
+    if (names.isEmpty()) {
+        return QString();
+    }
+
+    QStringList lines;
+    for (const QString &name : names) {
+        lines.append(QString("- %1").arg(name));
+    }
+    return QString("存在未应用参数，请先点击对应设置按钮：\n\n%1")
+            .arg(lines.join("\n"));
+}
+
+void Widget::setupTemplatePrivateSettingDirtyTracking()
+{
+    m_templateTargetLabelText = ui->label ? ui->label->text() : QString("目标字符内容:");
+    m_templateThresholdLabelText = ui->label_4 ? ui->label_4->text() : QString("图像合格阈值:");
+
+    if (ui->dateEdit) {
+        connect(ui->dateEdit, &QTextEdit::textChanged, this, [this]() {
+            if (m_updatingGlobalSettingsUi || m_applyingGlobalSettings) {
+                return;
+            }
+            if (ui->comboBox_4->currentIndex() == 1 && !m_wordTemplateProfiles.empty()) {
+                refreshTemplateTargetTextDirty();
+            }
+        });
+    }
+    if (ui->lineEdit_yuzhi) {
+        connect(ui->lineEdit_yuzhi, &QLineEdit::textChanged, this, [this](const QString &) {
+            if (m_updatingGlobalSettingsUi || m_applyingGlobalSettings) {
+                return;
+            }
+            if (ui->comboBox_4->currentIndex() == 1 && !m_wordTemplateProfiles.empty()) {
+                refreshTemplateImageThresholdDirty();
+            }
+        });
+    }
+}
+
+void Widget::refreshTemplateTargetTextDirty()
+{
+    bool dirty = false;
+    const int profileIndex = currentWordTemplateProfileIndex();
+    if (ui && ui->comboBox_4->currentIndex() == 1
+            && profileIndex >= 0
+            && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
+        const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+        dirty = (ui->dateEdit->toPlainText() != profile.settings.targetText);
+    }
+
+    m_templateTargetTextDirty = dirty;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::refreshTemplateImageThresholdDirty()
+{
+    bool dirty = false;
+    const int profileIndex = currentWordTemplateProfileIndex();
+    if (ui && ui->comboBox_4->currentIndex() == 1
+            && profileIndex >= 0
+            && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
+        int thresholdValue = 0;
+        if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)) {
+            dirty = true;
+        } else {
+            const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+            dirty = (thresholdValue != static_cast<int>(profile.settings.imageThreshold));
+        }
+    }
+
+    m_templateImageThresholdDirty = dirty;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::refreshTemplatePrivateSettingDirty()
+{
+    refreshTemplateTargetTextDirty();
+    refreshTemplateImageThresholdDirty();
+}
+
+void Widget::markTemplateTargetTextDirty()
+{
+    m_templateTargetTextDirty = true;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::markTemplateImageThresholdDirty()
+{
+    m_templateImageThresholdDirty = true;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::clearTemplateTargetTextDirty()
+{
+    m_templateTargetTextDirty = false;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::clearTemplateImageThresholdDirty()
+{
+    m_templateImageThresholdDirty = false;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::clearTemplatePrivateSettingDirty()
+{
+    m_templateTargetTextDirty = false;
+    m_templateImageThresholdDirty = false;
+    updateTemplatePrivateSettingDirtyUi();
+}
+
+void Widget::updateTemplatePrivateSettingDirtyUi()
+{
+    if (ui->label) {
+        ui->label->setText(m_templateTargetTextDirty
+                           ? m_templateTargetLabelText + " *"
+                           : m_templateTargetLabelText);
+    }
+    if (ui->label_4) {
+        ui->label_4->setText(m_templateImageThresholdDirty
+                             ? m_templateThresholdLabelText + " *"
+                             : m_templateThresholdLabelText);
+    }
 }
 
 void Widget::showManualCharacterTemplateCropDialog()
@@ -2664,11 +3728,6 @@ void Widget::setupWordTemplateEditorCombo()
 
     if (ui && ui->pushButton_browseImageSavePath) {
         ui->pushButton_browseImageSavePath->installEventFilter(this);
-    }
-
-    if (ui && ui->pushButton_11) {
-        ui->pushButton_11->setToolTip("把相机、PLC、触发、图像保存和识别模式等公共界面设置保存到当前 Windows 用户的软件数据文件夹。\n不会修改任何产品模板的目标字符、图像阈值或字符框配置。");
-        ui->pushButton_11->installEventFilter(this);
     }
 
     if (ui && ui->pushButton_7) {
@@ -2839,6 +3898,11 @@ void Widget::setupWordTemplateEditorCombo()
         m_wordTemplateEditWidget->hide();
     }
 
+    updateTissueRoughnessUiVisibility();
+}
+
+void Widget::setupDetectModeChangeTracking()
+{
     connect(ui->comboBox_4,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
@@ -2864,7 +3928,6 @@ void Widget::setupWordTemplateEditorCombo()
                 restoreTemplatesForMode(m_currentDetectModeId, false);
                 saveSettings();
             });
-    updateTissueRoughnessUiVisibility();
 }
 
 void Widget::clearWordMultiTemplateState()
@@ -2885,6 +3948,7 @@ void Widget::clearWordMultiTemplateState()
     m_currentTemplateNameVisible = false;
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
+    clearTemplatePrivateSettingDirty();
 }
 
 QString Widget::detectModeIdForIndex(int index) const
@@ -3167,8 +4231,9 @@ void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
     }
     {
         QSignalBlocker blocker(ui->lineEdit_yuzhi);
-        ui->lineEdit_yuzhi->setText(QString::number(profile.settings.imageThreshold));
+        ui->lineEdit_yuzhi->setText(QString::number(static_cast<int>(profile.settings.imageThreshold)));
     }
+    refreshTemplatePrivateSettingDirty();
 
     qDebug() << "[WORD_TEMPLATE_PROFILE] editing profile:"
              << profileIndex
@@ -3528,10 +4593,9 @@ bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
         return false;
     }
 
-    bool isOk = false;
-    const float gainValue = ui->lineEdit_14->text().trimmed().toFloat(&isOk);
-    if (!isOk) {
-        const QString message = QString("请输入有效的增益数字！当前相机允许范围：%1 ~ %2")
+    int gainIntValue = 0;
+    if (!parseIntValue(ui->lineEdit_14->text(), &gainIntValue)) {
+        const QString message = QString("请输入有效的整数增益！当前相机允许范围：%1 ~ %2")
                 .arg(stParam.fMin)
                 .arg(stParam.fMax);
         if (errors) errors->append(message);
@@ -3539,6 +4603,7 @@ bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
         return false;
     }
 
+    const float gainValue = static_cast<float>(gainIntValue);
     if (gainValue < stParam.fMin || gainValue > stParam.fMax) {
         const QString message = QString("输入的增益值超出限制！当前相机允许范围：%1 ~ %2")
                 .arg(stParam.fMin)
@@ -3570,6 +4635,8 @@ bool Widget::applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuc
     ok = applyCameraGainFromUi(errors, showSuccessMessage) && ok;
 
     if (ok) {
+        updateAppliedGlobalSettingsFromUi(QStringList() << "camera.exposure" << "camera.gain");
+        refreshGlobalSettingsDirty(QStringList() << "camera.exposure" << "camera.gain");
         saveSettings(false);
     }
     return ok;
@@ -3577,10 +4644,9 @@ bool Widget::applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuc
 
 bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    bool thresholdOk = false;
-    const double thresholdValue = ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk);
-    if (!thresholdOk) {
-        const QString message = "图像合格阈值必须是数字";
+    int thresholdValue = 0;
+    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)) {
+        const QString message = "图像合格阈值必须是整数";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("参数错误", message);
         return false;
@@ -3630,12 +4696,19 @@ bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSucc
 
     emit rotate(angleValue);
     emit choosechannel(colorchannel);
-    emit sendDataTo(ui->lineEdit_4->text());
-    emit ssim(static_cast<int>(thresholdValue));
+    emit ssim(thresholdValue);
 
     if (showSuccessMessage) {
         showParameterInfo("提示", "运行参数设置成功");
     }
+    updateAppliedGlobalSettingsFromUi(QStringList()
+                                      << "image.rotation"
+                                      << "image.color_channel"
+                                      << "tissue.roughness_threshold");
+    refreshGlobalSettingsDirty(QStringList()
+                               << "image.rotation"
+                               << "image.color_channel"
+                               << "tissue.roughness_threshold");
     saveSettings(false);
     return true;
 }
@@ -3676,6 +4749,8 @@ bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMess
     if (showSuccessMessage) {
         showParameterInfo("提示", PLCmode == 0 ? "连续模式设置成功" : "间歇模式设置成功");
     }
+    updateAppliedGlobalSettingFromUi("plc.trigger_mode");
+    refreshGlobalSettingDirty("plc.trigger_mode");
     saveSettings(false);
     return true;
 }
@@ -3746,9 +4821,25 @@ bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMess
         return false;
     }
 
+    emit sendDataTo(ui->lineEdit_4->text());
+
     if (showSuccessMessage) {
         showParameterInfo("提示", "所有设置已经完成！");
     }
+    updateAppliedGlobalSettingsFromUi(QStringList()
+                                      << "plc.photo_distance"
+                                      << "plc.photo_time"
+                                      << "plc.camera_delay"
+                                      << "plc.reject_distance"
+                                      << "plc.reject_time"
+                                      << "plc.reject_position");
+    refreshGlobalSettingsDirty(QStringList()
+                               << "plc.photo_distance"
+                               << "plc.photo_time"
+                               << "plc.camera_delay"
+                               << "plc.reject_distance"
+                               << "plc.reject_time"
+                               << "plc.reject_position");
     saveSettings(false);
     return true;
 }
@@ -3760,7 +4851,11 @@ bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMess
 void Widget::on_sureButton_clicked()
 {
     QStringList errors;
-    applyCameraExposureFromUi(&errors, true);
+    if (applyCameraExposureFromUi(&errors, true)) {
+        updateAppliedGlobalSettingFromUi("camera.exposure");
+        refreshGlobalSettingDirty("camera.exposure");
+        saveSettings(false);
+    }
 }
 
 /**
@@ -3863,14 +4958,21 @@ void Widget::on_ConnectpushButton_clicked()
     QByteArray ad(ui->lineEdit->text().toUtf8());
     Address = ad.data();
 
-    int tmp = client->ConnectTo(Address, 0, 1);
+    const int rack = ui->lineEdit_2->text().toInt();
+    const int slot = ui->lineEdit_3->text().toInt();
+    int tmp = client->ConnectTo(Address, rack, slot);
 
     if (tmp == 0)
     {
+        updateAppliedGlobalSettingsFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+        refreshGlobalSettingsDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+        saveSettings(false);
+        updateHardwareParameterUiEnabled();
         QMessageBox::information(this, "success", "PLC连接成功");
     }
     else
     {
+        updateHardwareParameterUiEnabled();
         QMessageBox::critical(this, "error", "PLC连接失败");
     }
 }
@@ -3884,10 +4986,12 @@ void Widget::on_DisconnectpushButton_clicked()
 
     if (tmp == 0)
     {
+        updateHardwareParameterUiEnabled();
         QMessageBox::information(this, "success", "PLC断开成功");
     }
     else
     {
+        updateHardwareParameterUiEnabled();
         QMessageBox::critical(this, "error", "PLC断开失败");
     }
 }
@@ -4116,6 +5220,7 @@ void Widget::on_cancel_clicked()
     ui->VideoShoot->setEnabled(true);
     ui->pushButton_4->setEnabled(true);
     isCollecting = false;
+    updateHardwareParameterUiEnabled();
 
     qDebug() << "=== on_cancel_clicked() COMPLETED ===";
 }
@@ -4193,6 +5298,7 @@ void Widget::on_textsure_btn_clicked()
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
+        refreshTemplateTargetTextDirty();
 
         const QString profileName = profile.name.isEmpty()
                 ? QDir(profile.dirPath).dirName()
@@ -4352,6 +5458,7 @@ void Widget::on_batchTextsure_btn_clicked()
         return;
     }
 
+    refreshTemplateTargetTextDirty();
     showParameterInfo("提示", "已将当前目标字符保存到所有已选择的产品模板。");
 }
 
@@ -4446,8 +5553,28 @@ void Widget::slot_clearResultLabel()
  */
 void Widget::closeEvent(QCloseEvent *event)
 {
+    updateHardwareParameterUiEnabled();
+    refreshAllGlobalSettingDirty();
+    refreshTemplatePrivateSettingDirty();
+
+    if (hasDirtySettings()) {
+        QMessageBox confirmBox(this);
+        confirmBox.setIcon(QMessageBox::Question);
+        confirmBox.setWindowTitle("退出确认");
+        confirmBox.setText("存在未应用参数，直接退出将不会保存这些修改。\n\n是否直接退出？");
+        QPushButton *exitButton = confirmBox.addButton("直接退出", QMessageBox::AcceptRole);
+        QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
+        confirmBox.setDefaultButton(cancelButton);
+        confirmBox.exec();
+
+        if (confirmBox.clickedButton() != exitButton) {
+            event->ignore();
+            return;
+        }
+    }
+
     cv::destroyAllWindows();
-    saveSettings();
+    saveSettings(false);
     event->accept();
 }
 
@@ -4510,16 +5637,15 @@ void Widget::on_pushButton_3_clicked()
         }
 
         const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
-        bool thresholdOk = false;
-        const int thresholdValue = static_cast<int>(thresholdText.toDouble(&thresholdOk));
-        if (!thresholdOk) {
-            showParameterWarning("参数错误", "图像合格阈值必须是数字");
+        int thresholdValue = 0;
+        if (!parseIntValue(thresholdText, &thresholdValue)) {
+            showParameterWarning("参数错误", "图像合格阈值必须是整数");
             return;
         }
 
         WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
         TemplatePrivateSettings updatedSettings = profile.settings;
-        updatedSettings.imageThreshold = thresholdText.toDouble();
+        updatedSettings.imageThreshold = thresholdValue;
         QString saveError;
         if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
                                                              updatedSettings,
@@ -4533,6 +5659,7 @@ void Widget::on_pushButton_3_clicked()
 
         profile.settings = updatedSettings;
         emit ssim(thresholdValue);
+        refreshTemplateImageThresholdDirty();
         showParameterInfo("提示",
                           QString("模板 [%1] 图像阈值设置成功：%2")
                           .arg(profile.name)
@@ -5189,6 +6316,9 @@ void Widget::on_pushButton_9_clicked()
     }
 
     emit rotate(angleValue);
+    updateAppliedGlobalSettingFromUi("image.rotation");
+    refreshGlobalSettingDirty("image.rotation");
+    saveSettings(false);
     showParameterInfo("提示", "旋转角度设置成功");
 }
 
@@ -5276,7 +6406,11 @@ void Widget::loadSettings()
         qDebug() << "[GLOBAL_SETTINGS] load failed, using defaults:" << errorMessage;
         settings = AppSettingsManager::defaultGlobalSettings();
     }
+    settings.cameraGain = static_cast<int>(settings.cameraGain);
+    m_appliedGlobalSettings = settings;
+    m_globalSettingsLoaded = true;
     applyGlobalSettingsToUi(settings);
+    applyTissueRoughnessThresholdFromUi(false);
 }
 
 /**
@@ -5285,8 +6419,15 @@ void Widget::loadSettings()
  */
 bool Widget::saveSettings(bool showErrorMessage)
 {
+    if (!m_globalSettingsLoaded) {
+        qWarning() << "[GLOBAL_SETTINGS] save skipped before initial load completed";
+        return false;
+    }
+
+    syncImmediateGlobalSettingsFromUi();
+
     QString errorMessage;
-    if (!AppSettingsManager::saveGlobalSettings(collectGlobalSettingsFromUi(), &errorMessage)) {
+    if (!AppSettingsManager::saveGlobalSettings(m_appliedGlobalSettings, &errorMessage)) {
         if (showErrorMessage) {
             showParameterCritical("严重警告", QString("当前界面设置保存失败：\n%1").arg(errorMessage));
         } else {
@@ -5317,7 +6458,7 @@ GlobalSettings Widget::collectGlobalSettingsFromUi() const
     settings.imageSavePath = selectedDir;
     settings.templateBaseDirPath = templateBaseDirPath;
     settings.cameraExposure = ui->spinBox->value();
-    settings.cameraGain = ui->lineEdit_14->text().toDouble();
+    settings.cameraGain = ui->lineEdit_14->text().toInt();
     settings.colorChannelId = idAt(colorChannelIds, ui->comboBox_5->currentIndex(), settings.colorChannelId);
     settings.imageRotationId = idAt(rotationIds, ui->comboBox_2->currentIndex(), settings.imageRotationId);
     settings.triggerEnabled = ui->checkBox->isChecked();
@@ -5354,7 +6495,9 @@ void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
     };
 
     const bool oldApplyingGlobalSettings = m_applyingGlobalSettings;
+    const bool oldUpdatingGlobalSettingsUi = m_updatingGlobalSettingsUi;
     m_applyingGlobalSettings = true;
+    m_updatingGlobalSettingsUi = true;
     m_templateDirPathsByMode = settings.templateDirPathsByMode;
 
     ui->comboBox_4->setCurrentIndex(indexOf(detectModeIds, settings.detectModeId, 1));
@@ -5365,7 +6508,7 @@ void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
     ui->comboBox_3->setCurrentIndex(indexOf(triggerModeIds, settings.triggerModeId, 1));
     ui->checkBox->setChecked(settings.triggerEnabled);
     ui->spinBox->setValue(settings.cameraExposure);
-    ui->lineEdit_14->setText(QString::number(settings.cameraGain));
+    ui->lineEdit_14->setText(QString::number(static_cast<int>(settings.cameraGain)));
     ui->lineEdit->setText(settings.plcIp);
     ui->lineEdit_2->setText(QString::number(settings.plcRack));
     ui->lineEdit_3->setText(QString::number(settings.plcSlot));
@@ -5380,9 +6523,9 @@ void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
     templateBaseDirPath = settings.templateBaseDirPath;
     updateSaveDirButtonText();
     updateTissueRoughnessUiVisibility();
-    applyTissueRoughnessThresholdFromUi(false);
     m_currentDetectModeId = currentDetectModeId();
     m_applyingGlobalSettings = oldApplyingGlobalSettings;
+    m_updatingGlobalSettingsUi = oldUpdatingGlobalSettingsUi;
     restoreTemplatesForMode(m_currentDetectModeId, false);
 }
 
@@ -5391,39 +6534,22 @@ void Widget::applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &set
     QSignalBlocker targetBlocker(ui->dateEdit);
     QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
     ui->dateEdit->setPlainText(settings.targetText);
-    ui->lineEdit_yuzhi->setText(QString::number(settings.imageThreshold));
+    ui->lineEdit_yuzhi->setText(QString::number(static_cast<int>(settings.imageThreshold)));
+    refreshTemplatePrivateSettingDirty();
 }
 
 /**
- * @brief 设置默认值
- * @details 为所有UI控件设置初始默认值
+ * @brief 设置非公共配置初始值
+ * @details 公共配置统一由 AppSettingsManager::defaultGlobalSettings() 提供
  */
-void Widget::setupDefaultValues()
+void Widget::setupNonPersistentDefaults()
 {
-    ui->lineEdit_6->setText("50");
-    ui->lineEdit_7->setText("300");
-    ui->lineEdit_8->setText("500");
-    ui->lineEdit_20->setText("500");
     ui->lineEdit_18->setText("1");
     ui->lineEdit_19->setText("3");
-    ui->lineEdit_12->setText("0");
-    ui->lineEdit_4->setText("300");
     ui->lineEdit_13->setText("11");
     ui->lineEdit_15->setText("3");
     ui->lineEdit_yuzhi->setText("70");
-    ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(TissueRollDetector::defaultRoughnessThreshold(), 'f', 3));
     ui->dateEdit->setPlainText("");
-    ui->spinBox->setValue(800);
-    ui->lineEdit_14->setText("1.0"); // 默认增益
-    ui->comboBox->setCurrentText("不保存图像");
-    ui->comboBox_saveImageType->setCurrentText("只保存带识别框图像");
-    ui->comboBox_4->setCurrentText("字库匹配");
-    ui->comboBox_2->setCurrentText("无旋转");
-    ui->comboBox_3->setCurrentText("间歇触发模式");
-    ui->checkBox->setChecked(true);
-    updateSaveDirButtonText();
-    updateTissueRoughnessUiVisibility();
-    applyTissueRoughnessThresholdFromUi(false);
 }
 
 // ================= 拦截滚轮误操作事件 =================
@@ -5462,7 +6588,6 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
     if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
             || watched == ui->pushButton_browseImageSavePath
-            || watched == ui->pushButton_11
             || watched == ui->pushButton_7
             || watched == ui->pushButton_10
             || watched == ui->label_4
@@ -5605,6 +6730,7 @@ void Widget::on_CloseCamera_clicked()
     m_bOpenDevice = false;
     ui->statusLabel->setText("相机已关闭");
     ui->statusLabel->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
+    updateHardwareParameterUiEnabled();
 }
 
 void Widget::on_MultiCameraMode_clicked()
@@ -5630,6 +6756,20 @@ void Widget::on_plcbtn_clicked()
     if (!m_bOpenDevice)
     {
         QMessageBox::warning(this, "警告", "采集失败,请打开设备！");
+        return;
+    }
+
+    updateHardwareParameterUiEnabled();
+    refreshAllGlobalSettingDirty();
+    refreshTemplatePrivateSettingDirty();
+
+    if (hasDirtySettings()) {
+        showParameterWarning("提示", dirtySettingsMessage());
+        return;
+    }
+
+    if (ui->checkBox->isChecked() && (!client || !client->Connected())) {
+        showParameterWarning("提示", "已启用 PLC 触发，但 PLC 未连接，请先连接 PLC。");
         return;
     }
 
@@ -5925,15 +7065,21 @@ void Widget::on_HandwareDetect_clicked()
     QByteArray ad(ui->lineEdit->text().toUtf8());
     Address = ad.data();
 
-    int tmp = client->ConnectTo(Address, 0, 1);
+    int tmp = client->ConnectTo(Address,
+                                ui->lineEdit_2->text().toInt(),
+                                ui->lineEdit_3->text().toInt());
 
     if (tmp != 0)
     {
         QMessageBox::critical(this, "error", "PLC连接失败");
     }
     else{
+    updateAppliedGlobalSettingsFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+    refreshGlobalSettingsDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+    saveSettings(false);
     qDebug()<<"opencamera，plc connect success";
     }
+    updateHardwareParameterUiEnabled();
 
     // 打开设备
     m_pcMyCamera = new CMvCamera;
@@ -5976,6 +7122,7 @@ void Widget::on_HandwareDetect_clicked()
     myThread->getImagePtr(myImage);
 
     m_bOpenDevice = true;
+    updateHardwareParameterUiEnabled();
 }
 
 // PLC模式选择
@@ -6288,19 +7435,11 @@ void Widget::on_pushButton_7_clicked()
     }
 
     emit choosechannel(colorchannel);
+    updateAppliedGlobalSettingFromUi("image.color_channel");
+    refreshGlobalSettingDirty("image.color_channel");
+    saveSettings(false);
     showParameterInfo("提示", "颜色通道设置成功");
 
-}
-
-
-void Widget::on_pushButton_11_clicked()
-{
-    if (saveSettings()) {
-        QMessageBox::information(this,
-                                 "成功",
-                                 QString("当前界面设置已保存到：\n%1")
-                                 .arg(AppSettingsManager::globalSettingsFilePath()));
-    }
 }
 
 
@@ -6308,12 +7447,20 @@ void Widget::on_pushButton_11_clicked()
 void Widget::on_pushButton_12_clicked()
 {
     QStringList errors;
-    applyCameraGainFromUi(&errors, true);
+    if (applyCameraGainFromUi(&errors, true)) {
+        updateAppliedGlobalSettingFromUi("camera.gain");
+        refreshGlobalSettingDirty("camera.gain");
+        saveSettings(false);
+    }
 }
 
 void Widget::on_pushButton_tissueRoughnessThreshold_clicked()
 {
-    applyTissueRoughnessThresholdFromUi(true);
+    if (applyTissueRoughnessThresholdFromUi(true)) {
+        updateAppliedGlobalSettingFromUi("tissue.roughness_threshold");
+        refreshGlobalSettingDirty("tissue.roughness_threshold");
+        saveSettings(false);
+    }
 }
 
 
@@ -6346,6 +7493,9 @@ void Widget::on_WriteVDpushButton_clicked()
     else
     {
         // 写入成功
+        updateAppliedGlobalSettingFromUi("plc.photo_distance");
+        refreshGlobalSettingDirty("plc.photo_distance");
+        saveSettings(false);
         showParameterInfo("提示", "拍照距离设置成功");
     }
 }

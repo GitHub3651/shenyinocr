@@ -1,6 +1,7 @@
 #include "appsettingsmanager.h"
 
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
 #include <QSettings>
@@ -78,6 +79,103 @@ const QStringList SupportedDetectModeIds = {
     "ocr_detection",
     "tissue_detection"
 };
+const QStringList SupportedImageSaveModeIds = {
+    "save_none",
+    "save_ng",
+    "save_ok",
+    "save_all"
+};
+const QStringList SupportedImageSaveTypeIds = {
+    "save_both",
+    "save_annotated_only",
+    "save_raw_only"
+};
+const QStringList SupportedColorChannelIds = {
+    "color",
+    "red",
+    "green",
+    "blue"
+};
+const QStringList SupportedImageRotationIds = {
+    "rotate_none",
+    "rotate_clockwise_90",
+    "rotate_counterclockwise_90",
+    "rotate_180"
+};
+const QStringList SupportedTriggerModeIds = {
+    "trigger_continuous",
+    "trigger_interval"
+};
+
+QString normalizeId(const QString &value,
+                    const QStringList &validIds,
+                    const QString &defaultId)
+{
+    const QString trimmedValue = value.trimmed();
+    return validIds.contains(trimmedValue) ? trimmedValue : defaultId;
+}
+
+bool normalizeGlobalSettingValues(GlobalSettings *settings)
+{
+    if (!settings) {
+        return false;
+    }
+
+    const GlobalSettings defaults = AppSettingsManager::defaultGlobalSettings();
+    bool changed = false;
+
+    auto normalizeField = [&changed](QString *field,
+                                     const QStringList &validIds,
+                                     const QString &defaultId) {
+        const QString normalizedValue = normalizeId(*field, validIds, defaultId);
+        if (*field != normalizedValue) {
+            *field = normalizedValue;
+            changed = true;
+        }
+    };
+
+    normalizeField(&settings->detectModeId,
+                   SupportedDetectModeIds,
+                   defaults.detectModeId);
+    normalizeField(&settings->imageSaveModeId,
+                   SupportedImageSaveModeIds,
+                   defaults.imageSaveModeId);
+    normalizeField(&settings->imageSaveTypeId,
+                   SupportedImageSaveTypeIds,
+                   defaults.imageSaveTypeId);
+    normalizeField(&settings->colorChannelId,
+                   SupportedColorChannelIds,
+                   defaults.colorChannelId);
+    normalizeField(&settings->imageRotationId,
+                   SupportedImageRotationIds,
+                   defaults.imageRotationId);
+
+    QString normalizedTriggerMode = normalizeId(settings->triggerModeId,
+                                                SupportedTriggerModeIds,
+                                                QString());
+    if (normalizedTriggerMode.isEmpty()) {
+        normalizedTriggerMode = normalizeId(settings->plcModeId,
+                                            SupportedTriggerModeIds,
+                                            defaults.triggerModeId);
+    }
+    if (settings->triggerModeId != normalizedTriggerMode
+            || settings->plcModeId != normalizedTriggerMode) {
+        settings->triggerModeId = normalizedTriggerMode;
+        settings->plcModeId = normalizedTriggerMode;
+        changed = true;
+    }
+
+    QString normalizedPlcIp = settings->plcIp.trimmed();
+    if (normalizedPlcIp.isEmpty()) {
+        normalizedPlcIp = defaults.plcIp;
+    }
+    if (settings->plcIp != normalizedPlcIp) {
+        settings->plcIp = normalizedPlcIp;
+        changed = true;
+    }
+
+    return changed;
+}
 
 void setError(QString *errorMessage, const QString &message)
 {
@@ -311,11 +409,21 @@ bool AppSettingsManager::loadGlobalSettings(GlobalSettings *settings, QString *e
         *settings = defaultGlobalSettings();
         return false;
     }
+
+    const bool repairedInvalidValues = normalizeGlobalSettingValues(settings);
     if (fileVersion < GlobalConfigVersion) {
         QString saveError;
         if (!saveGlobalSettings(*settings, &saveError)) {
             setError(errorMessage, unicodeText(L"\u516c\u5171\u914d\u7f6e\u81ea\u52a8\u5347\u7ea7\u5931\u8d25\uff1a%1").arg(saveError));
             return false;
+        }
+    } else if (repairedInvalidValues) {
+        QString saveError;
+        if (!saveGlobalSettings(*settings, &saveError)) {
+            qWarning().noquote()
+                    << "[GLOBAL_SETTINGS] failed to persist normalized values:"
+                    << path
+                    << saveError;
         }
     }
     return true;
