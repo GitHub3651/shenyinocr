@@ -9,6 +9,8 @@
 #include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPolygonF>
+#include <QPixmap>
+#include <QResizeEvent>
 
 class ImageLabel : public QLabel
 {
@@ -38,6 +40,8 @@ public:
 
     // 重写setPixmap
     void setPixmap(const QPixmap &pixmap);
+    void setAutoFitPixmap(const QPixmap &pixmap);
+    void clear();
 
     // ================= 🔥 新增：双框追踪专用接口 =================
     QPolygon getDetectionPoly() const { return m_detectionPoly; }
@@ -62,6 +66,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private:
     struct ColoredRect {
@@ -98,6 +103,10 @@ private:
     bool m_isInteracting = false;
     bool m_templateDrawingEnabled = false;
     QPoint m_startPoint;
+    QPixmap m_autoFitSourcePixmap;
+    bool m_autoFitPixmapEnabled = false;
+
+    void updateAutoFitPixmap();
 };
 
 #endif // IMAGELABEL_H

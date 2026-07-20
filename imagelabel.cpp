@@ -11,7 +11,39 @@ ImageLabel::ImageLabel(QWidget *parent) : QLabel(parent) {
 }
 
 void ImageLabel::setPixmap(const QPixmap &pixmap) {
+    m_autoFitPixmapEnabled = false;
+    m_autoFitSourcePixmap = QPixmap();
     QLabel::setPixmap(pixmap);
+}
+
+void ImageLabel::setAutoFitPixmap(const QPixmap &pixmap) {
+    m_autoFitSourcePixmap = pixmap;
+    m_autoFitPixmapEnabled = !pixmap.isNull();
+    updateAutoFitPixmap();
+}
+
+void ImageLabel::clear() {
+    m_autoFitPixmapEnabled = false;
+    m_autoFitSourcePixmap = QPixmap();
+    QLabel::clear();
+}
+
+void ImageLabel::updateAutoFitPixmap() {
+    if (!m_autoFitPixmapEnabled || m_autoFitSourcePixmap.isNull()
+            || width() <= 0 || height() <= 0) {
+        return;
+    }
+
+    QLabel::setPixmap(
+                m_autoFitSourcePixmap.scaled(
+                    size(),
+                    Qt::KeepAspectRatio,
+                    Qt::SmoothTransformation));
+}
+
+void ImageLabel::resizeEvent(QResizeEvent *event) {
+    QLabel::resizeEvent(event);
+    updateAutoFitPixmap();
 }
 
 // =====================================================================

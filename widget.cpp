@@ -4220,15 +4220,9 @@ void Widget::displayWordTemplateRawImage(const QString &dirPath)
         return;
     }
 
-    QSize labelSize = ui->image_undetected->size();
-    if (!labelSize.isValid() || labelSize.isEmpty()) {
-        labelSize = rawPixmap.size();
-    }
-
-    const QPixmap scaledPixmap = rawPixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     ui->image_undetected->setScaledContents(false);
     ui->image_undetected->setAlignment(Qt::AlignCenter);
-    ui->image_undetected->setPixmap(scaledPixmap);
+    ui->image_undetected->setAutoFitPixmap(rawPixmap);
 
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
