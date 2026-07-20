@@ -22,6 +22,7 @@
 #include <QTimer>
 #include <QThread>
 #include <QFileDialog>
+#include <QFileSystemModel>
 #include <QAbstractItemView>
 #include <QImageReader>
 #include <QLabel>
@@ -69,6 +70,8 @@
 #include <QTextEdit>
 #include <QIntValidator>
 #include <QDoubleValidator>
+#include <QSortFilterProxyModel>
+#include <QSet>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -163,6 +166,84 @@ bool fuzzyEqual(double left, double right)
 {
     return std::fabs(left - right) < 0.000001;
 }
+
+class CheckableDirectoryProxyModel : public QSortFilterProxyModel
+{
+public:
+    explicit CheckableDirectoryProxyModel(QObject *parent = nullptr)
+        : QSortFilterProxyModel(parent)
+    {
+    }
+
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
+    {
+        if (role == Qt::CheckStateRole && index.column() == 0) {
+            const QString path = directoryPath(index);
+            if (!path.isEmpty()) {
+                return m_checkedPaths.contains(path) ? Qt::Checked : Qt::Unchecked;
+            }
+        }
+        return QSortFilterProxyModel::data(index, role);
+    }
+
+    bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override
+    {
+        if (role == Qt::CheckStateRole && index.column() == 0) {
+            const QString path = directoryPath(index);
+            if (path.isEmpty()) {
+                return false;
+            }
+
+            if (value.toInt() == Qt::Checked) {
+                m_checkedPaths.insert(path);
+            } else {
+                m_checkedPaths.remove(path);
+            }
+            emit dataChanged(index, index, QVector<int>() << Qt::CheckStateRole);
+            return true;
+        }
+        return QSortFilterProxyModel::setData(index, value, role);
+    }
+
+    Qt::ItemFlags flags(const QModelIndex &index) const override
+    {
+        Qt::ItemFlags itemFlags = QSortFilterProxyModel::flags(index);
+        if (index.column() == 0 && !directoryPath(index).isEmpty()) {
+            itemFlags |= Qt::ItemIsUserCheckable;
+        }
+        return itemFlags;
+    }
+
+    QStringList checkedDirectories() const
+    {
+        QStringList paths = m_checkedPaths.values();
+        paths.sort(Qt::CaseInsensitive);
+        return paths;
+    }
+
+private:
+    QString directoryPath(const QModelIndex &proxyIndex) const
+    {
+        const QFileSystemModel *fileSystemModel =
+                qobject_cast<const QFileSystemModel *>(sourceModel());
+        if (!fileSystemModel || !proxyIndex.isValid()) {
+            return QString();
+        }
+
+        const QModelIndex sourceIndex = mapToSource(proxyIndex);
+        if (!sourceIndex.isValid() || !fileSystemModel->isDir(sourceIndex)) {
+            return QString();
+        }
+
+        const QString fileName = fileSystemModel->fileName(sourceIndex);
+        if (fileName == "." || fileName == "..") {
+            return QString();
+        }
+        return QDir::cleanPath(fileSystemModel->filePath(sourceIndex));
+    }
+
+    QSet<QString> m_checkedPaths;
+};
 }
 
 // OpenCV全局变量
@@ -6394,7 +6475,7 @@ void Widget::on_pushButton_4_clicked()
     };
 
     if (ui->comboBox_4->currentIndex() == 1) {
-        QFileDialog dialog(this, "选择产品模板文件夹", templateDialogStartDir());
+        QFileDialog dialog(this, "选择产品模板文件夹（可勾选多个）", templateDialogStartDir());
         dialog.setFileMode(QFileDialog::Directory);
         dialog.setOption(QFileDialog::ShowDirsOnly, true);
         dialog.setOption(QFileDialog::DontUseNativeDialog, true);
@@ -6404,6 +6485,10 @@ void Widget::on_pushButton_4_clicked()
         dialog.setLabelText(QFileDialog::Accept, "选择");
         dialog.setLabelText(QFileDialog::Reject, "取消");
         dialog.setNameFilter("所有文件 (*)");
+
+        CheckableDirectoryProxyModel *checkableDirectoryModel =
+                new CheckableDirectoryProxyModel(&dialog);
+        dialog.setProxyModel(checkableDirectoryModel);
 
         QListView *listView = dialog.findChild<QListView *>("listView");
         if (listView) {
@@ -6420,8 +6505,9 @@ void Widget::on_pushButton_4_clicked()
 
         if (dialog.exec() != QDialog::Accepted) return;
 
-        QStringList selectedDirs;
-        const QStringList dialogSelectedDirs = dialog.selectedFiles();
+        QStringList selectedDirs = checkableDirectoryModel->checkedDirectories();
+        const QStringList dialogSelectedDirs =
+                selectedDirs.isEmpty() ? dialog.selectedFiles() : QStringList();
         for (const QString &selectedDirPath : dialogSelectedDirs) {
             const QString cleanDir = QDir(selectedDirPath).absolutePath();
             if (!cleanDir.isEmpty() && !selectedDirs.contains(cleanDir)) {
