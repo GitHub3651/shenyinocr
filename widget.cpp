@@ -78,6 +78,8 @@
 #include <QtSql/QSqlDatabase>
 
 // 标准库
+#include <cmath>
+#include <limits>
 #include <windows.h>
 #include <algorithm>
 #include <iostream>
@@ -2109,15 +2111,21 @@ void Widget::on_VideoShoot_clicked()
         return;
     }
 
-    // 设置曝光（建议在拍照前确保设置生效）
-    int exposureValue = ui->spinBox->value();
-    m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-
     try {
         m_pcMyCamera->SetEnumValue("TriggerMode", 1);
         m_pcMyCamera->SetEnumValue("TriggerSource", 7); // 软触发
     } catch (...) {
         QMessageBox::warning(this, "警告", "相机配置失败！");
+        return;
+    }
+
+    QString exposureError;
+    if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
+                                  &exposureError)) {
+        QMessageBox::warning(this,
+                             "警告",
+                             QString("制作模板前应用相机曝光失败：\n%1")
+                             .arg(exposureError));
         return;
     }
 
@@ -4560,6 +4568,168 @@ bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
     return true;
 }
 
+bool Widget::queryCameraExposureRange(int *minimumValue,
+                                      int *maximumValue,
+                                      double *currentValue,
+                                      QString *errorMessage)
+{
+    if (!m_pcMyCamera) {
+        if (errorMessage) {
+            *errorMessage = "相机未初始化，无法读取曝光范围";
+        }
+        return false;
+    }
+
+    MVCC_FLOATVALUE exposureInfo = {0};
+    const int ret = m_pcMyCamera->GetFloatValue("ExposureTime", &exposureInfo);
+    if (ret != MV_OK) {
+        if (errorMessage) {
+            *errorMessage = QString("读取相机曝光范围失败，错误码：%1").arg(ret);
+        }
+        return false;
+    }
+
+    const double rawMinimum = static_cast<double>(exposureInfo.fMin);
+    const double rawMaximum = static_cast<double>(exposureInfo.fMax);
+    const double rawCurrent = static_cast<double>(exposureInfo.fCurValue);
+    if (!std::isfinite(rawMinimum)
+            || !std::isfinite(rawMaximum)
+            || !std::isfinite(rawCurrent)) {
+        if (errorMessage) {
+            *errorMessage = "相机返回的曝光范围无效";
+        }
+        return false;
+    }
+
+    const double integerMinimum = std::ceil(rawMinimum);
+    const double integerMaximum = std::floor(rawMaximum);
+    if (integerMinimum > integerMaximum
+            || integerMinimum < static_cast<double>((std::numeric_limits<int>::min)())
+            || integerMaximum > static_cast<double>((std::numeric_limits<int>::max)())) {
+        if (errorMessage) {
+            *errorMessage = QString("相机曝光范围无法转换为整数：%1 ~ %2")
+                    .arg(rawMinimum)
+                    .arg(rawMaximum);
+        }
+        return false;
+    }
+
+    if (minimumValue) {
+        *minimumValue = static_cast<int>(integerMinimum);
+    }
+    if (maximumValue) {
+        *maximumValue = static_cast<int>(integerMaximum);
+    }
+    if (currentValue) {
+        *currentValue = rawCurrent;
+    }
+    return true;
+}
+
+bool Widget::applyCameraExposureValue(int exposureValue, QString *errorMessage)
+{
+    int minimumValue = 0;
+    int maximumValue = 0;
+    if (!queryCameraExposureRange(&minimumValue, &maximumValue, nullptr, errorMessage)) {
+        return false;
+    }
+
+    {
+        QSignalBlocker blocker(ui->spinBox);
+        ui->spinBox->setRange(minimumValue, maximumValue);
+    }
+
+    if (exposureValue < minimumValue || exposureValue > maximumValue) {
+        if (errorMessage) {
+            *errorMessage = QString("曝光值 %1 超出当前相机允许范围：%2 ~ %3")
+                    .arg(exposureValue)
+                    .arg(minimumValue)
+                    .arg(maximumValue);
+        }
+        return false;
+    }
+
+    int ret = m_pcMyCamera->SetFloatValue("ExposureTime",
+                                          static_cast<float>(exposureValue));
+    if (ret != MV_OK) {
+        if (errorMessage) {
+            *errorMessage = QString("相机曝光设置失败，错误码：%1").arg(ret);
+        }
+        return false;
+    }
+
+    MVCC_FLOATVALUE readBackInfo = {0};
+    ret = m_pcMyCamera->GetFloatValue("ExposureTime", &readBackInfo);
+    if (ret != MV_OK) {
+        if (errorMessage) {
+            *errorMessage = QString("相机曝光写入后回读失败，错误码：%1").arg(ret);
+        }
+        return false;
+    }
+
+    const double actualValue = static_cast<double>(readBackInfo.fCurValue);
+    if (!std::isfinite(actualValue)
+            || std::fabs(actualValue - static_cast<double>(exposureValue)) > 0.5) {
+        if (errorMessage) {
+            *errorMessage = QString("相机曝光写入值与实际值不一致：设置 %1，实际 %2")
+                    .arg(exposureValue)
+                    .arg(actualValue);
+        }
+        return false;
+    }
+
+    qDebug() << "SetExposureTime verified:"
+             << exposureValue
+             << "range:" << minimumValue << "~" << maximumValue
+             << "actual:" << actualValue;
+    return true;
+}
+
+bool Widget::applySavedCameraExposure(QString *adjustmentMessage,
+                                      QString *errorMessage)
+{
+    int minimumValue = 0;
+    int maximumValue = 0;
+    if (!queryCameraExposureRange(&minimumValue, &maximumValue, nullptr, errorMessage)) {
+        return false;
+    }
+
+    const int savedValue = m_appliedGlobalSettings.cameraExposure;
+    const int adjustedValue = qBound(minimumValue, savedValue, maximumValue);
+
+    {
+        QSignalBlocker blocker(ui->spinBox);
+        ui->spinBox->setRange(minimumValue, maximumValue);
+        ui->spinBox->setValue(adjustedValue);
+    }
+
+    if (!applyCameraExposureValue(adjustedValue, errorMessage)) {
+        return false;
+    }
+
+    if (adjustedValue != savedValue) {
+        m_appliedGlobalSettings.cameraExposure = adjustedValue;
+        if (!saveSettings(false)) {
+            m_appliedGlobalSettings.cameraExposure = savedValue;
+            if (errorMessage) {
+                *errorMessage = "曝光值已根据相机范围调整，但公共配置保存失败";
+            }
+            return false;
+        }
+        if (adjustmentMessage) {
+            *adjustmentMessage =
+                    QString("原曝光值 %1 超出当前相机允许范围（%2 ~ %3），已调整为 %4。")
+                    .arg(savedValue)
+                    .arg(minimumValue)
+                    .arg(maximumValue)
+                    .arg(adjustedValue);
+        }
+    }
+
+    refreshGlobalSettingDirty("camera.exposure");
+    return true;
+}
+
 bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage)
 {
     if (m_pcMyCamera == nullptr || !m_bOpenDevice) {
@@ -4570,15 +4740,17 @@ bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMess
     }
 
     const int exposureValue = ui->spinBox->value();
-    const int ret = m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-    if (ret != MV_OK) {
-        const QString message = QString("相机曝光设置失败！错误码：%1").arg(ret);
+    QString errorMessage;
+    if (!applyCameraExposureValue(exposureValue, &errorMessage)) {
+        const QString message = errorMessage.isEmpty()
+                ? QString("相机曝光设置失败")
+                : errorMessage;
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
+        refreshGlobalSettingDirty("camera.exposure");
         return false;
     }
 
-    qDebug() << "SetExposureTime success:" << exposureValue;
     if (showSuccessMessage) {
         showParameterInfo("提示", "相机曝光设置成功！");
     }
@@ -5182,15 +5354,35 @@ void Widget::on_cancel_clicked()
             int nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[0]);
 
             if (MV_OK == nRet) {
+                m_bOpenDevice = true;
                 m_pcMyCamera->SetEnumValue("TriggerMode", 1);
                 m_pcMyCamera->SetEnumValue("TriggerSource", 7);
-                m_pcMyCamera->SetFloatValue("ExposureTime", 500);
-                m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
-                m_pcMyCamera->RegisterImageCallBack();
-                m_pcMyCamera->StartGrabbing();
-
-                m_bOpenDevice = true;
-                ui->statusLabel->setText("相机已打开");
+                QString adjustmentMessage;
+                QString exposureError;
+                if (!applySavedCameraExposure(&adjustmentMessage, &exposureError)) {
+                    m_pcMyCamera->Close();
+                    delete m_pcMyCamera;
+                    m_pcMyCamera = nullptr;
+                    m_bOpenDevice = false;
+                    {
+                        QSignalBlocker blocker(ui->spinBox);
+                        ui->spinBox->setRange(0, (std::numeric_limits<int>::max)());
+                        ui->spinBox->setValue(m_appliedGlobalSettings.cameraExposure);
+                    }
+                    refreshGlobalSettingDirty("camera.exposure");
+                    QMessageBox::warning(this,
+                                         "警告",
+                                         QString("停止识别后恢复相机曝光失败：\n%1")
+                                         .arg(exposureError));
+                } else {
+                    m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
+                    m_pcMyCamera->RegisterImageCallBack();
+                    m_pcMyCamera->StartGrabbing();
+                    ui->statusLabel->setText("相机已打开");
+                    if (!adjustmentMessage.isEmpty()) {
+                        QMessageBox::information(this, "提示", adjustmentMessage);
+                    }
+                }
             } else {
                 delete m_pcMyCamera;
                 m_pcMyCamera = nullptr;
@@ -6991,7 +7183,6 @@ void Widget::on_plcbtn_clicked()
                                  QString("启动识别前相机参数应用失败：\n") + applyErrors.join("\n"));
             return;
         }
-        const int exposureValue = ui->spinBox->value();
         const float gainValue = ui->lineEdit_14->text().toFloat();
 
         j = 1;
@@ -7010,7 +7201,15 @@ void Widget::on_plcbtn_clicked()
                 QThread::msleep(200);
                 m_pcMyCamera->SetEnumValue("TriggerMode", 1);
                 m_pcMyCamera->SetEnumValue("TriggerSource", 0); // 硬触发
-                m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
+                QString exposureError;
+                if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
+                                              &exposureError)) {
+                    QMessageBox::warning(this,
+                                         "启动失败",
+                                         QString("切换硬触发模式后恢复相机曝光失败：\n%1")
+                                         .arg(exposureError));
+                    return;
+                }
                 m_pcMyCamera->SetFloatValue("Gain", gainValue); // 恢复写入增益
                 m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
                 m_pcMyCamera->RegisterImageCallBack();
@@ -7144,6 +7343,15 @@ void Widget::on_plcbtn_clicked()
         }
 
         m_pcMyCamera->SetEnumValue("TriggerSource", 7); // 软触发
+        QString exposureError;
+        if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
+                                      &exposureError)) {
+            QMessageBox::warning(this,
+                                 "启动失败",
+                                 QString("切换软触发模式后恢复相机曝光失败：\n%1")
+                                 .arg(exposureError));
+            return;
+        }
         m_pcMyCamera->SetFloatValue("Gain", gainValue); // 软触发重新设置增益
         myThread->getCameraPtr(m_pcMyCamera);
         myThread->getImagePtr(myImage);
@@ -7216,19 +7424,34 @@ void Widget::on_HandwareDetect_clicked()
         QMessageBox::warning(this, "警告", "打开设备失败！");
         return;
     }
-    else
-    {
-        ui->statusLabel->setText("相机已打开");
-        ui->statusLabel->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
-        QMessageBox::information(this, "提示", "相机打开成功！");
-    }
 
+    m_bOpenDevice = true;
     // 设置为触发模式
     m_pcMyCamera->SetEnumValue("TriggerMode", 1);
     // 设置触发源为编码器触发
     m_pcMyCamera->SetEnumValue("TriggerSource", 0);
-    // 设置默认曝光时间
-    m_pcMyCamera->SetFloatValue("ExposureTime", 500);
+
+    QString exposureAdjustmentMessage;
+    QString exposureError;
+    if (!applySavedCameraExposure(&exposureAdjustmentMessage, &exposureError)) {
+        m_pcMyCamera->Close();
+        delete m_pcMyCamera;
+        m_pcMyCamera = nullptr;
+        m_bOpenDevice = false;
+        {
+            QSignalBlocker blocker(ui->spinBox);
+            ui->spinBox->setRange(0, (std::numeric_limits<int>::max)());
+            ui->spinBox->setValue(m_appliedGlobalSettings.cameraExposure);
+        }
+        refreshGlobalSettingDirty("camera.exposure");
+        updateHardwareParameterUiEnabled();
+        QMessageBox::warning(this,
+                             "警告",
+                             QString("打开相机后应用曝光参数失败：\n%1")
+                             .arg(exposureError));
+        return;
+    }
+
     m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
     // 开启相机采集
     m_pcMyCamera->RegisterImageCallBack();
@@ -7238,8 +7461,13 @@ void Widget::on_HandwareDetect_clicked()
     myThread->getCameraPtr(m_pcMyCamera);
     myThread->getImagePtr(myImage);
 
-    m_bOpenDevice = true;
+    ui->statusLabel->setText("相机已打开");
+    ui->statusLabel->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
     updateHardwareParameterUiEnabled();
+    const QString openMessage = exposureAdjustmentMessage.isEmpty()
+            ? QString("相机打开成功！")
+            : QString("相机打开成功！\n\n%1").arg(exposureAdjustmentMessage);
+    QMessageBox::information(this, "提示", openMessage);
 }
 
 // PLC模式选择

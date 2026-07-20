@@ -241,6 +241,12 @@ private:
     void showParameterInfoAsError(const QString &title, const QString &message);
     void showParameterWarning(const QString &title, const QString &message);
     void showParameterCritical(const QString &title, const QString &message);
+    bool queryCameraExposureRange(int *minimumValue,
+                                  int *maximumValue,
+                                  double *currentValue,
+                                  QString *errorMessage);
+    bool applyCameraExposureValue(int exposureValue, QString *errorMessage);
+    bool applySavedCameraExposure(QString *adjustmentMessage, QString *errorMessage);
     bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
