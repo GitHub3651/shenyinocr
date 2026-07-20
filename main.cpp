@@ -13,8 +13,11 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDateTime>
+#include <QFileInfo>
 #include <QDir>
 #include <QLoggingCategory>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QTimer>
 #include "RuntimeGuard.h"
 
@@ -22,12 +25,64 @@
 #include "ccrashstack.h"
 #endif
 QFile logFile;
+QString logDirectoryPath;
+QDate currentLogDate;
+QMutex logMutex;
 using namespace  std;
 #define APP_VERSION "5.14.2"
 #pragma execution_character_set("utf-8")
 
+void cleanupExpiredLogs()
+{
+    QDir logDir(logDirectoryPath);
+    const QDate retentionBoundary = QDate::currentDate().addMonths(-3);
+    const QFileInfoList logFiles = logDir.entryInfoList(
+                QStringList() << "app_log_*.txt" << "app_log.txt",
+                QDir::Files);
+    for (const QFileInfo &logInfo : logFiles) {
+        QDate logDate;
+        if (logInfo.fileName() == "app_log.txt") {
+            logDate = logInfo.lastModified().date();
+        } else {
+            const QString dateText = logInfo.fileName().mid(
+                        QString("app_log_").size(),
+                        QString("yyyy-MM-dd").size());
+            logDate = QDate::fromString(dateText, "yyyy-MM-dd");
+        }
+
+        if (logDate.isValid() && logDate < retentionBoundary) {
+            QFile::remove(logInfo.absoluteFilePath());
+        }
+    }
+}
+
+bool openLogFileForDate(const QDate &date)
+{
+    if (logFile.isOpen()) {
+        logFile.close();
+    }
+
+    const QString logPath = QDir(logDirectoryPath).absoluteFilePath(
+                QString("app_log_%1.txt").arg(date.toString("yyyy-MM-dd")));
+    logFile.setFileName(logPath);
+    if (!logFile.open(QIODevice::Append | QIODevice::Text)) {
+        currentLogDate = QDate();
+        return false;
+    }
+
+    currentLogDate = date;
+    return true;
+}
+
 void messageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
+    QMutexLocker locker(&logMutex);
+    const QDate today = QDate::currentDate();
+    if (currentLogDate != today) {
+        cleanupExpiredLogs();
+        openLogFileForDate(today);
+    }
+
     QByteArray localMsg = msg.toLocal8Bit();
     const char *file = context.file ? context.file : "";
     const char *function = context.function ? context.function : "";
@@ -69,18 +124,17 @@ long __stdcall callback(_EXCEPTION_POINTERS* excp)
 
 void setupLogging()
 {
-    QString logDirPath = QCoreApplication::applicationDirPath() + "/log";
-    QDir logDir(logDirPath);
+    logDirectoryPath = QCoreApplication::applicationDirPath() + "/log";
+    QDir logDir(logDirectoryPath);
     if (!logDir.exists()) {
         logDir.mkpath(".");
     }
 
-    QString logPath = logDirPath + "/app_log.txt";
-    logFile.setFileName(logPath);
-    if (logFile.open(QIODevice::Append | QIODevice::Text)) {
-        qDebug() << "Logging to" << logPath;
+    cleanupExpiredLogs();
+    if (openLogFileForDate(QDate::currentDate())) {
+        qDebug() << "Logging to" << logFile.fileName();
     } else {
-        qWarning() << "Failed to open log file" << logPath;
+        qWarning() << "Failed to open log file" << logFile.fileName();
     }
 
     qInstallMessageHandler(messageHandler);
