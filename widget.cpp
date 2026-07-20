@@ -3881,6 +3881,13 @@ void Widget::setupWordTemplateEditorCombo()
     }
 
     if (ui) {
+        if (ui->checkBox) {
+            ui->checkBox->setToolTip(
+                        "控制检测的触发方式。\n"
+                        "勾选：使用 PLC 外部触发信号控制相机拍照和检测，启动前必须连接 PLC。\n"
+                        "不勾选：使用软件软触发，启动后由相机连续采集并检测。");
+            ui->checkBox->installEventFilter(this);
+        }
         if (ui->pushButton_10) {
             ui->pushButton_10->setToolTip("清空当前尚未发出的剔除队列。\n适用于异常停机、误判、手动停止后，防止之前累计的剔除信号继续输出。");
             ui->pushButton_10->installEventFilter(this);
@@ -6965,9 +6972,10 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
 
-    if (watched == ui->textsure_btn
+        if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
             || watched == ui->batchImageThresholdButton
+            || watched == ui->checkBox
             || watched == ui->pushButton_browseImageSavePath
             || watched == ui->pushButton_7
             || watched == ui->pushButton_10
