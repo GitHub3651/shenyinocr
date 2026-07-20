@@ -292,6 +292,7 @@ private:
     QStringList dirtySettingNames() const;
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
+    void restoreUnappliedSettingsFromApplied();
     void setupTemplatePrivateSettingDirtyTracking();
     void refreshTemplateTargetTextDirty();
     void refreshTemplateImageThresholdDirty();

@@ -3435,8 +3435,75 @@ QString Widget::dirtySettingsMessage() const
     for (const QString &name : names) {
         lines.append(QString("- %1").arg(name));
     }
-    return QString("存在未应用参数，请先点击对应设置按钮：\n\n%1")
+    return QString("存在未应用参数：\n\n%1\n\n"
+                   "继续运行将放弃以上未应用修改，并使用之前已设置的参数。")
             .arg(lines.join("\n"));
+}
+
+void Widget::restoreUnappliedSettingsFromApplied()
+{
+    static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
+    static const QStringList rotationIds = {
+        "rotate_none",
+        "rotate_clockwise_90",
+        "rotate_counterclockwise_90",
+        "rotate_180"
+    };
+    static const QStringList triggerModeIds = {"trigger_continuous", "trigger_interval"};
+
+    auto indexOf = [](const QStringList &ids, const QString &id, int fallback) {
+        const int index = ids.indexOf(id);
+        return index >= 0 ? index : fallback;
+    };
+
+    const bool oldUpdating = m_updatingGlobalSettingsUi;
+    m_updatingGlobalSettingsUi = true;
+
+    QSignalBlocker exposureBlocker(ui->spinBox);
+    QSignalBlocker gainBlocker(ui->lineEdit_14);
+    QSignalBlocker channelBlocker(ui->comboBox_5);
+    QSignalBlocker rotationBlocker(ui->comboBox_2);
+    QSignalBlocker tissueThresholdBlocker(ui->lineEdit_tissueRoughnessThreshold);
+    QSignalBlocker triggerModeBlocker(ui->comboBox_3);
+    QSignalBlocker photoDistanceBlocker(ui->lineEdit_6);
+    QSignalBlocker photoTimeBlocker(ui->lineEdit_20);
+    QSignalBlocker cameraDelayBlocker(ui->lineEdit_4);
+    QSignalBlocker rejectDistanceBlocker(ui->lineEdit_7);
+    QSignalBlocker rejectTimeBlocker(ui->lineEdit_8);
+    QSignalBlocker rejectPositionBlocker(ui->lineEdit_12);
+
+    ui->spinBox->setValue(m_appliedGlobalSettings.cameraExposure);
+    ui->lineEdit_14->setText(QString::number(static_cast<int>(m_appliedGlobalSettings.cameraGain)));
+    ui->comboBox_5->setCurrentIndex(
+                indexOf(colorChannelIds, m_appliedGlobalSettings.colorChannelId, 0));
+    ui->comboBox_2->setCurrentIndex(
+                indexOf(rotationIds, m_appliedGlobalSettings.imageRotationId, 0));
+    ui->lineEdit_tissueRoughnessThreshold->setText(
+                QString::number(m_appliedGlobalSettings.tissueRoughnessThreshold, 'f', 3));
+    ui->comboBox_3->setCurrentIndex(
+                indexOf(triggerModeIds, m_appliedGlobalSettings.triggerModeId, 1));
+    ui->lineEdit_6->setText(QString::number(m_appliedGlobalSettings.photoDistance));
+    ui->lineEdit_20->setText(QString::number(m_appliedGlobalSettings.photoTime));
+    ui->lineEdit_4->setText(QString::number(m_appliedGlobalSettings.cameraDelay));
+    ui->lineEdit_7->setText(QString::number(m_appliedGlobalSettings.rejectDistance));
+    ui->lineEdit_8->setText(QString::number(m_appliedGlobalSettings.rejectTime));
+    ui->lineEdit_12->setText(QString::number(m_appliedGlobalSettings.rejectPosition));
+
+    const int profileIndex = currentWordTemplateProfileIndex();
+    if (ui->comboBox_4->currentIndex() == 1
+            && profileIndex >= 0
+            && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
+        const TemplatePrivateSettings &settings =
+                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].settings;
+        QSignalBlocker targetTextBlocker(ui->dateEdit);
+        QSignalBlocker imageThresholdBlocker(ui->lineEdit_yuzhi);
+        ui->dateEdit->setPlainText(settings.targetText);
+        ui->lineEdit_yuzhi->setText(QString::number(static_cast<int>(settings.imageThreshold)));
+    }
+
+    m_updatingGlobalSettingsUi = oldUpdating;
+    refreshAllGlobalSettingDirty();
+    refreshTemplatePrivateSettingDirty();
 }
 
 void Widget::setupTemplatePrivateSettingDirtyTracking()
@@ -6800,8 +6867,22 @@ void Widget::on_plcbtn_clicked()
     refreshTemplatePrivateSettingDirty();
 
     if (hasDirtySettings()) {
-        showParameterWarning("提示", dirtySettingsMessage());
-        return;
+        QMessageBox confirmBox(this);
+        confirmBox.setIcon(QMessageBox::Warning);
+        confirmBox.setWindowTitle("提示");
+        confirmBox.setText(dirtySettingsMessage());
+        QPushButton *continueButton =
+                confirmBox.addButton("继续运行", QMessageBox::AcceptRole);
+        QPushButton *cancelButton =
+                confirmBox.addButton("取消", QMessageBox::RejectRole);
+        confirmBox.setDefaultButton(cancelButton);
+        confirmBox.exec();
+
+        if (confirmBox.clickedButton() != continueButton) {
+            return;
+        }
+
+        restoreUnappliedSettingsFromApplied();
     }
 
     if (ui->checkBox->isChecked() && (!client || !client->Connected())) {
