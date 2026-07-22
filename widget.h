@@ -127,7 +127,6 @@ public:
 
     // ========== 公共方法 ==========
     void initWidget();                  ///< 初始化界面
-    void saveImage(QString format, QString savePath);    ///< 保存图像
     void saveImage2(QString format, QString savePath);
     void saveImage2(QString format, QString savePath, const QString &fileBaseName);
     void saveRawImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName);
@@ -146,12 +145,8 @@ signals:
     void captureFrame(Mat image);       ///< 捕获帧信号
     void sendDataTo(QString);           ///< 发送数据信号
     void pipei();                       ///< 匹配信号
-    void imgmuban(Mat*img);             ///< 模板图像信号
     void imgshibie(Mat *img);           ///< 识别图像信号
-    void kernal(int n);                 ///< 核大小信号
     void jiancestring(String targetstring1);  ///< 检测字符串信号
-    void caijianchicun(int width_min,int width_max,int height_min,int height_max,
-                       int block_size1,int horizontalKernel,int verticalKernel);  ///< 裁剪尺寸信号
     void ssim(int s);                   ///< SSIM信号
     void rotate(int angle);             ///< 旋转角度信号
     void choosechannel(int color);      ///< 颜色通道信号
@@ -175,7 +170,6 @@ private slots:
     void on_CloseCamera_clicked();      ///< 关闭相机按钮
     void onSpinBoxValueChanged(int value); ///< 旋转框值改变
     void on_sureButton_clicked();       ///< 确定按钮
-    void on_Saveimage_clicked();        ///< 保存图像按钮
 
     // ========== 工具函数 ==========
     QString setdatetime();              ///< 设置日期时间
@@ -209,8 +203,6 @@ private slots:
     void on_eliminatebutton_clicked();  ///< 消除按钮
 
     // ========== 其他按钮 ==========
-    void on_pushButton_2_clicked();
-    void on_pushButton_clicked();
     void on_pushButton_3_clicked();
     void on_pushButton_5_clicked();
     void on_pushButton_4_clicked();
@@ -327,8 +319,7 @@ private:
     void updateImageDisplayStatusText(const QString &body);
     void updateTemplateGuideText(const QString &title, const QString &body);
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
-    void setupCharacterSplitSettingsDialog();
-    void showCharacterSplitSettingsDialog();
+    void setupManualCharacterCropUi();
     void showManualCharacterTemplateCropDialog();
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
@@ -349,8 +340,6 @@ private:
     QFrame *m_templateGuideFrame = nullptr;
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
-    QDialog *m_characterSplitSettingsDialog = nullptr;
-    QPushButton *m_characterSplitSettingsButton = nullptr;
     QPushButton *m_manualCharacterCropButton = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;

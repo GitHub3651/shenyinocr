@@ -961,9 +961,9 @@
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>-138</y>
+               <y>0</y>
                <width>586</width>
-               <height>547</height>
+               <height>613</height>
               </rect>
              </property>
              <property name="styleSheet">
@@ -1235,19 +1235,6 @@ padding: 5px 10px;</string>
                   </property>
                   <layout class="QFormLayout" name="templateMakeFormLayout">
                    <item row="0" column="1">
-                    <widget class="QToolButton" name="Saveimage">
-                     <property name="minimumSize">
-                      <size>
-                       <width>0</width>
-                       <height>42</height>
-                      </size>
-                     </property>
-                     <property name="text">
-                      <string>自动分割字符</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item row="1" column="1">
                     <widget class="QPushButton" name="pushButton_5">
                      <property name="minimumSize">
                       <size>
@@ -1391,9 +1378,9 @@ background-color: #ebeef5;
              <property name="geometry">
               <rect>
                <x>0</x>
-               <y>0</y>
+               <y>-397</y>
                <width>586</width>
-               <height>1320</height>
+               <height>698</height>
               </rect>
              </property>
              <property name="styleSheet">
@@ -1446,16 +1433,16 @@ background-color: #ebeef5;
                    </item>
                   </widget>
                  </item>
-                  <item row="1" column="0" colspan="2">
-                   <widget class="QCheckBox" name="checkBox">
-                    <property name="minimumSize">
-                     <size>
-                      <width>0</width>
-                      <height>50</height>
-                     </size>
-                    </property>
-                    <property name="styleSheet">
-                     <string notr="true">QCheckBox {
+                 <item row="1" column="0" colspan="2">
+                  <widget class="QCheckBox" name="checkBox">
+                   <property name="minimumSize">
+                    <size>
+                     <width>0</width>
+                     <height>50</height>
+                    </size>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">QCheckBox {
     background-color: transparent;
     border: 1px solid #ebeef5;
     border-radius: 4px;
@@ -1471,12 +1458,12 @@ QCheckBox::indicator {
     width: 24px;
     height: 24px;
 }</string>
-                    </property>
-                    <property name="text">
-                     <string>启用触发</string>
-                    </property>
-                   </widget>
-                  </item>
+                   </property>
+                   <property name="text">
+                    <string>启用触发</string>
+                   </property>
+                  </widget>
+                 </item>
                 </layout>
                </widget>
               </item>
@@ -1842,240 +1829,6 @@ QCheckBox::indicator {
                   <widget class="QLabel" name="label_27">
                    <property name="text">
                     <string>图像旋转</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item row="4" column="0">
-               <widget class="QFrame" name="tab2_frame3">
-                <property name="styleSheet">
-                 <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                </property>
-                <property name="frameShape">
-                 <enum>QFrame::StyledPanel</enum>
-                </property>
-                <layout class="QVBoxLayout" name="_2">
-                 <item>
-                  <widget class="QLabel" name="label_21">
-                   <property name="styleSheet">
-                    <string>font-weight:bold;</string>
-                   </property>
-                   <property name="text">
-                    <string>字符尺寸限制 (Min - Max)</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QFrame" name="frame">
-                   <layout class="QGridLayout" name="_3">
-                    <property name="verticalSpacing">
-                     <number>12</number>
-                    </property>
-                    <item row="0" column="0">
-                     <widget class="QLabel" name="label_22">
-                      <property name="text">
-                       <string>宽度:</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="0" column="1">
-                     <widget class="QLineEdit" name="lineEdit_5">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>10</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="0" column="2">
-                     <widget class="QLineEdit" name="lineEdit_9">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>70</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="0">
-                     <widget class="QLabel" name="label_23">
-                      <property name="text">
-                       <string>高度:</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="1">
-                     <widget class="QLineEdit" name="lineEdit_10">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>10</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="2">
-                     <widget class="QLineEdit" name="lineEdit_11">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>90</string>
-                      </property>
-                     </widget>
-                    </item>
-                   </layout>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton_2">
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="text">
-                    <string>确认尺寸范围</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item row="5" column="0">
-               <widget class="QFrame" name="tab2_frame2">
-                <property name="styleSheet">
-                 <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                </property>
-                <property name="frameShape">
-                 <enum>QFrame::StyledPanel</enum>
-                </property>
-                <layout class="QVBoxLayout">
-                 <item>
-                  <widget class="QLabel" name="label_35">
-                   <property name="styleSheet">
-                    <string>font-weight: bold;</string>
-                   </property>
-                   <property name="text">
-                    <string>高级形态学参数</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QFrame" name="frame_2">
-                   <layout class="QGridLayout">
-                    <property name="verticalSpacing">
-                     <number>12</number>
-                    </property>
-                    <item row="0" column="0">
-                     <widget class="QLabel" name="label_26">
-                      <property name="text">
-                       <string>邻域:</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="0" column="1">
-                     <widget class="QLineEdit" name="lineEdit_15">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>3</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="0" column="2">
-                     <widget class="QLabel" name="label_31">
-                      <property name="text">
-                       <string>横向膨胀:</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="0" column="3">
-                     <widget class="QLineEdit" name="lineEdit_18">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>3</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="0">
-                     <widget class="QLabel" name="label_28">
-                      <property name="text">
-                       <string>整体膨胀:</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="1">
-                     <widget class="QLineEdit" name="lineEdit_13">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>11</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="2">
-                     <widget class="QLabel" name="label_32">
-                      <property name="text">
-                       <string>纵向膨胀:</string>
-                      </property>
-                     </widget>
-                    </item>
-                    <item row="1" column="3">
-                     <widget class="QLineEdit" name="lineEdit_19">
-                      <property name="minimumSize">
-                       <size>
-                        <width>0</width>
-                        <height>50</height>
-                       </size>
-                      </property>
-                      <property name="text">
-                       <string>3</string>
-                      </property>
-                     </widget>
-                    </item>
-                   </layout>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="pushButton">
-                   <property name="minimumSize">
-                    <size>
-                     <width>0</width>
-                     <height>50</height>
-                    </size>
-                   </property>
-                   <property name="text">
-                    <string>确认</string>
                    </property>
                   </widget>
                  </item>

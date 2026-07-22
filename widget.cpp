@@ -632,7 +632,7 @@ Widget::Widget(QWidget *parent)
     setupTemplatePrivateSettingDirtyTracking();
     setupWordTemplateEditorCombo();
     setupTemplateGuide();
-    setupCharacterSplitSettingsDialog();
+    setupManualCharacterCropUi();
     setupSoftwareSettingsPage();
 
     // 禁用焦点滚动调节（防误触）- 遍历全局所有下拉框和数字输入框，一劳永逸
@@ -838,8 +838,6 @@ void Widget::initWidget()
     connect(this, &Widget::choosechannel,myThread,&MyThread::receivecolorchannel1);
     connect(this, &Widget::sendDataTo, myThread, &MyThread::received);
     connect(this, &Widget::imgshibie, templatematch, &TemplateMatch::receshibie);
-    connect(this, &Widget::caijianchicun, templatematch, &TemplateMatch::caijiansize);
-    connect(this, &Widget::kernal, templatematch, &TemplateMatch::kernel);
     connect(this, &Widget::ssim, templatematch, &TemplateMatch::ssimvalue);
 
 
@@ -941,134 +939,6 @@ void Widget::wrongremove()
         // 100ms后调用rightremove恢复信号
         timer->start(100);
     }
-}
-
-/**
- * @brief 保存ui图像（带选择框裁剪）
- * @param format 图像格式（如jpg、png、bmp）
- * @param savePath 保存路径
- * @details 根据用户绘制的选择框裁剪图像并保存为模板
- */
-void Widget::saveImage(QString format, QString savePath)
-{
-    // 检查是否有图像可保存
-    if (ui->image_undetected->pixmap() == nullptr)
-    {
-        QMessageBox::warning(this, "警告", "保存失败,未采集到图像!");
-        return;
-    }
-
-    // 获取QLabel中显示的图像
-    QPixmap pixmap = *(ui->image_undetected->pixmap());
-    QImage img = pixmap.toImage();
-    Mat* image = QImageToMat(img);  // 假设QImageToMat是正确的转换函数
-    if (image == nullptr || image->empty())
-    {
-        QMessageBox::warning(this, "警告", "图像转换失败!");
-        return;
-    }
-
-    // 处理格式字符串（去除可能的点号）
-    if (format.startsWith("."))
-    {
-        format = format.mid(1);
-    }
-
-    // 确保保存目录存在
-    QDir dir;
-    if (!dir.mkpath(savePath))
-    {
-        qDebug() << "目录创建失败!";
-        QMessageBox::warning(this, "警告", "保存失败,无法创建目录!");
-        delete image;
-        return;
-    }
-
-    // 获取用户在QLabel上绘制的选择框
-    QRect selectionRect = imageLabel->getSelectionRect();
-    if (selectionRect.isNull() || selectionRect.width() <= 0 || selectionRect.height() <= 0)
-    {
-        QMessageBox::warning(this, "警告", "未选择有效区域!");
-        delete image;
-        return;
-    }
-
-    // 关键修复：计算图像在QLabel中的实际显示尺寸和偏移（解决缩放/留白问题）
-    // 1. 获取原始图像尺寸（OpenCV Mat: cols=宽, rows=高）
-    QSize originalImageSize(image->cols, image->rows);
-    // 2. 获取QLabel的显示尺寸
-    QSize labelSize = imageLabel->size();
-    if (labelSize.width() <= 0 || labelSize.height() <= 0)
-    {
-        QMessageBox::warning(this, "警告", "图像显示区域无效!");
-        delete image;
-        return;
-    }
-
-    // 3. 计算图像在QLabel中的实际缩放尺寸（按QLabel的缩放模式，通常是保持宽高比）
-    // 注意：需与QLabel的实际缩放模式一致（如ui->image_undetected的scaledContents属性）
-    QSize scaledImageSize = originalImageSize.scaled(labelSize, Qt::KeepAspectRatio);
-
-    // 4. 计算图像在QLabel中的偏移量（因居中显示导致的留白补偿）
-    int xOffset = (labelSize.width() - scaledImageSize.width()) / 2;   // 水平偏移（左留白）
-    int yOffset = (labelSize.height() - scaledImageSize.height()) / 2; // 垂直偏移（上留白）
-
-    // 5. 修正用户选择框：排除QLabel的留白区域，只保留图像显示区域内的部分
-    QRectF adjustedRect(
-                selectionRect.left() - xOffset,    // 减去水平偏移，得到相对于图像显示区域的X坐标
-                selectionRect.top() - yOffset,     // 减去垂直偏移，得到相对于图像显示区域的Y坐标
-                selectionRect.width(),
-                selectionRect.height()
-                );
-
-    // 6. 确保修正后的区域完全在图像显示区域内（避免超出显示范围）
-    QRectF validImageRect(0, 0, scaledImageSize.width(), scaledImageSize.height());
-    adjustedRect = adjustedRect.intersected(validImageRect);
-    if (adjustedRect.isNull() || adjustedRect.width() <= 0 || adjustedRect.height() <= 0)
-    {
-        QMessageBox::warning(this, "警告", "选择区域超出图像范围!");
-        delete image;
-        return;
-    }
-
-    // 7. 计算正确的缩放比例（原始图像尺寸 / 显示尺寸）
-    double xRatio = static_cast<double>(originalImageSize.width()) / scaledImageSize.width();
-    double yRatio = static_cast<double>(originalImageSize.height()) / scaledImageSize.height();
-
-    // 8. 将修正后的区域转换为原始图像的ROI（OpenCV坐标）
-    cv::Rect roi(
-                static_cast<int>(adjustedRect.left() * xRatio),    // 原始图像中的X起点
-                static_cast<int>(adjustedRect.top() * yRatio),     // 原始图像中的Y起点
-                static_cast<int>(adjustedRect.width() * xRatio),   // 原始图像中的宽度
-                static_cast<int>(adjustedRect.height() * yRatio)   // 原始图像中的高度
-                );
-
-    // 9. 最终校验：确保ROI在原始图像边界内
-    roi &= cv::Rect(0, 0, image->cols, image->rows);
-    if (roi.width <= 0 || roi.height <= 0)
-    {
-        QMessageBox::warning(this, "警告", "无效的裁剪区域!");
-        delete image;
-        return;
-    }
-
-    // 裁剪图像
-    cv::Mat croppedImage = (*image)(roi);
-
-    // 保存裁剪后的模板图像
-    muban = &croppedImage;  // 注意：这里是指针引用，需确保croppedImage生命周期有效
-    std::string savename = "muban.png";
-    if (cv::imwrite(savename, croppedImage))
-    {
-        QMessageBox::information(this, "提示", "模板muban.png保存成功!");
-    }
-    else
-    {
-        QMessageBox::warning(this, "警告", "保存失败!可能不支持该图像格式或路径错误。");
-    }
-
-    // 释放资源
-    delete image;
 }
 
 /**
@@ -2546,31 +2416,10 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     }
 }
 
-void Widget::setupCharacterSplitSettingsDialog()
+void Widget::setupManualCharacterCropUi()
 {
     if (!ui || m_manualCharacterCropButton) {
         return;
-    }
-
-    QWidget *settingsParent = ui->tab2_frame3 ? ui->tab2_frame3->parentWidget() : nullptr;
-    QGridLayout *settingsLayout = qobject_cast<QGridLayout *>(settingsParent ? settingsParent->layout() : nullptr);
-    if (settingsLayout) {
-        if (ui->tab2_frame3) {
-            settingsLayout->removeWidget(ui->tab2_frame3);
-            ui->tab2_frame3->hide();
-        }
-        if (ui->tab2_frame2) {
-            settingsLayout->removeWidget(ui->tab2_frame2);
-            ui->tab2_frame2->hide();
-        }
-    }
-
-    if (ui->Saveimage) {
-        QWidget *autoSplitParent = ui->Saveimage->parentWidget();
-        if (autoSplitParent && autoSplitParent->layout()) {
-            autoSplitParent->layout()->removeWidget(ui->Saveimage);
-        }
-        ui->Saveimage->hide();
     }
 
     if (!ui->manualCharacterCropButton) {
@@ -2602,15 +2451,6 @@ void Widget::setupCharacterSplitSettingsDialog()
     connect(m_manualCharacterCropButton, &QPushButton::clicked,
             this, &Widget::showManualCharacterTemplateCropDialog);
     refreshWordTemplateEditorCombo();
-}
-
-void Widget::showCharacterSplitSettingsDialog()
-{
-    if (!m_characterSplitSettingsDialog) {
-        return;
-    }
-
-    m_characterSplitSettingsDialog->exec();
 }
 
 void Widget::setupSoftwareSettingsPage()
@@ -3844,8 +3684,6 @@ void Widget::setupWordTemplateEditorCombo()
         if (ui->pushButton_9) ui->pushButton_9->setStyleSheet(commonPushButtonStyle);
         if (ui->pushButton_12) ui->pushButton_12->setStyleSheet(commonPushButtonStyle);
         if (ui->pushButton_tissueRoughnessThreshold) ui->pushButton_tissueRoughnessThreshold->setStyleSheet(commonPushButtonStyle);
-        if (ui->pushButton_2) ui->pushButton_2->setStyleSheet(commonPushButtonStyle);
-        if (ui->pushButton) ui->pushButton->setStyleSheet(commonPushButtonStyle);
         if (ui->plcmodebtn) ui->plcmodebtn->setStyleSheet(commonPushButtonStyle);
         if (ui->ConnectpushButton) ui->ConnectpushButton->setStyleSheet(commonPushButtonStyle);
         if (ui->DisconnectpushButton) ui->DisconnectpushButton->setStyleSheet(commonPushButtonStyle);
@@ -5129,87 +4967,6 @@ void Widget::on_sureButton_clicked()
 }
 
 /**
- * @brief 保存模板图像按钮点击槽函数
- * @details 提取当前选择区域，分割字符并保存为模板
- */
-void Widget::on_Saveimage_clicked()
-{
-
-    if (ui->image_undetected->pixmap() == nullptr)
-    {
-        QMessageBox::warning(this, "警告", "保存失败,未采集到图像!");
-        return;
-    }
-
-    // 获取程序运行目录
-    QString currentPath = QDir::currentPath();
-    qDebug() << "Current Path: " << currentPath;
-
-    // 删除所有.png文件
-    QDir dir(currentPath);
-    QFileInfoList files = dir.entryInfoList(QStringList() << "*.png" << "*.PNG", QDir::Files);
-
-    foreach (const QFileInfo &fileInfo, files)
-    {
-        QString filePath = fileInfo.absoluteFilePath();
-        qDebug() << "Found file: " << filePath;
-
-        if (QFile::remove(filePath))
-        {
-            qDebug() << "Successfully removed: " << filePath;
-        }
-    }
-
-    // 获取图像处理参数
-    bool ok1;
-    int width_min = ui->lineEdit_5->text().toInt(&ok1);
-    int width_max = ui->lineEdit_9->text().toInt(&ok1);
-    int height_min = ui->lineEdit_10->text().toInt(&ok1);
-    int height_max = ui->lineEdit_11->text().toInt(&ok1);
-    int block_size1 = ui->lineEdit_13->text().toInt(&ok1);
-    int kernelsize = ui->lineEdit_15->text().toInt(&ok1);
-    int horizontalKernel = ui->lineEdit_18->text().toInt(&ok1);
-    int verticalKernel = ui->lineEdit_19->text().toInt(&ok1);
-
-    // 统一判断：是否为有效整数 + 均为大于1的奇数
-    bool isParamValid = true;
-    // 再判断是否都满足「大于1且是奇数」
-    if (block_size1 <= 1 || block_size1 % 2 != 1
-            || kernelsize <= 1 || kernelsize % 2 != 1
-            || horizontalKernel <= 1 || horizontalKernel % 2 != 1
-            || verticalKernel <= 1 || verticalKernel % 2 != 1) {
-        isParamValid = false;
-    }
-
-    // 统一弹窗警告
-    if (!isParamValid) {
-        showParameterWarning("参数错误", "图像处理参数必须均为大于1的奇数，请修正后重试！");
-        return;
-    }
-
-
-    // 发送参数给模板匹配对象
-    emit caijianchicun(width_min, width_max, height_min, height_max, block_size1,
-                       horizontalKernel, verticalKernel);
-    emit kernal(kernelsize);
-
-    // 保存模板图像
-    saveImage("bmp", QDir::currentPath() + "/myImage/");
-
-    cv::Mat muban = cv::imread("muban.png");
-    templatematch->extractDigits(muban, digitTemplates);
-
-    // 保存分割后的字符图像
-    for (size_t i = 0; i < digitTemplates.size(); ++i)
-    {
-        std::stringstream ss;
-        ss << (i + 1) << ".png";
-        std::string filename = ss.str();
-        cv::imwrite(filename, digitTemplates[i]);
-    }
-}
-
-/**
  * @brief 获取目标字符串
  * @return QString 目标字符串
  */
@@ -5958,46 +5715,6 @@ void Widget::closeEvent(QCloseEvent *event)
     cv::destroyAllWindows();
     saveSettings(false);
     event->accept();
-}
-
-/**
- * @brief 图像参数确定按钮点击槽函数
- * @details 设置模板匹配的图像处理参数
- */
-void Widget::on_pushButton_clicked()
-{
-    bool ok1;
-    int width_min = ui->lineEdit_5->text().toInt(&ok1);
-    int width_max = ui->lineEdit_9->text().toInt(&ok1);
-    int height_min = ui->lineEdit_10->text().toInt(&ok1);
-    int height_max = ui->lineEdit_11->text().toInt(&ok1);
-    int block_size1 = ui->lineEdit_13->text().toInt(&ok1);
-    int kernelsize = ui->lineEdit_15->text().toInt(&ok1);
-    int horizontalKernel = ui->lineEdit_18->text().toInt(&ok1);
-    int verticalKernel = ui->lineEdit_19->text().toInt(&ok1);
-
-    // 统一判断：是否为有效整数 + 均为大于1的奇数
-    bool isParamValid = true;
-    // 再判断是否都满足「大于1且是奇数」
-    if (block_size1 <= 1 || block_size1 % 2 != 1
-            || kernelsize <= 1 || kernelsize % 2 != 1
-            || horizontalKernel <= 1 || horizontalKernel % 2 != 1
-            || verticalKernel <= 1 || verticalKernel % 2 != 1) {
-        isParamValid = false;
-    }
-
-    // 统一弹窗警告
-    if (!isParamValid) {
-        showParameterWarning("参数错误", "图像处理参数必须均为大于1的奇数，请修正后重试！");
-        return;
-    }
-
-
-    emit caijianchicun(width_min, width_max, height_min, height_max, block_size1,
-                       horizontalKernel, verticalKernel);
-    emit kernal(kernelsize);
-
-    showParameterInfo("提示", "图像参数设置成功");
 }
 
 /**
@@ -6931,10 +6648,6 @@ void Widget::applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &set
  */
 void Widget::setupNonPersistentDefaults()
 {
-    ui->lineEdit_18->setText("1");
-    ui->lineEdit_19->setText("3");
-    ui->lineEdit_13->setText("11");
-    ui->lineEdit_15->setText("3");
     ui->lineEdit_yuzhi->setText("70");
     ui->dateEdit->setPlainText("");
 }
@@ -6961,17 +6674,6 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
         return QWidget::eventFilter(watched, event);
     }
 
-    if (watched == m_characterSplitSettingsDialog
-            && event->type() == QEvent::EnterWhatsThisMode) {
-        QString helpText = m_characterSplitSettingsDialog->property("characterSplitHelpText").toString();
-        if (helpText.isEmpty()) {
-            helpText = "这里用于调整自动分割字符模板图片时使用的参数。";
-        }
-        QWhatsThis::showText(QCursor::pos(), helpText, m_characterSplitSettingsDialog);
-        QWhatsThis::leaveWhatsThisMode();
-        return true;
-    }
-
         if (watched == ui->textsure_btn
             || watched == ui->batchTextsure_btn
             || watched == ui->batchImageThresholdButton
@@ -6989,7 +6691,6 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
             || watched == ui->label_17
             || watched == ui->label_8
             || watched == ui->comboBox_3
-            || watched == ui->Saveimage
             || watched == m_manualCharacterCropButton
             || watched == ui->VideoShoot) {
         QWidget *button = qobject_cast<QWidget *>(watched);
@@ -7377,9 +7078,6 @@ void Widget::on_plcbtn_clicked()
         // 发送模板匹配相关参数
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
-        emit caijianchicun(ui->lineEdit_5->text().toInt(), ui->lineEdit_9->text().toInt(), ui->lineEdit_10->text().toInt(), ui->lineEdit_11->text().toInt(), ui->lineEdit_13->text().toInt(), ui->lineEdit_18->text().toInt(), ui->lineEdit_19->text().toInt());
-        emit kernal(ui->lineEdit_15->text().toInt());
-
         cameraThread->start();
         if (!cameraThread->wait(100)) {
             isCollecting = true;
@@ -7571,26 +7269,6 @@ void Widget::on_plcmodebtn_clicked()
     applyPlcTriggerModeFromUi(&errors, true);
 }
 
-// 模板匹配参数设置
-void Widget::on_pushButton_2_clicked()
-{
-    // 确定裁剪尺寸
-    bool ok1;
-    int width_min = ui->lineEdit_5->text().toInt(&ok1);
-    int width_max = ui->lineEdit_9->text().toInt(&ok1);
-    int height_min = ui->lineEdit_10->text().toInt(&ok1);
-    int height_max = ui->lineEdit_11->text().toInt(&ok1);
-    int block_size1 = ui->lineEdit_13->text().toInt(&ok1);
-    int kernelsize = ui->lineEdit_15->text().toInt(&ok1);
-    int horizontalKernel = ui->lineEdit_18->text().toInt(&ok1);
-    int verticalKernel = ui->lineEdit_19->text().toInt(&ok1);
-
-
-    emit caijianchicun(width_min, width_max, height_min, height_max, block_size1,  horizontalKernel, verticalKernel);
-    emit kernal(kernelsize);
-    showParameterInfo("提示", "模板尺寸设置成功");
-}
-
 // 剔除位置设置
 void Widget::on_eliminatebutton_clicked()
 {
@@ -7756,8 +7434,6 @@ void Widget::reinitializeCameraThread()
     // 步骤8: 连接模板匹配相关信号
     connect(this, &Widget::jiancestring, templatematch, &TemplateMatch::jianceshibiestr);
     connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
-    connect(this, &Widget::imgmuban, templatematch, &TemplateMatch::recemuban);
-    connect(this, &Widget::caijianchicun, templatematch, &TemplateMatch::caijiansize);
 
     qDebug() << "✓ cameraThread reinitialized successfully";
 }

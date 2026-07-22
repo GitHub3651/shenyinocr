@@ -22,7 +22,6 @@ public:
     explicit TemplateMatch(QObject* parent = nullptr) ;
     cv::Mat img;
     Mat *img1=nullptr;
-    Mat *imgmuban=nullptr;
     Mat *imgshibie=nullptr;
     MyThread *myThread = NULL;
     CameraThread *cameraThread=NULL;
@@ -31,12 +30,7 @@ public:
     char window_title_2;
     char window_title_3;
     int match_method;
-    int kernelsize;
     int value;
-    int width_min,width_max,height_min,height_max,block_size1,block_size2,fixedcols,fixedrows;
-    int verticalKernelsize,horizontalKernelsize;
-    Mat imageWithBoxes;
-    vector<Point> rectTopCenterPoints;
     String input="";
 //    int max_Trackbar = 5;
     double getMSSIM(cv::Mat& img1, cv::Mat& img2);
@@ -51,16 +45,10 @@ signals:
 
 
 public slots:
-    void recemuban(Mat *img1);
     void receshibie(Mat*img2);
-    double run1(vector<Mat> digitTemplates);
-    double run2(vector<Mat> digitTemplates,vector<Mat> digitRigions);
     int run3(std::vector<cv::Mat> digitTemplates);
     int run3(std::vector<cv::Mat> digitTemplates, const std::vector<int> &templateTargetIndexes);
     void jianceshibiestr(String string1);
-    void extractDigits(const Mat &image, vector<Mat> &digitRegions);
-    void caijiansize(int a,int b,int c,int d,int e,int i, int j);
-    void kernel(int a);
     void ssimvalue(int s);
 };
 
