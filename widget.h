@@ -129,7 +129,7 @@ public:
     void initWidget();                  ///< 初始化界面
     void saveImage2(QString format, QString savePath);
     void saveImage2(QString format, QString savePath, const QString &fileBaseName);
-    void saveRawImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName);
+    void saveCvImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName);
     bool shouldSaveRecognitionBoxImage() const;
     bool shouldSaveNoRecognitionBoxImage() const;
     void saveResultImages(QString format, const QString &resultDirName, const cv::Mat &image);

@@ -418,6 +418,47 @@ static bool g_allowTissueDetectionFrameDisplay = false;
 static TissueRollItem g_lastTissueRoll;
 static bool g_hasLastTissueRoll = false;
 
+static cv::Mat makeBgrCopy(const cv::Mat& image)
+{
+    if (image.empty()) {
+        return cv::Mat();
+    }
+    if (image.channels() == 3) {
+        return image.clone();
+    }
+
+    cv::Mat bgr;
+    if (image.channels() == 1) {
+        cv::cvtColor(image, bgr, cv::COLOR_GRAY2BGR);
+    } else if (image.channels() == 4) {
+        cv::cvtColor(image, bgr, cv::COLOR_BGRA2BGR);
+    }
+    return bgr;
+}
+
+static void drawTissueRollOverlay(cv::Mat& image, const TissueRollItem& roll)
+{
+    if (image.empty()) {
+        return;
+    }
+
+    const double dynamicScale = std::max(1.0, image.rows / 800.0);
+    const int boxThickness = std::max(2, static_cast<int>(2 * dynamicScale));
+    const int outerRadius = std::max(1, cvRound(std::max(roll.outerAxes.width, roll.outerAxes.height)));
+    const int innerRadius = std::max(1, cvRound(std::max(roll.innerAxes.width, roll.innerAxes.height)));
+
+    cv::circle(image,
+               cv::Point(cvRound(roll.center.x), cvRound(roll.center.y)),
+               outerRadius,
+               cv::Scalar(0, 255, 255),
+               boxThickness);
+    cv::circle(image,
+               cv::Point(cvRound(roll.innerCenter.x), cvRound(roll.innerCenter.y)),
+               innerRadius,
+               cv::Scalar(255, 0, 0),
+               boxThickness);
+}
+
 static cv::Point2f transformPoint(const cv::Mat& affine, const cv::Point2f& pt)
 {
     return cv::Point2f(
@@ -1216,16 +1257,16 @@ void Widget::saveImage2(QString format, QString savePath, const QString &fileBas
     });
 }
 
-void Widget::saveRawImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName)
+void Widget::saveCvImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName)
 {
     if (image.empty()) {
-        qDebug() << "无框原图保存失败，图像为空";
+        qDebug() << "图像保存失败，图像为空";
         return;
     }
 
     QImage img = cvMatToQImage(image);
     if (img.isNull()) {
-        qDebug() << "无框原图保存失败，图像格式不支持";
+        qDebug() << "图像保存失败，图像格式不支持";
         return;
     }
 
@@ -1238,7 +1279,7 @@ void Widget::saveRawImage(QString format, QString savePath, const cv::Mat &image
 
     QDir dir;
     if (!dir.mkpath(savePath)) {
-        qDebug() << "无框原图目录创建失败！路径：" << savePath;
+        qDebug() << "图像保存目录创建失败！路径：" << savePath;
         return;
     }
 
@@ -1255,14 +1296,14 @@ void Widget::saveRawImage(QString format, QString savePath, const cv::Mat &image
     QtConcurrent::run([=]() {
         try {
             if (img.save(saveName, format.toUpper().toStdString().c_str())) {
-                qDebug() << "无框原图异步保存成功：" << saveName;
+                qDebug() << "图像异步保存成功：" << saveName;
             } else {
-                qDebug() << "无框原图异步保存失败！路径：" << saveName;
+                qDebug() << "图像异步保存失败！路径：" << saveName;
             }
         } catch (const std::exception& e) {
-            qDebug() << "无框原图异步保存异常:" << e.what();
+            qDebug() << "图像异步保存异常:" << e.what();
         } catch (...) {
-            qDebug() << "无框原图异步保存发生未知异常";
+            qDebug() << "图像异步保存发生未知异常";
         }
     });
 }
@@ -1301,10 +1342,22 @@ void Widget::saveResultImages(QString format, const QString &resultDirName, cons
 
     const QString fileBaseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
     if (shouldSaveRecognitionBoxImage()) {
-        saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
+        const bool tissueMode = ui && ui->comboBox_4 && ui->comboBox_4->currentIndex() == 3;
+        if (tissueMode && g_hasLastTissueRoll) {
+            cv::Mat annotatedImage = makeBgrCopy(image);
+            if (!annotatedImage.empty()) {
+                drawTissueRollOverlay(annotatedImage, g_lastTissueRoll);
+                saveCvImage(format, selectedDir + "/" + resultName + "/", annotatedImage, fileBaseName);
+            } else {
+                qDebug() << "纸巾带框图生成失败，回退保存界面图像";
+                saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
+            }
+        } else {
+            saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
+        }
     }
     if (shouldSaveNoRecognitionBoxImage()) {
-        saveRawImage(format, selectedDir + "/" + resultName + "_raw/", image, fileBaseName);
+        saveCvImage(format, selectedDir + "/" + resultName + "_raw/", image, fileBaseName);
     }
 }
 
@@ -1402,18 +1455,7 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
         }
 
         if (tissueMode && g_hasLastTissueRoll) {
-            const TissueRollItem& roll = g_lastTissueRoll;
-            const int outerRadius = std::max(1, cvRound(std::max(roll.outerAxes.width, roll.outerAxes.height)));
-            const int innerRadius = std::max(1, cvRound(std::max(roll.innerAxes.width, roll.innerAxes.height)));
-
-            cv::circle(displayImg,
-                       cv::Point(cvRound(roll.center.x), cvRound(roll.center.y)),
-                       outerRadius,
-                       cv::Scalar(0, 255, 255), boxThickness);
-            cv::circle(displayImg,
-                       cv::Point(cvRound(roll.innerCenter.x), cvRound(roll.innerCenter.y)),
-                       innerRadius,
-                       cv::Scalar(255, 0, 0), boxThickness);
+            drawTissueRollOverlay(displayImg, g_lastTissueRoll);
         }
     }
 
