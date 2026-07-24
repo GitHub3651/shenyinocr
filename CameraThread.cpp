@@ -145,20 +145,65 @@ void CameraThread::run() {
                         const auto trackingStart = std::chrono::steady_clock::now();
                         DetectionPose bestPose;
                         QString bestName;
-                        for (const WordTrackingState &state : m_wordTrackingProfiles) {
-                            if (!state.ready) {
-                                continue;
+                        cv::Mat sharedTrackingGray;
+                        cv::Mat sharedTrackingSmallGray;
+                        const bool framePrepared =
+                                m_wordTrackingProfiles.front().matcher.prepareFrame(
+                                    *image,
+                                    &sharedTrackingGray,
+                                    &sharedTrackingSmallGray);
+                        if (framePrepared) {
+                            std::vector<DetectionPose> profilePoses(
+                                        m_wordTrackingProfiles.size());
+                            if (m_wordTrackingProfiles.size() == 1) {
+                                const WordTrackingState &state =
+                                        m_wordTrackingProfiles.front();
+                                if (state.ready) {
+                                    profilePoses.front() =
+                                            state.matcher.matchPrepared(
+                                                sharedTrackingGray,
+                                                sharedTrackingSmallGray,
+                                                state.datePoly);
+                                }
+                            } else {
+                                cv::parallel_for_(
+                                        cv::Range(
+                                            0,
+                                            static_cast<int>(
+                                                m_wordTrackingProfiles.size())),
+                                        [&](const cv::Range &range) {
+                                for (int i = range.start; i < range.end; ++i) {
+                                    const WordTrackingState &state =
+                                            m_wordTrackingProfiles[
+                                                static_cast<size_t>(i)];
+                                    if (!state.ready) {
+                                        continue;
+                                    }
+                                    profilePoses[static_cast<size_t>(i)] =
+                                            state.matcher.matchPrepared(
+                                                sharedTrackingGray,
+                                                sharedTrackingSmallGray,
+                                                state.datePoly);
+                                }
+                                });
                             }
 
-                            DetectionPose pose = state.matcher.match(*image, state.datePoly);
-                            if (!pose.valid) {
-                                continue;
-                            }
+                            for (size_t i = 0;
+                                 i < m_wordTrackingProfiles.size();
+                                 ++i) {
+                                const WordTrackingState &state =
+                                        m_wordTrackingProfiles[i];
+                                DetectionPose pose =
+                                        profilePoses[i];
+                                if (!pose.valid) {
+                                    continue;
+                                }
 
-                            pose.wordTemplateProfileIndex = state.profileIndex;
-                            if (!bestPose.valid || pose.score > bestPose.score) {
-                                bestPose = pose;
-                                bestName = state.name;
+                                pose.wordTemplateProfileIndex = state.profileIndex;
+                                if (!bestPose.valid || pose.score > bestPose.score) {
+                                    bestPose = pose;
+                                    bestName = state.name;
+                                }
                             }
                         }
                         bestPose.trackingElapsedMs =

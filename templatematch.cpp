@@ -1,4 +1,4 @@
-#include "templatematch.h"
+﻿#include "templatematch.h"
 #include <iostream>
 #include <QDebug>
 #include <QObject>
@@ -102,6 +102,56 @@ double TemplateMatch::calculateIOU(const cv::Rect& rectA, const cv::Rect& rectB)
 
 
 
+TemplateMatchPreparedTemplates TemplateMatch::prepareDigitTemplates(
+    const std::vector<cv::Mat> &digitTemplates)
+{
+    TemplateMatchPreparedTemplates prepared;
+    prepared.grayTemplates.reserve(digitTemplates.size());
+    prepared.smallTemplates.reserve(digitTemplates.size());
+
+    const double scale = 0.5;
+    for (const cv::Mat &digitTemplate : digitTemplates) {
+        cv::Mat grayTemplate;
+        if (digitTemplate.empty()) {
+            prepared.grayTemplates.emplace_back();
+            prepared.smallTemplates.emplace_back();
+            continue;
+        }
+
+        if (digitTemplate.channels() == 3) {
+            cv::cvtColor(
+                        digitTemplate,
+                        grayTemplate,
+                        cv::COLOR_BGR2GRAY);
+        } else if (digitTemplate.channels() == 4) {
+            cv::cvtColor(
+                        digitTemplate,
+                        grayTemplate,
+                        cv::COLOR_BGRA2GRAY);
+        } else {
+            grayTemplate =
+                    digitTemplate.clone();
+        }
+
+        cv::Mat smallTemplate;
+        if (!grayTemplate.empty()) {
+            cv::resize(
+                        grayTemplate,
+                        smallTemplate,
+                        cv::Size(),
+                        scale,
+                        scale,
+                        cv::INTER_LINEAR);
+        }
+        prepared.grayTemplates.push_back(
+                    grayTemplate);
+        prepared.smallTemplates.push_back(
+                    smallTemplate);
+    }
+
+    return prepared;
+}
+
 int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
     std::vector<int> templateTargetIndexes;
     templateTargetIndexes.reserve(digitTemplates.size());
@@ -112,35 +162,47 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
 }
 
 int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates, const std::vector<int> &templateTargetIndexes) {
+    if (!imgshibie) {
+        qDebug() << "[ERROR] Target image pointer is null, cannot proceed with matching.";
+        lastMatchResults.clear();
+        return 0;
+    }
 
     Mat targetImage;
     imgshibie->copyTo(targetImage);
+    const TemplateMatchPreparedTemplates preparedTemplates =
+            prepareDigitTemplates(
+                digitTemplates);
+    return run3(
+                targetImage,
+                preparedTemplates,
+                templateTargetIndexes);
+}
+
+int TemplateMatch::run3(
+    const cv::Mat &targetImage,
+    const TemplateMatchPreparedTemplates &preparedTemplates,
+    const std::vector<int> &templateTargetIndexes)
+{
+    cv::Mat targetGrayImage;
+
     // --- 1. 基础检查与图像预处理 ---
-    if (digitTemplates.empty() || targetImage.empty()) {
+    if (!preparedTemplates.isValid() || targetImage.empty()) {
         qDebug() << "[ERROR] Templates or target image is empty, cannot proceed with matching.";
+        lastMatchResults.clear();
         return 0.0;
     }
 
-    // 将目标图像转换为灰度图，以进行模板匹配
-    cv::Mat grayTarget;
-    cv::cvtColor(targetImage, grayTarget, cv::COLOR_BGR2GRAY);
+    // Keep the original run3 input rule: the date ROI is always BGR.
+    cv::cvtColor(
+                targetImage,
+                targetGrayImage,
+                cv::COLOR_BGR2GRAY);
 
-    // 将所有数字模板转换为灰度图
-    std::vector<cv::Mat> grayTemplates;
-    for (const cv::Mat& tmpl : digitTemplates) {
-        if (tmpl.empty()) {
-            grayTemplates.emplace_back(); // 如果模板为空，添加一个空Mat
-            continue;
-        }
-        cv::Mat grayTmpl;
-        // 如果模板是彩色图，转换为灰度图；否则直接复制
-        if (tmpl.channels() == 3) {
-            cv::cvtColor(tmpl, grayTmpl, cv::COLOR_BGR2GRAY);
-        } else {
-            grayTmpl = tmpl.clone();
-        }
-        grayTemplates.push_back(grayTmpl);
-    }
+    const std::vector<cv::Mat> &grayTemplates =
+            preparedTemplates.grayTemplates;
+    const std::vector<cv::Mat> &smallTemplates =
+            preparedTemplates.smallTemplates;
 
     std::vector<int> effectiveTargetIndexes;
     effectiveTargetIndexes.reserve(grayTemplates.size());
@@ -157,10 +219,6 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates, const std::vector<i
     // 配置匹配阈值，将其从百分比转换为0-1之间的浮点数
     const double threshold = static_cast<double>(value) / 100.0;
 
-    // 存储所有模板的匹配位置和分数
-    std::vector<std::vector<cv::Rect>> allMatchLocations(grayTemplates.size());
-    std::vector<std::vector<double>> allMatchScores(grayTemplates.size());
-
     // =========================================================================
     // --- 2. 降采样 + CPU 多线程并行加速版 ---
     // =========================================================================
@@ -170,86 +228,25 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates, const std::vector<i
 
     cv::Mat smallTarget;
     // 缩小目标大图
-    cv::resize(grayTarget, smallTarget, cv::Size(), scale, scale, cv::INTER_LINEAR);
+    cv::resize(targetGrayImage, smallTarget, cv::Size(), scale, scale, cv::INTER_LINEAR);
 
-    // 提前缩小所有模板，避免在多线程内重复缩放，榨干性能
-    std::vector<cv::Mat> smallTemplates(grayTemplates.size());
-    for (size_t i = 0; i < grayTemplates.size(); ++i) {
-        if (!grayTemplates[i].empty()) {
-            cv::resize(grayTemplates[i], smallTemplates[i], cv::Size(), scale, scale, cv::INTER_LINEAR);
-        }
-    }
-
+    std::vector<cv::Mat> matchScoreMaps(grayTemplates.size());
     cv::parallel_for_(cv::Range(0, grayTemplates.size()), [&](const cv::Range& range) {
         for (int i = range.start; i < range.end; ++i) {
             const cv::Mat& smallTmpl = smallTemplates[i];
-            const cv::Mat& origTmpl = grayTemplates[i]; // 保留对原图模板的引用，用于还原宽高
 
             // 检查模板是否有效，并且尺寸是否小于缩小后的目标图像，否则跳过
             if (smallTmpl.empty() || smallTarget.cols < smallTmpl.cols || smallTarget.rows < smallTmpl.rows) {
                 continue;
             }
 
-            // 执行模板匹配：在缩小的图像上匹配，速度极快！
-            cv::Mat result;
-            cv::matchTemplate(smallTarget, smallTmpl, result, cv::TM_CCOEFF_NORMED);
-
-            // 遍历匹配结果，收集所有分数超过阈值的匹配位置和分数
-            for (int y = 0; y < result.rows; ++y) {
-                const float* row = result.ptr<float>(y);
-                for (int x = 0; x < result.cols; ++x) {
-                    if (row[x] >= threshold) {
-                        // 【坐标降维打击】：将缩小图上找到的 (x,y) 除以 scale，精准还原回原图坐标
-                        int orig_x = static_cast<int>(std::round(x / scale));
-                        int orig_y = static_cast<int>(std::round(y / scale));
-
-                        // 框的宽高直接使用原始大模板的宽高，保证100%精准贴合
-                        allMatchLocations[i].emplace_back(orig_x, orig_y, origTmpl.cols, origTmpl.rows);
-                        allMatchScores[i].push_back(row[x]);
-                    }
-                }
-            }
+            cv::matchTemplate(
+                        smallTarget,
+                        smallTmpl,
+                        matchScoreMaps[static_cast<size_t>(i)],
+                        cv::TM_CCOEFF_NORMED);
         }
     });
-
-    // =========================================================================
-    // --- 3. 为每个模板按匹配分数排序（降序） (CPU 多线程并行加速版) ---
-    // =========================================================================
-    cv::parallel_for_(cv::Range(0, allMatchLocations.size()), [&](const cv::Range& range) {
-        for (int i = range.start; i < range.end; ++i) {
-            if (allMatchLocations[i].empty()) continue;
-
-            // 组合分数和位置
-            std::vector<std::pair<double, cv::Rect>> matches;
-            matches.reserve(allMatchLocations[i].size()); // 提前分配内存，提升速度
-            for (size_t j = 0; j < allMatchLocations[i].size(); j++) {
-                matches.emplace_back(allMatchScores[i][j], allMatchLocations[i][j]);
-            }
-
-            // 按分数降序排序
-            std::sort(matches.begin(), matches.end(),
-                [](const auto& a, const auto& b) {
-                    return a.first > b.first;
-                });
-
-            // 将排序后的结果写回
-            allMatchLocations[i].clear();
-            allMatchScores[i].clear();
-            for (const auto& match : matches) {
-                allMatchLocations[i].push_back(match.second);
-                allMatchScores[i].push_back(match.first);
-            }
-        }
-    });
-
-    // =========================================================================
-    // 以下部分保持串行，因为它们存在逻辑依赖或数据整合操作，不适合多线程
-    // =========================================================================
-
-    // --- 4. 非重叠匹配位置选择 ---
-    std::vector<std::vector<cv::Rect>> filteredLocations(grayTemplates.size());
-    std::vector<std::vector<double>> filteredScores(grayTemplates.size());
-    std::vector<cv::Rect> selectedLocations;  // 存储已选择的矩形
 
     int targetGroupCount = 0;
     for (int targetIndex : effectiveTargetIndexes) {
@@ -269,68 +266,76 @@ int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates, const std::vector<i
         }
     }
 
-    struct MatchCandidate {
-        double score = 0.0;
-        cv::Rect rect;
-        size_t templateIndex = 0;
-    };
+    std::vector<std::vector<cv::Rect>> allMatchLocations(grayTemplates.size());
+    std::vector<std::vector<double>> allMatchScores(grayTemplates.size());
+    std::vector<cv::Rect> selectedLocations;
 
-    // 按目标字符位置处理；同一目标位置的多个模板图只会选出一个最佳匹配。
+    // Scan score maps directly. This keeps the same threshold, target order
+    // and IoU rule without allocating and sorting every threshold candidate.
     for (int targetIndex = 0; targetIndex < targetGroupCount; ++targetIndex) {
         bool found = false;
-        std::vector<MatchCandidate> candidates;
+        double bestScore = threshold - 1.0;
+        cv::Rect bestRect;
+        size_t bestTemplateIndex = 0;
 
         for (size_t templateIndex : templateIndexesByTarget[static_cast<size_t>(targetIndex)]) {
-            for (size_t j = 0; j < allMatchLocations[templateIndex].size(); ++j) {
-                MatchCandidate candidate;
-                candidate.score = allMatchScores[templateIndex][j];
-                candidate.rect = allMatchLocations[templateIndex][j];
-                candidate.templateIndex = templateIndex;
-                candidates.push_back(candidate);
+            const cv::Mat &scoreMap =
+                    matchScoreMaps[templateIndex];
+            const cv::Mat &originalTemplate =
+                    grayTemplates[templateIndex];
+            if (scoreMap.empty() || originalTemplate.empty()) {
+                continue;
             }
-        }
 
-        std::sort(candidates.begin(), candidates.end(),
-                  [](const MatchCandidate &a, const MatchCandidate &b) {
-                      return a.score > b.score;
-                  });
+            for (int y = 0; y < scoreMap.rows; ++y) {
+                const float *scoreRow =
+                        scoreMap.ptr<float>(y);
+                for (int x = 0; x < scoreMap.cols; ++x) {
+                    const double score =
+                            scoreRow[x];
+                    if (score < threshold || score <= bestScore) {
+                        continue;
+                    }
 
-        for (const MatchCandidate &candidate : candidates) {
-            const cv::Rect& candidateRect = candidate.rect;
-            bool overlap = false;
+                    const cv::Rect candidateRect(
+                                static_cast<int>(
+                                    std::round(x / scale)),
+                                static_cast<int>(
+                                    std::round(y / scale)),
+                                originalTemplate.cols,
+                                originalTemplate.rows);
+                    bool overlapsSelected = false;
+                    for (const cv::Rect &selectedRect : selectedLocations) {
+                        if (calculateIOU(
+                                    candidateRect,
+                                    selectedRect) > 0.3) {
+                            overlapsSelected = true;
+                            break;
+                        }
+                    }
+                    if (overlapsSelected) {
+                        continue;
+                    }
 
-            // 检查是否与任何已选位置重叠
-            for (const cv::Rect& selectedRect : selectedLocations) {
-                // 计算IoU
-                double iou = calculateIOU(candidateRect, selectedRect);
-                if (iou > 0.3) {  // IoU阈值设为0.3
-                    overlap = true;
-                    break;
+                    bestScore = score;
+                    bestRect = candidateRect;
+                    bestTemplateIndex = templateIndex;
+                    found = true;
                 }
             }
-
-            // 如果没重叠则选择该位置
-            if (!overlap) {
-                // 添加到最终结果
-                filteredLocations[candidate.templateIndex].push_back(candidateRect);
-                filteredScores[candidate.templateIndex].push_back(candidate.score);
-
-                // 加入已选择集合
-                selectedLocations.push_back(candidateRect);
-                found = true;
-                break;  // 只需当前模板的一个位置
-            }
         }
 
-        // 可选：如果当前模板没有找到不重叠的位置，记录日志
-        if (!found) {
+        if (found) {
+            allMatchLocations[bestTemplateIndex].push_back(
+                        bestRect);
+            allMatchScores[bestTemplateIndex].push_back(
+                        bestScore);
+            selectedLocations.push_back(
+                        bestRect);
+        } else {
             qDebug() << "[INFO] No non-overlapping match found for target index: " << targetIndex;
         }
     }
-
-    // 将过滤后的结果赋值回原始变量
-    allMatchLocations = std::move(filteredLocations);
-    allMatchScores = std::move(filteredScores);
 
 
     // --- 4. 尺寸统一与行内高度对齐的核心逻辑 ---

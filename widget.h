@@ -492,6 +492,8 @@ private:
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
         std::vector<int> digitTemplateTargetIndexes;
+        TemplateMatchPreparedTemplates preparedDigitTemplates;
+        mutable int preferredBarcodeStrategyId = -1;
     };
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
@@ -501,6 +503,9 @@ private:
     BarcodeDecoderGetVersionFunction m_barcodeGetVersion = nullptr;
     BarcodeDecoderDecodeLuma8Function m_barcodeDecodeLuma8 = nullptr;
     QString m_barcodeDecoderError;
+    bool m_barcodeTemplateTrackingReadable = false;
+    QRect m_validatedBarcodeTrackingRect;
+    QString m_validatedBarcodeText;
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
     QStringList wordTemplateImagePathsForKey(const QDir &directory,
                                              const QString &searchKey,
@@ -514,6 +519,8 @@ private:
     bool loadWordTemplateProfileFromDir(const QString &dirPath,
                                         WordTemplateProfile *profile,
                                         QString *errorMessage);
+    void refreshWordTemplateProfileDigitCache(
+        WordTemplateProfile *profile) const;
     void setupWordTemplateEditorCombo();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
@@ -528,7 +535,9 @@ private:
                                   const std::vector<int> &templateTargetIndexes,
                                   const QString &targetText,
                                   const QString &imageThresholdText,
-                                  const QString &templateName);
+                                  const QString &templateName,
+                                  const TemplateMatchPreparedTemplates *preparedTemplates = nullptr,
+                                  const OrientedDateRoi *preparedDateRoi = nullptr);
     void runBarcodeWordDetection(cv::Mat *image,
                                  const DetectionPose &pose,
                                  const WordTemplateProfile &profile);
@@ -541,11 +550,20 @@ private:
     bool ensureBarcodeDecoderLoaded();
     BarcodeReadResult decodeBarcodeRoi(
         const cv::Mat &grayRoi,
-        const BarcodeDecodeOptions &options);
+        const BarcodeDecodeOptions &options,
+        int preferredStrategyId = -1,
+        int *successfulStrategyId = nullptr);
     BarcodeReadResult decodeBarcodeRoiOnce(
         const cv::Mat &grayRoi,
         unsigned int formatMask,
         unsigned int optionFlags) const;
+    bool validateBarcodeTemplateTrackingRect(
+        const QRect &uiTrackingRect,
+        BarcodeReadResult *barcode,
+        QString *failureReason);
+    QString barcodeTemplateValidationFailureText(
+        const BarcodeReadResult &barcode) const;
+    void clearBarcodeTemplateTrackingValidation();
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

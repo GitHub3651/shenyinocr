@@ -15,6 +15,18 @@
 #include <tuple>
 using namespace cv;
 
+struct TemplateMatchPreparedTemplates
+{
+    std::vector<cv::Mat> grayTemplates;
+    std::vector<cv::Mat> smallTemplates;
+
+    bool isValid() const
+    {
+        return !grayTemplates.empty()
+            && grayTemplates.size() == smallTemplates.size();
+    }
+};
+
 class TemplateMatch:public QThread
 {
     Q_OBJECT
@@ -39,6 +51,12 @@ public:
     double calculateIOU(const cv::Rect& rectA, const cv::Rect& rectB);
     // 新增：用于存储 run3 每次运算完的检测结果 <矩形框, 匹配分数, 目标字符位置索引>
     std::vector<std::tuple<cv::Rect, double, size_t>> lastMatchResults;
+    static TemplateMatchPreparedTemplates prepareDigitTemplates(
+        const std::vector<cv::Mat> &digitTemplates);
+    int run3(
+        const cv::Mat &targetImage,
+        const TemplateMatchPreparedTemplates &preparedTemplates,
+        const std::vector<int> &templateTargetIndexes);
 
 signals:
 

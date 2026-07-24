@@ -65,29 +65,82 @@ bool TrackingPoseMatcher::isReady() const
     return !templateGray.empty() && !preRotatedTemplates.empty() && !preRotatedTemplatesSmall.empty();
 }
 
-DetectionPose TrackingPoseMatcher::match(const cv::Mat& frameBgr,
-                                         const std::vector<cv::Point2f>& relDatePoly) const
+bool TrackingPoseMatcher::prepareFrame(
+    const cv::Mat& frameBgr,
+    cv::Mat* gray,
+    cv::Mat* smallGray) const
 {
-    DetectionPose pose;
+    if (!gray || !smallGray || frameBgr.empty()) {
+        return false;
+    }
+
+    if (frameBgr.channels() == 3) {
+        cv::cvtColor(
+                    frameBgr,
+                    *gray,
+                    cv::COLOR_BGR2GRAY);
+    } else if (frameBgr.channels() == 4) {
+        cv::cvtColor(
+                    frameBgr,
+                    *gray,
+                    cv::COLOR_BGRA2GRAY);
+    } else if (frameBgr.channels() == 1) {
+        *gray = frameBgr;
+    } else {
+        gray->release();
+        smallGray->release();
+        return false;
+    }
+
+    if (gray->empty()) {
+        smallGray->release();
+        return false;
+    }
+
+    cv::resize(
+                *gray,
+                *smallGray,
+                cv::Size(),
+                pyramidScale,
+                pyramidScale,
+                cv::INTER_AREA);
+    return !smallGray->empty();
+}
+
+DetectionPose TrackingPoseMatcher::match(
+    const cv::Mat& frameBgr,
+    const std::vector<cv::Point2f>& relDatePoly) const
+{
     if (!isReady() || frameBgr.empty()) {
-        return pose;
+        return DetectionPose();
     }
 
     cv::Mat gray;
-    if (frameBgr.channels() == 3) {
-        cv::cvtColor(frameBgr, gray, cv::COLOR_BGR2GRAY);
-    } else if (frameBgr.channels() == 4) {
-        cv::cvtColor(frameBgr, gray, cv::COLOR_BGRA2GRAY);
-    } else {
-        gray = frameBgr.clone();
+    cv::Mat smallGray;
+    if (!prepareFrame(
+                frameBgr,
+                &gray,
+                &smallGray)) {
+        return DetectionPose();
     }
 
-    if (gray.empty()) {
+    return matchPrepared(
+                gray,
+                smallGray,
+                relDatePoly);
+}
+
+DetectionPose TrackingPoseMatcher::matchPrepared(
+    const cv::Mat& gray,
+    const cv::Mat& smallGray,
+    const std::vector<cv::Point2f>& relDatePoly) const
+{
+    DetectionPose pose;
+    if (!isReady()
+            || gray.empty()
+            || smallGray.empty()) {
         return pose;
     }
-
-    cv::Mat smallGray;
-    cv::resize(gray, smallGray, cv::Size(), pyramidScale, pyramidScale, cv::INTER_AREA);
 
     double bestValSmall = -1.0;
     cv::Point bestLocSmall;

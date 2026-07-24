@@ -82,6 +82,7 @@
 #include <QtSql/QSqlDatabase>
 
 // 标准库
+#include <array>
 #include <cmath>
 #include <limits>
 #include <windows.h>
@@ -559,80 +560,197 @@ static OrientedDateRoi prepareOrientedDateRoi(const cv::Mat& src, const Detectio
     return oriented;
 }
 
-static OrientedTrackingRoi prepareOrientedTrackingRoi(
+struct BarcodeWordOrientedRois
+{
+    OrientedTrackingRoi tracking;
+    OrientedDateRoi date;
+};
+
+static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
     const cv::Mat& src,
     const DetectionPose& pose,
-    int paddingPercent)
+    int barcodePaddingPercent,
+    int datePadding)
 {
-    OrientedTrackingRoi oriented;
+    BarcodeWordOrientedRois prepared;
     if (src.empty() || !pose.valid || pose.trackingPoly.size() < 3) {
-        return oriented;
+        return prepared;
     }
 
-    oriented.rotationMatrix =
-        cv::getRotationMatrix2D(pose.anchorCenter, -pose.angleDeg, 1.0);
+    const cv::Mat rotationMatrix =
+            cv::getRotationMatrix2D(
+                pose.anchorCenter,
+                -pose.angleDeg,
+                1.0);
+    cv::Mat inverseRotationMatrix;
     cv::invertAffineTransform(
-        oriented.rotationMatrix,
-        oriented.inverseRotationMatrix);
-    cv::warpAffine(
-        src,
-        oriented.rotatedImage,
-        oriented.rotationMatrix,
-        src.size(),
-        cv::INTER_LINEAR,
-        cv::BORDER_REPLICATE);
+                rotationMatrix,
+                inverseRotationMatrix);
 
-    oriented.rotatedTrackingPoly =
-        transformPolygon(pose.trackingPoly, oriented.rotationMatrix);
-    if (oriented.rotatedTrackingPoly.size() < 3) {
-        return oriented;
+    const std::vector<cv::Point> rotatedTrackingPoly =
+            transformPolygon(
+                pose.trackingPoly,
+                rotationMatrix);
+    if (rotatedTrackingPoly.size() < 3) {
+        return prepared;
     }
 
     const cv::Rect trackingBounds =
-        cv::boundingRect(oriented.rotatedTrackingPoly);
+            cv::boundingRect(rotatedTrackingPoly);
     if (trackingBounds.width <= 0 || trackingBounds.height <= 0) {
-        return oriented;
+        return prepared;
     }
 
-    const int safePaddingPercent = std::max(0, paddingPercent);
-    const int shorterSide =
-        std::min(trackingBounds.width, trackingBounds.height);
-    const int paddingPixels = cvRound(
-        static_cast<double>(shorterSide)
-        * static_cast<double>(safePaddingPercent)
-        / 100.0);
-
-    oriented.roi = expandAndClampRect(
-        trackingBounds,
-        paddingPixels,
-        oriented.rotatedImage.size());
-    if (oriented.roi.width <= 0 || oriented.roi.height <= 0) {
-        return oriented;
+    const int shorterTrackingSide =
+            std::min(
+                trackingBounds.width,
+                trackingBounds.height);
+    const int trackingPaddingPixels =
+            cvRound(
+                static_cast<double>(shorterTrackingSide)
+                * static_cast<double>(
+                    std::max(0, barcodePaddingPercent))
+                / 100.0);
+    const cv::Rect trackingRoi =
+            expandAndClampRect(
+                trackingBounds,
+                trackingPaddingPixels,
+                src.size());
+    if (trackingRoi.width <= 0 || trackingRoi.height <= 0) {
+        return prepared;
     }
 
-    const cv::Mat cropped = oriented.rotatedImage(oriented.roi);
-    if (cropped.channels() == 1) {
-        if (cropped.depth() == CV_8U) {
-            oriented.grayRoi = cropped.clone();
-        } else {
-            cropped.convertTo(oriented.grayRoi, CV_8U);
+    std::vector<cv::Point> rotatedDatePoly;
+    cv::Rect dateRoi;
+    bool hasValidDateRoi = false;
+    if (pose.datePoly.size() >= 3) {
+        rotatedDatePoly =
+                transformPolygon(
+                    pose.datePoly,
+                    rotationMatrix);
+        if (rotatedDatePoly.size() >= 3) {
+            dateRoi =
+                    expandAndClampRect(
+                        cv::boundingRect(rotatedDatePoly),
+                        std::max(0, datePadding),
+                        src.size());
+            hasValidDateRoi =
+                    dateRoi.width > 0
+                    && dateRoi.height > 0;
         }
-    } else if (cropped.channels() == 3) {
-        cv::cvtColor(cropped, oriented.grayRoi, cv::COLOR_BGR2GRAY);
-    } else if (cropped.channels() == 4) {
-        cv::cvtColor(cropped, oriented.grayRoi, cv::COLOR_BGRA2GRAY);
-    } else {
-        return oriented;
     }
 
-    if (!oriented.grayRoi.isContinuous()) {
-        oriented.grayRoi = oriented.grayRoi.clone();
+    const cv::Rect combinedRoi =
+            hasValidDateRoi
+            ? (trackingRoi | dateRoi)
+            : trackingRoi;
+    if (combinedRoi.width <= 0 || combinedRoi.height <= 0) {
+        return prepared;
     }
 
-    oriented.valid = !oriented.grayRoi.empty()
-        && oriented.grayRoi.type() == CV_8UC1
-        && oriented.grayRoi.isContinuous();
-    return oriented;
+    cv::Mat localRotationMatrix = rotationMatrix.clone();
+    localRotationMatrix.at<double>(0, 2) -= combinedRoi.x;
+    localRotationMatrix.at<double>(1, 2) -= combinedRoi.y;
+
+    cv::Mat rotatedRegion;
+    cv::warpAffine(
+                src,
+                rotatedRegion,
+                localRotationMatrix,
+                combinedRoi.size(),
+                cv::INTER_LINEAR,
+                cv::BORDER_REPLICATE);
+    if (rotatedRegion.empty()) {
+        return prepared;
+    }
+
+    const cv::Rect localTrackingRoi(
+                trackingRoi.x - combinedRoi.x,
+                trackingRoi.y - combinedRoi.y,
+                trackingRoi.width,
+                trackingRoi.height);
+    const cv::Mat trackingCrop =
+            rotatedRegion(localTrackingRoi);
+    if (trackingCrop.channels() == 1) {
+        if (trackingCrop.depth() == CV_8U) {
+            prepared.tracking.grayRoi =
+                    trackingCrop.clone();
+        } else {
+            trackingCrop.convertTo(
+                        prepared.tracking.grayRoi,
+                        CV_8U);
+        }
+    } else if (trackingCrop.channels() == 3) {
+        cv::cvtColor(
+                    trackingCrop,
+                    prepared.tracking.grayRoi,
+                    cv::COLOR_BGR2GRAY);
+    } else if (trackingCrop.channels() == 4) {
+        cv::cvtColor(
+                    trackingCrop,
+                    prepared.tracking.grayRoi,
+                    cv::COLOR_BGRA2GRAY);
+    }
+
+    if (!prepared.tracking.grayRoi.empty()
+            && !prepared.tracking.grayRoi.isContinuous()) {
+        prepared.tracking.grayRoi =
+                prepared.tracking.grayRoi.clone();
+    }
+
+    prepared.tracking.rotatedImage = rotatedRegion;
+    prepared.tracking.rotatedTrackingPoly =
+            rotatedTrackingPoly;
+    prepared.tracking.roi = trackingRoi;
+    prepared.tracking.rotationMatrix =
+            rotationMatrix;
+    prepared.tracking.inverseRotationMatrix =
+            inverseRotationMatrix;
+    prepared.tracking.valid =
+            !prepared.tracking.grayRoi.empty()
+            && prepared.tracking.grayRoi.type() == CV_8UC1
+            && prepared.tracking.grayRoi.isContinuous();
+
+    if (!hasValidDateRoi) {
+        return prepared;
+    }
+
+    const cv::Rect localDateRoi(
+                dateRoi.x - combinedRoi.x,
+                dateRoi.y - combinedRoi.y,
+                dateRoi.width,
+                dateRoi.height);
+    prepared.date.croppedImage =
+            rotatedRegion(localDateRoi).clone();
+    if (prepared.date.croppedImage.type() != CV_8UC3) {
+        cv::Mat converted;
+        if (prepared.date.croppedImage.channels() == 1) {
+            cv::cvtColor(
+                        prepared.date.croppedImage,
+                        converted,
+                        cv::COLOR_GRAY2BGR);
+        } else if (prepared.date.croppedImage.channels() == 4) {
+            cv::cvtColor(
+                        prepared.date.croppedImage,
+                        converted,
+                        cv::COLOR_BGRA2BGR);
+        } else {
+            converted =
+                    prepared.date.croppedImage.clone();
+        }
+        prepared.date.croppedImage = converted;
+    }
+
+    prepared.date.rotatedImage = rotatedRegion;
+    prepared.date.rotatedDatePoly = rotatedDatePoly;
+    prepared.date.roi = dateRoi;
+    prepared.date.rotationMatrix = rotationMatrix;
+    prepared.date.inverseRotationMatrix =
+            inverseRotationMatrix;
+    prepared.date.valid =
+            !prepared.date.croppedImage.empty();
+
+    return prepared;
 }
 
 static std::vector<CVDrawResult> mapMatchResultsToOriginal(
@@ -1561,13 +1679,11 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
     // 🔥 【核心修改：这里彻底删除了 QPainter 绘制“日期”和“钢印”中文标签的所有代码】 🔥
 
     // 5. 渲染到 UI
-    QSize labelSize = ui->image_undetected->size();
     QPixmap pixmap = QPixmap::fromImage(img);
-    QPixmap scaledPixmap = pixmap.scaled(labelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     ui->image_undetected->setScaledContents(false);
     ui->image_undetected->setAlignment(Qt::AlignCenter);
-    ui->image_undetected->setPixmap(scaledPixmap);
+    ui->image_undetected->setAutoFitPixmap(pixmap);
     if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
         updateImageDisplayStatusText("正在显示相机采集图像...");
     }
@@ -1648,7 +1764,8 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
                                 profile.digitTemplateTargetIndexes,
                                 profile.settings.targetText,
                                 QString::number(profile.settings.imageThreshold),
-                                currentUsedTemplateName);
+                                currentUsedTemplateName,
+                                &profile.preparedDigitTemplates);
                 }
                 return;
             }
@@ -1933,7 +2050,9 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
                                       const std::vector<int> &templateTargetIndexes,
                                       const QString &targetString,
                                       const QString &imageThresholdText,
-                                      const QString &templateName)
+                                      const QString &templateName,
+                                      const TemplateMatchPreparedTemplates *preparedTemplates,
+                                      const OrientedDateRoi *preparedDateRoi)
 {
     if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
         wrongremove();
@@ -1955,7 +2074,17 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         string1.clear();
     }
 
-    OrientedDateRoi oriented = prepareOrientedDateRoi(*image, pose, 20);
+    OrientedDateRoi generatedOriented;
+    if (!preparedDateRoi) {
+        generatedOriented =
+                prepareOrientedDateRoi(
+                    *image,
+                    pose,
+                    20);
+        preparedDateRoi = &generatedOriented;
+    }
+    const OrientedDateRoi &oriented =
+            *preparedDateRoi;
     if (!oriented.valid) {
         qDebug().noquote() << QString("[WORD_DETECT] template=%1 result=NG reason=日期ROI无效或超出原图范围 poseValid=%2 poseScore=%3")
                               .arg(templateName.isEmpty() ? QString("--") : templateName)
@@ -1964,8 +2093,8 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         return;
     }
 
-    cv::Mat croppedImage = oriented.croppedImage.clone();
-    emit imgshibie(&croppedImage);
+    cv::Mat croppedImage =
+            oriented.croppedImage;
     ui->imagenum->setText(QString::number(totalImages));
 
     int targetNum = 0;
@@ -1983,7 +2112,21 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         templatematch->ssimvalue(thresholdValue);
     }
 
-    int detectNum = templatematch->run3(templates, templateTargetIndexes);
+    int detectNum = 0;
+    if (preparedTemplates
+            && preparedTemplates->isValid()) {
+        detectNum =
+                templatematch->run3(
+                    croppedImage,
+                    *preparedTemplates,
+                    templateTargetIndexes);
+    } else {
+        emit imgshibie(&croppedImage);
+        detectNum =
+                templatematch->run3(
+                    templates,
+                    templateTargetIndexes);
+    }
     QString judgeResult = (detectNum == targetNum ? "ok" : "no");
 
     const QStringList targetUnits = parseWordTemplateBaseNames(targetString);
@@ -2120,11 +2263,14 @@ void Widget::runBarcodeWordDetection(
         return;
     }
 
-    const OrientedTrackingRoi trackingRoi =
-            prepareOrientedTrackingRoi(
+    const BarcodeWordOrientedRois orientedRois =
+            prepareBarcodeWordOrientedRois(
                 *image,
                 pose,
-                profile.settings.barcodeOptions.roiPaddingPercent);
+                profile.settings.barcodeOptions.roiPaddingPercent,
+                20);
+    const OrientedTrackingRoi &trackingRoi =
+            orientedRois.tracking;
     if (!trackingRoi.valid) {
         barcode.status = BarcodeReadStatus::InvalidRoi;
         barcode.errorReason = "Invalid barcode tracking ROI";
@@ -2151,9 +2297,18 @@ void Widget::runBarcodeWordDetection(
         return;
     }
 
+    int successfulBarcodeStrategyId = -1;
     barcode = decodeBarcodeRoi(
                 trackingRoi.grayRoi,
-                profile.settings.barcodeOptions);
+                profile.settings.barcodeOptions,
+                profile.preferredBarcodeStrategyId,
+                &successfulBarcodeStrategyId);
+    if (barcode.readable) {
+        profile.preferredBarcodeStrategyId =
+                successfulBarcodeStrategyId;
+    } else {
+        profile.preferredBarcodeStrategyId = -1;
+    }
 
     barcode.cornersInOriginal.clear();
     barcode.cornersInOriginal.reserve(barcode.cornersInRoi.size());
@@ -2190,8 +2345,8 @@ void Widget::runBarcodeWordDetection(
     }
 
     // 日期区域无效也必须形成一次最终NG，不能进入原字库函数后无结果返回。
-    const OrientedDateRoi dateRoi =
-            prepareOrientedDateRoi(*image, pose, 20);
+    const OrientedDateRoi &dateRoi =
+            orientedRois.date;
     if (!dateRoi.valid) {
         finalizeBarcodeWordNg(
                     image,
@@ -2218,7 +2373,9 @@ void Widget::runBarcodeWordDetection(
                 profile.digitTemplateTargetIndexes,
                 profile.settings.targetText,
                 QString::number(profile.settings.imageThreshold),
-                templateName);
+                templateName,
+                &profile.preparedDigitTemplates,
+                &dateRoi);
 
     QString dateState = "已执行";
     QString finalState = "已输出";
@@ -2410,8 +2567,13 @@ BarcodeReadResult Widget::decodeBarcodeRoiOnce(
 
 BarcodeReadResult Widget::decodeBarcodeRoi(
     const cv::Mat &grayRoi,
-    const BarcodeDecodeOptions &options)
+    const BarcodeDecodeOptions &options,
+    int preferredStrategyId,
+    int *successfulStrategyId)
 {
+    if (successfulStrategyId) {
+        *successfulStrategyId = -1;
+    }
     if (!ensureBarcodeDecoderLoaded()) {
         BarcodeReadResult result;
         result.status = BarcodeReadStatus::DecoderUnavailable;
@@ -2419,16 +2581,25 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
         return result;
     }
 
+    if (grayRoi.empty()
+            || grayRoi.type() != CV_8UC1
+            || grayRoi.cols <= 0
+            || grayRoi.rows <= 0) {
+        BarcodeReadResult result;
+        result.status = BarcodeReadStatus::InvalidRoi;
+        result.errorReason = "Invalid grayscale barcode ROI";
+        return result;
+    }
+
+    cv::Mat sourceGray = grayRoi;
+    if (!sourceGray.isContinuous()) {
+        sourceGray = sourceGray.clone();
+    }
+
     const int maxDecodeTimeMs =
             std::max(1, options.maxDecodeTimeMs);
     QElapsedTimer timer;
     timer.start();
-
-    BarcodeReadResult result = decodeBarcodeRoiOnce(
-                grayRoi,
-                options.formatMask,
-                BARCODE_DECODER_OPTION_NONE);
-    result.elapsedMs = elapsedMilliseconds(timer);
 
     const auto isTerminalResult = [](const BarcodeReadResult &value) {
         return value.readable
@@ -2437,40 +2608,518 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
             || value.status == BarcodeReadStatus::InternalError;
     };
 
-    if (isTerminalResult(result) || !options.enableFallback) {
+    BarcodeReadResult result;
+    int attemptCount = 0;
+    QString lastAttemptName;
+
+    const auto budgetAvailable = [&]() {
+        return elapsedMilliseconds(timer) < maxDecodeTimeMs;
+    };
+
+    const auto runAttempt = [&](const cv::Mat &candidate,
+                                unsigned int optionFlags,
+                                int strategyId,
+                                const QString &attemptName,
+                                double scaleX,
+                                double scaleY,
+                                double offsetX,
+                                double offsetY) -> bool {
+        if (!budgetAvailable() || candidate.empty()) {
+            return false;
+        }
+
+        cv::Mat continuousCandidate = candidate;
+        if (continuousCandidate.type() != CV_8UC1) {
+            continuousCandidate.convertTo(continuousCandidate, CV_8UC1);
+        }
+        if (!continuousCandidate.isContinuous()) {
+            continuousCandidate = continuousCandidate.clone();
+        }
+
+        result = decodeBarcodeRoiOnce(
+                    continuousCandidate,
+                    options.formatMask,
+                    optionFlags);
+        ++attemptCount;
+        lastAttemptName = attemptName;
+        result.elapsedMs = elapsedMilliseconds(timer);
+
+        if (result.readable
+                && (std::abs(scaleX - 1.0) > 0.0001
+                    || std::abs(scaleY - 1.0) > 0.0001
+                    || std::abs(offsetX) > 0.0001
+                    || std::abs(offsetY) > 0.0001)) {
+            for (cv::Point2f &corner : result.cornersInRoi) {
+                corner.x = static_cast<float>(
+                    (corner.x - offsetX) / scaleX);
+                corner.y = static_cast<float>(
+                    (corner.y - offsetY) / scaleY);
+            }
+        }
+
+        if (result.readable && attemptCount > 1) {
+            qDebug() << "[BARCODE_DECODE]"
+                     << "fallbackSuccess=" << attemptName
+                     << "attempts=" << attemptCount
+                     << "elapsedMs=" << result.elapsedMs;
+        }
+        if (result.readable && successfulStrategyId) {
+            *successfulStrategyId = strategyId;
+        }
+
+        return isTerminalResult(result);
+    };
+
+    if (runAttempt(
+                sourceGray,
+                BARCODE_DECODER_OPTION_NONE,
+                0,
+                "original-fast",
+                1.0,
+                1.0,
+                0.0,
+                0.0)) {
         return result;
     }
 
-    if (elapsedMilliseconds(timer) < maxDecodeTimeMs) {
-        result = decodeBarcodeRoiOnce(
-                    grayRoi,
-                    options.formatMask,
-                    BARCODE_DECODER_OPTION_TRY_INVERT);
-        result.elapsedMs = elapsedMilliseconds(timer);
-        if (isTerminalResult(result)) {
-            return result;
-        }
+    if (!options.enableFallback) {
+        return result;
     }
 
-    if (elapsedMilliseconds(timer) < maxDecodeTimeMs) {
-        result = decodeBarcodeRoiOnce(
-                    grayRoi,
-                    options.formatMask,
-                    BARCODE_DECODER_OPTION_TRY_HARDER);
-        result.elapsedMs = elapsedMilliseconds(timer);
-        if (isTerminalResult(result)) {
+    const unsigned int robustOptions =
+            BARCODE_DECODER_OPTION_TRY_HARDER
+            | BARCODE_DECODER_OPTION_TRY_ROTATE
+            | BARCODE_DECODER_OPTION_TRY_INVERT;
+
+    const auto runFallbackStrategy = [&](int strategyId) -> bool {
+        if (!budgetAvailable()) {
+            return false;
+        }
+
+        switch (strategyId) {
+        case 1:
+            return runAttempt(
+                        sourceGray,
+                        robustOptions,
+                        1,
+                        "original-robust",
+                        1.0,
+                        1.0,
+                        0.0,
+                        0.0);
+        case 2: {
+            const int shorterSide =
+                    std::min(sourceGray.cols, sourceGray.rows);
+            const int cornerSize =
+                    std::max(2, std::min(16, shorterSide / 12));
+            const cv::Rect topLeft(
+                        0,
+                        0,
+                        std::min(cornerSize, sourceGray.cols),
+                        std::min(cornerSize, sourceGray.rows));
+            const cv::Rect topRight(
+                        std::max(0, sourceGray.cols - cornerSize),
+                        0,
+                        std::min(cornerSize, sourceGray.cols),
+                        std::min(cornerSize, sourceGray.rows));
+            const cv::Rect bottomLeft(
+                        0,
+                        std::max(0, sourceGray.rows - cornerSize),
+                        std::min(cornerSize, sourceGray.cols),
+                        std::min(cornerSize, sourceGray.rows));
+            const cv::Rect bottomRight(
+                        std::max(0, sourceGray.cols - cornerSize),
+                        std::max(0, sourceGray.rows - cornerSize),
+                        std::min(cornerSize, sourceGray.cols),
+                        std::min(cornerSize, sourceGray.rows));
+            std::array<double, 4> cornerMeans = {
+                cv::mean(sourceGray(topLeft))[0],
+                cv::mean(sourceGray(topRight))[0],
+                cv::mean(sourceGray(bottomLeft))[0],
+                cv::mean(sourceGray(bottomRight))[0]
+            };
+            std::sort(
+                        cornerMeans.begin(),
+                        cornerMeans.end());
+            const double estimatedBackground =
+                    (cornerMeans[1] + cornerMeans[2]) * 0.5;
+            const int padding =
+                    std::max(
+                        4,
+                        std::min(
+                            20,
+                            cvRound(shorterSide * 0.04)));
+            cv::Mat padded;
+            cv::copyMakeBorder(
+                        sourceGray,
+                        padded,
+                        padding,
+                        padding,
+                        padding,
+                        padding,
+                        cv::BORDER_CONSTANT,
+                        cv::Scalar(estimatedBackground));
+            return runAttempt(
+                        padded,
+                        robustOptions,
+                        2,
+                        "estimated-quiet-zone",
+                        1.0,
+                        1.0,
+                        padding,
+                        padding);
+        }
+        case 3: {
+            cv::Ptr<cv::CLAHE> clahe =
+                    cv::createCLAHE(
+                        2.0,
+                        cv::Size(8, 8));
+            cv::Mat claheImage;
+            clahe->apply(
+                        sourceGray,
+                        claheImage);
+            return runAttempt(
+                        claheImage,
+                        robustOptions,
+                        3,
+                        "clahe",
+                        1.0,
+                        1.0,
+                        0.0,
+                        0.0);
+        }
+        case 4: {
+            cv::Mat medianImage;
+            cv::medianBlur(
+                        sourceGray,
+                        medianImage,
+                        3);
+            cv::Mat normalizedImage;
+            cv::normalize(
+                        medianImage,
+                        normalizedImage,
+                        0,
+                        255,
+                        cv::NORM_MINMAX);
+            return runAttempt(
+                        normalizedImage,
+                        robustOptions,
+                        4,
+                        "median-normalized",
+                        1.0,
+                        1.0,
+                        0.0,
+                        0.0);
+        }
+        case 5: {
+            const int shorterSide =
+                    std::min(sourceGray.cols, sourceGray.rows);
+            int blockSize =
+                    std::max(
+                        21,
+                        std::min(
+                            51,
+                            cvRound(shorterSide / 8.0)));
+            if ((blockSize & 1) == 0) {
+                ++blockSize;
+            }
+            const int largestValidBlock =
+                    (shorterSide & 1) == 0
+                    ? shorterSide - 1
+                    : shorterSide;
+            blockSize =
+                    std::min(
+                        blockSize,
+                        largestValidBlock);
+            if (blockSize < 3) {
+                return false;
+            }
+
+            cv::Mat adaptiveImage;
+            cv::adaptiveThreshold(
+                        sourceGray,
+                        adaptiveImage,
+                        255,
+                        cv::ADAPTIVE_THRESH_GAUSSIAN_C,
+                        cv::THRESH_BINARY,
+                        blockSize,
+                        5);
+            return runAttempt(
+                        adaptiveImage,
+                        robustOptions,
+                        5,
+                        "adaptive-threshold",
+                        1.0,
+                        1.0,
+                        0.0,
+                        0.0);
+        }
+        case 6: {
+            cv::Mat downscaled;
+            cv::resize(
+                        sourceGray,
+                        downscaled,
+                        cv::Size(),
+                        0.75,
+                        0.75,
+                        cv::INTER_AREA);
+            return runAttempt(
+                        downscaled,
+                        robustOptions,
+                        6,
+                        "scale-0.75",
+                        0.75,
+                        0.75,
+                        0.0,
+                        0.0);
+        }
+        case 7: {
+            cv::Mat upscaled;
+            cv::resize(
+                        sourceGray,
+                        upscaled,
+                        cv::Size(),
+                        1.5,
+                        1.5,
+                        cv::INTER_CUBIC);
+            return runAttempt(
+                        upscaled,
+                        robustOptions,
+                        7,
+                        "scale-1.5",
+                        1.5,
+                        1.5,
+                        0.0,
+                        0.0);
+        }
+        default:
+            return false;
+        }
+    };
+
+    try {
+        const int preferredFallbackStrategy =
+                preferredStrategyId >= 1
+                && preferredStrategyId <= 7
+                ? preferredStrategyId
+                : -1;
+        if (preferredFallbackStrategy >= 1
+                && runFallbackStrategy(
+                    preferredFallbackStrategy)) {
             return result;
         }
+
+        for (int strategyId = 1;
+             strategyId <= 7 && budgetAvailable();
+             ++strategyId) {
+            if (strategyId == preferredFallbackStrategy) {
+                continue;
+            }
+            if (runFallbackStrategy(strategyId)) {
+                return result;
+            }
+        }
+    } catch (const cv::Exception &exception) {
+        result.status = BarcodeReadStatus::InternalError;
+        result.readable = false;
+        result.elapsedMs = elapsedMilliseconds(timer);
+        result.errorReason =
+                QString("Barcode generic preprocessing failed: %1")
+                .arg(QString::fromLocal8Bit(exception.what()));
+        return result;
     }
 
     result.elapsedMs = elapsedMilliseconds(timer);
     if (!result.readable && result.elapsedMs >= maxDecodeTimeMs) {
         result.status = BarcodeReadStatus::Timeout;
         result.errorReason =
-                QString("Barcode decoding exceeded %1 ms")
-                .arg(maxDecodeTimeMs);
+                QString("Barcode decoding exceeded %1 ms after %2 attempts")
+                .arg(maxDecodeTimeMs)
+                .arg(attemptCount);
+    } else if (!result.readable) {
+        result.status = BarcodeReadStatus::NotFound;
+        result.errorReason =
+                QString("Barcode was not found after %1 generic attempts")
+                .arg(attemptCount);
     }
+
+    qDebug() << "[BARCODE_DECODE]"
+             << "readable=" << result.readable
+             << "attempts=" << attemptCount
+             << "lastAttempt=" << lastAttemptName
+             << "elapsedMs=" << result.elapsedMs
+             << "status=" << static_cast<int>(result.status);
     return result;
+}
+
+void Widget::clearBarcodeTemplateTrackingValidation()
+{
+    m_barcodeTemplateTrackingReadable = false;
+    m_validatedBarcodeTrackingRect = QRect();
+    m_validatedBarcodeText.clear();
+}
+
+QString Widget::barcodeTemplateValidationFailureText(
+    const BarcodeReadResult &barcode) const
+{
+    switch (barcode.status) {
+    case BarcodeReadStatus::DecoderUnavailable:
+        return barcode.errorReason.trimmed().isEmpty()
+                ? "BarcodeDecoder.dll 不可用，无法验证二维码。"
+                : QString("BarcodeDecoder.dll 不可用：%1")
+                  .arg(barcode.errorReason);
+    case BarcodeReadStatus::InvalidRoi:
+        return "二维码框选区域无效，请重新框选。";
+    case BarcodeReadStatus::Timeout:
+        return "二维码扫描超时，请重新框选完整、清晰的二维码区域。";
+    case BarcodeReadStatus::InternalError:
+        return barcode.errorReason.trimmed().isEmpty()
+                ? "二维码解码器发生内部错误。"
+                : QString("二维码解码器发生内部错误：%1")
+                  .arg(barcode.errorReason);
+    case BarcodeReadStatus::NotFound:
+        return "当前框选区域内没有扫描到可读的 Data Matrix 二维码。";
+    case BarcodeReadStatus::Success:
+        break;
+    }
+
+    return "当前框选区域内没有扫描到可读的 Data Matrix 二维码。";
+}
+
+bool Widget::validateBarcodeTemplateTrackingRect(
+    const QRect &uiTrackingRect,
+    BarcodeReadResult *barcode,
+    QString *failureReason)
+{
+    BarcodeReadResult result;
+
+    auto finishFailure = [&](BarcodeReadStatus status,
+                             const QString &reason) -> bool {
+        result.status = status;
+        result.readable = false;
+        result.errorReason = reason;
+        if (barcode) {
+            *barcode = result;
+        }
+        if (failureReason) {
+            *failureReason = barcodeTemplateValidationFailureText(result);
+        }
+        return false;
+    };
+
+    if (!myImage || myImage->empty() || !imageLabel) {
+        return finishFailure(
+                    BarcodeReadStatus::InvalidRoi,
+                    "Template source image is unavailable");
+    }
+
+    const QRect normalizedRect = uiTrackingRect.normalized();
+    if (normalizedRect.width() <= 5 || normalizedRect.height() <= 5) {
+        return finishFailure(
+                    BarcodeReadStatus::InvalidRoi,
+                    "Barcode tracking rectangle is too small");
+    }
+
+    const QSize labelSize = imageLabel->size();
+    const QSize imageSize(myImage->cols, myImage->rows);
+    const QPixmap *displayedPixmap = imageLabel->pixmap();
+    const QSize displayedSize =
+            displayedPixmap && !displayedPixmap->isNull()
+            ? displayedPixmap->size()
+            : imageSize.scaled(labelSize, Qt::KeepAspectRatio);
+    if (displayedSize.width() <= 0 || displayedSize.height() <= 0) {
+        return finishFailure(
+                    BarcodeReadStatus::InvalidRoi,
+                    "Displayed image size is invalid");
+    }
+
+    const int xOffset = (labelSize.width() - displayedSize.width()) / 2;
+    const int yOffset = (labelSize.height() - displayedSize.height()) / 2;
+    const double scaleX =
+            static_cast<double>(imageSize.width()) / displayedSize.width();
+    const double scaleY =
+            static_cast<double>(imageSize.height()) / displayedSize.height();
+
+    const int sourceLeft = static_cast<int>(std::floor(
+        (normalizedRect.left() - xOffset) * scaleX));
+    const int sourceTop = static_cast<int>(std::floor(
+        (normalizedRect.top() - yOffset) * scaleY));
+    const int sourceRight = static_cast<int>(std::ceil(
+        (normalizedRect.right() + 1 - xOffset) * scaleX));
+    const int sourceBottom = static_cast<int>(std::ceil(
+        (normalizedRect.bottom() + 1 - yOffset) * scaleY));
+
+    cv::Rect sourceRect(
+                sourceLeft,
+                sourceTop,
+                sourceRight - sourceLeft,
+                sourceBottom - sourceTop);
+    sourceRect &= cv::Rect(0, 0, myImage->cols, myImage->rows);
+    if (sourceRect.width <= 5 || sourceRect.height <= 5) {
+        return finishFailure(
+                    BarcodeReadStatus::InvalidRoi,
+                    "Barcode tracking rectangle is outside the source image");
+    }
+
+    const cv::Mat sourceRoi = (*myImage)(sourceRect);
+    cv::Mat grayRoi;
+    if (sourceRoi.channels() == 1) {
+        grayRoi = sourceRoi.clone();
+    } else if (sourceRoi.channels() == 3) {
+        cv::cvtColor(sourceRoi, grayRoi, cv::COLOR_BGR2GRAY);
+    } else if (sourceRoi.channels() == 4) {
+        cv::cvtColor(sourceRoi, grayRoi, cv::COLOR_BGRA2GRAY);
+    } else {
+        return finishFailure(
+                    BarcodeReadStatus::InvalidRoi,
+                    QString("Unsupported source image channels: %1")
+                    .arg(sourceRoi.channels()));
+    }
+
+    if (grayRoi.type() != CV_8UC1) {
+        cv::Mat converted;
+        grayRoi.convertTo(converted, CV_8UC1);
+        grayRoi = converted;
+    }
+    if (!grayRoi.isContinuous()) {
+        grayRoi = grayRoi.clone();
+    }
+
+    result = decodeBarcodeRoi(grayRoi, BarcodeDecodeOptions());
+    qDebug() << "[BARCODE_TEMPLATE]"
+             << "uiRect=" << normalizedRect
+             << "labelSize=" << labelSize
+             << "pixmapSize=" << displayedSize
+             << "sourceRect="
+             << sourceRect.x << sourceRect.y
+             << sourceRect.width << sourceRect.height
+             << "readable=" << result.readable
+             << "elapsedMs=" << result.elapsedMs
+             << "text=" << result.text
+             << "reason=" << result.errorReason;
+
+    const bool readable =
+            result.status == BarcodeReadStatus::Success
+            && result.readable
+            && (!result.rawBytes.isEmpty() || !result.text.isEmpty());
+    if (!readable) {
+        result.readable = false;
+        if (barcode) {
+            *barcode = result;
+        }
+        if (failureReason) {
+            *failureReason = barcodeTemplateValidationFailureText(result);
+        }
+        return false;
+    }
+
+    if (barcode) {
+        *barcode = result;
+    }
+    if (failureReason) {
+        failureReason->clear();
+    }
+    return true;
 }
 
 void Widget::finalizeBarcodeWordNg(
@@ -2754,6 +3403,7 @@ void Widget::on_VideoShoot_clicked()
     const bool needsTemplateDrawing =
             ui->comboBox_4->currentIndex() == 0
             || isWordFamilyMode(currentDetectModeId());
+    clearBarcodeTemplateTrackingValidation();
     imageLabel->setTemplateDrawingEnabled(needsTemplateDrawing);
     if (needsTemplateDrawing) {
         imageLabel->resetDrawingStep();
@@ -3017,18 +3667,22 @@ void Widget::showTemplateGuideForCurrentMode()
 
 void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
 {
-    if (!m_templateGuideFrame || !m_templateGuideFrame->isVisible()) {
+    if (!ui || !imageLabel) {
         return;
     }
 
     const int modeIndex = ui->comboBox_4->currentIndex();
     if (modeIndex != 0 && modeIndex != 1 && modeIndex != 4) {
-        hideTemplateGuide();
+        if (m_templateGuideFrame && m_templateGuideFrame->isVisible()) {
+            hideTemplateGuide();
+        }
         return;
     }
 
     const bool barcodeWordMode =
             detectModeIdForIndex(modeIndex) == BarcodeWordDetectionMode;
+    const bool guideVisible =
+            m_templateGuideFrame && m_templateGuideFrame->isVisible();
     const QString title = barcodeWordMode
             ? "二维码+三期模板制作"
             : (modeIndex == 1
@@ -3036,6 +3690,56 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
                : "模板匹配模板制作");
     const QString trackingRegionName =
             barcodeWordMode ? "二维码区域" : "定位区域";
+
+    if (barcodeWordMode
+            && (eventName == "tracking_started"
+                || eventName == "tracking_too_small"
+                || eventName == "template_reset")) {
+        clearBarcodeTemplateTrackingValidation();
+    }
+
+    if (barcodeWordMode && eventName == "tracking_done") {
+        const QRect trackingRect =
+                imageLabel->getTrackingRect().normalized();
+        BarcodeReadResult barcode;
+        QString failureReason;
+        if (!validateBarcodeTemplateTrackingRect(
+                    trackingRect,
+                    &barcode,
+                    &failureReason)) {
+            clearBarcodeTemplateTrackingValidation();
+            imageLabel->resetDrawingStep();
+            if (guideVisible) {
+                updateTemplateGuideText(
+                            title,
+                            "二维码扫描失败，已清空当前框线，请重新框选二维码区域。");
+            }
+
+            QTimer::singleShot(0, this, [this, failureReason]() {
+                QMessageBox::warning(
+                            this,
+                            "二维码扫描失败",
+                            failureReason
+                            + "\n\n请重新完整框选二维码区域，"
+                              "四周保留少量背景，不要包含右侧日期。");
+            });
+            return;
+        }
+
+        m_barcodeTemplateTrackingReadable = true;
+        m_validatedBarcodeTrackingRect = trackingRect;
+        m_validatedBarcodeText = barcode.text;
+        if (guideVisible) {
+            updateTemplateGuideText(
+                        title,
+                        "二维码扫描成功。请用鼠标左键依次点击喷码区域边缘，右键闭合。");
+        }
+        return;
+    }
+
+    if (!guideVisible) {
+        return;
+    }
 
     if (eventName == "tracking_started") {
         updateTemplateGuideText(
@@ -4318,6 +5022,8 @@ void Widget::showManualCharacterTemplateCropDialog()
                 WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
                 profile.digitTemplates = reloadedTemplates;
                 profile.digitTemplateTargetIndexes = reloadedTemplateTargetIndexes;
+                refreshWordTemplateProfileDigitCache(
+                            &profile);
             }
         } else {
             reloadMessage = QString("\n\n字符模板已保存，但当前目标字符仍有图片未加载成功：\n%1").arg(loadError);
@@ -4556,6 +5262,7 @@ void Widget::setupDetectModeChangeTracking()
 
 void Widget::clearWordMultiTemplateState()
 {
+    clearBarcodeTemplateTrackingValidation();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
     currentTemplateDirPath.clear();
@@ -5149,9 +5856,23 @@ bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
         }
     }
 
+    refreshWordTemplateProfileDigitCache(
+                &loadedProfile);
     *profile = loadedProfile;
     if (errorMessage) *errorMessage = pendingMessage;
     return true;
+}
+
+void Widget::refreshWordTemplateProfileDigitCache(
+    WordTemplateProfile *profile) const
+{
+    if (!profile) {
+        return;
+    }
+
+    profile->preparedDigitTemplates =
+            TemplateMatch::prepareDigitTemplates(
+                profile->digitTemplates);
 }
 
 bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
@@ -6027,6 +6748,8 @@ void Widget::on_textsure_btn_clicked()
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
+        refreshWordTemplateProfileDigitCache(
+                    &profile);
         refreshTemplateTargetTextDirty();
 
         const QString profileName = profile.name.isEmpty()
@@ -6163,6 +6886,8 @@ void Widget::on_batchTextsure_btn_clicked()
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
+        refreshWordTemplateProfileDigitCache(
+                    &profile);
         ++successCount;
     }
 
@@ -6501,6 +7226,35 @@ void Widget::on_pushButton_5_clicked()
                             : "定位区域太小，请重新框选。");
             return;
         }
+        if (isBarcodeWordTemplateMode) {
+            const QRect normalizedTrackingRect =
+                    uiTrackRect.normalized();
+            if (!m_barcodeTemplateTrackingReadable
+                    || m_validatedBarcodeTrackingRect
+                       != normalizedTrackingRect) {
+                BarcodeReadResult barcode;
+                QString failureReason;
+                if (!validateBarcodeTemplateTrackingRect(
+                            normalizedTrackingRect,
+                            &barcode,
+                            &failureReason)) {
+                    clearBarcodeTemplateTrackingValidation();
+                    imageLabel->resetDrawingStep();
+                    QMessageBox::warning(
+                                this,
+                                "二维码扫描失败",
+                                failureReason
+                                + "\n\n模板不能保存，请重新完整框选二维码区域，"
+                                  "扫描成功后再框选喷码检测区域。");
+                    return;
+                }
+
+                m_barcodeTemplateTrackingReadable = true;
+                m_validatedBarcodeTrackingRect =
+                        normalizedTrackingRect;
+                m_validatedBarcodeText = barcode.text;
+            }
+        }
         if (uiDetectPoly.isEmpty()) {
             QMessageBox::warning(this, "提示", "请先框选喷码检测区域。");
             return;
@@ -6638,13 +7392,20 @@ void Widget::on_pushButton_5_clicked()
     auto toPhysicalPoint = [&](QPoint uiPt) -> cv::Point2f {
         QSize labelSize = imageLabel->size();
         QSize imgSize(calibImg.cols, calibImg.rows);
-        QSize scaledSize = imgSize.scaled(labelSize, Qt::KeepAspectRatio);
-        int xOff = (labelSize.width() - scaledSize.width()) / 2;
-        int yOff = (labelSize.height() - scaledSize.height()) / 2;
-        double ratio = (double)imgSize.width() / scaledSize.width();
+        const QPixmap *displayedPixmap = imageLabel->pixmap();
+        QSize displayedSize =
+                displayedPixmap && !displayedPixmap->isNull()
+                ? displayedPixmap->size()
+                : imgSize.scaled(labelSize, Qt::KeepAspectRatio);
+        int xOff = (labelSize.width() - displayedSize.width()) / 2;
+        int yOff = (labelSize.height() - displayedSize.height()) / 2;
+        double ratioX =
+                static_cast<double>(imgSize.width()) / displayedSize.width();
+        double ratioY =
+                static_cast<double>(imgSize.height()) / displayedSize.height();
 
-        float px = (uiPt.x() - xOff) * ratio;
-        float py = (uiPt.y() - yOff) * ratio;
+        float px = static_cast<float>((uiPt.x() - xOff) * ratioX);
+        float py = static_cast<float>((uiPt.y() - yOff) * ratioY);
         return cv::Point2f(px, py);
     };
 
@@ -6750,6 +7511,7 @@ void Widget::on_pushButton_5_clicked()
     }
     imageLabel->setTemplateDrawingEnabled(false);
     imageLabel->clearSelection();
+    clearBarcodeTemplateTrackingValidation();
     hideTemplateGuide();
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
@@ -7664,6 +8426,8 @@ void Widget::on_plcbtn_clicked()
                 for (const cv::Mat &digitTemplate : sourceProfile.digitTemplates) {
                     runtimeProfile.digitTemplates.push_back(digitTemplate.clone());
                 }
+                refreshWordTemplateProfileDigitCache(
+                            &runtimeProfile);
                 barcodeWordProfilesForRun.push_back(std::move(runtimeProfile));
             }
         }
