@@ -142,6 +142,7 @@ void CameraThread::run() {
                 } else {
                     cv::Mat displayImage = image->clone();
                     if (m_wordTemplateProfileMode && !m_wordTrackingProfiles.empty()) {
+                        const auto trackingStart = std::chrono::steady_clock::now();
                         DetectionPose bestPose;
                         QString bestName;
                         for (const WordTrackingState &state : m_wordTrackingProfiles) {
@@ -160,6 +161,9 @@ void CameraThread::run() {
                                 bestName = state.name;
                             }
                         }
+                        bestPose.trackingElapsedMs =
+                                std::chrono::duration<double, std::milli>(
+                                    std::chrono::steady_clock::now() - trackingStart).count();
 
                         emit signal_boxesSelected(bestPose);
                         if (bestPose.valid) {

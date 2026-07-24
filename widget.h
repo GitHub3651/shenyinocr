@@ -537,7 +537,7 @@ private:
                                const BarcodeReadResult &barcode,
                                const QString &barcodeState,
                                const QString &reason,
-                               qint64 totalElapsedMs);
+                               double postTrackingElapsedMs);
     bool ensureBarcodeDecoderLoaded();
     BarcodeReadResult decodeBarcodeRoi(
         const cv::Mat &grayRoi,

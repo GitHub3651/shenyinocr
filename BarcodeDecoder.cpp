@@ -15,6 +15,11 @@ namespace {
 const char DecoderLibraryFileName[] = "BarcodeDecoder.dll";
 const int DecoderTextCapacity = 8192;
 
+double elapsedMilliseconds(const QElapsedTimer &timer)
+{
+    return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+}
+
 QString defaultDecoderLibraryFilePath()
 {
     return QDir(QCoreApplication::applicationDirPath())
@@ -178,7 +183,7 @@ BarcodeReadResult BarcodeDecoder::decode(
         grayImage,
         options.formatMask,
         BARCODE_DECODER_OPTION_NONE);
-    lastResult.elapsedMs = static_cast<int>(totalTimer.elapsed());
+    lastResult.elapsedMs = elapsedMilliseconds(totalTimer);
 
     if (lastResult.readable || isFatalDecodeStatus(lastResult.status)) {
         return lastResult;
@@ -189,7 +194,7 @@ BarcodeReadResult BarcodeDecoder::decode(
     }
 
     const auto budgetAvailable = [&totalTimer, maxDecodeTimeMs]() {
-        return totalTimer.elapsed() < maxDecodeTimeMs;
+        return elapsedMilliseconds(totalTimer) < maxDecodeTimeMs;
     };
 
     const auto runAttempt = [this, &lastResult, &totalTimer, &options](
@@ -199,7 +204,7 @@ BarcodeReadResult BarcodeDecoder::decode(
             candidate,
             options.formatMask,
             optionFlags);
-        lastResult.elapsedMs = static_cast<int>(totalTimer.elapsed());
+        lastResult.elapsedMs = elapsedMilliseconds(totalTimer);
         return lastResult.readable || isFatalDecodeStatus(lastResult.status);
     };
 
@@ -258,14 +263,14 @@ BarcodeReadResult BarcodeDecoder::decode(
     } catch (const cv::Exception &exception) {
         lastResult.status = BarcodeReadStatus::InternalError;
         lastResult.readable = false;
-        lastResult.elapsedMs = static_cast<int>(totalTimer.elapsed());
+        lastResult.elapsedMs = elapsedMilliseconds(totalTimer);
         lastResult.errorReason =
             QStringLiteral("Barcode fallback preprocessing failed: %1")
             .arg(QString::fromLocal8Bit(exception.what()));
         return lastResult;
     }
 
-    lastResult.elapsedMs = static_cast<int>(totalTimer.elapsed());
+    lastResult.elapsedMs = elapsedMilliseconds(totalTimer);
     if (lastResult.elapsedMs >= maxDecodeTimeMs) {
         lastResult.status = BarcodeReadStatus::Timeout;
         lastResult.errorReason = QStringLiteral("Barcode decoding exceeded the %1 ms budget")
@@ -319,7 +324,8 @@ BarcodeReadResult BarcodeDecoder::decodeOnce(
 
     BarcodeReadResult result;
     if (elapsedMicroseconds > 0) {
-        result.elapsedMs = (elapsedMicroseconds + 999) / 1000;
+        result.elapsedMs =
+                static_cast<double>(elapsedMicroseconds) / 1000.0;
     }
 
     if (returnCode == BARCODE_DECODER_RESULT_SUCCESS) {

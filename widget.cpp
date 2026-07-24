@@ -96,6 +96,11 @@
 using namespace std;
 
 namespace {
+double elapsedMilliseconds(const QElapsedTimer &timer)
+{
+    return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+}
+
 const QStringList &detectModeIds()
 {
     static const QStringList ids = {
@@ -2111,7 +2116,7 @@ void Widget::runBarcodeWordDetection(
                     barcode,
                     "未执行",
                     "未找到二维码追踪锚点",
-                    totalTimer.elapsed());
+                    elapsedMilliseconds(totalTimer));
         return;
     }
 
@@ -2129,7 +2134,7 @@ void Widget::runBarcodeWordDetection(
                     barcode,
                     "未执行",
                     "二维码追踪区域无效或超出图像范围",
-                    totalTimer.elapsed());
+                    elapsedMilliseconds(totalTimer));
         return;
     }
 
@@ -2142,7 +2147,7 @@ void Widget::runBarcodeWordDetection(
                     barcode,
                     "读码器不可用",
                     "BarcodeDecoder.dll不可用",
-                    totalTimer.elapsed());
+                    elapsedMilliseconds(totalTimer));
         return;
     }
 
@@ -2180,7 +2185,7 @@ void Widget::runBarcodeWordDetection(
                     barcode,
                     "不可读",
                     reason,
-                    totalTimer.elapsed());
+                    elapsedMilliseconds(totalTimer));
         return;
     }
 
@@ -2194,14 +2199,14 @@ void Widget::runBarcodeWordDetection(
                     barcode,
                     "可读",
                     "日期检测区域无效或超出图像范围",
-                    totalTimer.elapsed());
+                    elapsedMilliseconds(totalTimer));
         return;
     }
 
     qDebug().noquote()
             << QString("[BARCODE_WORD] template=%1 barcode=OK barcodeMs=%2 text=\"%3\" date=START")
                .arg(templateName)
-               .arg(barcode.elapsedMs)
+               .arg(barcode.elapsedMs, 0, 'f', 3)
                .arg(barcode.text);
 
     const int totalBeforeDate = totalImages;
@@ -2230,19 +2235,22 @@ void Widget::runBarcodeWordDetection(
     ui->resultlabel_7->setText(resultLines.join("\n"));
     ui->resultlabel_7->setWordWrap(true);
 
-    const qint64 totalElapsedMs = totalTimer.elapsed();
+    const double postTrackingElapsedMs = elapsedMilliseconds(totalTimer);
+    const double totalElapsedMs =
+            pose.trackingElapsedMs + postTrackingElapsedMs;
     ui->speedLabel->setText(
-                QString("检测耗时 %1 毫秒（读码 %2 毫秒）")
-                .arg(totalElapsedMs)
-                .arg(barcode.elapsedMs));
+                QString("检测耗时 %1 ms")
+                .arg(totalElapsedMs, 0, 'f', 2));
 
     qDebug().noquote()
-            << QString("[BARCODE_WORD] template=%1 barcode=OK date=%2 final=%3 barcodeMs=%4 totalMs=%5")
+            << QString("[BARCODE_WORD] template=%1 barcode=OK date=%2 final=%3 trackingMs=%4 barcodeMs=%5 postTrackingMs=%6 totalMs=%7")
                .arg(templateName)
                .arg(dateState)
                .arg(finalState)
-               .arg(barcode.elapsedMs)
-               .arg(totalElapsedMs);
+               .arg(pose.trackingElapsedMs, 0, 'f', 3)
+               .arg(barcode.elapsedMs, 0, 'f', 3)
+               .arg(postTrackingElapsedMs, 0, 'f', 3)
+               .arg(totalElapsedMs, 0, 'f', 3);
 }
 
 bool Widget::ensureBarcodeDecoderLoaded()
@@ -2344,7 +2352,8 @@ BarcodeReadResult Widget::decodeBarcodeRoiOnce(
                 &elapsedMicroseconds);
 
     if (elapsedMicroseconds > 0) {
-        result.elapsedMs = (elapsedMicroseconds + 999) / 1000;
+        result.elapsedMs =
+                static_cast<double>(elapsedMicroseconds) / 1000.0;
     }
 
     if (returnCode == BARCODE_DECODER_RESULT_SUCCESS) {
@@ -2419,7 +2428,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                 grayRoi,
                 options.formatMask,
                 BARCODE_DECODER_OPTION_NONE);
-    result.elapsedMs = static_cast<int>(timer.elapsed());
+    result.elapsedMs = elapsedMilliseconds(timer);
 
     const auto isTerminalResult = [](const BarcodeReadResult &value) {
         return value.readable
@@ -2432,29 +2441,29 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
         return result;
     }
 
-    if (timer.elapsed() < maxDecodeTimeMs) {
+    if (elapsedMilliseconds(timer) < maxDecodeTimeMs) {
         result = decodeBarcodeRoiOnce(
                     grayRoi,
                     options.formatMask,
                     BARCODE_DECODER_OPTION_TRY_INVERT);
-        result.elapsedMs = static_cast<int>(timer.elapsed());
+        result.elapsedMs = elapsedMilliseconds(timer);
         if (isTerminalResult(result)) {
             return result;
         }
     }
 
-    if (timer.elapsed() < maxDecodeTimeMs) {
+    if (elapsedMilliseconds(timer) < maxDecodeTimeMs) {
         result = decodeBarcodeRoiOnce(
                     grayRoi,
                     options.formatMask,
                     BARCODE_DECODER_OPTION_TRY_HARDER);
-        result.elapsedMs = static_cast<int>(timer.elapsed());
+        result.elapsedMs = elapsedMilliseconds(timer);
         if (isTerminalResult(result)) {
             return result;
         }
     }
 
-    result.elapsedMs = static_cast<int>(timer.elapsed());
+    result.elapsedMs = elapsedMilliseconds(timer);
     if (!result.readable && result.elapsedMs >= maxDecodeTimeMs) {
         result.status = BarcodeReadStatus::Timeout;
         result.errorReason =
@@ -2470,12 +2479,14 @@ void Widget::finalizeBarcodeWordNg(
     const BarcodeReadResult &barcode,
     const QString &barcodeState,
     const QString &reason,
-    qint64 totalElapsedMs)
+    double postTrackingElapsedMs)
 {
     if (!image || image->empty()) {
         qDebug() << "[BARCODE_WORD] Cannot finalize NG: input image is empty.";
         return;
     }
+    QElapsedTimer finalizationTimer;
+    finalizationTimer.start();
 
     if (!removalQueue.empty()
             && totalImages >= removalQueue.front().second - 1) {
@@ -2539,16 +2550,24 @@ void Widget::finalizeBarcodeWordNg(
     ui->lineBoxIndex_6->setText(QString::number(passRate, 'f', 1));
     ui->ngnum->setText(QString::number(ngImages));
     ui->imagenum->setText(QString::number(totalImages));
+    const double finalizationElapsedMs =
+            elapsedMilliseconds(finalizationTimer);
+    const double totalElapsedMs =
+            pose.trackingElapsedMs
+            + postTrackingElapsedMs
+            + finalizationElapsedMs;
     ui->speedLabel->setText(
-                QString("检测耗时 %1 毫秒（读码 %2 毫秒）")
-                .arg(totalElapsedMs)
-                .arg(barcode.elapsedMs));
+                QString("检测耗时 %1 ms")
+                .arg(totalElapsedMs, 0, 'f', 2));
 
     qDebug().noquote()
-            << QString("[BARCODE_WORD] barcode=%1 date=NOT_EXECUTED final=NG barcodeMs=%2 totalMs=%3 reason=%4 decoderReason=%5")
+            << QString("[BARCODE_WORD] barcode=%1 date=NOT_EXECUTED final=NG trackingMs=%2 barcodeMs=%3 postTrackingMs=%4 finalizeMs=%5 totalMs=%6 reason=%7 decoderReason=%8")
                .arg(barcodeState)
-               .arg(barcode.elapsedMs)
-               .arg(totalElapsedMs)
+               .arg(pose.trackingElapsedMs, 0, 'f', 3)
+               .arg(barcode.elapsedMs, 0, 'f', 3)
+               .arg(postTrackingElapsedMs, 0, 'f', 3)
+               .arg(finalizationElapsedMs, 0, 'f', 3)
+               .arg(totalElapsedMs, 0, 'f', 3)
                .arg(reason)
                .arg(barcode.errorReason);
 

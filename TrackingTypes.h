@@ -14,6 +14,7 @@ struct DetectionPose {
     float angleDeg = 0.0f;
     float score = 0.0f;
     int wordTemplateProfileIndex = -1;
+    double trackingElapsedMs = 0.0;
 };
 
 Q_DECLARE_METATYPE(DetectionPose)

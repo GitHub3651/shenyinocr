@@ -45,7 +45,7 @@ struct BarcodeReadResult
     QByteArray rawBytes;
     std::vector<cv::Point2f> cornersInRoi;
     std::vector<cv::Point2f> cornersInOriginal;
-    int elapsedMs = 0;
+    double elapsedMs = 0.0;
     QString errorReason;
 };
 
