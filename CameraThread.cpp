@@ -60,6 +60,10 @@ void CameraThread::clearWordTemplateTrackingProfiles() {
     m_wordTemplateProfileMode = false;
 }
 
+void CameraThread::setBarcodeWordHardTriggerMode(bool enabled) {
+    m_barcodeWordHardTriggerMode = enabled;
+}
+
 void CameraThread::run() {
     m_running = true;
     m_stopRequested.store(false);
@@ -76,7 +80,14 @@ void CameraThread::run() {
     while (m_running && !m_stopRequested.load()) {
         if (m_pcMyCamera) {
             try {
-                *image = m_pcMyCamera->timesGetImage(); //
+                if (m_barcodeWordHardTriggerMode) {
+                    if (!m_pcMyCamera->takeImageForMainIfReady(*image)) {
+                        msleep(2);
+                        continue;
+                    }
+                } else {
+                    *image = m_pcMyCamera->timesGetImage(); //
+                }
                 if (image->empty()) { msleep(10); continue; }
 
                 // 图像预处理（旋转与颜色通道）
@@ -157,10 +168,15 @@ void CameraThread::run() {
                                      << bestName
                                      << "score:" << bestPose.score;
 
-                            if (m_pcMyCamera->isImageReadyForMain()) {
+                            if (m_barcodeWordHardTriggerMode
+                                    || m_pcMyCamera->isImageReadyForMain()) {
                                 emit signal_cleanlabel(); //
                                 emit signal_sendForDetection(image->clone(), bestPose);
                             }
+                        } else if (m_barcodeWordHardTriggerMode) {
+                            qDebug() << "[BARCODE_WORD] Hard-trigger tracking failed; send one NG frame.";
+                            emit signal_cleanlabel();
+                            emit signal_sendForDetection(image->clone(), bestPose);
                         }
                     } else if (tracking && m_poseMatcher.isReady()) {
                         DetectionPose pose = m_poseMatcher.match(*image, initialDatePoly);
@@ -179,6 +195,10 @@ void CameraThread::run() {
                 }
 
             } catch (...) { msleep(10); continue; }
+        }
+
+        if (m_barcodeWordHardTriggerMode) {
+            continue;
         }
 
         // 线程睡眠逻辑

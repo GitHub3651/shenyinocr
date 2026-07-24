@@ -83,6 +83,7 @@ public:
 
     void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
     void clearWordTemplateTrackingProfiles();
+    void setBarcodeWordHardTriggerMode(bool enabled);
 
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
@@ -192,6 +193,7 @@ private:
     };
     std::vector<WordTrackingState> m_wordTrackingProfiles;
     bool m_wordTemplateProfileMode = false;
+    bool m_barcodeWordHardTriggerMode = false;
 
     // ========== 配置参数 ==========
     int angle2 = 0;  ///< 图像旋转角度 (默认0，不旋转)

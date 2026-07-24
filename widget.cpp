@@ -890,6 +890,13 @@ Widget::~Widget()
     delete templatematch;
     templatematch = nullptr;
 
+    m_barcodeGetVersion = nullptr;
+    m_barcodeDecodeLuma8 = nullptr;
+    if (m_barcodeDecoderModule) {
+        FreeLibrary(m_barcodeDecoderModule);
+        m_barcodeDecoderModule = nullptr;
+    }
+
     if (myThreadStopped) {
         delete myImage;
         myImage = nullptr;
@@ -1574,16 +1581,39 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
         return;
     }
 
-    const int mode = ui->comboBox_4->currentIndex();
+    const int mode = m_barcodeWordRunActive
+            ? 4
+            : ui->comboBox_4->currentIndex();
+    if (mode == 4 && !m_barcodeWordRunActive) {
+        qDebug() << "[BARCODE_WORD] Ignore detection result because barcode-word run is not active.";
+        return;
+    }
     if (mode == 2) {
         slot_readAndDetect(image, pose);
     } else if (mode == 0) {
         slot_readAndDetect3(image, pose);
-    } else if (mode == 1) {
+    } else if (mode == 1 || mode == 4) {
+        if (mode == 4 && !pose.valid) {
+            BarcodeReadResult barcode;
+            finalizeBarcodeWordNg(
+                        image,
+                        pose,
+                        barcode,
+                        "未执行",
+                        "硬触发帧未找到二维码追踪锚点",
+                        0);
+            return;
+        }
+
+        const std::vector<WordTemplateProfile> &detectionProfiles =
+                (mode == 4 && !m_runningBarcodeWordProfiles.empty())
+                ? m_runningBarcodeWordProfiles
+                : m_wordTemplateProfiles;
         if (pose.wordTemplateProfileIndex >= 0) {
             const int profileIndex = pose.wordTemplateProfileIndex;
-            if (profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
-                const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+            if (profileIndex < static_cast<int>(detectionProfiles.size())) {
+                const WordTemplateProfile &profile =
+                        detectionProfiles[static_cast<size_t>(profileIndex)];
                 if (profile.settings.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
                     qDebug() << "[WORD_TEMPLATE_PROFILE] Selected profile has no target text/templates:"
                              << profileIndex
@@ -1603,19 +1633,24 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
                                                  ? QString("--")
                                                  : currentUsedTemplateName);
 
-                runWordTemplateDetection(image,
-                                         pose,
-                                         profile.digitTemplates,
-                                         profile.digitTemplateTargetIndexes,
-                                         profile.settings.targetText,
-                                         QString::number(profile.settings.imageThreshold),
-                                         currentUsedTemplateName);
+                if (mode == 4) {
+                    runBarcodeWordDetection(image, pose, profile);
+                } else {
+                    runWordTemplateDetection(
+                                image,
+                                pose,
+                                profile.digitTemplates,
+                                profile.digitTemplateTargetIndexes,
+                                profile.settings.targetText,
+                                QString::number(profile.settings.imageThreshold),
+                                currentUsedTemplateName);
+                }
                 return;
             }
 
             qDebug() << "[WORD_TEMPLATE_PROFILE] Invalid profile index from pose:"
                      << profileIndex
-                     << "profile count:" << static_cast<int>(m_wordTemplateProfiles.size());
+                     << "profile count:" << static_cast<int>(detectionProfiles.size());
             return;
         }
 
@@ -2048,6 +2083,474 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     ui->speedLabel->setText(QString("检测耗时 %1 毫秒").arg(duration));
+
+    j++;
+}
+
+void Widget::runBarcodeWordDetection(
+    cv::Mat *image,
+    const DetectionPose &pose,
+    const WordTemplateProfile &profile)
+{
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
+    const QString templateName = profile.name.isEmpty()
+            ? QDir(profile.dirPath).dirName()
+            : profile.name;
+    BarcodeReadResult barcode;
+
+    if (!image || image->empty()) {
+        qDebug() << "[BARCODE_WORD] input image is empty; stop.";
+        return;
+    }
+    if (!pose.valid) {
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "未执行",
+                    "未找到二维码追踪锚点",
+                    totalTimer.elapsed());
+        return;
+    }
+
+    const OrientedTrackingRoi trackingRoi =
+            prepareOrientedTrackingRoi(
+                *image,
+                pose,
+                profile.settings.barcodeOptions.roiPaddingPercent);
+    if (!trackingRoi.valid) {
+        barcode.status = BarcodeReadStatus::InvalidRoi;
+        barcode.errorReason = "Invalid barcode tracking ROI";
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "未执行",
+                    "二维码追踪区域无效或超出图像范围",
+                    totalTimer.elapsed());
+        return;
+    }
+
+    if (!ensureBarcodeDecoderLoaded()) {
+        barcode.status = BarcodeReadStatus::DecoderUnavailable;
+        barcode.errorReason = m_barcodeDecoderError;
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "读码器不可用",
+                    "BarcodeDecoder.dll不可用",
+                    totalTimer.elapsed());
+        return;
+    }
+
+    barcode = decodeBarcodeRoi(
+                trackingRoi.grayRoi,
+                profile.settings.barcodeOptions);
+
+    barcode.cornersInOriginal.clear();
+    barcode.cornersInOriginal.reserve(barcode.cornersInRoi.size());
+    for (const cv::Point2f &corner : barcode.cornersInRoi) {
+        const cv::Point2f cornerInRotatedImage(
+                    corner.x + trackingRoi.roi.x,
+                    corner.y + trackingRoi.roi.y);
+        barcode.cornersInOriginal.push_back(
+                    transformPoint(
+                        trackingRoi.inverseRotationMatrix,
+                        cornerInRotatedImage));
+    }
+
+    if (!barcode.readable) {
+        QString reason;
+        if (barcode.status == BarcodeReadStatus::Timeout) {
+            reason = "二维码读取超时";
+        } else if (barcode.status == BarcodeReadStatus::InvalidRoi) {
+            reason = "二维码区域无效";
+        } else if (barcode.status == BarcodeReadStatus::InternalError) {
+            reason = "二维码解码器内部错误";
+        } else {
+            reason = "二维码不可读或区域内没有二维码";
+        }
+
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "不可读",
+                    reason,
+                    totalTimer.elapsed());
+        return;
+    }
+
+    // 日期区域无效也必须形成一次最终NG，不能进入原字库函数后无结果返回。
+    const OrientedDateRoi dateRoi =
+            prepareOrientedDateRoi(*image, pose, 20);
+    if (!dateRoi.valid) {
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "可读",
+                    "日期检测区域无效或超出图像范围",
+                    totalTimer.elapsed());
+        return;
+    }
+
+    qDebug().noquote()
+            << QString("[BARCODE_WORD] template=%1 barcode=OK barcodeMs=%2 text=\"%3\" date=START")
+               .arg(templateName)
+               .arg(barcode.elapsedMs)
+               .arg(barcode.text);
+
+    const int totalBeforeDate = totalImages;
+    const int ngBeforeDate = ngImages;
+    runWordTemplateDetection(
+                image,
+                pose,
+                profile.digitTemplates,
+                profile.digitTemplateTargetIndexes,
+                profile.settings.targetText,
+                QString::number(profile.settings.imageThreshold),
+                templateName);
+
+    QString dateState = "已执行";
+    QString finalState = "已输出";
+    if (totalImages > totalBeforeDate) {
+        const bool dateIsOk = (ngImages == ngBeforeDate);
+        dateState = dateIsOk ? "正确" : "错误";
+        finalState = dateIsOk ? "OK" : "NG";
+    }
+
+    QStringList resultLines;
+    resultLines.append("二维码：可读");
+    resultLines.append(QString("二维码内容：%1").arg(barcode.text));
+    resultLines.append(QString("日期：%1").arg(dateState));
+    ui->resultlabel_7->setText(resultLines.join("\n"));
+    ui->resultlabel_7->setWordWrap(true);
+
+    const qint64 totalElapsedMs = totalTimer.elapsed();
+    ui->speedLabel->setText(
+                QString("检测耗时 %1 毫秒（读码 %2 毫秒）")
+                .arg(totalElapsedMs)
+                .arg(barcode.elapsedMs));
+
+    qDebug().noquote()
+            << QString("[BARCODE_WORD] template=%1 barcode=OK date=%2 final=%3 barcodeMs=%4 totalMs=%5")
+               .arg(templateName)
+               .arg(dateState)
+               .arg(finalState)
+               .arg(barcode.elapsedMs)
+               .arg(totalElapsedMs);
+}
+
+bool Widget::ensureBarcodeDecoderLoaded()
+{
+    if (m_barcodeDecoderModule
+            && m_barcodeGetVersion
+            && m_barcodeDecodeLuma8) {
+        return true;
+    }
+
+    m_barcodeGetVersion = nullptr;
+    m_barcodeDecodeLuma8 = nullptr;
+    if (m_barcodeDecoderModule) {
+        FreeLibrary(m_barcodeDecoderModule);
+        m_barcodeDecoderModule = nullptr;
+    }
+
+    const QString decoderPath = QDir::toNativeSeparators(
+                QDir(QCoreApplication::applicationDirPath())
+                .filePath("BarcodeDecoder.dll"));
+    HMODULE module = LoadLibraryW(
+                reinterpret_cast<LPCWSTR>(decoderPath.utf16()));
+    if (!module) {
+        const DWORD loadError = GetLastError();
+        m_barcodeDecoderError =
+                QString("无法加载二维码解码DLL：%1（Windows错误码=%2）")
+                .arg(decoderPath)
+                .arg(static_cast<qulonglong>(loadError));
+        return false;
+    }
+
+    BarcodeDecoderGetVersionFunction getVersion =
+            reinterpret_cast<BarcodeDecoderGetVersionFunction>(
+                GetProcAddress(module, "BarcodeDecoder_GetVersion"));
+    BarcodeDecoderDecodeLuma8Function decodeLuma8 =
+            reinterpret_cast<BarcodeDecoderDecodeLuma8Function>(
+                GetProcAddress(module, "BarcodeDecoder_DecodeLuma8"));
+    if (!getVersion || !decodeLuma8) {
+        m_barcodeDecoderError =
+                QString("二维码解码DLL缺少接口：%1").arg(decoderPath);
+        FreeLibrary(module);
+        return false;
+    }
+
+    m_barcodeDecoderModule = module;
+    m_barcodeGetVersion = getVersion;
+    m_barcodeDecodeLuma8 = decodeLuma8;
+    m_barcodeDecoderError.clear();
+    qDebug() << "[BARCODE_WORD] Decoder DLL loaded:" << decoderPath;
+    return true;
+}
+
+BarcodeReadResult Widget::decodeBarcodeRoiOnce(
+    const cv::Mat &grayRoi,
+    unsigned int formatMask,
+    unsigned int optionFlags) const
+{
+    BarcodeReadResult result;
+    if (!m_barcodeDecodeLuma8) {
+        result.status = BarcodeReadStatus::DecoderUnavailable;
+        result.errorReason = "Barcode decoder function is unavailable";
+        return result;
+    }
+
+    if (grayRoi.empty()
+            || grayRoi.type() != CV_8UC1
+            || !grayRoi.isContinuous()
+            || grayRoi.cols <= 0
+            || grayRoi.rows <= 0
+            || grayRoi.step <= 0
+            || grayRoi.step > static_cast<size_t>(
+                std::numeric_limits<int>::max())) {
+        result.status = BarcodeReadStatus::InvalidRoi;
+        result.errorReason = "Invalid continuous grayscale barcode ROI";
+        return result;
+    }
+
+    QByteArray textBuffer(8192, '\0');
+    int textLength = 0;
+    int decodedFormat = 0;
+    float corners[8] = {
+        0.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f
+    };
+    int elapsedMicroseconds = 0;
+
+    const int returnCode = m_barcodeDecodeLuma8(
+                grayRoi.ptr<unsigned char>(0),
+                grayRoi.cols,
+                grayRoi.rows,
+                static_cast<int>(grayRoi.step),
+                formatMask,
+                optionFlags,
+                textBuffer.data(),
+                textBuffer.size(),
+                &textLength,
+                &decodedFormat,
+                corners,
+                &elapsedMicroseconds);
+
+    if (elapsedMicroseconds > 0) {
+        result.elapsedMs = (elapsedMicroseconds + 999) / 1000;
+    }
+
+    if (returnCode == BARCODE_DECODER_RESULT_SUCCESS) {
+        const int safeTextLength = std::max(
+            0,
+            std::min(textLength, textBuffer.size()));
+        result.rawBytes = textBuffer.left(safeTextLength);
+        result.text = QString::fromUtf8(
+                    result.rawBytes.constData(),
+                    result.rawBytes.size());
+
+        if (decodedFormat
+                == static_cast<int>(
+                    BARCODE_DECODER_FORMAT_DATA_MATRIX)) {
+            result.format = BarcodeFormat::DataMatrix;
+        } else if (decodedFormat
+                   == static_cast<int>(
+                       BARCODE_DECODER_FORMAT_QR_CODE)) {
+            result.format = BarcodeFormat::QRCode;
+        }
+
+        for (int index = 0; index < 4; ++index) {
+            result.cornersInRoi.emplace_back(
+                        corners[index * 2],
+                        corners[index * 2 + 1]);
+        }
+
+        result.readable = !result.rawBytes.isEmpty();
+        result.status = result.readable
+                ? BarcodeReadStatus::Success
+                : BarcodeReadStatus::InternalError;
+        if (!result.readable) {
+            result.errorReason =
+                    "Decoder returned success with empty barcode data";
+        }
+        return result;
+    }
+
+    if (returnCode == BARCODE_DECODER_RESULT_NOT_FOUND) {
+        result.status = BarcodeReadStatus::NotFound;
+        result.errorReason = "Barcode was not found or is unreadable";
+    } else if (returnCode
+               == BARCODE_DECODER_ERROR_INVALID_ARGUMENT) {
+        result.status = BarcodeReadStatus::InvalidRoi;
+        result.errorReason = "Decoder rejected barcode ROI arguments";
+    } else {
+        result.status = BarcodeReadStatus::InternalError;
+        result.errorReason =
+                QString("Barcode decoder error, return code=%1")
+                .arg(returnCode);
+    }
+    return result;
+}
+
+BarcodeReadResult Widget::decodeBarcodeRoi(
+    const cv::Mat &grayRoi,
+    const BarcodeDecodeOptions &options)
+{
+    if (!ensureBarcodeDecoderLoaded()) {
+        BarcodeReadResult result;
+        result.status = BarcodeReadStatus::DecoderUnavailable;
+        result.errorReason = m_barcodeDecoderError;
+        return result;
+    }
+
+    const int maxDecodeTimeMs =
+            std::max(1, options.maxDecodeTimeMs);
+    QElapsedTimer timer;
+    timer.start();
+
+    BarcodeReadResult result = decodeBarcodeRoiOnce(
+                grayRoi,
+                options.formatMask,
+                BARCODE_DECODER_OPTION_NONE);
+    result.elapsedMs = static_cast<int>(timer.elapsed());
+
+    const auto isTerminalResult = [](const BarcodeReadResult &value) {
+        return value.readable
+            || value.status == BarcodeReadStatus::InvalidRoi
+            || value.status == BarcodeReadStatus::DecoderUnavailable
+            || value.status == BarcodeReadStatus::InternalError;
+    };
+
+    if (isTerminalResult(result) || !options.enableFallback) {
+        return result;
+    }
+
+    if (timer.elapsed() < maxDecodeTimeMs) {
+        result = decodeBarcodeRoiOnce(
+                    grayRoi,
+                    options.formatMask,
+                    BARCODE_DECODER_OPTION_TRY_INVERT);
+        result.elapsedMs = static_cast<int>(timer.elapsed());
+        if (isTerminalResult(result)) {
+            return result;
+        }
+    }
+
+    if (timer.elapsed() < maxDecodeTimeMs) {
+        result = decodeBarcodeRoiOnce(
+                    grayRoi,
+                    options.formatMask,
+                    BARCODE_DECODER_OPTION_TRY_HARDER);
+        result.elapsedMs = static_cast<int>(timer.elapsed());
+        if (isTerminalResult(result)) {
+            return result;
+        }
+    }
+
+    result.elapsedMs = static_cast<int>(timer.elapsed());
+    if (!result.readable && result.elapsedMs >= maxDecodeTimeMs) {
+        result.status = BarcodeReadStatus::Timeout;
+        result.errorReason =
+                QString("Barcode decoding exceeded %1 ms")
+                .arg(maxDecodeTimeMs);
+    }
+    return result;
+}
+
+void Widget::finalizeBarcodeWordNg(
+    cv::Mat *image,
+    const DetectionPose &pose,
+    const BarcodeReadResult &barcode,
+    const QString &barcodeState,
+    const QString &reason,
+    qint64 totalElapsedMs)
+{
+    if (!image || image->empty()) {
+        qDebug() << "[BARCODE_WORD] Cannot finalize NG: input image is empty.";
+        return;
+    }
+
+    if (!removalQueue.empty()
+            && totalImages >= removalQueue.front().second - 1) {
+        wrongremove();
+        removalQueue.pop();
+    }
+
+    currentImagesSnapshot = totalImages;
+    if (judge) {
+        j = 1;
+        x++;
+        judge = false;
+    }
+    if ((j - 1) % x == 0) {
+        imageLabel->clearGreenRects();
+        detectedRects.clear();
+        string1.clear();
+    }
+
+    g_lastDrawResults.clear();
+    g_lastPose = pose;
+    g_lastStampPoly.clear();
+    g_lastStampIsOverlap = false;
+    g_lastDetectTime = QDateTime::currentMSecsSinceEpoch();
+    slot_displayAndDetect(image);
+
+    QStringList resultLines;
+    resultLines.append(QString("二维码：%1").arg(barcodeState));
+    if (!barcode.text.isEmpty()) {
+        resultLines.append(QString("二维码内容：%1").arg(barcode.text));
+    }
+    resultLines.append("日期：未执行");
+    resultLines.append(QString("原因：%1").arg(reason));
+    ui->resultlabel_7->setText(resultLines.join("\n"));
+    ui->resultlabel_7->setWordWrap(true);
+
+    if (j % x == 0) {
+        if (ui->comboBox->currentIndex() == 1
+                || ui->comboBox->currentIndex() == 3) {
+            saveWordResultImages("png", "ng", *image);
+        }
+
+        ngImages++;
+        totalImages++;
+        ui->resultlabel->setText(
+                    QString("<font size='10' color='red'>错误！</font>"));
+
+        if (wrongindex == 0) {
+            wrongremove();
+        } else {
+            removalQueue.push(
+                        std::make_pair(
+                            totalImages,
+                            totalImages + wrongindex));
+        }
+    }
+
+    const double passRate = totalImages > 0
+            ? (1.0 - static_cast<double>(ngImages) / totalImages) * 100.0
+            : 0.0;
+    ui->lineBoxIndex_6->setText(QString::number(passRate, 'f', 1));
+    ui->ngnum->setText(QString::number(ngImages));
+    ui->imagenum->setText(QString::number(totalImages));
+    ui->speedLabel->setText(
+                QString("检测耗时 %1 毫秒（读码 %2 毫秒）")
+                .arg(totalElapsedMs)
+                .arg(barcode.elapsedMs));
+
+    qDebug().noquote()
+            << QString("[BARCODE_WORD] barcode=%1 date=NOT_EXECUTED final=NG barcodeMs=%2 totalMs=%3 reason=%4 decoderReason=%5")
+               .arg(barcodeState)
+               .arg(barcode.elapsedMs)
+               .arg(totalElapsedMs)
+               .arg(reason)
+               .arg(barcode.errorReason);
 
     j++;
 }
@@ -5289,6 +5792,7 @@ QImage Widget::cvMatToQImage(const cv::Mat &mat)
 void Widget::on_cancel_clicked()
 {
     qDebug() << "=== on_cancel_clicked() START ===";
+    m_barcodeWordRunActive = false;
 
     // Step 2: 请求线程停止，保留当前模板状态，便于再次启动
     if (myThread) {
@@ -5412,6 +5916,8 @@ void Widget::on_cancel_clicked()
     g_lastStampPoly.clear();
     g_lastStampIsOverlap = false;
     g_lastDetectTime = 0;
+    m_barcodeWordRunActive = false;
+    m_runningBarcodeWordProfiles.clear();
 
     first = false;
     x = 1;
@@ -7052,13 +7558,6 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
-    if (currentDetectModeId() == BarcodeWordDetectionMode) {
-        showParameterWarning(
-                    "提示",
-                    "二维码+三期模式当前只完成模板配置，顺序检测将在下一阶段接入。");
-        return;
-    }
-
     updateHardwareParameterUiEnabled();
     refreshAllGlobalSettingDirty();
     refreshTemplatePrivateSettingDirty();
@@ -7088,7 +7587,9 @@ void Widget::on_plcbtn_clicked()
     }
 
     updateCurrentTemplateName();
-    const bool isWordMode = (ui->comboBox_4->currentIndex() == 1);
+    const bool isWordMode = isWordFamilyMode(currentDetectModeId());
+    const bool isBarcodeWordMode =
+            currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
     const bool isWordProfileMode = isWordMode && !m_wordTemplateProfiles.empty();
     QString wordRunningTemplateName;
@@ -7132,10 +7633,29 @@ void Widget::on_plcbtn_clicked()
     }
 
     std::vector<WordTrackingProfile> wordTrackingProfilesForRun;
+    std::vector<WordTemplateProfile> barcodeWordProfilesForRun;
     if (isWordProfileMode) {
+        if (isBarcodeWordMode) {
+            barcodeWordProfilesForRun.reserve(m_wordTemplateProfiles.size());
+            for (const WordTemplateProfile &sourceProfile : m_wordTemplateProfiles) {
+                WordTemplateProfile runtimeProfile = sourceProfile;
+                runtimeProfile.trackingTemplate = sourceProfile.trackingTemplate.clone();
+                runtimeProfile.digitTemplates.clear();
+                runtimeProfile.digitTemplates.reserve(sourceProfile.digitTemplates.size());
+                for (const cv::Mat &digitTemplate : sourceProfile.digitTemplates) {
+                    runtimeProfile.digitTemplates.push_back(digitTemplate.clone());
+                }
+                barcodeWordProfilesForRun.push_back(std::move(runtimeProfile));
+            }
+        }
+
+        const std::vector<WordTemplateProfile> &profilesForRun =
+                isBarcodeWordMode
+                ? barcodeWordProfilesForRun
+                : m_wordTemplateProfiles;
         QStringList pendingProfiles;
-        for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
-            const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
+        for (int i = 0; i < static_cast<int>(profilesForRun.size()); ++i) {
+            const WordTemplateProfile &profile = profilesForRun[static_cast<size_t>(i)];
             const QString profileName = profile.name.isEmpty()
                     ? QDir(profile.dirPath).dirName()
                     : profile.name;
@@ -7165,6 +7685,15 @@ void Widget::on_plcbtn_clicked()
             return;
         }
     }
+
+    if (isBarcodeWordMode) {
+        m_runningBarcodeWordProfiles.swap(barcodeWordProfilesForRun);
+        qDebug() << "[BARCODE_WORD_PROFILE] Runtime profile snapshot ready:"
+                 << static_cast<int>(m_runningBarcodeWordProfiles.size());
+    } else {
+        m_runningBarcodeWordProfiles.clear();
+    }
+    m_barcodeWordRunActive = false;
 
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -7242,6 +7771,7 @@ void Widget::on_plcbtn_clicked()
         cameraThread = new CameraThread(this, m_pcMyCamera);
 
         cameraThread->setBypassTracking(isTissueMode);
+        cameraThread->setBarcodeWordHardTriggerMode(isBarcodeWordMode);
         if (isTissueMode) {
             cameraThread->clearPresetBoxes();
             cameraThread->clearWordTemplateTrackingProfiles();
@@ -7290,6 +7820,7 @@ void Widget::on_plcbtn_clicked()
 
         cameraThread->start();
         if (!cameraThread->wait(100)) {
+            m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
             ui->statusLabel->setText(QString("触发模式运行中\n产品模板：%1").arg(runningTemplateName));
             ui->plcbtn->setText("采集中...");
@@ -7297,6 +7828,7 @@ void Widget::on_plcbtn_clicked()
             ui->VideoShoot->setEnabled(false);
             ui->pushButton_4->setEnabled(false);
         } else {
+            m_barcodeWordRunActive = false;
             isCollecting = false;
         }
     }
@@ -7360,6 +7892,7 @@ void Widget::on_plcbtn_clicked()
 
         if (!myThread->isRunning()) {
             myThread->start();
+            m_barcodeWordRunActive = isBarcodeWordMode;
             ui->statusLabel->setText(QString("软触发模式运行中\n产品模板：%1").arg(runningTemplateName));
             ui->plcbtn->setEnabled(false);
             ui->VideoShoot->setEnabled(false);

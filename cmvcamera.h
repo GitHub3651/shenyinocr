@@ -161,6 +161,7 @@ public:
     cv::Mat timesGetImage();
 
     bool isImageReadyForMain() ;
+    bool takeImageForMainIfReady(cv::Mat &image);
 
     void setnonblocking(bool on);//初始或需要继续非阻塞取图时调用
 

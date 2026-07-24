@@ -75,6 +75,8 @@
 #include <Detector.h>
 #include "TrackingTypes.h"
 #include "appsettingsmanager.h"
+#include "BarcodeDecoderApi.h"
+#include "BarcodeTypes.h"
 
 using namespace cv;
 using namespace PaddleOCR;
@@ -493,6 +495,12 @@ private:
     };
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
+    std::vector<WordTemplateProfile> m_runningBarcodeWordProfiles; ///< 二维码+三期启动时的只读Profile快照
+    bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
+    HMODULE m_barcodeDecoderModule = nullptr;
+    BarcodeDecoderGetVersionFunction m_barcodeGetVersion = nullptr;
+    BarcodeDecoderDecodeLuma8Function m_barcodeDecodeLuma8 = nullptr;
+    QString m_barcodeDecoderError;
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
     QStringList wordTemplateImagePathsForKey(const QDir &directory,
                                              const QString &searchKey,
@@ -521,6 +529,23 @@ private:
                                   const QString &targetText,
                                   const QString &imageThresholdText,
                                   const QString &templateName);
+    void runBarcodeWordDetection(cv::Mat *image,
+                                 const DetectionPose &pose,
+                                 const WordTemplateProfile &profile);
+    void finalizeBarcodeWordNg(cv::Mat *image,
+                               const DetectionPose &pose,
+                               const BarcodeReadResult &barcode,
+                               const QString &barcodeState,
+                               const QString &reason,
+                               qint64 totalElapsedMs);
+    bool ensureBarcodeDecoderLoaded();
+    BarcodeReadResult decodeBarcodeRoi(
+        const cv::Mat &grayRoi,
+        const BarcodeDecodeOptions &options);
+    BarcodeReadResult decodeBarcodeRoiOnce(
+        const cv::Mat &grayRoi,
+        unsigned int formatMask,
+        unsigned int optionFlags) const;
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

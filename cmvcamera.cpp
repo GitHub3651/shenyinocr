@@ -606,6 +606,18 @@ bool CMvCamera::isImageReadyForMain()
     return false;  // 没有新图像
 }
 
+bool CMvCamera::takeImageForMainIfReady(cv::Mat &targetImage)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_imageReadyForMain || m_image.empty()) {
+        return false;
+    }
+
+    targetImage = m_image.clone();
+    m_imageReadyForMain = false;
+    return !targetImage.empty();
+}
+
 void CMvCamera::setnonblocking(bool on)
 {
     std::lock_guard<std::mutex> lock(m_mutex);  // 添加锁保护
