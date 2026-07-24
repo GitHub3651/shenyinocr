@@ -47,6 +47,7 @@ SOURCES += \
     appsettingsmanager.cpp \
     BarcodeDecoder.cpp \
     CameraThread.cpp \
+    DetectionModes.cpp \
     Detector.cpp \
     ImageManipulator.cpp \
     MultiCameraController.cpp \
@@ -82,6 +83,7 @@ HEADERS += \
     BarcodeTypes.h \
     CameraThread.h \
     CryptoUtils.h \
+    DetectionModes.h \
     Detector.h \
     IMultiCameraProvider.h \
     MultiCameraController.h \

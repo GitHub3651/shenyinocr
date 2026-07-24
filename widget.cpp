@@ -16,6 +16,7 @@
 #include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
+#include "DetectionModes.h"
 
 
 // Qt核心组件
@@ -97,7 +98,13 @@ using namespace std;
 namespace {
 const QStringList &detectModeIds()
 {
-    static const QStringList ids = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList ids = {
+        "stamp_detection",
+        "word_detection",
+        "ocr_detection",
+        "tissue_detection",
+        BarcodeWordDetectionMode
+    };
     return ids;
 }
 
@@ -544,6 +551,82 @@ static OrientedDateRoi prepareOrientedDateRoi(const cv::Mat& src, const Detectio
     }
 
     oriented.valid = !oriented.croppedImage.empty();
+    return oriented;
+}
+
+static OrientedTrackingRoi prepareOrientedTrackingRoi(
+    const cv::Mat& src,
+    const DetectionPose& pose,
+    int paddingPercent)
+{
+    OrientedTrackingRoi oriented;
+    if (src.empty() || !pose.valid || pose.trackingPoly.size() < 3) {
+        return oriented;
+    }
+
+    oriented.rotationMatrix =
+        cv::getRotationMatrix2D(pose.anchorCenter, -pose.angleDeg, 1.0);
+    cv::invertAffineTransform(
+        oriented.rotationMatrix,
+        oriented.inverseRotationMatrix);
+    cv::warpAffine(
+        src,
+        oriented.rotatedImage,
+        oriented.rotationMatrix,
+        src.size(),
+        cv::INTER_LINEAR,
+        cv::BORDER_REPLICATE);
+
+    oriented.rotatedTrackingPoly =
+        transformPolygon(pose.trackingPoly, oriented.rotationMatrix);
+    if (oriented.rotatedTrackingPoly.size() < 3) {
+        return oriented;
+    }
+
+    const cv::Rect trackingBounds =
+        cv::boundingRect(oriented.rotatedTrackingPoly);
+    if (trackingBounds.width <= 0 || trackingBounds.height <= 0) {
+        return oriented;
+    }
+
+    const int safePaddingPercent = std::max(0, paddingPercent);
+    const int shorterSide =
+        std::min(trackingBounds.width, trackingBounds.height);
+    const int paddingPixels = cvRound(
+        static_cast<double>(shorterSide)
+        * static_cast<double>(safePaddingPercent)
+        / 100.0);
+
+    oriented.roi = expandAndClampRect(
+        trackingBounds,
+        paddingPixels,
+        oriented.rotatedImage.size());
+    if (oriented.roi.width <= 0 || oriented.roi.height <= 0) {
+        return oriented;
+    }
+
+    const cv::Mat cropped = oriented.rotatedImage(oriented.roi);
+    if (cropped.channels() == 1) {
+        if (cropped.depth() == CV_8U) {
+            oriented.grayRoi = cropped.clone();
+        } else {
+            cropped.convertTo(oriented.grayRoi, CV_8U);
+        }
+    } else if (cropped.channels() == 3) {
+        cv::cvtColor(cropped, oriented.grayRoi, cv::COLOR_BGR2GRAY);
+    } else if (cropped.channels() == 4) {
+        cv::cvtColor(cropped, oriented.grayRoi, cv::COLOR_BGRA2GRAY);
+    } else {
+        return oriented;
+    }
+
+    if (!oriented.grayRoi.isContinuous()) {
+        oriented.grayRoi = oriented.grayRoi.clone();
+    }
+
+    oriented.valid = !oriented.grayRoi.empty()
+        && oriented.grayRoi.type() == CV_8UC1
+        && oriented.grayRoi.isContinuous();
     return oriented;
 }
 
@@ -2146,8 +2229,9 @@ void Widget::on_VideoShoot_clicked()
     // 在 UI 上显示最新的这一帧
     slot_displayAndDetect(myImage);
 
-    const bool needsTemplateDrawing = (ui->comboBox_4->currentIndex() == 0
-                                       || ui->comboBox_4->currentIndex() == 1);
+    const bool needsTemplateDrawing =
+            ui->comboBox_4->currentIndex() == 0
+            || isWordFamilyMode(currentDetectModeId());
     imageLabel->setTemplateDrawingEnabled(needsTemplateDrawing);
     if (needsTemplateDrawing) {
         imageLabel->resetDrawingStep();
@@ -2393,9 +2477,16 @@ void Widget::showTemplateGuideForCurrentMode()
         return;
     }
 
-    if (modeIndex == 1) {
-        updateTemplateGuideText("字库匹配模板制作",
-                                "请按住鼠标左键拖动，框选定位区域。");
+    if (modeIndex == 1 || modeIndex == 4) {
+        const bool barcodeWordMode =
+                detectModeIdForIndex(modeIndex) == BarcodeWordDetectionMode;
+        updateTemplateGuideText(
+                    barcodeWordMode
+                        ? "二维码+三期模板制作"
+                        : "字库匹配模板制作",
+                    barcodeWordMode
+                        ? "请按住鼠标左键拖动，框选二维码区域作为追踪锚点。"
+                        : "请按住鼠标左键拖动，框选定位区域。");
         return;
     }
 
@@ -2409,22 +2500,35 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     }
 
     const int modeIndex = ui->comboBox_4->currentIndex();
-    if (modeIndex != 0 && modeIndex != 1) {
+    if (modeIndex != 0 && modeIndex != 1 && modeIndex != 4) {
         hideTemplateGuide();
         return;
     }
 
-    const QString title = (modeIndex == 1) ? "字库匹配模板制作" : "模板匹配模板制作";
+    const bool barcodeWordMode =
+            detectModeIdForIndex(modeIndex) == BarcodeWordDetectionMode;
+    const QString title = barcodeWordMode
+            ? "二维码+三期模板制作"
+            : (modeIndex == 1
+               ? "字库匹配模板制作"
+               : "模板匹配模板制作");
+    const QString trackingRegionName =
+            barcodeWordMode ? "二维码区域" : "定位区域";
 
     if (eventName == "tracking_started") {
-        updateTemplateGuideText(title,
-                                "松开鼠标左键完成定位区域。");
+        updateTemplateGuideText(
+                    title,
+                    QString("松开鼠标左键完成%1。").arg(trackingRegionName));
     } else if (eventName == "template_reset") {
-        updateTemplateGuideText(title,
-                                "已清空当前框线，请重新按住鼠标左键拖动，框选定位区域。");
+        updateTemplateGuideText(
+                    title,
+                    QString("已清空当前框线，请重新按住鼠标左键拖动，框选%1。")
+                    .arg(trackingRegionName));
     } else if (eventName == "tracking_too_small") {
-        updateTemplateGuideText(title,
-                                "定位区域太小，请重新框选更大的定位区域。");
+        updateTemplateGuideText(
+                    title,
+                    QString("%1太小，请重新框选更大的%1。")
+                    .arg(trackingRegionName));
     } else if (eventName == "tracking_done") {
         updateTemplateGuideText(title,
                                 "请用鼠标左键依次点击喷码区域边缘，右键闭合。");
@@ -3247,7 +3351,13 @@ void Widget::updateGlobalSettingDirtyUi(const QString &key)
 
 void Widget::updateAppliedGlobalSettingFromUi(const QString &key)
 {
-    static const QStringList detectModeIds = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList detectModeIds = {
+        "stamp_detection",
+        "word_detection",
+        "ocr_detection",
+        "tissue_detection",
+        BarcodeWordDetectionMode
+    };
     static const QStringList imageSaveModeIds = {"save_none", "save_ng", "save_ok", "save_all"};
     static const QStringList imageSaveTypeIds = {"save_both", "save_annotated_only", "save_raw_only"};
     static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
@@ -3461,7 +3571,7 @@ void Widget::restoreUnappliedSettingsFromApplied()
     ui->lineEdit_12->setText(QString::number(m_appliedGlobalSettings.rejectPosition));
 
     const int profileIndex = currentWordTemplateProfileIndex();
-    if (ui->comboBox_4->currentIndex() == 1
+    if (isWordFamilyMode(currentDetectModeId())
             && profileIndex >= 0
             && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
         const TemplatePrivateSettings &settings =
@@ -3487,7 +3597,7 @@ void Widget::setupTemplatePrivateSettingDirtyTracking()
             if (m_updatingGlobalSettingsUi || m_applyingGlobalSettings) {
                 return;
             }
-            if (ui->comboBox_4->currentIndex() == 1 && !m_wordTemplateProfiles.empty()) {
+            if (isWordFamilyMode(currentDetectModeId()) && !m_wordTemplateProfiles.empty()) {
                 refreshTemplateTargetTextDirty();
             }
         });
@@ -3497,7 +3607,7 @@ void Widget::setupTemplatePrivateSettingDirtyTracking()
             if (m_updatingGlobalSettingsUi || m_applyingGlobalSettings) {
                 return;
             }
-            if (ui->comboBox_4->currentIndex() == 1 && !m_wordTemplateProfiles.empty()) {
+            if (isWordFamilyMode(currentDetectModeId()) && !m_wordTemplateProfiles.empty()) {
                 refreshTemplateImageThresholdDirty();
             }
         });
@@ -3508,7 +3618,7 @@ void Widget::refreshTemplateTargetTextDirty()
 {
     bool dirty = false;
     const int profileIndex = currentWordTemplateProfileIndex();
-    if (ui && ui->comboBox_4->currentIndex() == 1
+    if (ui && isWordFamilyMode(currentDetectModeId())
             && profileIndex >= 0
             && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
         const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
@@ -3523,7 +3633,7 @@ void Widget::refreshTemplateImageThresholdDirty()
 {
     bool dirty = false;
     const int profileIndex = currentWordTemplateProfileIndex();
-    if (ui && ui->comboBox_4->currentIndex() == 1
+    if (ui && isWordFamilyMode(currentDetectModeId())
             && profileIndex >= 0
             && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
         int thresholdValue = 0;
@@ -3592,8 +3702,8 @@ void Widget::updateTemplatePrivateSettingDirtyUi()
 
 void Widget::showManualCharacterTemplateCropDialog()
 {
-    if (!ui || ui->comboBox_4->currentIndex() != 1) {
-        showParameterInfoAsError("提示", "手动切割字符模板只用于字库匹配模式。");
+    if (!ui || !isWordFamilyMode(currentDetectModeId())) {
+        showParameterInfoAsError("提示", "手动切割字符模板只用于字库类检测模式。");
         return;
     }
 
@@ -3901,14 +4011,18 @@ void Widget::setupDetectModeChangeTracking()
                     return;
                 }
 
-                storeCurrentTemplatePathsForMode(m_currentDetectModeId);
-                m_currentDetectModeId = detectModeIdForIndex(index);
+                const QString previousModeId = m_currentDetectModeId;
+                const QString nextModeId = detectModeIdForIndex(index);
+                storeCurrentTemplatePathsForMode(previousModeId);
+                m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
                 if (imageLabel) {
                     imageLabel->setTemplateDrawingEnabled(false);
                 }
                 hideTemplateGuide();
-                if (index != 1 && !m_wordTemplateProfiles.empty()) {
+                if (previousModeId != nextModeId
+                        && isWordFamilyMode(previousModeId)
+                        && !m_wordTemplateProfiles.empty()) {
                     clearWordMultiTemplateState();
                 } else {
                     refreshWordTemplateEditorCombo();
@@ -3945,7 +4059,8 @@ QString Widget::detectModeIdForIndex(int index) const
         "stamp_detection",
         "word_detection",
         "ocr_detection",
-        "tissue_detection"
+        "tissue_detection",
+        BarcodeWordDetectionMode
     };
     return (index >= 0 && index < detectModeIds.size())
             ? detectModeIds.at(index)
@@ -3961,7 +4076,7 @@ QStringList Widget::currentTemplatePathsForMode(const QString &modeId) const
 {
     QStringList paths;
 
-    if (modeId == "word_detection") {
+    if (isWordFamilyMode(modeId)) {
         for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
             if (profile.dirPath.trimmed().isEmpty()) {
                 continue;
@@ -4002,7 +4117,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
     }
     hideTemplateGuide();
 
-    if (modeId == "word_detection") {
+    if (isWordFamilyMode(modeId)) {
         std::vector<WordTemplateProfile> loadedProfiles;
         QStringList validPaths;
         QStringList skippedMessages;
@@ -4106,7 +4221,7 @@ void Widget::refreshWordTemplateEditorCombo()
         return;
     }
 
-    const bool isWordMode = (ui->comboBox_4->currentIndex() == 1);
+    const bool isWordMode = isWordFamilyMode(currentDetectModeId());
     const bool hasWordProfiles = isWordMode && !m_wordTemplateProfiles.empty();
 
     if (ui->batchTextsure_btn) {
@@ -5332,7 +5447,7 @@ bool Widget::isAlnumOrChinese(char c)
 
 void Widget::on_textsure_btn_clicked()
 {
-    if (ui->comboBox_4->currentIndex() == 1)
+    if (isWordFamilyMode(currentDetectModeId()))
     {
         if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
             showParameterWarning("提示", "请先停止检测后再修改模板字符");
@@ -5452,7 +5567,7 @@ void Widget::on_textsure_btn_clicked()
 
 void Widget::on_batchTextsure_btn_clicked()
 {
-    if (ui->comboBox_4->currentIndex() != 1) {
+    if (!isWordFamilyMode(currentDetectModeId())) {
         on_textsure_btn_clicked();
         return;
     }
@@ -5553,7 +5668,7 @@ void Widget::on_batchTextsure_btn_clicked()
 
 void Widget::on_batchImageThresholdButton_clicked()
 {
-    if (ui->comboBox_4->currentIndex() != 1) {
+    if (!isWordFamilyMode(currentDetectModeId())) {
         on_pushButton_3_clicked();
         return;
     }
@@ -5765,7 +5880,7 @@ void Widget::closeEvent(QCloseEvent *event)
  */
 void Widget::on_pushButton_3_clicked()
 {
-    if (ui->comboBox_4->currentIndex() == 1) {
+    if (isWordFamilyMode(currentDetectModeId())) {
         if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
             showParameterWarning("提示", "请先停止检测后再修改模板阈值");
             return;
@@ -5819,17 +5934,24 @@ void Widget::on_pushButton_3_clicked()
  */
 void Widget::on_pushButton_5_clicked()
 {
+    const bool isBarcodeWordTemplateMode =
+            currentDetectModeId() == BarcodeWordDetectionMode;
+    const bool isWordTemplateMode =
+            isWordFamilyMode(currentDetectModeId());
+
     if (!myImage || myImage->empty()) {
         QMessageBox::warning(this, "提示", "请先点击【制作模板】拍照获取图像。");
         return;
     }
     if (!imageLabel->isTemplateDrawingEnabled()) {
-        QMessageBox::warning(this, "提示",
-                             QStringLiteral("\u8bf7\u5148\u70b9\u51fb\u3010\u5236\u4f5c\u6a21\u677f\u3011\u62cd\u7167\uff0c\u5e76\u5b8c\u6210\u5b9a\u4f4d\u533a\u57df\u548c\u55b7\u7801\u68c0\u6d4b\u533a\u57df\u6846\u9009\u3002"));
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    isBarcodeWordTemplateMode
+                        ? "请先点击【制作模板】拍照，并完成二维码追踪锚点和喷码检测区域框选。"
+                        : "请先点击【制作模板】拍照，并完成定位区域和喷码检测区域框选。");
         return;
     }
-
-    const bool isWordTemplateMode = (ui->comboBox_4->currentIndex() == 1);
 
     // 字库匹配模式下，保存前先检查框选状态，避免输入名称后才发现无法保存。
     QRect uiTrackRect = imageLabel->getTrackingRect();
@@ -5837,11 +5959,21 @@ void Widget::on_pushButton_5_clicked()
 
     if (isWordTemplateMode) {
         if (uiTrackRect.isNull()) {
-            QMessageBox::warning(this, "提示", "请先框选定位区域。");
+            QMessageBox::warning(
+                        this,
+                        "提示",
+                        isBarcodeWordTemplateMode
+                            ? "请先框选二维码区域作为追踪锚点。"
+                            : "请先框选定位区域。");
             return;
         }
         if (uiTrackRect.width() <= 5 || uiTrackRect.height() <= 5) {
-            QMessageBox::warning(this, "提示", "定位区域太小，请重新框选。");
+            QMessageBox::warning(
+                        this,
+                        "提示",
+                        isBarcodeWordTemplateMode
+                            ? "二维码追踪锚点区域太小，请重新框选。"
+                            : "定位区域太小，请重新框选。");
             return;
         }
         if (uiDetectPoly.isEmpty()) {
@@ -5887,7 +6019,9 @@ void Widget::on_pushButton_5_clicked()
     formLayout->addRow("模板文件夹保存目录：", baseDirLayout);
 
     QLabel *hintLabel = new QLabel(
-                "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。",
+                isBarcodeWordTemplateMode
+                    ? "保存后会将二维码区域同时作为追踪锚点和读码区域，并记录喷码检测区域。"
+                    : "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。",
                 &inputDialog);
     hintLabel->setWordWrap(true);
 
@@ -5941,9 +6075,15 @@ void Widget::on_pushButton_5_clicked()
         QMessageBox confirmBox(this);
         confirmBox.setIcon(QMessageBox::Warning);
         confirmBox.setWindowTitle("确认覆盖");
-        confirmBox.setText(QString("产品模板 [%1] 已存在。\n\n"
-                                   "继续保存会覆盖该产品模板中的定位区域、喷码检测区域和参数配置。\n"
-                                   "是否继续？").arg(newFolderName));
+        const QString trackingDescription = isBarcodeWordTemplateMode
+                ? "二维码追踪锚点区域"
+                : "定位区域";
+        confirmBox.setText(
+                    QString("产品模板 [%1] 已存在。\n\n"
+                            "继续保存会覆盖该产品模板中的%2、喷码检测区域和参数配置。\n"
+                            "是否继续？")
+                    .arg(newFolderName)
+                    .arg(trackingDescription));
         QPushButton *overwriteButton = confirmBox.addButton("覆盖", QMessageBox::AcceptRole);
         QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
         confirmBox.setDefaultButton(cancelButton);
@@ -6240,7 +6380,7 @@ void Widget::on_pushButton_4_clicked()
         return QDir(desktopPath).absolutePath();
     };
 
-    if (ui->comboBox_4->currentIndex() == 1) {
+    if (isWordFamilyMode(currentDetectModeId())) {
         QFileDialog dialog(this, "选择产品模板文件夹（可勾选多个）", templateDialogStartDir());
         dialog.setFileMode(QFileDialog::Directory);
         dialog.setOption(QFileDialog::ShowDirsOnly, true);
@@ -6382,7 +6522,7 @@ void Widget::on_pushButton_4_clicked()
         return;
     }
     updateCurrentTemplateName();
-    if (ui->comboBox_4->currentIndex() == 1 && imageLabel) {
+    if (isWordFamilyMode(currentDetectModeId()) && imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearGreenRects();
         imageLabel->clearSelection();
@@ -6586,7 +6726,13 @@ bool Widget::saveSettings(bool showErrorMessage)
 
 GlobalSettings Widget::collectGlobalSettingsFromUi() const
 {
-    static const QStringList detectModeIds = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList detectModeIds = {
+        "stamp_detection",
+        "word_detection",
+        "ocr_detection",
+        "tissue_detection",
+        BarcodeWordDetectionMode
+    };
     static const QStringList imageSaveModeIds = {"save_none", "save_ng", "save_ok", "save_all"};
     static const QStringList imageSaveTypeIds = {"save_both", "save_annotated_only", "save_raw_only"};
     static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
@@ -6628,7 +6774,13 @@ GlobalSettings Widget::collectGlobalSettingsFromUi() const
 
 void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
 {
-    static const QStringList detectModeIds = {"stamp_detection", "word_detection", "ocr_detection", "tissue_detection"};
+    static const QStringList detectModeIds = {
+        "stamp_detection",
+        "word_detection",
+        "ocr_detection",
+        "tissue_detection",
+        BarcodeWordDetectionMode
+    };
     static const QStringList imageSaveModeIds = {"save_none", "save_ng", "save_ok", "save_all"};
     static const QStringList imageSaveTypeIds = {"save_both", "save_annotated_only", "save_raw_only"};
     static const QStringList colorChannelIds = {"color", "red", "green", "blue"};
@@ -6775,6 +6927,15 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
                                 "纸巾检测通常不需要制作产品模板。\n\n"
                                 "请设置纸巾检测粗糙度阈值后启动检测。";
                         break;
+                    case 4:
+                        tooltipText =
+                                "制作二维码+三期产品模板步骤：\n\n"
+                                "1. 点击后拍摄当前产品图像。\n"
+                                "2. 在图像上框选二维码区域作为追踪锚点。\n"
+                                "3. 用鼠标左键依次点击喷码区域边缘。\n"
+                                "4. 点击鼠标右键闭合喷码检测区域。\n"
+                                "5. 点击【保存模板】保存产品模板。";
+                        break;
                     default:
                         tooltipText = "点击后拍摄当前图像，用于制作产品模板。";
                         break;
@@ -6888,6 +7049,13 @@ void Widget::on_plcbtn_clicked()
     if (!m_bOpenDevice)
     {
         QMessageBox::warning(this, "警告", "采集失败,请打开设备！");
+        return;
+    }
+
+    if (currentDetectModeId() == BarcodeWordDetectionMode) {
+        showParameterWarning(
+                    "提示",
+                    "二维码+三期模式当前只完成模板配置，顺序检测将在下一阶段接入。");
         return;
     }
 

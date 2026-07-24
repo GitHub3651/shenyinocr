@@ -55,6 +55,10 @@ const char TrackingBoxY[] = "Template/tracking_box_y";
 const char TrackingBoxWidth[] = "Template/tracking_box_width";
 const char TrackingBoxHeight[] = "Template/tracking_box_height";
 const char HasValidBoxes[] = "Template/has_valid_boxes";
+const char BarcodeFormatMask[] = "Template/barcode_format_mask";
+const char BarcodeRoiPaddingPercent[] = "Template/barcode_roi_padding_percent";
+const char BarcodeMaxDecodeTimeMs[] = "Template/barcode_max_decode_time_ms";
+const char BarcodeFallbackEnabled[] = "Template/barcode_fallback_enabled";
 }
 
 namespace CharacterBoxes {
@@ -77,7 +81,8 @@ const QStringList SupportedDetectModeIds = {
     "stamp_detection",
     "word_detection",
     "ocr_detection",
-    "tissue_detection"
+    "tissue_detection",
+    "barcode_word_detection"
 };
 const QStringList SupportedImageSaveModeIds = {
     "save_none",
@@ -556,6 +561,10 @@ bool AppSettingsManager::loadTemplatePrivateSettings(const QString &templateDir,
         SettingsKeys::Template::TrackingBoxWidth,
         SettingsKeys::Template::TrackingBoxHeight,
         SettingsKeys::Template::HasValidBoxes,
+        SettingsKeys::Template::BarcodeFormatMask,
+        SettingsKeys::Template::BarcodeRoiPaddingPercent,
+        SettingsKeys::Template::BarcodeMaxDecodeTimeMs,
+        SettingsKeys::Template::BarcodeFallbackEnabled,
         SettingsKeys::CharacterBoxes::Count,
         SettingsKeys::CharacterBoxes::SourceWidth,
         SettingsKeys::CharacterBoxes::SourceHeight
@@ -578,6 +587,18 @@ bool AppSettingsManager::loadTemplatePrivateSettings(const QString &templateDir,
                 ini.value(SettingsKeys::Template::TrackingBoxWidth, settings->trackingBox.width).toDouble(),
                 ini.value(SettingsKeys::Template::TrackingBoxHeight, settings->trackingBox.height).toDouble());
     settings->hasValidBoxes = ini.value(SettingsKeys::Template::HasValidBoxes, settings->hasValidBoxes).toBool();
+    settings->barcodeOptions.formatMask =
+            ini.value(SettingsKeys::Template::BarcodeFormatMask,
+                      settings->barcodeOptions.formatMask).toUInt();
+    settings->barcodeOptions.roiPaddingPercent =
+            ini.value(SettingsKeys::Template::BarcodeRoiPaddingPercent,
+                      settings->barcodeOptions.roiPaddingPercent).toInt();
+    settings->barcodeOptions.maxDecodeTimeMs =
+            ini.value(SettingsKeys::Template::BarcodeMaxDecodeTimeMs,
+                      settings->barcodeOptions.maxDecodeTimeMs).toInt();
+    settings->barcodeOptions.enableFallback =
+            ini.value(SettingsKeys::Template::BarcodeFallbackEnabled,
+                      settings->barcodeOptions.enableFallback).toBool();
     settings->characterSourceImageSize = QSize(
                 ini.value(SettingsKeys::CharacterBoxes::SourceWidth, settings->characterSourceImageSize.width()).toInt(),
                 ini.value(SettingsKeys::CharacterBoxes::SourceHeight, settings->characterSourceImageSize.height()).toInt());
@@ -644,6 +665,14 @@ bool AppSettingsManager::saveTemplatePrivateSettings(const QString &templateDir,
         ini.setValue(SettingsKeys::Template::TrackingBoxWidth, settings.trackingBox.width);
         ini.setValue(SettingsKeys::Template::TrackingBoxHeight, settings.trackingBox.height);
         ini.setValue(SettingsKeys::Template::HasValidBoxes, settings.hasValidBoxes);
+        ini.setValue(SettingsKeys::Template::BarcodeFormatMask,
+                     settings.barcodeOptions.formatMask);
+        ini.setValue(SettingsKeys::Template::BarcodeRoiPaddingPercent,
+                     settings.barcodeOptions.roiPaddingPercent);
+        ini.setValue(SettingsKeys::Template::BarcodeMaxDecodeTimeMs,
+                     settings.barcodeOptions.maxDecodeTimeMs);
+        ini.setValue(SettingsKeys::Template::BarcodeFallbackEnabled,
+                     settings.barcodeOptions.enableFallback);
         ini.setValue(SettingsKeys::CharacterBoxes::SourceWidth, settings.characterSourceImageSize.width());
         ini.setValue(SettingsKeys::CharacterBoxes::SourceHeight, settings.characterSourceImageSize.height());
         ini.setValue(SettingsKeys::CharacterBoxes::Count, settings.characterBoxes.size());
@@ -671,6 +700,10 @@ bool AppSettingsManager::saveTemplatePrivateSettings(const QString &templateDir,
         SettingsKeys::Template::TrackingBoxWidth,
         SettingsKeys::Template::TrackingBoxHeight,
         SettingsKeys::Template::HasValidBoxes,
+        SettingsKeys::Template::BarcodeFormatMask,
+        SettingsKeys::Template::BarcodeRoiPaddingPercent,
+        SettingsKeys::Template::BarcodeMaxDecodeTimeMs,
+        SettingsKeys::Template::BarcodeFallbackEnabled,
         SettingsKeys::CharacterBoxes::Count,
         SettingsKeys::CharacterBoxes::SourceWidth,
         SettingsKeys::CharacterBoxes::SourceHeight

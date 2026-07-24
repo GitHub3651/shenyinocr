@@ -35,6 +35,16 @@ struct OrientedDateRoi {
     cv::Mat inverseRotationMatrix;
 };
 
+struct OrientedTrackingRoi {
+    bool valid = false;
+    cv::Mat rotatedImage;
+    std::vector<cv::Point> rotatedTrackingPoly;
+    cv::Rect roi;
+    cv::Mat grayRoi;
+    cv::Mat rotationMatrix;
+    cv::Mat inverseRotationMatrix;
+};
+
 inline cv::Point2f rotateRelativePoint(const cv::Point2f& pt, float angleDeg)
 {
     const double rad = angleDeg * CV_PI / 180.0;

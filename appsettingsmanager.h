@@ -1,6 +1,8 @@
 #ifndef APPSETTINGSMANAGER_H
 #define APPSETTINGSMANAGER_H
 
+#include "BarcodeTypes.h"
+
 #include <QRect>
 #include <QMap>
 #include <QSize>
@@ -51,13 +53,14 @@ struct CharacterTemplateBox
 
 struct TemplatePrivateSettings
 {
-    int configVersion = 1;
+    int configVersion = 2;
     QString targetText;
     double imageThreshold = 70.0;
     cv::Rect2d trackingBox;
     bool hasValidBoxes = false;
     QVector<CharacterTemplateBox> characterBoxes;
     QSize characterSourceImageSize;
+    BarcodeDecodeOptions barcodeOptions;
 };
 
 namespace SettingsKeys {
@@ -100,6 +103,10 @@ extern const char TrackingBoxY[];
 extern const char TrackingBoxWidth[];
 extern const char TrackingBoxHeight[];
 extern const char HasValidBoxes[];
+extern const char BarcodeFormatMask[];
+extern const char BarcodeRoiPaddingPercent[];
+extern const char BarcodeMaxDecodeTimeMs[];
+extern const char BarcodeFallbackEnabled[];
 }
 
 namespace CharacterBoxes {
@@ -118,7 +125,7 @@ class AppSettingsManager
 {
 public:
     static const int GlobalConfigVersion = 2;
-    static const int TemplateConfigVersion = 1;
+    static const int TemplateConfigVersion = 2;
 
     static QString globalDataDirPath();
     static QString globalSettingsFilePath();
