@@ -45,6 +45,7 @@ CONFIG(release, debug|release) {
 
 SOURCES += \
     appsettingsmanager.cpp \
+    BarcodeDecoder.cpp \
     CameraThread.cpp \
     Detector.cpp \
     ImageManipulator.cpp \
@@ -76,6 +77,9 @@ SOURCES += \
 
 HEADERS += \
     appsettingsmanager.h \
+    BarcodeDecoder.h \
+    BarcodeDecoderApi.h \
+    BarcodeTypes.h \
     CameraThread.h \
     CryptoUtils.h \
     Detector.h \
