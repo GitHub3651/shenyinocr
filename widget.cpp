@@ -75,6 +75,7 @@
 #include <QSortFilterProxyModel>
 #include <QSet>
 #include <QEvent>
+#include <QRegularExpression>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -7726,6 +7727,25 @@ void Widget::on_pushButton_5_clicked()
         }
     }
 
+    if (!isWordTemplateMode
+            && (uiTrackRect.isNull()
+                || uiDetectPoly.isEmpty()
+                || uiDetectPoly.size() < 3)) {
+        QMessageBox::warning(this, "警告",
+                             "保存模板前，请先在图像上完成以下操作：\n\n"
+                             "1. 框选定位区域\n"
+                             "2. 框选并闭合喷码检测区域\n\n"
+                             "完成后再点击【保存模板】。");
+        return;
+    }
+
+    bool thresholdOk = false;
+    ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk);
+    if (!thresholdOk) {
+        showParameterWarning("参数错误", "图像合格阈值必须是数字，模板未保存。");
+        return;
+    }
+
     auto defaultTemplateBaseDir = [this]() -> QString {
         if (!templateBaseDirPath.trimmed().isEmpty() && QDir(templateBaseDirPath).exists()) {
             return QDir(templateBaseDirPath).absolutePath();
@@ -7801,6 +7821,17 @@ void Widget::on_pushButton_5_clicked()
 
     QString newFolderName = nameEdit->text().trimmed();
     if (newFolderName.isEmpty()) return;
+    const QRegularExpression invalidFolderNameChars(R"([\\/:*?"<>|])");
+    if (newFolderName == "."
+            || newFolderName == ".."
+            || newFolderName.contains(invalidFolderNameChars)) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "产品模板文件夹名称不能是“.”或“..”，"
+                    "也不能包含 \\ / : * ? \" < > | 这些字符。");
+        return;
+    }
 
     QString baseDirPath = baseDirEdit->text().trimmed();
     if (baseDirPath.isEmpty()) {
@@ -7809,21 +7840,26 @@ void Widget::on_pushButton_5_clicked()
     }
     baseDirPath = QDir(baseDirPath).absolutePath();
 
-    QString savePath = QDir(baseDirPath).absoluteFilePath(newFolderName);
+    QString savePath = QDir::cleanPath(
+                QDir(baseDirPath).absoluteFilePath(newFolderName));
+    if (QDir(QFileInfo(savePath).absolutePath()).absolutePath()
+            .compare(baseDirPath, Qt::CaseInsensitive) != 0) {
+        QMessageBox::warning(this, "错误", "产品模板保存路径无效，模板未保存。");
+        return;
+    }
+
     QDir dir(savePath);
-    if (isWordTemplateMode && dir.exists()) {
+    if (dir.exists()) {
         QMessageBox confirmBox(this);
         confirmBox.setIcon(QMessageBox::Warning);
         confirmBox.setWindowTitle("确认覆盖");
-        const QString trackingDescription = isBarcodeWordTemplateMode
-                ? "二维码追踪锚点区域"
-                : "定位区域";
         confirmBox.setText(
                     QString("产品模板 [%1] 已存在。\n\n"
-                            "继续保存会覆盖该产品模板中的%2、喷码检测区域和参数配置。\n"
+                            "继续保存会先清空该文件夹中的全部旧文件和子文件夹，"
+                            "然后写入当前模板。\n"
+                            "清空后旧模板无法恢复。\n\n"
                             "是否继续？")
-                    .arg(newFolderName)
-                    .arg(trackingDescription));
+                    .arg(newFolderName));
         QPushButton *overwriteButton = confirmBox.addButton("覆盖", QMessageBox::AcceptRole);
         QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
         confirmBox.setDefaultButton(cancelButton);
@@ -7831,22 +7867,31 @@ void Widget::on_pushButton_5_clicked()
         if (confirmBox.clickedButton() != overwriteButton) {
             return;
         }
+
+        const QFileInfo existingTemplateInfo(savePath);
+        if (existingTemplateInfo.isSymLink()) {
+            QMessageBox::warning(this,
+                                 "错误",
+                                 "同名产品模板文件夹是快捷链接，无法安全清空。");
+            return;
+        }
+        if (!dir.removeRecursively()) {
+            QMessageBox::warning(
+                        this,
+                        "错误",
+                        "同名产品模板文件夹清空失败。\n"
+                        "请检查其中的文件是否被其他程序占用。");
+            return;
+        }
+        dir = QDir(savePath);
     }
 
-    if (!dir.mkpath(".")) {
+    if (!QDir().mkpath(savePath)) {
         QMessageBox::warning(this, "错误", "产品模板文件夹创建失败，无法保存模板。");
         return;
     }
+    dir = QDir(savePath);
     templateBaseDirPath = baseDirPath;
-
-    if (!isWordTemplateMode && (uiTrackRect.isNull() || uiDetectPoly.isEmpty() || uiDetectPoly.size() < 3)) {
-        QMessageBox::warning(this, "警告",
-                             "保存模板前，请先在图像上完成以下操作：\n\n"
-                             "1. 框选定位区域\n"
-                             "2. 框选并闭合喷码检测区域\n\n"
-                             "完成后再点击【保存模板】。");
-        return;
-    }
 
     // 2. 转换坐标 (使用局部 clone 确保计算基准稳定)
     cv::Mat calibImg = myImage->clone();
