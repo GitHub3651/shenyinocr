@@ -3612,11 +3612,19 @@ void Widget::updateOperationUiState()
     case OperationState::TemplatePreviewing:
         if (ui->VideoShoot) ui->VideoShoot->setEnabled(true);
         if (ui->cancel) ui->cancel->setEnabled(true);
+        if (ui->statusLabel) {
+            ui->statusLabel->setText(
+                        "模板制作中：实时取景");
+        }
         break;
     case OperationState::TemplateFrozen:
         if (ui->VideoShoot) ui->VideoShoot->setEnabled(true);
         if (ui->pushButton_5) ui->pushButton_5->setEnabled(true);
         if (ui->cancel) ui->cancel->setEnabled(true);
+        if (ui->statusLabel) {
+            ui->statusLabel->setText(
+                        "模板制作中：请完成框选并保存");
+        }
         break;
     }
 
@@ -3697,6 +3705,10 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
         if (imageLabel) {
             imageLabel->setTemplateDrawingEnabled(false);
         }
+        ui->statusLabel->setText(
+                    m_bOpenDevice
+                    ? "模板实时取景失败，相机已打开"
+                    : "模板实时取景失败，相机已关闭");
         updateImageDisplayStatusText("实时取景失败，请检查相机后重试。");
         QMessageBox::warning(this, "实时取景失败", reason);
     },
@@ -3719,6 +3731,10 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
+            ui->statusLabel->setText(
+                        m_bOpenDevice
+                        ? "模板实时取景已停止，相机已打开"
+                        : "模板实时取景已停止，相机已关闭");
             updateOperationUiState();
             return;
         }
@@ -8339,6 +8355,10 @@ void Widget::on_pushButton_5_clicked()
     clearBarcodeTemplateTrackingValidation();
     hideTemplateGuide();
     resetTemplateCaptureState();
+    ui->statusLabel->setText(
+                m_bOpenDevice
+                ? "模板保存完成，相机已打开"
+                : "模板保存完成，相机已关闭");
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
     if (isWordTemplateMode) {
@@ -9260,15 +9280,6 @@ void Widget::on_plcbtn_clicked()
             currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
     const bool isWordProfileMode = isWordMode && !m_wordTemplateProfiles.empty();
-    QString wordRunningTemplateName;
-    if (isWordProfileMode) {
-        wordRunningTemplateName = m_wordTemplateProfiles.size() == 1
-                ? m_wordTemplateProfiles.front().name
-                : QString("字库多模板");
-    }
-    const QString runningTemplateName = isTissueMode
-            ? QString("无")
-            : (isWordProfileMode ? wordRunningTemplateName : QDir(currentTemplateDirPath).dirName());
 
     if (isWordMode && m_wordTemplateProfiles.empty()) {
         QMessageBox::warning(this, "提示", "当前没有加载产品模板，请重新选择产品模板文件夹。");
@@ -9515,7 +9526,7 @@ void Widget::on_plcbtn_clicked()
             isCollecting = true;
             m_operationState =
                     OperationState::Detecting;
-            ui->statusLabel->setText(QString("触发模式运行中\n产品模板：%1").arg(runningTemplateName));
+            ui->statusLabel->setText("触发模式运行中");
             updateOperationUiState();
         } else {
             m_barcodeWordRunActive = false;
@@ -9590,7 +9601,7 @@ void Widget::on_plcbtn_clicked()
             isCollecting = true;
             m_operationState =
                     OperationState::Detecting;
-            ui->statusLabel->setText(QString("软触发模式运行中\n产品模板：%1").arg(runningTemplateName));
+            ui->statusLabel->setText("软触发模式运行中");
             updateOperationUiState();
         }
     }
