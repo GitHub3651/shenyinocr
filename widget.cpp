@@ -4676,7 +4676,6 @@ void Widget::setupNumericInputValidators()
     };
 
     setIntValidator(ui->lineEdit_14);
-    setIntValidator(ui->lineEdit_yuzhi);
     setIntValidator(ui->lineEdit_2);
     setIntValidator(ui->lineEdit_3);
     setIntValidator(ui->lineEdit_6);
@@ -4685,6 +4684,14 @@ void Widget::setupNumericInputValidators()
     setIntValidator(ui->lineEdit_7);
     setIntValidator(ui->lineEdit_8);
     setIntValidator(ui->lineEdit_12);
+
+    if (ui->lineEdit_yuzhi) {
+        ui->lineEdit_yuzhi->setValidator(
+                    new QIntValidator(0, 100, ui->lineEdit_yuzhi));
+        ui->lineEdit_yuzhi->setMaxLength(3);
+        ui->lineEdit_yuzhi->setToolTip(
+                    "请输入0到100之间的整数，单位：%");
+    }
 
     if (ui->lineEdit_tissueRoughnessThreshold) {
         QDoubleValidator *validator = new QDoubleValidator(0.001, 1000000.0, 3, ui->lineEdit_tissueRoughnessThreshold);
@@ -6602,8 +6609,10 @@ bool Widget::applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuc
 bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
     int thresholdValue = 0;
-    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)) {
-        const QString message = "图像合格阈值必须是整数";
+    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)
+            || thresholdValue < 0
+            || thresholdValue > 100) {
+        const QString message = "图像合格阈值必须是0到100之间的整数（单位：%）";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("参数错误", message);
         return false;
@@ -7388,8 +7397,11 @@ void Widget::on_batchImageThresholdButton_clicked()
 
     const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
     int thresholdValue = 0;
-    if (!parseIntValue(thresholdText, &thresholdValue)) {
-        showParameterWarning("参数错误", "图像合格阈值必须是整数");
+    if (!parseIntValue(thresholdText, &thresholdValue)
+            || thresholdValue < 0
+            || thresholdValue > 100) {
+        showParameterWarning("参数错误",
+                             "图像合格阈值必须是0到100之间的整数（单位：%）");
         return;
     }
 
@@ -7605,8 +7617,11 @@ void Widget::on_pushButton_3_clicked()
 
         const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
         int thresholdValue = 0;
-        if (!parseIntValue(thresholdText, &thresholdValue)) {
-            showParameterWarning("参数错误", "图像合格阈值必须是整数");
+        if (!parseIntValue(thresholdText, &thresholdValue)
+                || thresholdValue < 0
+                || thresholdValue > 100) {
+            showParameterWarning("参数错误",
+                                 "图像合格阈值必须是0到100之间的整数（单位：%）");
             return;
         }
 
@@ -7634,7 +7649,14 @@ void Widget::on_pushButton_3_clicked()
         return;
     }
 
-    int number = ui->lineEdit_yuzhi->text().toDouble();
+    int number = 0;
+    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &number)
+            || number < 0
+            || number > 100) {
+        showParameterWarning("参数错误",
+                             "图像合格阈值必须是0到100之间的整数（单位：%）");
+        return;
+    }
     emit ssim(number);
     showParameterInfo("提示", "阈值设置成功");
 }
@@ -7739,10 +7761,12 @@ void Widget::on_pushButton_5_clicked()
         return;
     }
 
-    bool thresholdOk = false;
-    ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk);
-    if (!thresholdOk) {
-        showParameterWarning("参数错误", "图像合格阈值必须是数字，模板未保存。");
+    int thresholdValue = 0;
+    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)
+            || thresholdValue < 0
+            || thresholdValue > 100) {
+        showParameterWarning("参数错误",
+                             "图像合格阈值必须是0到100之间的整数（单位：%），模板未保存。");
         return;
     }
 
@@ -8059,10 +8083,12 @@ bool Widget::saveSettingsToDir(const QString &dirPath)
         }
     }
 
-    bool thresholdOk = false;
-    const double imageThreshold = ui->lineEdit_yuzhi->text().trimmed().toDouble(&thresholdOk);
-    if (!thresholdOk) {
-        showParameterWarning("参数错误", "图像合格阈值必须是数字，模板配置未保存。");
+    int imageThreshold = 0;
+    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &imageThreshold)
+            || imageThreshold < 0
+            || imageThreshold > 100) {
+        showParameterWarning("参数错误",
+                             "图像合格阈值必须是0到100之间的整数（单位：%），模板配置未保存。");
         return false;
     }
     privateSettings.targetText = ui->dateEdit->toPlainText();
