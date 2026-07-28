@@ -1,0 +1,257 @@
+/* ============================
+   Global Base Style
+============================ */
+QWidget {
+    background: #0F1F33 !important;
+    color: #E7F2FF;
+    font-family: "Microsoft YaHei","微软雅黑";
+    font-size: 15px;
+}
+
+/* 清除奇怪边框 */
+* {
+    outline: 0;
+    border: none;
+}
+
+/* ============================
+   修复 UI 中写死的白色背景
+   ⚠ 只修 QFrame，去掉 QGroupBox / QWidget，避免覆盖
+============================ */
+QFrame {
+    background: #132B46;
+}
+
+/* ============================
+   左侧图像显示区域：强制撑满
+============================ */
+QLabel[img="true"] {
+    background: #0A1A2C;
+    border: 2px solid #355A82;
+    border-radius: 8px;
+    min-height: 480px;
+    min-width: 600px;
+}
+
+/* ============================
+   TabWidget
+============================ */
+QTabWidget::pane {
+    border: 1px solid #2E4E73;
+    background: #102843;
+    border-radius: 6px;
+}
+
+QTabBar::tab {
+    background: #1C3E62;
+    padding: 12px 32px;
+    margin-right: 2px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #DDEBFF;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+QTabBar::tab:selected {
+    background: #3B73B7;
+    color: white;
+}
+
+QTabBar::tab:hover {
+    background: #4E8BD6;
+}
+
+/* 关闭按钮 */
+QTabBar::close-button {
+    image: url(:/close_light.png);
+    width: 14px;
+    height: 14px;
+    margin-left: 10px;
+}
+
+/* ============================
+   GroupBox — 卡片组件（深蓝背景）
+============================ */
+QGroupBox {
+    background: #0D2240;              /* 深蓝色背景 */
+    border: 1px solid #355A82;
+    border-radius: 6px;
+    margin-top: 16px;
+    padding: 10px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 4px 12px;
+    background: #3A6EA5;              /* 保持原有标题蓝色 */
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+/* ============================
+   Frame 内容容器
+============================ */
+QFrame {
+    border: 1px solid #355A82;
+    border-radius: 6px;
+    padding: 8px;
+}
+
+/* ============================
+   Buttons 
+============================ */
+QPushButton, QToolButton {
+    background: #3A6EA5;              /* 按钮颜色不变 */
+    color: white;
+    border-radius: 6px;
+    min-height: 40px;
+    padding: 6px 18px;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+QPushButton:hover, QToolButton:hover {
+    background: #5AA9E6;
+}
+
+QPushButton:pressed, QToolButton:pressed {
+    background: #2C4F73;
+}
+
+/* ToolButton 小图标按钮 */
+QToolButton {
+    font-size: 14px;
+    padding: 6px;
+}
+
+/* ============================
+   LineEdit / SpinBox 输入框
+============================ */
+QLineEdit, QTextEdit, QSpinBox, QDoubleSpinBox {
+    background: #D8E8FF;
+    border: 1px solid #6A90C6;
+    border-radius: 4px;
+    color: #0F1F33;
+    padding: 4px 6px;
+    min-height: 38px;
+    font-size: 15px;
+}
+
+QLineEdit:focus {
+    background: #EEF5FF;
+    border: 1px solid #88B7FF;
+}
+
+/* ============================
+   ComboBox（下拉框）
+============================ */
+QComboBox {
+    background: #D8E8FF;
+    border: 1px solid #6A90C6;
+    border-radius: 4px;
+    padding-left: 8px;
+    min-height: 38px;
+    color: #0F1F33;   /* 深色文字 */
+    font-size: 15px;
+}
+
+QComboBox::drop-down {
+    width: 28px;
+    border-left: 1px solid #6A90C6;
+    background: #B4CFF5;
+}
+
+QComboBox QAbstractItemView {
+    background: #1C3E62;
+    color: white;
+    selection-background-color: #3A6EA5;
+}
+
+/* ============================
+   ScrollBar
+============================ */
+QScrollBar:vertical {
+    width: 12px;
+    background: #112134;
+}
+QScrollBar::handle:vertical {
+    background: #3A6EA5;
+    border-radius: 6px;
+}
+
+/* ============================
+   Label — 与按钮同色的蓝色背景
+============================ */
+QLabel {
+    background: #3A6EA5;              /* 和按钮完全相同 */
+    color: white;
+    font-size: 15px;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+/* 图片 Label 保持独立样式，不用按钮蓝 */
+QLabel[img="true"] {
+    background: #0A1A2C;
+    border: 2px solid #355A82;
+    border-radius: 8px;
+    min-height: 480px;
+    min-width: 600px;
+    padding: 0;
+}
+
+/* ============================
+   数值显示框（右侧统计）
+============================ */
+QLineEdit[valuebox="true"] {
+    background: #CFE2FF;
+    color: #0F1F33;
+    font-size: 16px;
+    font-weight: bold;
+    min-height: 40px;
+}
+
+/* ============================
+   Slider
+============================ */
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #1E3A61;
+    border-radius: 3px;
+}
+QSlider::handle:horizontal {
+    background: #5AA9E6;
+    width: 14px;
+    border-radius: 7px;
+    margin: -4px 0;
+}
+
+
+QMessageBox {
+    font-size: 16px;
+}
+
+/* 匹配 objectName 为 image_undetected 的 Label，设为白色 */
+QLabel#image_undetected {
+    background-color: white; /* 背景色白色 */
+    color: #000000; /* 文字色黑色（避免白字白底看不见） */
+    border: 2px solid #000000; /* 可选：黑色边框，增强辨识度 */
+    /* 继承原 Label 的其他样式（如圆角、内边距），保持一致性 */
+    border-radius: 8px;
+    padding: 4px;
+    font-size: 15px;
+    font-weight: normal;
+}
+
+/* 若该 Label 是图片类型（带 img 属性），补充适配 */
+QLabel[img="true"]#image_undetected {
+    background-color: white; /* 覆盖原黑色背景，设为白色 */
+    border: 2px solid #000000; /* 黑色边框，与白色背景区分 */
+    min-height: 480px;
+    min-width: 600px;
+    padding: 0;
+}

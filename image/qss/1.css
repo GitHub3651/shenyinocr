@@ -1,0 +1,189 @@
+/* ============================================================
+   Light Pro Theme - 最终版本：黑色圆角边框，所有字体为黑色
+   --- 解决了 UI 文件中 QFrame 样式冲突的问题 ---
+============================================================ */
+
+/* --- 全局基础 --- */
+QWidget {
+    background-color: #f5f7fa;
+    color: #333333; /* 全局深色字体 */
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 16px;
+}
+
+/* --- 分组框 --- */
+QGroupBox {
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    margin-top: 30px;
+    background-color: #ffffff;
+    font-weight: bold;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 15px;
+    top: 5px;
+    padding: 4px 10px;
+    color: #1976d2;
+    background-color: #e3f2fd;
+    border-radius: 4px;
+}
+
+/* --- 输入框 (确保深黑文本) --- */
+QLineEdit, QSpinBox, QDoubleSpinBox, QTextEdit, QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #c0c4cc;
+    border-radius: 4px;
+    color: #333333; /* 修正: 从中灰改为深黑 */
+    padding: 5px 10px;
+    font-size: 16px;
+}
+
+QLineEdit:focus, 
+QSpinBox:focus, 
+QComboBox:focus {
+    border: 1px solid #409eff;
+    background-color: #ecf5ff;
+}
+
+/* --- 只读数字框 (确保深色字体) --- */
+QLineEdit[readOnly="true"] {
+    background-color: #f4f4f5;
+    border: none;
+    font-size: 20px;
+    color: #303133;
+    font-weight: bold;
+}
+
+/* --- QTabWidget 内的 QFrame 样式（从 UI 文件中移除后，在这里集中定义） --- */
+/* 适用于 tab1_frame2, tab1_frame3, tab2_frame2/3/4, tab3_frame1/2/3 等*/
+/* 使用 [frameShape="StyledPanel"] 来精准定位 tab 中的 QFrame */
+QTabWidget QFrame[frameShape="StyledPanel"] {
+    background: #fbfbfc;
+    border: 1px solid #ebeef5; /* 浅灰边框 */
+    border-radius: 4px; 
+    padding: 5px;
+}
+
+/* 嵌套在 Frame 中的 Frame (如 tab2_frame3 内部的 frame/frame_2) */
+QTabWidget QFrame QFrame {
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+/* --- QPushButton (关键修正: 黑色圆角边框 + 黑色文本) --- */
+/* 提高通用选择器优先级：确保所有 QPushButton 都生效 */
+/* 使用 QWidget QPushButton 确保它能覆盖绝大多数通用 QPushButton 定义 */
+QWidget QPushButton {
+    background-color: #ffffff;
+    color: #333333; 
+    border: 1px solid #303133; /* 黑色圆角边框 */
+    border-radius: 4px;
+    padding: 10px 15px;
+    font-size: 16px;
+    font-weight: bold;
+    outline: none;
+    background-clip: padding-box; /* 解决 Qt 渲染的常见问题 */
+}
+
+/* 悬停/按下状态 */
+QPushButton:hover {
+    background-color: #f2f6fc;
+}
+
+QPushButton:pressed {
+    background-color: #ebeef5;
+}
+
+/* 清零按钮样式 (特殊情况: 红色背景保留白色文本) */
+QPushButton#cut_cancelButton_2, 
+QPushButton#cut_cancelButton_3 {
+    background-color: #f56c6c;
+    border: 1px solid #303133;
+    border-radius: 4px;
+    padding: 0 10px;
+    color: #ffffff;
+}
+
+QPushButton#cut_cancelButton_2:hover, 
+QPushButton#cut_cancelButton_3:hover {
+    background-color: #f78989;
+}
+
+QPushButton#cut_cancelButton_2:pressed, 
+QPushButton#cut_cancelButton_3:pressed {
+    background-color: #e45656;
+}
+
+/* --- TabWidget --- */
+QTabWidget::pane {
+    border: 1px solid #e4e7ed;
+    border-top: none;
+    background: #ffffff;
+    border-radius: 6px;
+}
+
+QTabWidget::tab-bar {
+    left: 5px;
+}
+
+/* QTabBar::tab (确保深黑文本) */
+QTabBar::tab {
+    background: #f5f7fa;
+    border: 1px solid #e4e7ed;
+    border-bottom: none;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+    padding: 8px 18px;
+    font-size: 16px;
+    color: #333333; 
+    margin-right: 2px;
+}
+
+QTabBar::tab:selected, QTabBar::tab:hover {
+    background: #ffffff;
+    border-color: #e4e7ed;
+    color: #303133;
+}
+
+QTabBar::tab:selected {
+    border-bottom-color: #ffffff;
+    margin-bottom: -1px;
+}
+
+/* --- QToolButton (主控操作台按钮, 确保黑色圆角边框 + 黑色文本) --- */
+QGroupBox#topControlPanel QToolButton {
+    border: 1px solid #303133; /* 统一的黑色边框 */
+    border-radius: 8px; /* 圆角 */
+    padding: 10px;
+    font-size: 16px;
+    background-color: #ffffff;
+    color: #333333; /* 确保深色文本 */
+}
+
+/* 悬停微动效果 */
+QGroupBox#topControlPanel QToolButton:hover {
+    background-color: #f2f6fc;
+    margin-top: -2px;
+}
+
+/* --- 结果标签 (确保深色字体) --- */
+QLabel#resultlabel {
+    font-size: 40px;
+    font-weight: 900;
+    color: #ffffff;
+    background-color: #ff9800;
+    border-radius: 6px;
+    padding: 10px;
+}
+QLabel#statusLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333333;
+    background-color: #eef1f6;
+    border-radius: 6px;
+    padding: 10px;
+}
