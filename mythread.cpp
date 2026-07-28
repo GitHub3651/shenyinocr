@@ -143,7 +143,6 @@ void MyThread::run() {
                     auto detectEnd = std::chrono::high_resolution_clock::now();
                     result.processingTimeMs = static_cast<int>(
                         std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
-                    emit signal_cleanlabel();
                     emit signal_sendTissueResult(detectionImage, result);
                     lastDetectionTime = now;
                 }
@@ -229,7 +228,6 @@ void MyThread::run() {
                         int interval = receivedata.toInt();
                         if (interval <= 0) interval = 300;
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
-                            emit signal_cleanlabel(); //
                             emit signal_sendForDetection(imagePtr->clone(), bestPose); //
                             lastDetectionTime = now;
                         }
@@ -242,7 +240,6 @@ void MyThread::run() {
                         int interval = receivedata.toInt();
                         if (interval <= 0) interval = 300;
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
-                            emit signal_cleanlabel(); //
                             emit signal_sendForDetection(imagePtr->clone(), pose); //
                             lastDetectionTime = now;
                         }

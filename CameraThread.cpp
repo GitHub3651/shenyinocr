@@ -136,7 +136,6 @@ void CameraThread::run() {
                         auto detectEnd = std::chrono::high_resolution_clock::now();
                         result.processingTimeMs = static_cast<int>(
                             std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
-                        emit signal_cleanlabel();
                         emit signal_sendTissueResult(detectionImage, result);
                     }
                 } else {
@@ -219,12 +218,10 @@ void CameraThread::run() {
 
                             if (m_barcodeWordHardTriggerMode
                                     || m_pcMyCamera->isImageReadyForMain()) {
-                                emit signal_cleanlabel(); //
                                 emit signal_sendForDetection(image->clone(), bestPose);
                             }
                         } else if (m_barcodeWordHardTriggerMode) {
                             qDebug() << "[BARCODE_WORD] Hard-trigger tracking failed; send one NG frame.";
-                            emit signal_cleanlabel();
                             emit signal_sendForDetection(image->clone(), bestPose);
                         }
                     } else if (tracking && m_poseMatcher.isReady()) {
@@ -232,7 +229,6 @@ void CameraThread::run() {
                         emit signal_boxesSelected(pose);
                         if (pose.valid) {
                             if (m_pcMyCamera->isImageReadyForMain()) {
-                                emit signal_cleanlabel(); //
                                 emit signal_sendForDetection(image->clone(), pose);
                             }
                         } else if (initialTrackingBox.width > 0 && initialTrackingBox.height > 0) {

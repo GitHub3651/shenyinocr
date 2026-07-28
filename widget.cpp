@@ -102,6 +102,13 @@ double elapsedMilliseconds(const QElapsedTimer &timer)
     return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
 }
 
+void setLabelTextIfChanged(QLabel *label, const QString &text)
+{
+    if (label && label->text() != text) {
+        label->setText(text);
+    }
+}
+
 const QStringList &detectModeIds()
 {
     static const QStringList ids = {
@@ -1873,8 +1880,9 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     }
 
     // ================== 4. UI 文本更新与 PLC 判定 ==================
-    ui->resultlabel_7->setText(QString::fromStdString(allResults));
-    ui->resultlabel_7->setWordWrap(true);
+    setLabelTextIfChanged(
+                ui->resultlabel_7,
+                QString::fromStdString(allResults));
 
     // 🔥 此处删掉了 imageLabel->addSelectionRect 和 imageLabel->update()
     // 界面上不会再出现任何检测框
@@ -2404,8 +2412,9 @@ void Widget::runBarcodeWordDetection(
     resultLines.append("二维码：可读");
     resultLines.append(QString("二维码内容：%1").arg(barcode.text));
     resultLines.append(QString("日期：%1").arg(dateState));
-    ui->resultlabel_7->setText(resultLines.join("\n"));
-    ui->resultlabel_7->setWordWrap(true);
+    setLabelTextIfChanged(
+                ui->resultlabel_7,
+                resultLines.join("\n"));
 
     const double postTrackingElapsedMs = elapsedMilliseconds(totalTimer);
     const double totalElapsedMs =
@@ -3296,8 +3305,9 @@ void Widget::finalizeBarcodeWordNg(
     }
     resultLines.append("日期：未执行");
     resultLines.append(QString("原因：%1").arg(reason));
-    ui->resultlabel_7->setText(resultLines.join("\n"));
-    ui->resultlabel_7->setWordWrap(true);
+    setLabelTextIfChanged(
+                ui->resultlabel_7,
+                resultLines.join("\n"));
 
     if (j % x == 0) {
         if (ui->comboBox->currentIndex() == 1
@@ -3401,12 +3411,14 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
         ? "background-color: #eef1f6; border-radius: 6px; font-size: 36px; font-weight: 900; color: #20b455;"
         : "background-color: #eef1f6; border-radius: 6px; font-size: 36px; font-weight: 900; color: #ff4d4f;");
     ui->resultlabel->setWordWrap(true);
-    if (tissueResult.rollFound) {
-        ui->resultlabel_7->setText(QString("粗糙度：%1").arg(tissueResult.roll.roughnessScore, 0, 'f', 3));
-    } else {
-        ui->resultlabel_7->setText("粗糙度：--");
-    }
-    ui->resultlabel_7->setWordWrap(true);
+    const QString tissueRecognitionText =
+            tissueResult.rollFound
+            ? QString("粗糙度：%1")
+              .arg(tissueResult.roll.roughnessScore, 0, 'f', 3)
+            : QString("粗糙度：--");
+    setLabelTextIfChanged(
+                ui->resultlabel_7,
+                tissueRecognitionText);
 
     g_allowTissueDetectionFrameDisplay = true;
     slot_displayAndDetect(image);
