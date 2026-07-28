@@ -338,6 +338,8 @@ private:
     bool stopTemplatePreview(int waitTimeMs = 1500);
     void resetTemplateCaptureState();
     bool hasTemplateDrawingSelection() const;
+    void updateOperationUiState();
+    bool hasRunningInspectionThread() const;
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -374,6 +376,17 @@ private:
             TemplateCaptureState::Idle;
     cv::Mat m_lastTemplatePreviewFrame;
     quint64 m_templatePreviewSessionId = 0;
+
+    enum class OperationState {
+        CameraClosed,
+        CameraReady,
+        Detecting,
+        Stopping,
+        TemplatePreviewing,
+        TemplateFrozen
+    };
+    OperationState m_operationState =
+            OperationState::CameraClosed;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器

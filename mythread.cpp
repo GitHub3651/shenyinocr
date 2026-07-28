@@ -115,7 +115,8 @@ void MyThread::runTemplatePreview(quint64 sessionId)
                 ++consecutiveFailures;
                 if (consecutiveFailures >= 3) {
                     emit signal_templatePreviewError(
-                                QString("连续3次执行相机软件触发失败，错误码：%1")
+                                QStringLiteral(
+                                    "连续3次执行相机软件触发失败，错误码：%1")
                                 .arg(triggerResult),
                                 sessionId);
                     break;
@@ -156,8 +157,18 @@ void MyThread::runTemplatePreview(quint64 sessionId)
             if (!receivedNewFrame) {
                 ++consecutiveFailures;
                 if (consecutiveFailures >= 3) {
+                    const uint64_t frameSequenceAfter =
+                            cameraPtr->m_frameseq.load();
+                    qWarning() << "[TEMPLATE_PREVIEW] frame timeout:"
+                               << "sessionId=" << sessionId
+                               << "frameSequenceBefore="
+                               << frameSequenceBefore
+                               << "frameSequenceAfter="
+                               << frameSequenceAfter;
                     emit signal_templatePreviewError(
-                                "连续3次等待相机图像超时，请检查相机连接和触发设置。",
+                                QStringLiteral(
+                                    "连续3次等待相机图像超时，"
+                                    "请检查相机连接和触发设置。"),
                                 sessionId);
                     break;
                 }
@@ -202,7 +213,9 @@ void MyThread::runTemplatePreview(quint64 sessionId)
             ++consecutiveFailures;
             if (consecutiveFailures >= 3) {
                 emit signal_templatePreviewError(
-                            "模板实时取景发生异常，请重新打开相机后重试。",
+                            QStringLiteral(
+                                "模板实时取景发生异常，"
+                                "请重新打开相机后重试。"),
                             sessionId);
                 break;
             }

@@ -76,6 +76,7 @@
 #include <QSet>
 #include <QEvent>
 #include <QRegularExpression>
+#include <QAbstractButton>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -921,7 +922,7 @@ Widget::Widget(QWidget *parent)
     setupGlobalSettingBindings();
     clearAllGlobalSettingDirty();
     clearTemplatePrivateSettingDirty();
-    updateHardwareParameterUiEnabled();
+    updateOperationUiState();
 
     updateCurrentTemplateName();
 
@@ -1601,7 +1602,12 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
     // 纸巾检测生产运行时，画面应当和检测结果绑定。
     // 普通预览帧不再覆盖界面，只有检测槽主动放行的那一帧会显示。
     const bool tissueMode = ui->comboBox_4->currentIndex() == 3;
-    const bool productionRunning = isCollecting || !ui->plcbtn->isEnabled();
+    const bool productionRunning =
+            isCollecting
+            || m_operationState
+               == OperationState::Detecting
+            || m_operationState
+               == OperationState::Stopping;
     if (tissueMode && productionRunning && !g_allowTissueDetectionFrameDisplay) {
         return;
     }
@@ -3488,6 +3494,167 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
     j++;
 }
 
+bool Widget::hasRunningInspectionThread() const
+{
+    const bool softwareInspectionRunning =
+            myThread
+            && myThread->isRunning()
+            && m_templateCaptureState
+               != TemplateCaptureState::Previewing;
+    const bool hardwareInspectionRunning =
+            cameraThread
+            && cameraThread->isRunning();
+    return softwareInspectionRunning
+            || hardwareInspectionRunning;
+}
+
+void Widget::updateOperationUiState()
+{
+    if (!ui) {
+        return;
+    }
+
+    QList<QAbstractButton *> operationButtons =
+            findChildren<QAbstractButton *>();
+    for (QAbstractButton *button : operationButtons) {
+        if (!button) {
+            continue;
+        }
+        if (m_multiCameraWidget
+                && m_multiCameraWidget->isAncestorOf(button)) {
+            continue;
+        }
+        const QString operationDisabledStyleMarker =
+                "/* operation-disabled-style */";
+        if (!button->styleSheet().contains(
+                    operationDisabledStyleMarker)) {
+            button->setStyleSheet(
+                        button->styleSheet()
+                        + "\n/* operation-disabled-style */"
+                          "QPushButton:disabled,"
+                          "QToolButton:disabled,"
+                          "QCheckBox:disabled {"
+                          "background-color: #f2f3f5;"
+                          "color: #a8abb2;"
+                          "border-color: #dcdfe6;"
+                          "}");
+        }
+        button->setEnabled(false);
+    }
+
+    const bool idleState =
+            m_operationState == OperationState::CameraClosed
+            || m_operationState == OperationState::CameraReady;
+    if (idleState) {
+        for (QAbstractButton *button : operationButtons) {
+            if (!button) {
+                continue;
+            }
+            if (m_multiCameraWidget
+                    && m_multiCameraWidget->isAncestorOf(button)) {
+                continue;
+            }
+            button->setEnabled(true);
+        }
+    }
+
+    if (ui->plcbtn) {
+        ui->plcbtn->setText(
+                    m_operationState == OperationState::Detecting
+                    ? "采集中..."
+                    : (m_operationState == OperationState::Stopping
+                       ? "停止中..."
+                       : "启动识别"));
+    }
+    if (ui->cancel) {
+        const bool templateOperation =
+                m_operationState == OperationState::TemplatePreviewing
+                || m_operationState == OperationState::TemplateFrozen;
+        ui->cancel->setText(
+                    m_operationState == OperationState::Stopping
+                    ? "停止中..."
+                    : (templateOperation
+                       ? "退出模板制作"
+                       : "停止识别"));
+    }
+    if (ui->VideoShoot) {
+        if (m_operationState
+                == OperationState::TemplatePreviewing) {
+            ui->VideoShoot->setText(
+                        "拍照并开始框选");
+        } else if (m_operationState
+                   == OperationState::TemplateFrozen) {
+            ui->VideoShoot->setText("重新取景");
+        } else {
+            ui->VideoShoot->setText("制作模板");
+        }
+    }
+
+    switch (m_operationState) {
+    case OperationState::CameraClosed:
+        if (ui->cancel) ui->cancel->setEnabled(false);
+        if (ui->CloseCamera) ui->CloseCamera->setEnabled(false);
+        if (ui->plcbtn) ui->plcbtn->setEnabled(false);
+        if (ui->VideoShoot) ui->VideoShoot->setEnabled(false);
+        if (ui->pushButton_5) ui->pushButton_5->setEnabled(false);
+        break;
+    case OperationState::CameraReady:
+        if (ui->HandwareDetect) ui->HandwareDetect->setEnabled(false);
+        if (ui->cancel) ui->cancel->setEnabled(false);
+        if (ui->pushButton_5) ui->pushButton_5->setEnabled(false);
+        break;
+    case OperationState::Detecting:
+        if (ui->cancel) ui->cancel->setEnabled(true);
+        break;
+    case OperationState::Stopping:
+        if (ui->cancel) ui->cancel->setEnabled(true);
+        break;
+    case OperationState::TemplatePreviewing:
+        if (ui->VideoShoot) ui->VideoShoot->setEnabled(true);
+        if (ui->cancel) ui->cancel->setEnabled(true);
+        break;
+    case OperationState::TemplateFrozen:
+        if (ui->VideoShoot) ui->VideoShoot->setEnabled(true);
+        if (ui->pushButton_5) ui->pushButton_5->setEnabled(true);
+        if (ui->cancel) ui->cancel->setEnabled(true);
+        break;
+    }
+
+    const bool normalSettingsEnabled = idleState;
+    for (auto it = m_globalSettingBindings.constBegin();
+         it != m_globalSettingBindings.constEnd();
+         ++it) {
+        if (it.value().editor) {
+            it.value().editor->setEnabled(
+                        normalSettingsEnabled);
+        }
+    }
+    if (ui->comboBox_4) {
+        ui->comboBox_4->setEnabled(
+                    normalSettingsEnabled);
+    }
+    if (m_wordTemplateEditComboBox) {
+        m_wordTemplateEditComboBox->setEnabled(
+                    normalSettingsEnabled);
+    }
+    if (ui->dateEdit) {
+        ui->dateEdit->setEnabled(
+                    normalSettingsEnabled
+                    || m_operationState
+                       == OperationState::TemplateFrozen);
+    }
+    if (ui->lineEdit_yuzhi) {
+        ui->lineEdit_yuzhi->setEnabled(
+                    normalSettingsEnabled
+                    || m_operationState
+                       == OperationState::TemplateFrozen);
+    }
+
+    if (idleState) {
+        updateHardwareParameterUiEnabled();
+    }
+}
+
 void Widget::connectTemplatePreviewSignals(MyThread *thread)
 {
     if (!thread) {
@@ -3539,19 +3706,33 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
             &QThread::finished,
             this,
             [this, thread]() {
-        if (thread != myThread
-                || m_templateCaptureState
-                   != TemplateCaptureState::Previewing) {
+        if (thread != myThread) {
             return;
         }
 
-        ++m_templatePreviewSessionId;
-        m_templateCaptureState =
-                TemplateCaptureState::Idle;
-        m_lastTemplatePreviewFrame.release();
-        if (ui && ui->VideoShoot) {
-            ui->VideoShoot->setText("制作模板");
-            ui->VideoShoot->setEnabled(!isCollecting);
+        if (m_templateCaptureState
+                == TemplateCaptureState::Previewing) {
+            ++m_templatePreviewSessionId;
+            m_templateCaptureState =
+                    TemplateCaptureState::Idle;
+            m_lastTemplatePreviewFrame.release();
+            m_operationState = m_bOpenDevice
+                    ? OperationState::CameraReady
+                    : OperationState::CameraClosed;
+            updateOperationUiState();
+            return;
+        }
+
+        if (m_operationState
+                == OperationState::Detecting) {
+            isCollecting = false;
+            m_barcodeWordRunActive = false;
+            m_operationState = m_bOpenDevice
+                    ? OperationState::CameraReady
+                    : OperationState::CameraClosed;
+            ui->statusLabel->setText(
+                        "识别线程已停止");
+            updateOperationUiState();
         }
     },
     Qt::QueuedConnection);
@@ -3594,11 +3775,16 @@ bool Widget::stopTemplatePreview(int waitTimeMs)
 
 void Widget::resetTemplateCaptureState()
 {
+    const bool wasTemplateOperation =
+            m_templateCaptureState
+               != TemplateCaptureState::Idle
+            || m_operationState
+               == OperationState::TemplatePreviewing
+            || m_operationState
+               == OperationState::TemplateFrozen;
     if (!stopTemplatePreview()) {
-        if (ui && ui->VideoShoot) {
-            ui->VideoShoot->setText("停止取景中...");
-            ui->VideoShoot->setEnabled(false);
-        }
+        m_operationState = OperationState::Stopping;
+        updateOperationUiState();
         return;
     }
 
@@ -3614,10 +3800,14 @@ void Widget::resetTemplateCaptureState()
                     false,
                     m_templatePreviewSessionId);
     }
-    if (ui && ui->VideoShoot) {
-        ui->VideoShoot->setText("制作模板");
-        ui->VideoShoot->setEnabled(!isCollecting);
+    if (wasTemplateOperation
+            || (m_operationState != OperationState::Detecting
+                && m_operationState != OperationState::Stopping)) {
+        m_operationState = m_bOpenDevice
+                ? OperationState::CameraReady
+                : OperationState::CameraClosed;
     }
+    updateOperationUiState();
 }
 
 bool Widget::startTemplatePreview()
@@ -3628,6 +3818,14 @@ bool Widget::startTemplatePreview()
     }
     if (isCollecting
             || (cameraThread && cameraThread->isRunning())) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前正在进行正式检测，请先点击【停止识别】。");
+        return false;
+    }
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping) {
         QMessageBox::warning(
                     this,
                     "提示",
@@ -3692,6 +3890,9 @@ bool Widget::startTemplatePreview()
     ++m_templatePreviewSessionId;
     m_templateCaptureState =
             TemplateCaptureState::Previewing;
+    m_operationState =
+            OperationState::TemplatePreviewing;
+    updateOperationUiState();
 
     myThread->getCameraPtr(m_pcMyCamera);
     myThread->getImagePtr(myImage);
@@ -3702,7 +3903,6 @@ bool Widget::startTemplatePreview()
                 m_templatePreviewSessionId);
     myThread->start();
 
-    ui->VideoShoot->setText("拍照并开始框选");
     updateImageDisplayStatusText(
                 "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。");
     return true;
@@ -3732,6 +3932,8 @@ bool Widget::freezeTemplatePreview()
 
     m_templateCaptureState =
             TemplateCaptureState::Frozen;
+    m_operationState =
+            OperationState::TemplateFrozen;
     *myImage = m_lastTemplatePreviewFrame.clone();
     slot_displayAndDetect(myImage);
 
@@ -3749,7 +3951,7 @@ bool Widget::freezeTemplatePreview()
         updateImageDisplayStatusText(
                     "当前画面已冻结，如需调整请点击【重新取景】。");
     }
-    ui->VideoShoot->setText("重新取景");
+    updateOperationUiState();
     return true;
 }
 
@@ -3759,6 +3961,14 @@ bool Widget::freezeTemplatePreview()
  */
 void Widget::on_VideoShoot_clicked()
 {
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前正在进行正式检测，请先点击【停止识别】。");
+        return;
+    }
     if (!m_bOpenDevice) {
         QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return;
@@ -3979,7 +4189,7 @@ void Widget::setupTemplateGuide()
     m_templateGuideBodyLabel->setStyleSheet(
                 "color: #000000;"
                 "font-family: 'Microsoft YaHei';"
-                "font-size: 22px;"
+                "font-size: 18px;"
                 "font-weight: bold;"
                 "border: none;"
                 "background: transparent;");
@@ -4664,6 +4874,15 @@ void Widget::updateHardwareParameterUiEnabled()
         QString disabledReason;
         dependencyState(binding.hardwareDependency, &enabled, &disabledReason);
         setHardwareControlEnabled(binding.control, enabled, disabledReason, true);
+    }
+
+    const bool operationBusy =
+            m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_operationState == OperationState::TemplatePreviewing
+            || m_operationState == OperationState::TemplateFrozen;
+    if (operationBusy) {
+        updateOperationUiState();
     }
 }
 
@@ -5506,6 +5725,11 @@ void Widget::setupWordTemplateEditorCombo()
                 "}"
                 "QPushButton:pressed {"
                 "background-color: #ebeef5;"
+                "}"
+                "QPushButton:disabled {"
+                "background-color: #f2f3f5;"
+                "color: #a8abb2;"
+                "border-color: #dcdfe6;"
                 "}";
 
         if (ui->textsure_btn) ui->textsure_btn->setStyleSheet(commonPushButtonStyle);
@@ -5659,6 +5883,9 @@ void Widget::setupWordTemplateEditorCombo()
                     "border-radius: 4px;"
                     "color: #333333;"
                     "padding: 5px 10px;"
+                    "}"
+                    "QComboBox:disabled {"
+                    "color: #a8abb2;"
                     "}");
 
         editorLayout->addWidget(m_wordTemplateEditLabel);
@@ -6990,8 +7217,45 @@ QImage Widget::cvMatToQImage(const cv::Mat &mat)
 void Widget::on_cancel_clicked()
 {
     qDebug() << "=== on_cancel_clicked() START ===";
+
+    const bool templateOperation =
+            m_templateCaptureState
+               != TemplateCaptureState::Idle
+            || m_operationState
+               == OperationState::TemplatePreviewing
+            || m_operationState
+               == OperationState::TemplateFrozen;
+    if (templateOperation) {
+        resetTemplateCaptureState();
+        if (m_operationState == OperationState::Stopping) {
+            ui->statusLabel->setText(
+                        "正在退出模板制作，请稍候");
+            return;
+        }
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+            imageLabel->clearSelection();
+        }
+        clearBarcodeTemplateTrackingValidation();
+        hideTemplateGuide();
+        ui->statusLabel->setText(
+                    m_bOpenDevice
+                    ? "已退出模板制作，相机已打开"
+                    : "已退出模板制作，相机已关闭");
+        updateOperationUiState();
+        return;
+    }
+
+    if (m_operationState != OperationState::Detecting
+            && !isCollecting
+            && !hasRunningInspectionThread()) {
+        updateOperationUiState();
+        return;
+    }
+
+    m_operationState = OperationState::Stopping;
+    updateOperationUiState();
     m_barcodeWordRunActive = false;
-    resetTemplateCaptureState();
 
     // Step 2: 请求线程停止，保留当前模板状态，便于再次启动
     if (myThread) {
@@ -7037,11 +7301,9 @@ void Widget::on_cancel_clicked()
 
     if (!myThreadStopped || !cameraThreadStopped) {
         ui->statusLabel->setText("停止中，请稍后再关闭相机");
-        ui->plcbtn->setText("停止中...");
-        ui->plcbtn->setEnabled(false);
-        ui->VideoShoot->setEnabled(false);
-        ui->pushButton_4->setEnabled(false);
         isCollecting = true;
+        m_operationState = OperationState::Stopping;
+        updateOperationUiState();
         return;
     }
 
@@ -7124,13 +7386,11 @@ void Widget::on_cancel_clicked()
     judge = false;
 
     ui->statusLabel->setText("已停止");
-    ui->plcbtn->setText("启动");
-    ui->plcbtn->setEnabled(true);
-    ui->VideoShoot->setEnabled(true);
-    ui->pushButton_4->setEnabled(true);
     isCollecting = false;
-    resetTemplateCaptureState();
-    updateHardwareParameterUiEnabled();
+    m_operationState = m_bOpenDevice
+            ? OperationState::CameraReady
+            : OperationState::CameraClosed;
+    updateOperationUiState();
 
     qDebug() << "=== on_cancel_clicked() COMPLETED ===";
 }
@@ -7562,6 +7822,31 @@ void Widget::slot_clearResultLabel()
  */
 void Widget::closeEvent(QCloseEvent *event)
 {
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || isCollecting
+            || hasRunningInspectionThread()) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前正在识别或停止中，请先完成【停止识别】后再关闭软件。");
+        event->ignore();
+        return;
+    }
+    if (m_templateCaptureState
+            != TemplateCaptureState::Idle
+            || m_operationState
+               == OperationState::TemplatePreviewing
+            || m_operationState
+               == OperationState::TemplateFrozen) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前正在制作模板，请先点击【退出模板制作】后再关闭软件。");
+        event->ignore();
+        return;
+    }
+
     updateHardwareParameterUiEnabled();
     refreshAllGlobalSettingDirty();
     refreshTemplatePrivateSettingDirty();
@@ -7667,6 +7952,15 @@ void Widget::on_pushButton_3_clicked()
  */
 void Widget::on_pushButton_5_clicked()
 {
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_operationState == OperationState::TemplatePreviewing) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前状态不能保存模板，请先停止识别或冻结模板画面。");
+        return;
+    }
     const bool isBarcodeWordTemplateMode =
             currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isWordTemplateMode =
@@ -8188,6 +8482,16 @@ void Widget::initOverlapDetectorFromCurrentDir() {
 // 功能：从用户输入解析模板文件名，选择产品模板文件夹
 void Widget::on_pushButton_4_clicked()
 {
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_templateCaptureState
+               != TemplateCaptureState::Idle) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "请先停止识别或退出模板制作，再选择产品模板。");
+        return;
+    }
     QString dirPath;
     auto templateDialogStartDir = [this]() -> QString {
         if (!templateBaseDirPath.trimmed().isEmpty() && QDir(templateBaseDirPath).exists()) {
@@ -8805,29 +9109,28 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
 //关闭相机按钮
 void Widget::on_CloseCamera_clicked()
 {
-    resetTemplateCaptureState();
-
-    if (!isCollecting && myThread && myThread->isRunning()) {
-        myThread->requestStop();
-        myThread->stop();
-        if (!myThread->wait(3000)) {
-            QMessageBox::warning(this, "警告", "相机正在检测采图中！\n请先点击【停止识别】完全停止检测后，再关闭相机。");
-            return;
-        }
+    if (m_templateCaptureState
+            != TemplateCaptureState::Idle
+            || m_operationState
+               == OperationState::TemplatePreviewing
+            || m_operationState
+               == OperationState::TemplateFrozen) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前正在制作模板，请先点击【退出模板制作】。");
+        return;
     }
 
-    if (!isCollecting && cameraThread && cameraThread->isRunning()) {
-        cameraThread->requestStop();
-        if (!cameraThread->wait(3000)) {
-            QMessageBox::warning(this, "警告", "相机正在检测采图中！\n请先点击【停止识别】完全停止检测后，再关闭相机。");
-            return;
-        }
-    }
-
-    // 如果系统正在采集中（软触发或硬触发线程在跑），拦截关闭并提示
-    if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting)
-    {
-        QMessageBox::warning(this, "警告", "相机正在检测采图中！\n请先点击【停止识别】完全停止检测后，再关闭相机。");
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || isCollecting
+            || hasRunningInspectionThread()) {
+        QMessageBox::warning(
+                    this,
+                    "警告",
+                    "相机正在检测采图中！\n"
+                    "请先点击【停止识别】完全停止检测后，再关闭相机。");
         return;
     }
 
@@ -8855,14 +9158,28 @@ void Widget::on_CloseCamera_clicked()
     //    totalTime=0;
     // 标记相机关闭状态
     m_bOpenDevice = false;
-    resetTemplateCaptureState();
+    m_templateCaptureState =
+            TemplateCaptureState::Idle;
+    m_lastTemplatePreviewFrame.release();
+    m_operationState =
+            OperationState::CameraClosed;
     ui->statusLabel->setText("相机已关闭");
     ui->statusLabel->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
-    updateHardwareParameterUiEnabled();
+    updateOperationUiState();
 }
 
 void Widget::on_MultiCameraMode_clicked()
 {
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_templateCaptureState
+               != TemplateCaptureState::Idle) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "请先停止当前识别或退出模板制作。");
+        return;
+    }
     if (!m_multiCameraWidget) {
         m_multiCameraWidget = new MultiCameraWidget(this);
         m_multiCameraWidget->setAttribute(Qt::WA_DeleteOnClose);
@@ -8881,19 +9198,31 @@ void Widget::on_plcbtn_clicked()
 {
     qDebug() << "=== on_plcbtn_clicked() START ===";
 
-    if (!m_bOpenDevice)
-    {
-        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
-        return;
-    }
-
-    resetTemplateCaptureState();
     if (m_templateCaptureState
-            == TemplateCaptureState::Previewing) {
+            != TemplateCaptureState::Idle
+            || m_operationState
+               == OperationState::TemplatePreviewing
+            || m_operationState
+               == OperationState::TemplateFrozen) {
         QMessageBox::warning(
                     this,
                     "提示",
-                    "实时取景线程尚未停止，暂时不能启动正式检测。");
+                    "当前正在制作模板，请先点击【退出模板制作】。");
+        return;
+    }
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || isCollecting
+            || hasRunningInspectionThread()) {
+        QMessageBox::information(
+                    this,
+                    "提示",
+                    "当前正在识别或停止中，请勿重复启动。");
+        return;
+    }
+    if (!m_bOpenDevice)
+    {
+        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return;
     }
 
@@ -9110,6 +9439,27 @@ void Widget::on_plcbtn_clicked()
         }
 
         cameraThread = new CameraThread(this, m_pcMyCamera);
+        CameraThread *startedCameraThread =
+                cameraThread;
+        connect(cameraThread,
+                &QThread::finished,
+                this,
+                [this, startedCameraThread]() {
+            if (cameraThread != startedCameraThread
+                    || m_operationState
+                       != OperationState::Detecting) {
+                return;
+            }
+            isCollecting = false;
+            m_barcodeWordRunActive = false;
+            m_operationState = m_bOpenDevice
+                    ? OperationState::CameraReady
+                    : OperationState::CameraClosed;
+            ui->statusLabel->setText(
+                        "识别线程已停止");
+            updateOperationUiState();
+        },
+        Qt::QueuedConnection);
 
         cameraThread->setBypassTracking(isTissueMode);
         cameraThread->setBarcodeWordHardTriggerMode(isBarcodeWordMode);
@@ -9163,14 +9513,17 @@ void Widget::on_plcbtn_clicked()
         if (!cameraThread->wait(100)) {
             m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
+            m_operationState =
+                    OperationState::Detecting;
             ui->statusLabel->setText(QString("触发模式运行中\n产品模板：%1").arg(runningTemplateName));
-            ui->plcbtn->setText("采集中...");
-            ui->plcbtn->setEnabled(false);
-            ui->VideoShoot->setEnabled(false);
-            ui->pushButton_4->setEnabled(false);
+            updateOperationUiState();
         } else {
             m_barcodeWordRunActive = false;
             isCollecting = false;
+            m_operationState = m_bOpenDevice
+                    ? OperationState::CameraReady
+                    : OperationState::CameraClosed;
+            updateOperationUiState();
         }
     }
     else
@@ -9234,10 +9587,11 @@ void Widget::on_plcbtn_clicked()
         if (!myThread->isRunning()) {
             myThread->start();
             m_barcodeWordRunActive = isBarcodeWordMode;
+            isCollecting = true;
+            m_operationState =
+                    OperationState::Detecting;
             ui->statusLabel->setText(QString("软触发模式运行中\n产品模板：%1").arg(runningTemplateName));
-            ui->plcbtn->setEnabled(false);
-            ui->VideoShoot->setEnabled(false);
-            ui->pushButton_4->setEnabled(false);
+            updateOperationUiState();
         }
     }
 
@@ -9247,6 +9601,17 @@ void Widget::on_plcbtn_clicked()
 // 检测相机
 void Widget::on_HandwareDetect_clicked()
 {
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_templateCaptureState
+               != TemplateCaptureState::Idle
+            || hasRunningInspectionThread()) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前有任务正在运行，不能重新打开相机。");
+        return;
+    }
     if (m_bOpenDevice)
     {
         QMessageBox::warning(this, "警告", "相机已连接！");
@@ -9320,7 +9685,9 @@ void Widget::on_HandwareDetect_clicked()
             ui->spinBox->setValue(m_appliedGlobalSettings.cameraExposure);
         }
         refreshGlobalSettingDirty("camera.exposure");
-        updateHardwareParameterUiEnabled();
+        m_operationState =
+                OperationState::CameraClosed;
+        updateOperationUiState();
         QMessageBox::warning(this,
                              "警告",
                              QString("打开相机后应用曝光参数失败：\n%1")
@@ -9339,7 +9706,9 @@ void Widget::on_HandwareDetect_clicked()
 
     ui->statusLabel->setText("相机已打开");
     ui->statusLabel->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
-    updateHardwareParameterUiEnabled();
+    m_operationState =
+            OperationState::CameraReady;
+    updateOperationUiState();
     const QString openMessage = exposureAdjustmentMessage.isEmpty()
             ? QString("相机打开成功！")
             : QString("相机打开成功！\n\n%1").arg(exposureAdjustmentMessage);
@@ -9601,6 +9970,27 @@ void Widget::initStyle()
         QFile file(":/qss/1.css");// 淡蓝色风格
         if(file.open(QFile::ReadOnly)){
             QString qss = QLatin1String(file.readAll());
+            qss +=
+                    "\nQGroupBox#topControlPanel QToolButton:disabled {"
+                    "background-color: #f2f3f5;"
+                    "color: #a8abb2;"
+                    "border-color: #dcdfe6;"
+                    "}"
+                    "QPushButton:disabled {"
+                    "background-color: #f2f3f5;"
+                    "color: #a8abb2;"
+                    "border-color: #dcdfe6;"
+                    "}"
+                    "QComboBox:disabled,"
+                    "QLineEdit:disabled,"
+                    "QTextEdit:disabled,"
+                    "QPlainTextEdit:disabled,"
+                    "QSpinBox:disabled,"
+                    "QDoubleSpinBox:disabled,"
+                    "QDateEdit:disabled,"
+                    "QTimeEdit:disabled {"
+                    "color: #a8abb2;"
+                    "}";
 
             // 提取主色调用于设置系统调色板
             QString paletteColor = qss.mid(20,7);// 获取QSS中定义的主色
