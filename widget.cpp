@@ -27,6 +27,7 @@
 #include <QAbstractItemView>
 #include <QImageReader>
 #include <QLabel>
+#include <QFontMetrics>
 #include <QListView>
 #include <QPainter>
 #include <QLineEdit>
@@ -73,6 +74,7 @@
 #include <QDoubleValidator>
 #include <QSortFilterProxyModel>
 #include <QSet>
+#include <QEvent>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -3493,7 +3495,7 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
 void Widget::on_VideoShoot_clicked()
 {
     if (!m_bOpenDevice) {
-        QMessageBox::warning(this, "警告", "采集失败,请打开设备！");
+        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return;
     }
 
@@ -3560,7 +3562,7 @@ void Widget::on_VideoShoot_clicked()
 //    qDebug() << "=== on_ReShoot_clicked() called ===";
 
 //    if (!m_bOpenDevice) {
-//        QMessageBox::warning(this, "警告", "采集失败,请打开设备！");
+//        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
 //        return;
 //    }
 
@@ -3719,9 +3721,10 @@ void Widget::setupTemplateGuide()
                 "border: none;"
                 "}");
     m_templateGuideFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_templateGuideFrame->installEventFilter(this);
 
     QVBoxLayout *guideLayout = new QVBoxLayout(m_templateGuideFrame);
-    guideLayout->setContentsMargins(12, 0, 12, 4);
+    guideLayout->setContentsMargins(14, 0, 14, 0);
     guideLayout->setSpacing(0);
 
     m_templateGuideTitleLabel = new QLabel(m_templateGuideFrame);
@@ -3730,13 +3733,62 @@ void Widget::setupTemplateGuide()
     m_templateGuideTitleLabel->hide();
 
     m_templateGuideBodyLabel = new QLabel(m_templateGuideFrame);
-    m_templateGuideBodyLabel->setStyleSheet("color: #000000; font-size: 18px; font-weight: normal; border: none; background: transparent;");
-    m_templateGuideBodyLabel->setWordWrap(false);
+    m_templateGuideBodyLabel->setStyleSheet(
+                "color: #000000;"
+                "font-family: 'Microsoft YaHei';"
+                "font-size: 22px;"
+                "font-weight: bold;"
+                "border: none;"
+                "background: transparent;");
+    m_templateGuideBodyLabel->setAlignment(
+                Qt::AlignLeft | Qt::AlignTop);
+    m_templateGuideBodyLabel->setSizePolicy(
+                QSizePolicy::Expanding,
+                QSizePolicy::Fixed);
+    m_templateGuideBodyLabel->setWordWrap(true);
 
     guideLayout->addWidget(m_templateGuideBodyLabel);
 
     ui->verticalLayout_InnerImg->insertWidget(0, m_templateGuideFrame);
     hideTemplateGuide();
+}
+
+void Widget::adjustTemplateGuideHeight()
+{
+    if (!m_templateGuideFrame
+            || !m_templateGuideBodyLabel
+            || !m_templateGuideFrame->layout()) {
+        return;
+    }
+
+    const QMargins margins =
+            m_templateGuideFrame->layout()->contentsMargins();
+    const int availableWidth =
+            m_templateGuideFrame->contentsRect().width()
+            - margins.left()
+            - margins.right();
+    if (availableWidth <= 0) {
+        return;
+    }
+
+    m_templateGuideBodyLabel->ensurePolished();
+    const QFontMetrics metrics(m_templateGuideBodyLabel->font());
+    const QRect textRect = metrics.boundingRect(
+                QRect(0,
+                      0,
+                      availableWidth,
+                      std::numeric_limits<int>::max()),
+                Qt::TextWordWrap | Qt::AlignLeft,
+                m_templateGuideBodyLabel->text());
+    const int contentHeight =
+            qMax(metrics.lineSpacing(), textRect.height());
+
+    if (m_templateGuideBodyLabel->height() != contentHeight) {
+        m_templateGuideBodyLabel->setFixedHeight(contentHeight);
+    }
+    if (m_templateGuideFrame->height() != contentHeight) {
+        m_templateGuideFrame->setFixedHeight(contentHeight);
+    }
 }
 
 void Widget::updateTemplateGuideText(const QString &title, const QString &body)
@@ -3749,14 +3801,20 @@ void Widget::updateTemplateGuideText(const QString &title, const QString &body)
     m_templateGuideTitleLabel->clear();
     m_templateGuideTitleLabel->hide();
     QString guideText = body.trimmed();
-    if (!guideText.startsWith("【操作提示】")) {
-        guideText.prepend("【操作提示】");
+    if (!guideText.startsWith("【操作步骤】")) {
+        guideText.prepend("【操作步骤】 ");
     }
     if (!guideText.contains("【按下esc退出当前模板制作】")) {
         guideText.append("  【按下esc退出当前模板制作】");
     }
-    m_templateGuideBodyLabel->setText(guideText);
+    setLabelTextIfChanged(
+                m_templateGuideBodyLabel,
+                guideText);
     m_templateGuideFrame->setVisible(true);
+    adjustTemplateGuideHeight();
+    QTimer::singleShot(0, this, [this]() {
+        adjustTemplateGuideHeight();
+    });
 }
 
 void Widget::hideTemplateGuide()
@@ -3774,8 +3832,14 @@ void Widget::updateImageDisplayStatusText(const QString &body)
 
     m_templateGuideTitleLabel->clear();
     m_templateGuideTitleLabel->hide();
-    m_templateGuideBodyLabel->setText(body.trimmed());
+    setLabelTextIfChanged(
+                m_templateGuideBodyLabel,
+                QString("【当前状态】 %1").arg(body.trimmed()));
     m_templateGuideFrame->setVisible(true);
+    adjustTemplateGuideHeight();
+    QTimer::singleShot(0, this, [this]() {
+        adjustTemplateGuideHeight();
+    });
 }
 
 void Widget::showTemplateGuideForCurrentMode()
@@ -8278,6 +8342,14 @@ void Widget::setupNonPersistentDefaults()
 // ================= 拦截滚轮误操作事件 =================
 bool Widget::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_templateGuideFrame
+            && event->type() == QEvent::Resize) {
+        QTimer::singleShot(0, this, [this]() {
+            adjustTemplateGuideHeight();
+        });
+        return false;
+    }
+
     if (watched == m_softwareDataDirLineEdit) {
         if (event->type() == QEvent::MouseButtonDblClick) {
             const QString dirPath = m_softwareDataDirLineEdit->text().trimmed();
@@ -8477,7 +8549,7 @@ void Widget::on_plcbtn_clicked()
 
     if (!m_bOpenDevice)
     {
-        QMessageBox::warning(this, "警告", "采集失败,请打开设备！");
+        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return;
     }
 

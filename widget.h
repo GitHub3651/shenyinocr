@@ -316,6 +316,7 @@ private:
     void updateTissueRoughnessUiVisibility();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
     void setupTemplateGuide();
+    void adjustTemplateGuideHeight();
     void showTemplateGuideForCurrentMode();
     void hideTemplateGuide();
     void updateImageDisplayStatusText(const QString &body);
