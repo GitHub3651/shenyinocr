@@ -441,8 +441,6 @@ void __stdcall ImageCallBack(unsigned char* pData, MV_FRAME_OUT_INFO_EX* pFrameI
         return;
     }
 
-    qDebug() << "ImageCallBack triggered.";
-
     cv::Mat image;
     void* handle = camera->GetHandle();
     if (!handle) {
@@ -464,8 +462,6 @@ void __stdcall ImageCallBack(unsigned char* pData, MV_FRAME_OUT_INFO_EX* pFrameI
         isMono = false;
         break;
     }
-
-    qDebug() << "Pixel type determined. Mono:" << isMono;
 
     try {
         if (isMono) {
@@ -491,7 +487,6 @@ void __stdcall ImageCallBack(unsigned char* pData, MV_FRAME_OUT_INFO_EX* pFrameI
             }
 
             image = cv::Mat(pFrameInfo->nHeight, pFrameInfo->nWidth, CV_8UC3, dstBuffer.data()).clone();
-            qDebug() << "Color image created after conversion.";
         }
         std::lock_guard<std::mutex> lock(camera->m_mutex);
         camera->m_image = image;
@@ -504,9 +499,6 @@ void __stdcall ImageCallBack(unsigned char* pData, MV_FRAME_OUT_INFO_EX* pFrameI
         camera->m_cvForGetImage.notify_one();
         camera->m_imageReadyForMain = true;
         camera->m_cvForMain.notify_one();
-
-        qDebug() << "Image processing completed and notifications sent.";
-
     } catch (const std::exception& e) {
         qDebug() << "Exception caught during image processing:" << e.what();
     } catch (...) {

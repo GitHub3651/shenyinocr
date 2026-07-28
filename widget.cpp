@@ -961,6 +961,8 @@ Widget::~Widget()
 {
     qDebug() << "Widget destructor called";
 
+    resetTemplateCaptureState();
+
     // 先停止线程并断开信号，避免窗口销毁时 queued signal 再访问 ui。
     bool myThreadStopped = true;
     bool cameraThreadStopped = true;
@@ -1102,10 +1104,7 @@ void Widget::initWidget()
     connect(this, &Widget::sendDataTo, myThread, &MyThread::received);
     connect(this, &Widget::imgshibie, templatematch, &TemplateMatch::receshibie);
     connect(this, &Widget::ssim, templatematch, &TemplateMatch::ssimvalue);
-
-
-
-
+    connectTemplatePreviewSignals(myThread);
 }
 
 
@@ -3488,9 +3487,274 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
     j++;
 }
 
+void Widget::connectTemplatePreviewSignals(MyThread *thread)
+{
+    if (!thread) {
+        return;
+    }
+
+    connect(thread,
+            &MyThread::signal_templatePreviewImage,
+            this,
+            [this, thread](cv::Mat image, quint64 sessionId) {
+        if (m_templateCaptureState
+                != TemplateCaptureState::Previewing
+                || sessionId != m_templatePreviewSessionId
+                || image.empty()) {
+            thread->acknowledgeTemplatePreviewFrame(
+                        sessionId);
+            return;
+        }
+
+        m_lastTemplatePreviewFrame = image.clone();
+        slot_displayAndDetect(&m_lastTemplatePreviewFrame);
+        updateImageDisplayStatusText(
+                    "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。");
+        thread->acknowledgeTemplatePreviewFrame(
+                    sessionId);
+    },
+    Qt::QueuedConnection);
+
+    connect(thread,
+            &MyThread::signal_templatePreviewError,
+            this,
+            [this](const QString &reason, quint64 sessionId) {
+        if (m_templateCaptureState
+                != TemplateCaptureState::Previewing
+                || sessionId != m_templatePreviewSessionId) {
+            return;
+        }
+
+        resetTemplateCaptureState();
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+        }
+        updateImageDisplayStatusText("实时取景失败，请检查相机后重试。");
+        QMessageBox::warning(this, "实时取景失败", reason);
+    },
+    Qt::QueuedConnection);
+
+    connect(thread,
+            &QThread::finished,
+            this,
+            [this, thread]() {
+        if (thread != myThread
+                || m_templateCaptureState
+                   != TemplateCaptureState::Previewing) {
+            return;
+        }
+
+        ++m_templatePreviewSessionId;
+        m_templateCaptureState =
+                TemplateCaptureState::Idle;
+        m_lastTemplatePreviewFrame.release();
+        if (ui && ui->VideoShoot) {
+            ui->VideoShoot->setText("制作模板");
+            ui->VideoShoot->setEnabled(!isCollecting);
+        }
+    },
+    Qt::QueuedConnection);
+}
+
+bool Widget::hasTemplateDrawingSelection() const
+{
+    return imageLabel
+            && (!imageLabel->getTrackingRect().isNull()
+                || !imageLabel->getDetectionPoly().isEmpty());
+}
+
+bool Widget::stopTemplatePreview(int waitTimeMs)
+{
+    if (m_templateCaptureState
+            != TemplateCaptureState::Previewing) {
+        return true;
+    }
+
+    // 先使当前会话失效，已进入事件队列的旧帧将被直接忽略。
+    ++m_templatePreviewSessionId;
+    if (!myThread) {
+        return true;
+    }
+
+    myThread->setTemplatePreviewMode(
+                false,
+                m_templatePreviewSessionId);
+    myThread->requestStop();
+    myThread->stop();
+
+    if (myThread->isRunning()
+            && !myThread->wait(waitTimeMs)) {
+        qDebug() << "[TEMPLATE_PREVIEW] Worker did not stop within"
+                 << waitTimeMs << "ms";
+        return false;
+    }
+    return true;
+}
+
+void Widget::resetTemplateCaptureState()
+{
+    if (!stopTemplatePreview()) {
+        if (ui && ui->VideoShoot) {
+            ui->VideoShoot->setText("停止取景中...");
+            ui->VideoShoot->setEnabled(false);
+        }
+        return;
+    }
+
+    if (m_templateCaptureState
+            != TemplateCaptureState::Previewing) {
+        ++m_templatePreviewSessionId;
+    }
+    m_templateCaptureState = TemplateCaptureState::Idle;
+    m_lastTemplatePreviewFrame.release();
+
+    if (myThread) {
+        myThread->setTemplatePreviewMode(
+                    false,
+                    m_templatePreviewSessionId);
+    }
+    if (ui && ui->VideoShoot) {
+        ui->VideoShoot->setText("制作模板");
+        ui->VideoShoot->setEnabled(!isCollecting);
+    }
+}
+
+bool Widget::startTemplatePreview()
+{
+    if (!m_bOpenDevice || !m_pcMyCamera) {
+        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
+        return false;
+    }
+    if (isCollecting
+            || (cameraThread && cameraThread->isRunning())) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前正在进行正式检测，请先点击【停止识别】。");
+        return false;
+    }
+    if (myThread && myThread->isRunning()) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "相机采集线程仍在运行，请先停止当前任务。");
+        return false;
+    }
+    if (!myThread) {
+        reinitializeMyThread();
+    }
+    if (!myThread || !myImage) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "实时取景线程初始化失败。");
+        return false;
+    }
+
+    try {
+        if (m_pcMyCamera->SetEnumValue("TriggerMode", 1)
+                != MV_OK
+                || m_pcMyCamera->SetEnumValue("TriggerSource", 7)
+                != MV_OK) {
+            QMessageBox::warning(
+                        this,
+                        "警告",
+                        "相机切换到软件触发模式失败！");
+            return false;
+        }
+    } catch (...) {
+        QMessageBox::warning(this, "警告", "相机配置失败！");
+        return false;
+    }
+
+    QString exposureError;
+    if (!applyCameraExposureValue(
+                m_appliedGlobalSettings.cameraExposure,
+                &exposureError)) {
+        QMessageBox::warning(
+                    this,
+                    "警告",
+                    QString("制作模板前应用相机曝光失败：\n%1")
+                    .arg(exposureError));
+        return false;
+    }
+
+    angleValue = ui->comboBox_2->currentIndex();
+    colorchannel = ui->comboBox_5->currentIndex();
+
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+        imageLabel->clearSelection();
+    }
+    clearBarcodeTemplateTrackingValidation();
+    m_lastTemplatePreviewFrame.release();
+    ++m_templatePreviewSessionId;
+    m_templateCaptureState =
+            TemplateCaptureState::Previewing;
+
+    myThread->getCameraPtr(m_pcMyCamera);
+    myThread->getImagePtr(myImage);
+    myThread->receiveangle(angleValue);
+    myThread->receivecolorchannel1(colorchannel);
+    myThread->setTemplatePreviewMode(
+                true,
+                m_templatePreviewSessionId);
+    myThread->start();
+
+    ui->VideoShoot->setText("拍照并开始框选");
+    updateImageDisplayStatusText(
+                "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。");
+    return true;
+}
+
+bool Widget::freezeTemplatePreview()
+{
+    if (m_templateCaptureState
+            != TemplateCaptureState::Previewing) {
+        return false;
+    }
+    if (m_lastTemplatePreviewFrame.empty()) {
+        QMessageBox::information(
+                    this,
+                    "提示",
+                    "相机尚未返回有效画面，请稍候再点击。");
+        return false;
+    }
+
+    if (!stopTemplatePreview()) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "实时取景线程尚未停止，请稍后重试。");
+        return false;
+    }
+
+    m_templateCaptureState =
+            TemplateCaptureState::Frozen;
+    *myImage = m_lastTemplatePreviewFrame.clone();
+    slot_displayAndDetect(myImage);
+
+    const bool needsTemplateDrawing =
+            ui->comboBox_4->currentIndex() == 0
+            || isWordFamilyMode(currentDetectModeId());
+    clearBarcodeTemplateTrackingValidation();
+    imageLabel->setTemplateDrawingEnabled(
+                needsTemplateDrawing);
+    if (needsTemplateDrawing) {
+        imageLabel->resetDrawingStep();
+        showTemplateGuideForCurrentMode();
+    } else {
+        hideTemplateGuide();
+        updateImageDisplayStatusText(
+                    "当前画面已冻结，如需调整请点击【重新取景】。");
+    }
+    ui->VideoShoot->setText("重新取景");
+    return true;
+}
+
 /**
- * @brief 软触发拍照按钮点击槽函数
- * @details 发送软触发信号给相机，采集一张图像并进行识别
+ * @brief 制作模板按钮点击槽函数
+ * @details 第一次点击进入实时取景，第二次点击冻结画面并开始框选
  */
 void Widget::on_VideoShoot_clicked()
 {
@@ -3499,59 +3763,37 @@ void Widget::on_VideoShoot_clicked()
         return;
     }
 
-    try {
-        m_pcMyCamera->SetEnumValue("TriggerMode", 1);
-        m_pcMyCamera->SetEnumValue("TriggerSource", 7); // 软触发
-    } catch (...) {
-        QMessageBox::warning(this, "警告", "相机配置失败！");
+    if (m_templateCaptureState
+            == TemplateCaptureState::Previewing) {
+        freezeTemplatePreview();
         return;
     }
 
-    QString exposureError;
-    if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
-                                  &exposureError)) {
-        QMessageBox::warning(this,
-                             "警告",
-                             QString("制作模板前应用相机曝光失败：\n%1")
-                             .arg(exposureError));
-        return;
+    if (m_templateCaptureState
+            == TemplateCaptureState::Frozen
+            && hasTemplateDrawingSelection()) {
+        QMessageBox confirmBox(this);
+        confirmBox.setIcon(QMessageBox::Question);
+        confirmBox.setWindowTitle("重新取景");
+        confirmBox.setText(
+                    "重新取景会清空当前已经绘制的框线。\n\n是否继续？");
+        QPushButton *continueButton =
+                confirmBox.addButton(
+                    "重新取景",
+                    QMessageBox::AcceptRole);
+        QPushButton *cancelButton =
+                confirmBox.addButton(
+                    "取消",
+                    QMessageBox::RejectRole);
+        confirmBox.setDefaultButton(cancelButton);
+        confirmBox.exec();
+        if (confirmBox.clickedButton()
+                != continueButton) {
+            return;
+        }
     }
 
-    // 执行触发
-    m_pcMyCamera->CommandExecute("TriggerSoftware");
-
-    // 等待图像传输完成（根据你的相机性能调整）
-    QThread::msleep(ui->spinBox->value() / 1000 + 100);
-
-    // 🔥 核心修改：将采集到的图像存入类成员变量 myImage，而不是局部变量
-    // 这样图像就能在函数结束后继续存在于内存中
-    *myImage = m_pcMyCamera->GetImage();
-
-    if (myImage->empty()) {
-        QMessageBox::warning(this, "警告", "未能获取有效图像！");
-        return;
-    }
-
-    // 处理旋转逻辑（直接作用于成员变量）
-    int rotationIndex = ui->comboBox_2->currentIndex();
-    if (rotationIndex == 1) cv::rotate(*myImage, *myImage, cv::ROTATE_90_CLOCKWISE);
-    else if (rotationIndex == 2) cv::rotate(*myImage, *myImage, cv::ROTATE_90_COUNTERCLOCKWISE);
-    else if (rotationIndex == 3) cv::rotate(*myImage, *myImage, cv::ROTATE_180);
-
-    // 在 UI 上显示最新的这一帧
-    slot_displayAndDetect(myImage);
-
-    const bool needsTemplateDrawing =
-            ui->comboBox_4->currentIndex() == 0
-            || isWordFamilyMode(currentDetectModeId());
-    clearBarcodeTemplateTrackingValidation();
-    imageLabel->setTemplateDrawingEnabled(needsTemplateDrawing);
-    if (needsTemplateDrawing) {
-        imageLabel->resetDrawingStep();
-        showTemplateGuideForCurrentMode();
-    } else {
-        hideTemplateGuide();
-    }
+    startTemplatePreview();
 }
 /**
  * @brief 连续拍照按钮点击槽函数
@@ -5438,6 +5680,7 @@ void Widget::setupDetectModeChangeTracking()
             this,
             [this](int index) {
                 if (m_applyingGlobalSettings) {
+                    resetTemplateCaptureState();
                     updateTissueRoughnessUiVisibility();
                     refreshWordTemplateEditorCombo();
                     return;
@@ -5445,6 +5688,7 @@ void Widget::setupDetectModeChangeTracking()
 
                 const QString previousModeId = m_currentDetectModeId;
                 const QString nextModeId = detectModeIdForIndex(index);
+                resetTemplateCaptureState();
                 storeCurrentTemplatePathsForMode(previousModeId);
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
@@ -6737,6 +6981,7 @@ void Widget::on_cancel_clicked()
 {
     qDebug() << "=== on_cancel_clicked() START ===";
     m_barcodeWordRunActive = false;
+    resetTemplateCaptureState();
 
     // Step 2: 请求线程停止，保留当前模板状态，便于再次启动
     if (myThread) {
@@ -6874,6 +7119,7 @@ void Widget::on_cancel_clicked()
     ui->VideoShoot->setEnabled(true);
     ui->pushButton_4->setEnabled(true);
     isCollecting = false;
+    resetTemplateCaptureState();
     updateHardwareParameterUiEnabled();
 
     qDebug() << "=== on_cancel_clicked() COMPLETED ===";
@@ -7323,6 +7569,16 @@ void Widget::closeEvent(QCloseEvent *event)
         }
     }
 
+    resetTemplateCaptureState();
+    if (m_templateCaptureState
+            == TemplateCaptureState::Previewing) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "实时取景线程尚未停止，请稍后再关闭程序。");
+        event->ignore();
+        return;
+    }
     cv::destroyAllWindows();
     saveSettings(false);
     event->accept();
@@ -7719,6 +7975,7 @@ void Widget::on_pushButton_5_clicked()
     imageLabel->clearSelection();
     clearBarcodeTemplateTrackingValidation();
     hideTemplateGuide();
+    resetTemplateCaptureState();
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
     if (isWordTemplateMode) {
@@ -7915,6 +8172,7 @@ void Widget::on_pushButton_4_clicked()
         }
 
         if (selectedDirs.isEmpty()) return;
+        resetTemplateCaptureState();
         const QFileInfo firstSelectedDirInfo(selectedDirs.first());
         if (firstSelectedDirInfo.dir().exists()) {
             templateBaseDirPath = firstSelectedDirInfo.dir().absolutePath();
@@ -7992,6 +8250,7 @@ void Widget::on_pushButton_4_clicked()
                                                     templateDialogStartDir(),
                                                     QFileDialog::ShowDirsOnly);
         if (dirPath.isEmpty()) return;
+        resetTemplateCaptureState();
         const QFileInfo selectedDirInfo(dirPath);
         if (selectedDirInfo.dir().exists()) {
             templateBaseDirPath = selectedDirInfo.dir().absolutePath();
@@ -8405,40 +8664,41 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
                     case 0:
                         tooltipText =
                                 "制作模板匹配产品模板：\n\n"
-                                "1. 点击后拍摄当前产品图像。\n"
-                                "2. 在图像上框选定位区域和检测区域。\n"
-                                "3. 点击【保存模板】保存产品模板。";
+                                "1. 点击【制作模板】进入实时取景。\n"
+                                "2. 调整产品位置后点击【拍照并开始框选】。\n"
+                                "3. 在冻结图像上框选定位区域和检测区域。\n"
+                                "4. 点击【保存模板】保存产品模板。";
                         break;
                     case 1:
                         tooltipText =
                                 "制作字库产品模板步骤：\n\n"
-                                "1. 点击后拍摄当前产品图像。\n"
-                                "2. 在图像上按住鼠标左键，框选定位区域。\n"
-                                "3. 用鼠标左键依次点击喷码区域边缘。\n"
-                                "4. 点击鼠标右键闭合喷码检测区域。\n"
+                                "1. 点击【制作模板】进入实时取景。\n"
+                                "2. 调整产品位置后点击【拍照并开始框选】。\n"
+                                "3. 按住鼠标左键框选定位区域。\n"
+                                "4. 用鼠标左键点击喷码区域边缘，右键闭合。\n"
                                 "5. 点击【保存模板】保存产品模板。";
                         break;
                     case 2:
                         tooltipText =
-                                "深度模型模式通常不需要制作传统产品模板。\n\n"
-                                "请确认模型文件和相关参数已经配置完成。";
+                                "点击后进入实时取景，再次点击可冻结当前画面。\n\n"
+                                "深度模型模式通常不需要制作传统产品模板。";
                         break;
                     case 3:
                         tooltipText =
-                                "纸巾检测通常不需要制作产品模板。\n\n"
-                                "请设置纸巾检测粗糙度阈值后启动检测。";
+                                "点击后进入实时取景，再次点击可冻结当前画面。\n\n"
+                                "纸巾检测通常不需要制作产品模板。";
                         break;
                     case 4:
                         tooltipText =
                                 "制作二维码+三期产品模板步骤：\n\n"
-                                "1. 点击后拍摄当前产品图像。\n"
-                                "2. 在图像上框选二维码区域作为追踪锚点。\n"
-                                "3. 用鼠标左键依次点击喷码区域边缘。\n"
-                                "4. 点击鼠标右键闭合喷码检测区域。\n"
+                                "1. 点击【制作模板】进入实时取景。\n"
+                                "2. 调整产品位置后点击【拍照并开始框选】。\n"
+                                "3. 框选二维码区域作为追踪锚点。\n"
+                                "4. 用鼠标左键点击喷码区域边缘，右键闭合。\n"
                                 "5. 点击【保存模板】保存产品模板。";
                         break;
                     default:
-                        tooltipText = "点击后拍摄当前图像，用于制作产品模板。";
+                        tooltipText = "点击后进入实时取景，再次点击冻结当前画面。";
                         break;
                     }
                 } else {
@@ -8474,6 +8734,8 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
 //关闭相机按钮
 void Widget::on_CloseCamera_clicked()
 {
+    resetTemplateCaptureState();
+
     if (!isCollecting && myThread && myThread->isRunning()) {
         myThread->requestStop();
         myThread->stop();
@@ -8522,6 +8784,7 @@ void Widget::on_CloseCamera_clicked()
     //    totalTime=0;
     // 标记相机关闭状态
     m_bOpenDevice = false;
+    resetTemplateCaptureState();
     ui->statusLabel->setText("相机已关闭");
     ui->statusLabel->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
     updateHardwareParameterUiEnabled();
@@ -8550,6 +8813,16 @@ void Widget::on_plcbtn_clicked()
     if (!m_bOpenDevice)
     {
         QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
+        return;
+    }
+
+    resetTemplateCaptureState();
+    if (m_templateCaptureState
+            == TemplateCaptureState::Previewing) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "实时取景线程尚未停止，暂时不能启动正式检测。");
         return;
     }
 
@@ -9087,6 +9360,7 @@ void Widget::reinitializeMyThread()
     connect(this, &Widget::rotate, myThread, &MyThread::receiveangle);
     connect(this, &Widget::choosechannel,myThread,&MyThread::receivecolorchannel1);
     connect(this, &Widget::sendDataTo, myThread, &MyThread::received);
+    connectTemplatePreviewSignals(myThread);
 
     // 步骤7: 如果相机已打开，传递相机指针
     if (m_pcMyCamera && m_bOpenDevice) {

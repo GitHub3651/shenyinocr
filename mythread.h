@@ -87,6 +87,14 @@ public:
     void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
     void clearWordTemplateTrackingProfiles();
 
+    /**
+     * @brief 设置模板制作实时预览模式
+     * @param enabled true时只连续采图和显示，不执行任何检测
+     * @param sessionId 当前预览会话编号，用于丢弃迟到帧
+     */
+    void setTemplatePreviewMode(bool enabled, quint64 sessionId);
+    void acknowledgeTemplatePreviewFrame(quint64 sessionId);
+
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
         clearWordTemplateTrackingProfiles();
@@ -102,6 +110,16 @@ signals:
      * @param image 图像指针
      */
     void signal_messImage(cv::Mat image);
+
+    /**
+     * @brief 模板制作实时预览帧
+     */
+    void signal_templatePreviewImage(cv::Mat image, quint64 sessionId);
+
+    /**
+     * @brief 模板制作实时预览连续取图失败
+     */
+    void signal_templatePreviewError(QString reason, quint64 sessionId);
 
     /**
      * @brief 发送检测信号
@@ -149,6 +167,8 @@ protected:
     void run() override;
 
 private:
+    void runTemplatePreview(quint64 sessionId);
+
     // Qt相关
     QImage *myImage;                    // QImage图像对象
 
@@ -179,6 +199,9 @@ private:
     // 线程控制（线程安全）
     std::atomic<bool> m_stopRequested;  // 停止请求标志
     std::atomic<bool> m_tracking;       // 跟踪状态标志
+    std::atomic<bool> m_templatePreviewMode{false};
+    std::atomic<quint64> m_templatePreviewSessionId{0};
+    std::atomic<bool> m_templatePreviewFramePending{false};
 
     // 时间控制
     std::chrono::steady_clock::time_point lastDetectionTime;  // 上次检测时间

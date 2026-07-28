@@ -74,15 +74,153 @@ void MyThread::clearWordTemplateTrackingProfiles() {
     m_wordTemplateProfileMode = false;
 }
 
+void MyThread::setTemplatePreviewMode(bool enabled, quint64 sessionId)
+{
+    m_templatePreviewSessionId.store(sessionId);
+    m_templatePreviewMode.store(enabled);
+    m_templatePreviewFramePending.store(false);
+}
+
+void MyThread::acknowledgeTemplatePreviewFrame(quint64 sessionId)
+{
+    if (m_templatePreviewSessionId.load() == sessionId) {
+        m_templatePreviewFramePending.store(false);
+    }
+}
+
 void MyThread::receiveangle(int a) { angle1 = a; }
 void MyThread::receivecolorchannel1(int c) { colorc1 = c; }
 void MyThread::getCameraPtr(CMvCamera *camera) { cameraPtr = camera; }
 void MyThread::getImagePtr(cv::Mat *image) { imagePtr = image; }
 void MyThread::received(QString data) { receivedata = data; }
 
+void MyThread::runTemplatePreview(quint64 sessionId)
+{
+    int consecutiveFailures = 0;
+
+    while (cameraPtr
+           && !m_stopRequested.load()
+           && m_templatePreviewMode.load()
+           && m_templatePreviewSessionId.load() == sessionId) {
+        try {
+            // 丢弃进入预览前遗留的就绪标志，确保随后取得的是本次触发产生的新帧。
+            cv::Mat discardedFrame;
+            cameraPtr->takeImageForMainIfReady(discardedFrame);
+            const uint64_t frameSequenceBefore =
+                    cameraPtr->m_frameseq.load();
+
+            const int triggerResult =
+                    cameraPtr->CommandExecute("TriggerSoftware");
+            if (triggerResult != MV_OK) {
+                ++consecutiveFailures;
+                if (consecutiveFailures >= 3) {
+                    emit signal_templatePreviewError(
+                                QString("连续3次执行相机软件触发失败，错误码：%1")
+                                .arg(triggerResult),
+                                sessionId);
+                    break;
+                }
+                continue;
+            }
+
+            cv::Mat previewFrame;
+            bool receivedNewFrame = false;
+            const std::chrono::steady_clock::time_point waitStart =
+                    std::chrono::steady_clock::now();
+
+            while (!m_stopRequested.load()
+                   && m_templatePreviewMode.load()
+                   && m_templatePreviewSessionId.load() == sessionId) {
+                if (cameraPtr->m_frameseq.load() > frameSequenceBefore
+                        && cameraPtr->takeImageForMainIfReady(previewFrame)
+                        && !previewFrame.empty()) {
+                    receivedNewFrame = true;
+                    break;
+                }
+
+                const qint64 waitedMs =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - waitStart).count();
+                if (waitedMs >= 500) {
+                    break;
+                }
+                msleep(2);
+            }
+
+            if (m_stopRequested.load()
+                    || !m_templatePreviewMode.load()
+                    || m_templatePreviewSessionId.load() != sessionId) {
+                break;
+            }
+
+            if (!receivedNewFrame) {
+                ++consecutiveFailures;
+                if (consecutiveFailures >= 3) {
+                    emit signal_templatePreviewError(
+                                "连续3次等待相机图像超时，请检查相机连接和触发设置。",
+                                sessionId);
+                    break;
+                }
+                continue;
+            }
+
+            consecutiveFailures = 0;
+
+            if (angle1 == 1) {
+                cv::rotate(previewFrame,
+                           previewFrame,
+                           cv::ROTATE_90_CLOCKWISE);
+            } else if (angle1 == 2) {
+                cv::rotate(previewFrame,
+                           previewFrame,
+                           cv::ROTATE_90_COUNTERCLOCKWISE);
+            } else if (angle1 == 3) {
+                cv::rotate(previewFrame,
+                           previewFrame,
+                           cv::ROTATE_180);
+            }
+
+            if (colorc1 > 0 && previewFrame.channels() >= 3) {
+                std::vector<cv::Mat> channels;
+                cv::split(previewFrame, channels);
+                if (colorc1 == 1) {
+                    previewFrame = channels[2];
+                } else if (colorc1 == 2) {
+                    previewFrame = channels[1];
+                } else if (colorc1 == 3) {
+                    previewFrame = channels[0];
+                }
+            }
+
+            // 采集保持全速，但事件队列中最多保留一张待显示图像，避免UI积压旧帧。
+            if (!m_templatePreviewFramePending.exchange(true)) {
+                emit signal_templatePreviewImage(
+                            previewFrame,
+                            sessionId);
+            }
+        } catch (...) {
+            ++consecutiveFailures;
+            if (consecutiveFailures >= 3) {
+                emit signal_templatePreviewError(
+                            "模板实时取景发生异常，请重新打开相机后重试。",
+                            sessionId);
+                break;
+            }
+        }
+    }
+
+    m_templatePreviewMode.store(false);
+    m_templatePreviewFramePending.store(false);
+}
+
 void MyThread::run() {
     if (!cameraPtr || !imagePtr) return;
     m_stopRequested.store(false);
+
+    if (m_templatePreviewMode.load()) {
+        runTemplatePreview(m_templatePreviewSessionId.load());
+        return;
+    }
 
     m_tracking.store(!m_trackingTemplate.empty() && m_poseMatcher.isReady());
 

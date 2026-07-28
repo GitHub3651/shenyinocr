@@ -332,6 +332,12 @@ private:
     QStringList currentTemplatePathsForMode(const QString &modeId) const;
     void storeCurrentTemplatePathsForMode(const QString &modeId);
     void restoreTemplatesForMode(const QString &modeId, bool showMessage);
+    void connectTemplatePreviewSignals(MyThread *thread);
+    bool startTemplatePreview();
+    bool freezeTemplatePreview();
+    bool stopTemplatePreview(int waitTimeMs = 1500);
+    void resetTemplateCaptureState();
+    bool hasTemplateDrawingSelection() const;
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -358,6 +364,16 @@ private:
     bool m_templateImageThresholdDirty = false;
     QString m_templateTargetLabelText;
     QString m_templateThresholdLabelText;
+
+    enum class TemplateCaptureState {
+        Idle,
+        Previewing,
+        Frozen
+    };
+    TemplateCaptureState m_templateCaptureState =
+            TemplateCaptureState::Idle;
+    cv::Mat m_lastTemplatePreviewFrame;
+    quint64 m_templatePreviewSessionId = 0;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器
