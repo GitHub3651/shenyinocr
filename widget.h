@@ -494,6 +494,9 @@ private:
         std::vector<int> digitTemplateTargetIndexes;
         TemplateMatchPreparedTemplates preparedDigitTemplates;
         mutable int preferredBarcodeStrategyId = -1;
+        mutable unsigned int preferredBarcodeOptionFlags =
+                BARCODE_DECODER_OPTION_NONE;
+        mutable int consecutiveBarcodeFailures = 0;
     };
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
@@ -552,7 +555,10 @@ private:
         const cv::Mat &grayRoi,
         const BarcodeDecodeOptions &options,
         int preferredStrategyId = -1,
-        int *successfulStrategyId = nullptr);
+        unsigned int preferredOptionFlags =
+            BARCODE_DECODER_OPTION_NONE,
+        int *successfulStrategyId = nullptr,
+        unsigned int *successfulOptionFlags = nullptr);
     BarcodeReadResult decodeBarcodeRoiOnce(
         const cv::Mat &grayRoi,
         unsigned int formatMask,

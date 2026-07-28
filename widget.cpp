@@ -2298,16 +2298,31 @@ void Widget::runBarcodeWordDetection(
     }
 
     int successfulBarcodeStrategyId = -1;
+    unsigned int successfulBarcodeOptionFlags =
+            BARCODE_DECODER_OPTION_NONE;
     barcode = decodeBarcodeRoi(
                 trackingRoi.grayRoi,
                 profile.settings.barcodeOptions,
                 profile.preferredBarcodeStrategyId,
-                &successfulBarcodeStrategyId);
+                profile.preferredBarcodeOptionFlags,
+                &successfulBarcodeStrategyId,
+                &successfulBarcodeOptionFlags);
     if (barcode.readable) {
         profile.preferredBarcodeStrategyId =
                 successfulBarcodeStrategyId;
+        profile.preferredBarcodeOptionFlags =
+                successfulBarcodeOptionFlags;
+        profile.consecutiveBarcodeFailures = 0;
     } else {
-        profile.preferredBarcodeStrategyId = -1;
+        profile.consecutiveBarcodeFailures =
+                std::min(
+                    3,
+                    profile.consecutiveBarcodeFailures + 1);
+        if (profile.consecutiveBarcodeFailures >= 3) {
+            profile.preferredBarcodeStrategyId = -1;
+            profile.preferredBarcodeOptionFlags =
+                    BARCODE_DECODER_OPTION_NONE;
+        }
     }
 
     barcode.cornersInOriginal.clear();
@@ -2569,10 +2584,16 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
     const cv::Mat &grayRoi,
     const BarcodeDecodeOptions &options,
     int preferredStrategyId,
-    int *successfulStrategyId)
+    unsigned int preferredOptionFlags,
+    int *successfulStrategyId,
+    unsigned int *successfulOptionFlags)
 {
     if (successfulStrategyId) {
         *successfulStrategyId = -1;
+    }
+    if (successfulOptionFlags) {
+        *successfulOptionFlags =
+                BARCODE_DECODER_OPTION_NONE;
     }
     if (!ensureBarcodeDecoderLoaded()) {
         BarcodeReadResult result;
@@ -2611,6 +2632,8 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
     BarcodeReadResult result;
     int attemptCount = 0;
     QString lastAttemptName;
+    unsigned int lastOptionFlags =
+            BARCODE_DECODER_OPTION_NONE;
 
     const auto budgetAvailable = [&]() {
         return elapsedMilliseconds(timer) < maxDecodeTimeMs;
@@ -2642,6 +2665,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                     optionFlags);
         ++attemptCount;
         lastAttemptName = attemptName;
+        lastOptionFlags = optionFlags;
         result.elapsedMs = elapsedMilliseconds(timer);
 
         if (result.readable
@@ -2660,11 +2684,15 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
         if (result.readable && attemptCount > 1) {
             qDebug() << "[BARCODE_DECODE]"
                      << "fallbackSuccess=" << attemptName
+                     << "optionFlags=" << optionFlags
                      << "attempts=" << attemptCount
                      << "elapsedMs=" << result.elapsedMs;
         }
         if (result.readable && successfulStrategyId) {
             *successfulStrategyId = strategyId;
+        }
+        if (result.readable && successfulOptionFlags) {
+            *successfulOptionFlags = optionFlags;
         }
 
         return isTerminalResult(result);
@@ -2686,12 +2714,19 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
         return result;
     }
 
-    const unsigned int robustOptions =
+    const unsigned int normalFallbackOptions =
+            BARCODE_DECODER_OPTION_TRY_HARDER;
+    const unsigned int invertedFallbackOptions =
             BARCODE_DECODER_OPTION_TRY_HARDER
-            | BARCODE_DECODER_OPTION_TRY_ROTATE
             | BARCODE_DECODER_OPTION_TRY_INVERT;
+    const unsigned int fullFallbackOptions =
+            BARCODE_DECODER_OPTION_TRY_HARDER
+            | BARCODE_DECODER_OPTION_TRY_INVERT
+            | BARCODE_DECODER_OPTION_TRY_ROTATE;
 
-    const auto runFallbackStrategy = [&](int strategyId) -> bool {
+    const auto runFallbackStrategy =
+            [&](int strategyId,
+                unsigned int optionFlags) -> bool {
         if (!budgetAvailable()) {
             return false;
         }
@@ -2700,7 +2735,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
         case 1:
             return runAttempt(
                         sourceGray,
-                        robustOptions,
+                        optionFlags,
                         1,
                         "original-robust",
                         1.0,
@@ -2761,7 +2796,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                         cv::Scalar(estimatedBackground));
             return runAttempt(
                         padded,
-                        robustOptions,
+                        optionFlags,
                         2,
                         "estimated-quiet-zone",
                         1.0,
@@ -2780,7 +2815,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                         claheImage);
             return runAttempt(
                         claheImage,
-                        robustOptions,
+                        optionFlags,
                         3,
                         "clahe",
                         1.0,
@@ -2803,7 +2838,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                         cv::NORM_MINMAX);
             return runAttempt(
                         normalizedImage,
-                        robustOptions,
+                        optionFlags,
                         4,
                         "median-normalized",
                         1.0,
@@ -2846,7 +2881,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                         5);
             return runAttempt(
                         adaptiveImage,
-                        robustOptions,
+                        optionFlags,
                         5,
                         "adaptive-threshold",
                         1.0,
@@ -2865,7 +2900,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                         cv::INTER_AREA);
             return runAttempt(
                         downscaled,
-                        robustOptions,
+                        optionFlags,
                         6,
                         "scale-0.75",
                         0.75,
@@ -2884,7 +2919,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                         cv::INTER_CUBIC);
             return runAttempt(
                         upscaled,
-                        robustOptions,
+                        optionFlags,
                         7,
                         "scale-1.5",
                         1.5,
@@ -2903,21 +2938,71 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
                 && preferredStrategyId <= 7
                 ? preferredStrategyId
                 : -1;
-        if (preferredFallbackStrategy >= 1
-                && runFallbackStrategy(
-                    preferredFallbackStrategy)) {
-            return result;
-        }
 
-        for (int strategyId = 1;
-             strategyId <= 7 && budgetAvailable();
-             ++strategyId) {
-            if (strategyId == preferredFallbackStrategy) {
-                continue;
-            }
-            if (runFallbackStrategy(strategyId)) {
+        const unsigned int supportedOptionMask =
+                BARCODE_DECODER_OPTION_TRY_HARDER
+                | BARCODE_DECODER_OPTION_TRY_INVERT
+                | BARCODE_DECODER_OPTION_TRY_ROTATE;
+        unsigned int cachedOptionFlags =
+                preferredOptionFlags & supportedOptionMask;
+        if (preferredFallbackStrategy >= 1) {
+            cachedOptionFlags |=
+                    BARCODE_DECODER_OPTION_TRY_HARDER;
+            if (runFallbackStrategy(
+                        preferredFallbackStrategy,
+                        cachedOptionFlags)) {
                 return result;
             }
+        }
+
+        const auto runPhase =
+                [&](unsigned int phaseOptionFlags,
+                    int phaseDeadlineMs) -> bool {
+            for (int strategyId = 1;
+                 strategyId <= 7
+                 && budgetAvailable()
+                 && elapsedMilliseconds(timer)
+                    < phaseDeadlineMs;
+                 ++strategyId) {
+                const bool preferredAlreadyCovered =
+                        strategyId == preferredFallbackStrategy
+                        && (cachedOptionFlags & phaseOptionFlags)
+                           == phaseOptionFlags;
+                if (preferredAlreadyCovered) {
+                    continue;
+                }
+                if (runFallbackStrategy(
+                            strategyId,
+                            phaseOptionFlags)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const int normalPhaseDeadlineMs =
+                std::max(
+                    1,
+                    maxDecodeTimeMs * 60 / 100);
+        const int invertedPhaseDeadlineMs =
+                std::max(
+                    normalPhaseDeadlineMs,
+                    maxDecodeTimeMs * 85 / 100);
+
+        if (runPhase(
+                    normalFallbackOptions,
+                    normalPhaseDeadlineMs)) {
+            return result;
+        }
+        if (runPhase(
+                    invertedFallbackOptions,
+                    invertedPhaseDeadlineMs)) {
+            return result;
+        }
+        if (runPhase(
+                    fullFallbackOptions,
+                    maxDecodeTimeMs)) {
+            return result;
         }
     } catch (const cv::Exception &exception) {
         result.status = BarcodeReadStatus::InternalError;
@@ -2947,6 +3032,7 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
              << "readable=" << result.readable
              << "attempts=" << attemptCount
              << "lastAttempt=" << lastAttemptName
+             << "lastOptionFlags=" << lastOptionFlags
              << "elapsedMs=" << result.elapsedMs
              << "status=" << static_cast<int>(result.status);
     return result;
