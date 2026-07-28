@@ -557,8 +557,10 @@ private:
         const cv::Mat &grayRoi,
         unsigned int formatMask,
         unsigned int optionFlags) const;
+    BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
     bool validateBarcodeTemplateTrackingRect(
         const QRect &uiTrackingRect,
+        const BarcodeDecodeOptions &options,
         BarcodeReadResult *barcode,
         QString *failureReason);
     QString barcodeTemplateValidationFailureText(

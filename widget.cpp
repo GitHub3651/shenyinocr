@@ -2988,6 +2988,7 @@ QString Widget::barcodeTemplateValidationFailureText(
 
 bool Widget::validateBarcodeTemplateTrackingRect(
     const QRect &uiTrackingRect,
+    const BarcodeDecodeOptions &options,
     BarcodeReadResult *barcode,
     QString *failureReason)
 {
@@ -3061,31 +3062,49 @@ bool Widget::validateBarcodeTemplateTrackingRect(
                     "Barcode tracking rectangle is outside the source image");
     }
 
-    const cv::Mat sourceRoi = (*myImage)(sourceRect);
-    cv::Mat grayRoi;
-    if (sourceRoi.channels() == 1) {
-        grayRoi = sourceRoi.clone();
-    } else if (sourceRoi.channels() == 3) {
-        cv::cvtColor(sourceRoi, grayRoi, cv::COLOR_BGR2GRAY);
-    } else if (sourceRoi.channels() == 4) {
-        cv::cvtColor(sourceRoi, grayRoi, cv::COLOR_BGRA2GRAY);
-    } else {
+    DetectionPose templatePose;
+    templatePose.valid = true;
+    templatePose.angleDeg = 0.0f;
+    templatePose.anchorCenter = cv::Point2f(
+                sourceRect.x + (sourceRect.width - 1) * 0.5f,
+                sourceRect.y + (sourceRect.height - 1) * 0.5f);
+    templatePose.trackingPoly = {
+        cv::Point(sourceRect.x, sourceRect.y),
+        cv::Point(sourceRect.x + sourceRect.width - 1, sourceRect.y),
+        cv::Point(sourceRect.x + sourceRect.width - 1,
+                  sourceRect.y + sourceRect.height - 1),
+        cv::Point(sourceRect.x,
+                  sourceRect.y + sourceRect.height - 1)
+    };
+
+    const BarcodeWordOrientedRois prepared =
+            prepareBarcodeWordOrientedRois(
+                *myImage,
+                templatePose,
+                options.roiPaddingPercent,
+                0);
+    const OrientedTrackingRoi &trackingRoi = prepared.tracking;
+    if (!trackingRoi.valid) {
         return finishFailure(
                     BarcodeReadStatus::InvalidRoi,
-                    QString("Unsupported source image channels: %1")
-                    .arg(sourceRoi.channels()));
+                    "Failed to prepare barcode tracking ROI");
     }
 
-    if (grayRoi.type() != CV_8UC1) {
-        cv::Mat converted;
-        grayRoi.convertTo(converted, CV_8UC1);
-        grayRoi = converted;
-    }
-    if (!grayRoi.isContinuous()) {
-        grayRoi = grayRoi.clone();
+    result = decodeBarcodeRoi(
+                trackingRoi.grayRoi,
+                options);
+    result.cornersInOriginal.clear();
+    result.cornersInOriginal.reserve(result.cornersInRoi.size());
+    for (const cv::Point2f &corner : result.cornersInRoi) {
+        const cv::Point2f cornerInRotatedImage(
+                    corner.x + trackingRoi.roi.x,
+                    corner.y + trackingRoi.roi.y);
+        result.cornersInOriginal.push_back(
+                    transformPoint(
+                        trackingRoi.inverseRotationMatrix,
+                        cornerInRotatedImage));
     }
 
-    result = decodeBarcodeRoi(grayRoi, BarcodeDecodeOptions());
     qDebug() << "[BARCODE_TEMPLATE]"
              << "uiRect=" << normalizedRect
              << "labelSize=" << labelSize
@@ -3093,6 +3112,12 @@ bool Widget::validateBarcodeTemplateTrackingRect(
              << "sourceRect="
              << sourceRect.x << sourceRect.y
              << sourceRect.width << sourceRect.height
+             << "decodeRoi="
+             << trackingRoi.roi.x << trackingRoi.roi.y
+             << trackingRoi.roi.width << trackingRoi.roi.height
+             << "paddingPercent=" << options.roiPaddingPercent
+             << "maxDecodeTimeMs=" << options.maxDecodeTimeMs
+             << "fallback=" << options.enableFallback
              << "readable=" << result.readable
              << "elapsedMs=" << result.elapsedMs
              << "text=" << result.text
@@ -3120,6 +3145,22 @@ bool Widget::validateBarcodeTemplateTrackingRect(
         failureReason->clear();
     }
     return true;
+}
+
+BarcodeDecodeOptions Widget::barcodeTemplateValidationOptions() const
+{
+    const int profileIndex = currentWordTemplateProfileIndex();
+    if (currentDetectModeId() == BarcodeWordDetectionMode
+            && profileIndex >= 0
+            && profileIndex
+               < static_cast<int>(m_wordTemplateProfiles.size())) {
+        return m_wordTemplateProfiles[
+                    static_cast<size_t>(profileIndex)]
+                .settings.barcodeOptions;
+    }
+
+    return AppSettingsManager::defaultTemplatePrivateSettings()
+            .barcodeOptions;
 }
 
 void Widget::finalizeBarcodeWordNg(
@@ -3705,6 +3746,7 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
         QString failureReason;
         if (!validateBarcodeTemplateTrackingRect(
                     trackingRect,
+                    barcodeTemplateValidationOptions(),
                     &barcode,
                     &failureReason)) {
             clearBarcodeTemplateTrackingValidation();
@@ -7236,6 +7278,7 @@ void Widget::on_pushButton_5_clicked()
                 QString failureReason;
                 if (!validateBarcodeTemplateTrackingRect(
                             normalizedTrackingRect,
+                            barcodeTemplateValidationOptions(),
                             &barcode,
                             &failureReason)) {
                     clearBarcodeTemplateTrackingValidation();
@@ -7371,6 +7414,7 @@ void Widget::on_pushButton_5_clicked()
             return;
         }
     }
+
     if (!dir.mkpath(".")) {
         QMessageBox::warning(this, "错误", "产品模板文件夹创建失败，无法保存模板。");
         return;
