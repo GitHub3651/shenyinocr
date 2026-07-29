@@ -3766,15 +3766,11 @@ void Widget::updateOperationUiState()
     }
     if (ui->dateEdit) {
         ui->dateEdit->setEnabled(
-                    normalSettingsEnabled
-                    || m_operationState
-                       == OperationState::TemplateFrozen);
+                    normalSettingsEnabled);
     }
     if (ui->lineEdit_yuzhi) {
         ui->lineEdit_yuzhi->setEnabled(
-                    normalSettingsEnabled
-                    || m_operationState
-                       == OperationState::TemplateFrozen);
+                    normalSettingsEnabled);
     }
 
     if (idleState) {
