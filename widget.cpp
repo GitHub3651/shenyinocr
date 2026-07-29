@@ -7990,62 +7990,71 @@ void Widget::slot_clearResultLabel()
  */
 void Widget::closeEvent(QCloseEvent *event)
 {
-    if (m_operationState == OperationState::Detecting
-            || m_operationState == OperationState::Stopping
-            || isCollecting
-            || hasRunningInspectionThread()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前正在识别或停止中，请先完成【停止识别】后再关闭软件。");
-        event->ignore();
-        return;
-    }
-    if (m_templateCaptureState
-            != TemplateCaptureState::Idle
-            || m_operationState
-               == OperationState::TemplatePreviewing
-            || m_operationState
-               == OperationState::TemplateFrozen) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前正在制作模板，请先点击【退出模板制作】后再关闭软件。");
-        event->ignore();
+    if (m_applicationExitInProgress) {
+        event->accept();
         return;
     }
 
-    updateHardwareParameterUiEnabled();
-    refreshAllGlobalSettingDirty();
-    refreshTemplatePrivateSettingDirty();
+    m_applicationExitInProgress = true;
+    m_operationState = OperationState::Stopping;
+    m_barcodeWordRunActive = false;
+    isCollecting = false;
 
-    if (hasDirtySettings()) {
-        QMessageBox confirmBox(this);
-        confirmBox.setIcon(QMessageBox::Question);
-        confirmBox.setWindowTitle("退出确认");
-        confirmBox.setText("存在未应用参数，直接退出将不会保存这些修改。\n\n是否直接退出？");
-        QPushButton *exitButton = confirmBox.addButton("直接退出", QMessageBox::AcceptRole);
-        QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
-        confirmBox.setDefaultButton(cancelButton);
-        confirmBox.exec();
+    // 立即废弃当前模板取景会话，禁止迟到帧继续进入UI。
+    ++m_templatePreviewSessionId;
+    m_templateCaptureState = TemplateCaptureState::Idle;
+    m_lastTemplatePreviewFrame.release();
 
-        if (confirmBox.clickedButton() != exitButton) {
-            event->ignore();
-            return;
+    if (myThread) {
+        disconnect(myThread, nullptr, this, nullptr);
+        disconnect(this, nullptr, myThread, nullptr);
+        myThread->setTemplatePreviewMode(
+                    false,
+                    m_templatePreviewSessionId);
+        myThread->requestStop();
+        myThread->stop();
+    }
+    if (cameraThread) {
+        disconnect(cameraThread, nullptr, this, nullptr);
+        disconnect(this, nullptr, cameraThread, nullptr);
+        cameraThread->requestStop();
+    }
+    if (m_pcMyCamera) {
+        m_pcMyCamera->requestStop();
+    }
+
+    // 正常情况下线程会在下一次停止检查时立即退出。
+    // 只做短暂等待，不再因为工作线程而阻止窗口关闭。
+    const bool myThreadStopped =
+            !myThread
+            || !myThread->isRunning()
+            || myThread->wait(500);
+    const bool cameraThreadStopped =
+            !cameraThread
+            || !cameraThread->isRunning()
+            || cameraThread->wait(500);
+
+    // 只有工作线程已经停止时才主动释放相机，防止线程继续访问失效句柄。
+    if (m_pcMyCamera
+            && myThreadStopped
+            && cameraThreadStopped) {
+        try {
+            m_pcMyCamera->Close();
+        } catch (...) {
         }
+        delete m_pcMyCamera;
+        m_pcMyCamera = nullptr;
+        m_bOpenDevice = false;
     }
 
-    resetTemplateCaptureState();
-    if (m_templateCaptureState
-            == TemplateCaptureState::Previewing) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "实时取景线程尚未停止，请稍后再关闭程序。");
-        event->ignore();
-        return;
+    if (client && client->Connected()) {
+        client->Disconnect();
     }
-    cv::destroyAllWindows();
+
+    try {
+        cv::destroyAllWindows();
+    } catch (...) {
+    }
     saveSettings(false);
     event->accept();
 }

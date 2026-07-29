@@ -388,6 +388,7 @@ private:
     };
     OperationState m_operationState =
             OperationState::CameraClosed;
+    bool m_applicationExitInProgress = false;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器
