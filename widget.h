@@ -340,6 +340,7 @@ private:
     void resetTemplateCaptureState();
     bool hasTemplateDrawingSelection() const;
     void updateOperationUiState();
+    void clearInspectionTransientDisplay();
     bool hasRunningInspectionThread() const;
 
     // ========== UI对象 ==========

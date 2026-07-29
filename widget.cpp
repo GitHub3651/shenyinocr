@@ -3661,6 +3661,23 @@ bool Widget::hasRunningInspectionThread() const
             || hardwareInspectionRunning;
 }
 
+void Widget::clearInspectionTransientDisplay()
+{
+    if (!ui) {
+        return;
+    }
+    if (ui->resultlabel) {
+        ui->resultlabel->clear();
+    }
+    if (ui->resultlabel_7) {
+        ui->resultlabel_7->clear();
+    }
+    if (ui->speedLabel) {
+        ui->speedLabel->clear();
+    }
+    allResults.clear();
+}
+
 void Widget::updateOperationUiState()
 {
     if (!ui) {
@@ -3937,6 +3954,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
+            clearInspectionTransientDisplay();
             ui->statusLabel->setText(
                         "识别线程已停止");
             updateOperationUiState();
@@ -4099,6 +4117,7 @@ bool Widget::startTemplatePreview()
             TemplateCaptureState::Previewing;
     m_operationState =
             OperationState::TemplatePreviewing;
+    clearInspectionTransientDisplay();
     updateOperationUiState();
 
     myThread->getCameraPtr(m_pcMyCamera);
@@ -7634,6 +7653,7 @@ void Widget::on_cancel_clicked()
     m_operationState = m_bOpenDevice
             ? OperationState::CameraReady
             : OperationState::CameraClosed;
+    clearInspectionTransientDisplay();
     updateOperationUiState();
 
     qDebug() << "=== on_cancel_clicked() COMPLETED ===";
@@ -9706,6 +9726,7 @@ void Widget::on_plcbtn_clicked()
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
+            clearInspectionTransientDisplay();
             ui->statusLabel->setText(
                         "识别线程已停止");
             updateOperationUiState();
