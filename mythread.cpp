@@ -369,19 +369,30 @@ void MyThread::run() {
                                 std::chrono::steady_clock::now() - trackingStart).count();
 
                     emit signal_boxesSelected(bestPose);
+                    auto now = std::chrono::steady_clock::now();
+                    int interval = receivedata.toInt();
+                    if (interval <= 0) interval = 300;
+                    const bool detectionDue =
+                            std::chrono::duration_cast<
+                                std::chrono::milliseconds>(
+                                now - lastDetectionTime).count()
+                            >= interval;
+
                     if (bestPose.valid) {
                         qDebug() << "[WORD_TEMPLATE_PROFILE] MyThread selected profile:"
                                  << bestPose.wordTemplateProfileIndex
                                  << bestName
                                  << "score:" << bestPose.score;
+                    } else if (detectionDue) {
+                        qDebug() << "[WORD_TEMPLATE_PROFILE] MyThread tracking failed;"
+                                 << "send one NG frame for this soft-trigger interval.";
+                    }
 
-                        auto now = std::chrono::steady_clock::now();
-                        int interval = receivedata.toInt();
-                        if (interval <= 0) interval = 300;
-                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
-                            emit signal_sendForDetection(imagePtr->clone(), bestPose); //
-                            lastDetectionTime = now;
-                        }
+                    if (detectionDue) {
+                        emit signal_sendForDetection(
+                                    imagePtr->clone(),
+                                    bestPose);
+                        lastDetectionTime = now;
                     }
                 } else if (m_tracking.load() && m_poseMatcher.isReady()) {
                     DetectionPose pose = m_poseMatcher.match(*imagePtr, initialDatePoly);

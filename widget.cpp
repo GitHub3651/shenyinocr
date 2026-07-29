@@ -1729,15 +1729,23 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
     } else if (mode == 0) {
         slot_readAndDetect3(image, pose);
     } else if (mode == 1 || mode == 4) {
-        if (mode == 4 && !pose.valid) {
-            BarcodeReadResult barcode;
-            finalizeBarcodeWordNg(
-                        image,
-                        pose,
-                        barcode,
-                        "未执行",
-                        "硬触发帧未找到二维码追踪锚点",
-                        0);
+        if (!pose.valid) {
+            ui->currentTemplateName->setText("--");
+            if (mode == 4) {
+                BarcodeReadResult barcode;
+                finalizeBarcodeWordNg(
+                            image,
+                            pose,
+                            barcode,
+                            "未执行",
+                            "未找到二维码追踪锚点",
+                            0);
+            } else {
+                finalizeWordTrackingNg(
+                            image,
+                            pose,
+                            "未找到字库定位区域");
+            }
             return;
         }
 
@@ -3264,6 +3272,103 @@ BarcodeDecodeOptions Widget::barcodeTemplateValidationOptions() const
 
     return AppSettingsManager::defaultTemplatePrivateSettings()
             .barcodeOptions;
+}
+
+void Widget::finalizeWordTrackingNg(
+    cv::Mat *image,
+    const DetectionPose &pose,
+    const QString &reason)
+{
+    if (!image || image->empty()) {
+        qDebug() << "[WORD_DETECT] Cannot finalize tracking NG:"
+                 << "input image is empty.";
+        return;
+    }
+
+    QElapsedTimer finalizationTimer;
+    finalizationTimer.start();
+
+    if (!removalQueue.empty()
+            && totalImages
+               >= removalQueue.front().second - 1) {
+        wrongremove();
+        removalQueue.pop();
+    }
+
+    currentImagesSnapshot = totalImages;
+    if (judge) {
+        j = 1;
+        x++;
+        judge = false;
+    }
+    imageLabel->clearGreenRects();
+    detectedRects.clear();
+    string1.clear();
+
+    g_lastDrawResults.clear();
+    g_lastPose = pose;
+    g_lastStampPoly.clear();
+    g_lastStampIsOverlap = false;
+    g_lastDetectTime =
+            QDateTime::currentMSecsSinceEpoch();
+    slot_displayAndDetect(image);
+
+    setLabelTextIfChanged(
+                ui->resultlabel_7,
+                QString("定位：失败\n"
+                        "字符检测：未执行\n"
+                        "原因：%1")
+                .arg(reason));
+
+    if (ui->comboBox->currentIndex() == 1
+            || ui->comboBox->currentIndex() == 3) {
+        saveWordResultImages(
+                    "png",
+                    "ng",
+                    *image);
+    }
+
+    ngImages++;
+    totalImages++;
+    ui->resultlabel->setText(
+                QString("<font size='10' color='red'>"
+                        "错误！</font>"));
+
+    if (wrongindex == 0) {
+        wrongremove();
+    } else {
+        removalQueue.push(
+                    std::make_pair(
+                        totalImages,
+                        totalImages + wrongindex));
+    }
+
+    const double passRate =
+            totalImages > 0
+            ? (1.0
+               - static_cast<double>(ngImages)
+                 / totalImages) * 100.0
+            : 0.0;
+    ui->lineBoxIndex_6->setText(
+                QString::number(passRate, 'f', 1));
+    ui->ngnum->setText(
+                QString::number(ngImages));
+    ui->imagenum->setText(
+                QString::number(totalImages));
+
+    const double totalElapsedMs =
+            pose.trackingElapsedMs
+            + elapsedMilliseconds(finalizationTimer);
+    ui->speedLabel->setText(
+                QString("检测耗时 %1 ms")
+                .arg(totalElapsedMs, 0, 'f', 2));
+
+    qDebug().noquote()
+            << QString("[WORD_DETECT] result=NG "
+                       "trackingMs=%1 reason=%2")
+               .arg(pose.trackingElapsedMs, 0, 'f', 3)
+               .arg(reason);
+    j++;
 }
 
 void Widget::finalizeBarcodeWordNg(

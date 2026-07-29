@@ -575,6 +575,9 @@ private:
     void runBarcodeWordDetection(cv::Mat *image,
                                  const DetectionPose &pose,
                                  const WordTemplateProfile &profile);
+    void finalizeWordTrackingNg(cv::Mat *image,
+                                const DetectionPose &pose,
+                                const QString &reason);
     void finalizeBarcodeWordNg(cv::Mat *image,
                                const DetectionPose &pose,
                                const BarcodeReadResult &barcode,
