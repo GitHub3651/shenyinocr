@@ -170,6 +170,21 @@ QGroupBox#topControlPanel QToolButton:hover {
     margin-top: -2px;
 }
 
+/* 模板实时取景时，只让边框轻柔呼吸，避免整块按钮闪烁 */
+QGroupBox#topControlPanel QToolButton#VideoShoot[templateCaptureActive="true"] {
+    background-color: #ffffff;
+    color: #2f6f9f;
+    border: 2px solid #b7d7f5;
+    margin-top: 0;
+}
+
+QGroupBox#topControlPanel QToolButton#VideoShoot[templateCaptureActive="true"][templateCaptureAttention="true"] {
+    background-color: #f4f9ff;
+    color: #1677d2;
+    border: 2px solid #409eff;
+    margin-top: 0;
+}
+
 /* --- 结果标签 (确保深色字体) --- */
 QLabel#resultlabel {
     font-size: 40px;

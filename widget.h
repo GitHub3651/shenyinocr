@@ -394,6 +394,8 @@ private:
     QTimer *timer;                      ///< 定时器
     QTimer *m_timer;                    ///< 定时器2
     QTimer *timer1;                     ///< 定时器3
+    QTimer *m_templateCaptureAttentionTimer = nullptr;
+    bool m_templateCaptureAttentionOn = false;
 
     // ========== 图像相关 ==========
     int imageIndex;                     ///< 图像索引

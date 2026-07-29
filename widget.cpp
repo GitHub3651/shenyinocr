@@ -77,6 +77,7 @@
 #include <QEvent>
 #include <QRegularExpression>
 #include <QAbstractButton>
+#include <QStyle>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -821,6 +822,39 @@ Widget::Widget(QWidget *parent)
     ui->setupUi(this);
 
     initStyle();
+
+    m_templateCaptureAttentionTimer = new QTimer(this);
+    m_templateCaptureAttentionTimer->setInterval(900);
+    connect(m_templateCaptureAttentionTimer,
+            &QTimer::timeout,
+            this,
+            [this]() {
+        if (!ui
+                || !ui->VideoShoot
+                || m_operationState
+                   != OperationState::TemplatePreviewing) {
+            m_templateCaptureAttentionTimer->stop();
+            m_templateCaptureAttentionOn = false;
+        } else {
+            m_templateCaptureAttentionOn =
+                    !m_templateCaptureAttentionOn;
+        }
+
+        if (ui && ui->VideoShoot) {
+            ui->VideoShoot->setProperty(
+                        "templateCaptureActive",
+                        m_operationState
+                        == OperationState::TemplatePreviewing);
+            ui->VideoShoot->setProperty(
+                        "templateCaptureAttention",
+                        m_templateCaptureAttentionOn);
+            ui->VideoShoot->style()->unpolish(
+                        ui->VideoShoot);
+            ui->VideoShoot->style()->polish(
+                        ui->VideoShoot);
+            ui->VideoShoot->update();
+        }
+    });
 
     // UI 文件中已经是 ImageLabel，直接使用
     imageLabel=ui->image_undetected;
@@ -3771,6 +3805,48 @@ void Widget::updateOperationUiState()
     if (ui->lineEdit_yuzhi) {
         ui->lineEdit_yuzhi->setEnabled(
                     normalSettingsEnabled);
+    }
+
+    if (m_templateCaptureAttentionTimer
+            && ui->VideoShoot) {
+        if (m_operationState
+                == OperationState::TemplatePreviewing) {
+            if (!m_templateCaptureAttentionTimer->isActive()) {
+                m_templateCaptureAttentionOn = true;
+                ui->VideoShoot->setProperty(
+                            "templateCaptureActive",
+                            true);
+                ui->VideoShoot->setProperty(
+                            "templateCaptureAttention",
+                            true);
+                ui->VideoShoot->style()->unpolish(
+                            ui->VideoShoot);
+                ui->VideoShoot->style()->polish(
+                            ui->VideoShoot);
+                ui->VideoShoot->update();
+                m_templateCaptureAttentionTimer->start();
+            }
+        } else {
+            m_templateCaptureAttentionTimer->stop();
+            if (m_templateCaptureAttentionOn
+                    || ui->VideoShoot->property(
+                        "templateCaptureActive").toBool()
+                    || ui->VideoShoot->property(
+                        "templateCaptureAttention").toBool()) {
+                m_templateCaptureAttentionOn = false;
+                ui->VideoShoot->setProperty(
+                            "templateCaptureActive",
+                            false);
+                ui->VideoShoot->setProperty(
+                            "templateCaptureAttention",
+                            false);
+                ui->VideoShoot->style()->unpolish(
+                            ui->VideoShoot);
+                ui->VideoShoot->style()->polish(
+                            ui->VideoShoot);
+                ui->VideoShoot->update();
+            }
+        }
     }
 
     if (idleState) {
@@ -7999,6 +8075,9 @@ void Widget::closeEvent(QCloseEvent *event)
     m_operationState = OperationState::Stopping;
     m_barcodeWordRunActive = false;
     isCollecting = false;
+    if (m_templateCaptureAttentionTimer) {
+        m_templateCaptureAttentionTimer->stop();
+    }
 
     // 立即废弃当前模板取景会话，禁止迟到帧继续进入UI。
     ++m_templatePreviewSessionId;
