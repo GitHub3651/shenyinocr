@@ -31,7 +31,13 @@ enum BarcodeDecoderOptionFlag
     BARCODE_DECODER_OPTION_NONE = 0u,
     BARCODE_DECODER_OPTION_TRY_HARDER = 1u << 0,
     BARCODE_DECODER_OPTION_TRY_ROTATE = 1u << 1,
-    BARCODE_DECODER_OPTION_TRY_INVERT = 1u << 2
+    BARCODE_DECODER_OPTION_TRY_INVERT = 1u << 2,
+
+    // The following flags are supported by BarcodeDecoder.dll 2.0 and later.
+    // They only extend the option mask; the exported C function ABI is unchanged.
+    BARCODE_DECODER_OPTION_TRY_DOWNSCALE = 1u << 3,
+    BARCODE_DECODER_OPTION_TRY_DENOISE = 1u << 4,
+    BARCODE_DECODER_OPTION_GLOBAL_HISTOGRAM = 1u << 5
 };
 
 enum BarcodeDecoderReturnCode

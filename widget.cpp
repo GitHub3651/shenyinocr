@@ -2496,7 +2496,21 @@ bool Widget::ensureBarcodeDecoderLoaded()
     m_barcodeGetVersion = getVersion;
     m_barcodeDecodeLuma8 = decodeLuma8;
     m_barcodeDecoderError.clear();
-    qDebug() << "[BARCODE_WORD] Decoder DLL loaded:" << decoderPath;
+
+    QByteArray versionBuffer(256, '\0');
+    const int versionResult = m_barcodeGetVersion(
+                versionBuffer.data(),
+                versionBuffer.size());
+    const QString decoderVersion =
+            versionResult > 0
+            ? QString::fromUtf8(
+                versionBuffer.constData(),
+                std::min(versionResult, versionBuffer.size()))
+            : QStringLiteral("unknown");
+    qDebug() << "[BARCODE_WORD] Decoder DLL loaded:"
+             << decoderPath
+             << "version:"
+             << decoderVersion;
     return true;
 }
 

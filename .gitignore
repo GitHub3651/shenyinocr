@@ -3,6 +3,7 @@
 .vscode/
 Bin/
 build/
+BarcodeDecoderDll/build-vs2022/
 debug/
 include/
 Lib/
