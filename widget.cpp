@@ -1121,7 +1121,7 @@ void Widget::initWidget()
 
     // 连接线程信号槽 - 图像显示
     connect(myThread, &MyThread::signal_messImage, this, [this](cv::Mat img) {
-        this->slot_displayAndDetect(&img);
+        this->handleStreamingFrame(img);
     }, Qt::QueuedConnection);
 
     // 连接线程信号槽 - 图像检测（根据检测模式选择不同的处理函数）
@@ -3678,6 +3678,24 @@ void Widget::clearInspectionTransientDisplay()
     allResults.clear();
 }
 
+bool Widget::shouldSuppressStreamingFrame() const
+{
+    return m_resultBoundDisplayActive
+            && isWordFamilyMode(currentDetectModeId());
+}
+
+void Widget::handleStreamingFrame(const cv::Mat &image)
+{
+    if (image.empty() || shouldSuppressStreamingFrame()) {
+        return;
+    }
+
+    // cv::Mat在这里仅做浅拷贝，slot_displayAndDetect内部会创建独立显示图，
+    // 不修改相机线程传入的源图。
+    cv::Mat displayFrame = image;
+    slot_displayAndDetect(&displayFrame);
+}
+
 void Widget::updateOperationUiState()
 {
     if (!ui) {
@@ -6187,6 +6205,7 @@ void Widget::setupDetectModeChangeTracking()
                 const QString previousModeId = m_currentDetectModeId;
                 const QString nextModeId = detectModeIdForIndex(index);
                 resetTemplateCaptureState();
+                m_resultBoundDisplayActive = false;
                 storeCurrentTemplatePathsForMode(previousModeId);
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
@@ -9753,7 +9772,7 @@ void Widget::on_plcbtn_clicked()
         connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
         connect(cameraThread, &CameraThread::signal_cleanlabel, this, &Widget::slot_clearResultLabel, Qt::QueuedConnection);
         connect(cameraThread, &CameraThread::signal_messImage, this, [this](cv::Mat img) {
-            this->slot_displayAndDetect(&img);
+            this->handleStreamingFrame(img);
         }, Qt::QueuedConnection);
         connect(cameraThread, &CameraThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
         connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
@@ -9781,6 +9800,7 @@ void Widget::on_plcbtn_clicked()
         // 发送模板匹配相关参数
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
+        m_resultBoundDisplayActive = isWordMode;
         cameraThread->start();
         if (!cameraThread->wait(100)) {
             m_barcodeWordRunActive = isBarcodeWordMode;
@@ -9790,6 +9810,7 @@ void Widget::on_plcbtn_clicked()
             ui->statusLabel->setText("触发模式运行中");
             updateOperationUiState();
         } else {
+            m_resultBoundDisplayActive = false;
             m_barcodeWordRunActive = false;
             isCollecting = false;
             m_operationState = m_bOpenDevice
@@ -9857,6 +9878,7 @@ void Widget::on_plcbtn_clicked()
         myThread->getImagePtr(myImage);
 
         if (!myThread->isRunning()) {
+            m_resultBoundDisplayActive = isWordMode;
             myThread->start();
             m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
@@ -10050,7 +10072,7 @@ void Widget::reinitializeMyThread()
 
     // 连接信号槽 - 图像显示
     connect(myThread, &MyThread::signal_messImage, this, [this](cv::Mat img) {
-        this->slot_displayAndDetect(&img);
+        this->handleStreamingFrame(img);
     }, Qt::QueuedConnection);
     // 连接信号槽 - 清除标签
     connect(myThread, &MyThread::signal_cleanlabel,
@@ -10143,7 +10165,7 @@ void Widget::reinitializeCameraThread()
 
     // 步骤6: 连接信号槽 - 图像显示
     connect(cameraThread, &CameraThread::signal_messImage, this, [this](cv::Mat img) {
-        this->slot_displayAndDetect(&img);
+        this->handleStreamingFrame(img);
     }, Qt::QueuedConnection);
 
     connect(cameraThread, &CameraThread::signal_boxesSelected,
@@ -10198,6 +10220,12 @@ void Widget::ensureThreadsReady()
  */
 void Widget::slot_saveBoxesFromThread(DetectionPose pose)
 {
+    // 字库家族生产检测显示“最后一次完整检测结果帧”。
+    // 实时追踪位姿不能再移动上一张检测结果的字符框，否则画面、框和OK/NG会来自不同帧。
+    if (shouldSuppressStreamingFrame()) {
+        return;
+    }
+
     // 1. 如果目标离开了视野，立刻清空屏幕上的字符框和钢印框，保持画面干净
     if (!pose.valid) {
         g_lastDrawResults.clear();

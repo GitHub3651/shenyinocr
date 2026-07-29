@@ -342,6 +342,8 @@ private:
     void updateOperationUiState();
     void clearInspectionTransientDisplay();
     bool hasRunningInspectionThread() const;
+    void handleStreamingFrame(const cv::Mat &image);
+    bool shouldSuppressStreamingFrame() const;
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -389,6 +391,7 @@ private:
     };
     OperationState m_operationState =
             OperationState::CameraClosed;
+    bool m_resultBoundDisplayActive = false;
     bool m_applicationExitInProgress = false;
 
     // ========== 定时器 ==========
