@@ -3972,7 +3972,6 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
-            clearInspectionTransientDisplay();
             ui->statusLabel->setText(
                         "识别线程已停止");
             updateOperationUiState();
@@ -7672,7 +7671,8 @@ void Widget::on_cancel_clicked()
     m_operationState = m_bOpenDevice
             ? OperationState::CameraReady
             : OperationState::CameraClosed;
-    clearInspectionTransientDisplay();
+    // 停止识别后保留最后一次判定结果、识别内容和耗时，
+    // 便于现场人员复核。进入模板制作时仍会主动清除这些内容。
     updateOperationUiState();
 
     qDebug() << "=== on_cancel_clicked() COMPLETED ===";
@@ -9745,7 +9745,6 @@ void Widget::on_plcbtn_clicked()
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
-            clearInspectionTransientDisplay();
             ui->statusLabel->setText(
                         "识别线程已停止");
             updateOperationUiState();
