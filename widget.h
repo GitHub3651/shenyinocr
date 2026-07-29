@@ -313,6 +313,7 @@ private:
     void updateHardwareParameterUiEnabled();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
+    void updateImageSaveOptionsVisibility();
     void updateTissueRoughnessUiVisibility();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
     void setupTemplateGuide();

@@ -4163,6 +4163,34 @@ void Widget::updateSaveDirButtonText()
     ui->lineEdit_imageSavePath->setToolTip(saveDir);
 }
 
+void Widget::updateImageSaveOptionsVisibility()
+{
+    if (!ui || !ui->comboBox) {
+        return;
+    }
+
+    const bool saveImages =
+            ui->comboBox->currentIndex() != 0;
+    if (ui->label_saveImageType) {
+        ui->label_saveImageType->setVisible(saveImages);
+    }
+    if (ui->comboBox_saveImageType) {
+        ui->comboBox_saveImageType->setVisible(saveImages);
+    }
+    if (ui->label_imageSavePath) {
+        ui->label_imageSavePath->setVisible(saveImages);
+    }
+    if (ui->lineEdit_imageSavePath) {
+        ui->lineEdit_imageSavePath->setVisible(saveImages);
+    }
+    if (ui->pushButton_browseImageSavePath) {
+        ui->pushButton_browseImageSavePath->setVisible(saveImages);
+    }
+    if (ui->imageSaveFrame) {
+        ui->imageSaveFrame->updateGeometry();
+    }
+}
+
 void Widget::updateTissueRoughnessUiVisibility()
 {
     if (!ui) {
@@ -5020,6 +5048,15 @@ void Widget::setupGlobalSettingBindings()
     registerHardwareAction(ui->plcmodebtn, HardwareDependency::PlcRuntime);
     registerHardwareAction(ui->WriteVDpushButton, HardwareDependency::PlcRuntime);
     registerHardwareAction(ui->pushButton_8, HardwareDependency::PlcRuntime);
+
+    connect(ui->comboBox,
+            static_cast<void (QComboBox::*)(int)>(
+                &QComboBox::currentIndexChanged),
+            this,
+            [this](int) {
+        updateImageSaveOptionsVisibility();
+    });
+    updateImageSaveOptionsVisibility();
 }
 
 void Widget::registerGlobalSetting(const QString &key,
