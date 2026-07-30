@@ -70,6 +70,7 @@
 #include <QCursor>
 #include <QFrame>
 #include <QTextEdit>
+#include <QScrollArea>
 #include <QIntValidator>
 #include <QDoubleValidator>
 #include <QSortFilterProxyModel>
@@ -77,6 +78,7 @@
 #include <QEvent>
 #include <QRegularExpression>
 #include <QAbstractButton>
+#include <QSplitterHandle>
 #include <QStyle>
 
 // Qt串口和SQL
@@ -822,6 +824,63 @@ Widget::Widget(QWidget *parent)
     ui->setupUi(this);
 
     initStyle();
+
+    // 检测信息区域允许被分隔条压缩；空间不足时只在该区域内部滚动。
+    QScrollArea *detectionInfoScrollArea = new QScrollArea;
+    detectionInfoScrollArea->setObjectName("detectionInfoScrollArea");
+    detectionInfoScrollArea->setFrameShape(QFrame::NoFrame);
+    detectionInfoScrollArea->setWidgetResizable(true);
+    detectionInfoScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    detectionInfoScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    detectionInfoScrollArea->setSizePolicy(
+                QSizePolicy::Expanding,
+                QSizePolicy::Expanding);
+    detectionInfoScrollArea->setWidget(ui->groupBox1);
+    ui->rightPanelSplitter->insertWidget(0, detectionInfoScrollArea);
+
+    if (QSplitterHandle *rightPanelHandle =
+            ui->rightPanelSplitter->handle(1)) {
+        rightPanelHandle->setCursor(Qt::SplitVCursor);
+        rightPanelHandle->setToolTip(
+                    QString::fromWCharArray(
+                        L"\u4e0a\u4e0b\u62d6\u52a8"
+                        L"\u8c03\u6574\u533a\u57df\u9ad8\u5ea6"));
+
+        QHBoxLayout *handleLayout =
+                new QHBoxLayout(rightPanelHandle);
+        handleLayout->setContentsMargins(0, 0, 0, 0);
+        handleLayout->setSpacing(0);
+
+        QLabel *handleGrip =
+                new QLabel(QString::fromWCharArray(
+                               L"\u2195  \u62d6\u52a8\u8c03\u6574"),
+                           rightPanelHandle);
+        handleGrip->setObjectName("rightPanelSplitterGrip");
+        handleGrip->setAlignment(Qt::AlignCenter);
+        handleGrip->setMinimumWidth(92);
+        handleGrip->setAttribute(
+                    Qt::WA_TransparentForMouseEvents);
+        handleGrip->ensurePolished();
+
+        const int handleGripHeight =
+                qMax(24, handleGrip->fontMetrics().height() + 8);
+        const int splitterHandleHeight =
+                handleGripHeight + 8;
+        handleGrip->setFixedHeight(handleGripHeight);
+        ui->rightPanelSplitter->setProperty(
+                    "visualHandleHeight",
+                    splitterHandleHeight);
+        ui->rightPanelSplitter->setHandleWidth(
+                    splitterHandleHeight);
+        rightPanelHandle->setMinimumHeight(
+                    splitterHandleHeight);
+        rightPanelHandle->setMaximumHeight(
+                    splitterHandleHeight);
+
+        handleLayout->addStretch();
+        handleLayout->addWidget(handleGrip);
+        handleLayout->addStretch();
+    }
 
     m_templateCaptureAttentionTimer = new QTimer(this);
     m_templateCaptureAttentionTimer->setInterval(900);
@@ -1961,7 +2020,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
                 if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3))
                     saveImage2Async("jpg", selectedDir + "/ok/");
 
-                ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font><br>"));
+                ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
                 rightremove();
             }
             else
@@ -2083,7 +2142,7 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
                 saveResultImages("png", "ok", *image);
             }
-            ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font><br>"));
+            ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
             rightremove();
         }
     }
@@ -2276,7 +2335,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
                 saveWordResultImages("png", "ok", *image);
             }
-            ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font><br>"));
+            ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
             rightremove();
         }
     }
@@ -5628,8 +5687,12 @@ void Widget::syncImmediateGlobalSettingsFromUi()
                                       << "plc.ip"
                                       << "plc.rack"
                                       << "plc.slot"
-                                      << "template.base_dir"
-                                      << "template.history_paths");
+                                       << "template.base_dir"
+                                       << "template.history_paths");
+    if (ui->rightPanelSplitter) {
+        m_appliedGlobalSettings.rightPanelSplitterState =
+                ui->rightPanelSplitter->saveState();
+    }
 }
 
 QStringList Widget::dirtyGlobalSettingNames() const
@@ -9195,6 +9258,10 @@ GlobalSettings Widget::collectGlobalSettingsFromUi() const
     settings.templateDirPathsByMode = m_templateDirPathsByMode;
     settings.templateDirPathsByMode.insert(settings.detectModeId,
                                            currentTemplatePathsForMode(settings.detectModeId));
+    if (ui->rightPanelSplitter) {
+        settings.rightPanelSplitterState =
+                ui->rightPanelSplitter->saveState();
+    }
     return settings;
 }
 
@@ -9243,6 +9310,30 @@ void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
     ui->lineEdit_8->setText(QString::number(settings.rejectTime));
     ui->lineEdit_12->setText(QString::number(settings.rejectPosition));
     ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(settings.tissueRoughnessThreshold, 'f', 3));
+    if (ui->rightPanelSplitter
+            && !settings.rightPanelSplitterState.isEmpty()
+            && !ui->rightPanelSplitter->restoreState(
+                settings.rightPanelSplitterState)) {
+        qDebug() << "[UI_SETTINGS] right panel splitter state is invalid;"
+                 << "using the default layout.";
+    }
+    if (ui->rightPanelSplitter) {
+        const int visualHandleHeight =
+                ui->rightPanelSplitter
+                ->property("visualHandleHeight").toInt();
+        if (visualHandleHeight > 0) {
+            ui->rightPanelSplitter->setHandleWidth(
+                        visualHandleHeight);
+            if (QSplitterHandle *rightPanelHandle =
+                    ui->rightPanelSplitter->handle(1)) {
+                rightPanelHandle->setMinimumHeight(
+                            visualHandleHeight);
+                rightPanelHandle->setMaximumHeight(
+                            visualHandleHeight);
+            }
+        }
+        ui->rightPanelSplitter->setChildrenCollapsible(true);
+    }
     selectedDir = settings.imageSavePath;
     templateBaseDirPath = settings.templateBaseDirPath;
     updateSaveDirButtonText();

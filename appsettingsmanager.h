@@ -3,6 +3,7 @@
 
 #include "BarcodeTypes.h"
 
+#include <QByteArray>
 #include <QRect>
 #include <QMap>
 #include <QSize>
@@ -43,6 +44,7 @@ struct GlobalSettings
 
     double tissueRoughnessThreshold = 6.0;
     QMap<QString, QStringList> templateDirPathsByMode;
+    QByteArray rightPanelSplitterState;
 };
 
 struct CharacterTemplateBox
@@ -92,6 +94,7 @@ extern const char RejectDistance[];
 extern const char RejectTime[];
 extern const char RejectPosition[];
 extern const char TissueRoughnessThreshold[];
+extern const char RightPanelSplitterState[];
 QString templatePathsKey(const QString &modeId);
 }
 

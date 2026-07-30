@@ -425,7 +425,49 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QGroupBox" name="groupBox1">
+       <widget class="QSplitter" name="rightPanelSplitter">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="handleWidth">
+         <number>30</number>
+        </property>
+        <property name="childrenCollapsible">
+         <bool>true</bool>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">QSplitter#rightPanelSplitter::handle:vertical {
+    border: none;
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 rgba(255, 255, 255, 0),
+        stop: 0.47 rgba(255, 255, 255, 0),
+        stop: 0.48 #cbd5df,
+        stop: 0.52 #cbd5df,
+        stop: 0.53 rgba(255, 255, 255, 0),
+        stop: 1 rgba(255, 255, 255, 0));
+}
+QSplitter#rightPanelSplitter::handle:vertical:hover,
+QSplitter#rightPanelSplitter::handle:vertical:pressed {
+    background: qlineargradient(
+        x1: 0, y1: 0, x2: 0, y2: 1,
+        stop: 0 rgba(255, 255, 255, 0),
+        stop: 0.47 rgba(255, 255, 255, 0),
+        stop: 0.48 #409eff,
+        stop: 0.52 #409eff,
+        stop: 0.53 rgba(255, 255, 255, 0),
+        stop: 1 rgba(255, 255, 255, 0));
+}
+QLabel#rightPanelSplitterGrip {
+    color: #526b80;
+    background: #f4f7fa;
+    border: 1px solid #aebdca;
+    border-radius: 11px;
+    font-size: 12px;
+    font-weight: 600;
+}</string>
+        </property>
+        <widget class="QGroupBox" name="groupBox1">
         <property name="title">
          <string>检测信息</string>
         </property>
@@ -927,11 +969,9 @@
            </property>
           </widget>
          </item>
-        </layout>
-       </widget>
-      </item>
-      <item>
-       <widget class="QTabWidget" name="tabWidget">
+         </layout>
+        </widget>
+        <widget class="QTabWidget" name="tabWidget">
         <property name="currentIndex">
          <number>0</number>
         </property>
@@ -2344,6 +2384,7 @@ QCheckBox::indicator {
           </item>
          </layout>
         </widget>
+       </widget>
        </widget>
       </item>
      </layout>

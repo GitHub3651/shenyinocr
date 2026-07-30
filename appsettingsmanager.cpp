@@ -40,6 +40,7 @@ const char RejectDistance[] = "Global/reject_distance";
 const char RejectTime[] = "Global/reject_time";
 const char RejectPosition[] = "Global/reject_position";
 const char TissueRoughnessThreshold[] = "Global/tissue_roughness_threshold";
+const char RightPanelSplitterState[] = "Ui/right_panel_splitter_state";
 
 QString templatePathsKey(const QString &modeId)
 {
@@ -403,6 +404,8 @@ bool AppSettingsManager::loadGlobalSettings(GlobalSettings *settings, QString *e
     settings->rejectPosition = ini.value(SettingsKeys::Global::RejectPosition, settings->rejectPosition).toInt();
     settings->tissueRoughnessThreshold = ini.value(SettingsKeys::Global::TissueRoughnessThreshold,
                                                    settings->tissueRoughnessThreshold).toDouble();
+    settings->rightPanelSplitterState =
+            ini.value(SettingsKeys::Global::RightPanelSplitterState).toByteArray();
     settings->templateDirPathsByMode.clear();
     for (const QString &modeId : SupportedDetectModeIds) {
         settings->templateDirPathsByMode.insert(
@@ -476,6 +479,8 @@ bool AppSettingsManager::saveGlobalSettings(const GlobalSettings &settings, QStr
         ini.setValue(SettingsKeys::Global::RejectTime, settings.rejectTime);
         ini.setValue(SettingsKeys::Global::RejectPosition, settings.rejectPosition);
         ini.setValue(SettingsKeys::Global::TissueRoughnessThreshold, settings.tissueRoughnessThreshold);
+        ini.setValue(SettingsKeys::Global::RightPanelSplitterState,
+                     settings.rightPanelSplitterState);
         for (const QString &modeId : SupportedDetectModeIds) {
             ini.setValue(SettingsKeys::Global::templatePathsKey(modeId),
                          settings.templateDirPathsByMode.value(modeId));
