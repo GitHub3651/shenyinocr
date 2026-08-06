@@ -1,37 +1,41 @@
-# 忽略用户指定的文件夹
-.vs/
-.vscode/
-Bin/
-build/
-BarcodeDecoderDll/build-vs2022/
-debug/
-include/
-Lib/
-myImage/
-OpenCV/
-PaddleOCR/
-release/
-SDK/
-industrial_char_segmenter/
+# Build, deployment and archival directories
+/build/
+/dist/
+/archive/
+/output/
 
-# Qt / QMake 编译生成文件
-Makefile
-Makefile.Debug
-Makefile.Release
-object_script.*
-*_plugin_import.cpp
+# Transitional former worktree. It is removed after .git moves to the root.
+/Autoadd/
+
+# Binary third-party packages are supplied outside Git. Keep only the
+# reproducible dependency manifest under version control.
+/third_party/*
+!/third_party/
+!/third_party/DEPENDENCIES.md
+
+# Qt / QMake generated files and user-specific Qt Creator settings
 /.qmake.stash
 /.qmake.cache
+Makefile
+Makefile.*
+object_script.*
+*_plugin_import.cpp
 *.pro.user
 *.pro.user.*
-
-# Qt MOC, UIC, RCC 生成的文件
 moc_*.cpp
 moc_*.h
 ui_*.h
 qrc_*.cpp
 
-# Visual Studio 相关及编译中转文件
+# CMake and IDE build metadata
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
 *.suo
 *.user
 *.ipch
@@ -42,9 +46,27 @@ qrc_*.cpp
 *.sdf
 *.VC.db
 *.VC.opendb
-*.vcxproj.user
+/.vs/
+/.vscode/
 
-# 编译生成的可执行文件、库和对象文件
+# Tool build output
+/tools/barcode_decoder/build*/
+/tools/barcode_decoder/debug/
+/tools/barcode_decoder/release/
+/tools/license_tool/debug/
+/tools/license_tool/release/
+
+# Python experiment environments, inputs and generated output
+/experiments/industrial_char_segmenter/.venv/
+/experiments/industrial_char_segmenter/venv/
+/experiments/industrial_char_segmenter/__pycache__/
+/experiments/industrial_char_segmenter/data/input/
+/experiments/industrial_char_segmenter/data/output/
+**/__pycache__/
+*.py[cod]
+
+# Runtime and compiler artifacts. Source code, .ui, .qrc, Qt projects,
+# PaddleOCR source, tool source and documents remain tracked.
 *.obj
 *.o
 *.exe
@@ -53,10 +75,22 @@ qrc_*.cpp
 *.a
 *.lib
 *.pdb
-
-# 日志及系统保留文件
+*.ilk
+*.exp
+*.qm
 *.log
 *.bak
 *.autosave
 Thumbs.db
 .DS_Store
+
+# Local models and run-time data are deployed separately.
+models/
+Model/
+myImage/
+
+# Existing application translations are retained during the layout migration.
+!app/Translate_CN.qm
+!app/Translate_EN.qm
+!app/image/Translate_CN.qm
+!app/image/Translate_EN.qm

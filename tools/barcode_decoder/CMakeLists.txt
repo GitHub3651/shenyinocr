@@ -62,7 +62,7 @@ FetchContent_MakeAvailable(libdmtx)
 
 add_library(BarcodeDecoder SHARED
     BarcodeDecoderDll.cpp
-    ../BarcodeDecoderApi.h
+    ../../app/BarcodeDecoderApi.h
 )
 
 target_compile_features(BarcodeDecoder PRIVATE cxx_std_20)
@@ -75,7 +75,7 @@ target_compile_options(BarcodeDecoder PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
 )
 target_include_directories(BarcodeDecoder PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../app
     ${libdmtx_SOURCE_DIR}
 )
 target_link_libraries(BarcodeDecoder PRIVATE

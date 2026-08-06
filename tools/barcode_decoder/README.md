@@ -1,7 +1,7 @@
 # BarcodeDecoder.dll
 
 这是主程序二维码读码接口的可重建源码工程。它保持
-`../BarcodeDecoderApi.h`中的原有C ABI，不依赖Qt和OpenCV。
+`../../app/BarcodeDecoderApi.h`中的原有C ABI，不依赖Qt和OpenCV。
 
 底层优先使用ZXing-C++ 3.1.0-rc1。ZXing快速路径失败并且主程序
 传入`TRY_HARDER`时，Data Matrix会再使用libdmtx 0.7.8进行一次

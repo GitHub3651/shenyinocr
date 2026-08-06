@@ -19,6 +19,11 @@ CONFIG += c++11
 TARGET = ShengYin
 TEMPLATE = app
 
+# The .pro file lives in app/. All repository-level paths are derived from
+# this one location so Qt Creator kits do not depend on the former nested root.
+PROJECT_ROOT = $$clean_path($$PWD/..)
+THIRD_PARTY = $$PROJECT_ROOT/third_party
+
 # The following define makes your compiler emit warnings if you use
 # any feature of Qt which has been marked as deprecated (the exact warnings
 # depend on your compiler). Please consult the documentation of the
@@ -134,38 +139,32 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 
 
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\paddle\fluid\inference
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\paddle\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\protobuf\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\glog\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\gflags\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\xxhash\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\zlib\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\boost
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\eigen3
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\mklml\include
-INCLUDEPATH += $$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\mkldnn\include
-INCLUDEPATH += $$PWD\..\3rdparty\opencv\include
-                $$PWD\include\
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/paddle/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/protobuf/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/glog/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/gflags/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xxhash/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mkldnn/include
+INCLUDEPATH += $$THIRD_PARTY/opencv/include
 
 
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\paddle\lib -lpaddle_inference
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\mklml\lib -lmklml
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\mklml\lib -llibiomp5md
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\mkldnn\lib -lmkldnn
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\glog\lib -lglog
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\gflags\lib -lgflags_static
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\protobuf\lib -llibprotobuf
-LIBS += -L$$PWD\..\3rdparty\paddle_inference_install_dir\third_party\install\xxhash\lib -lxxhash
-#LIBS += -L$$PWD\..\3rdparty\opencv -lopencv_world440
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/paddle/lib -lpaddle_inference
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/lib -lmklml
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/lib -llibiomp5md
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mkldnn/lib -lmkldnn
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/glog/lib -lglog
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/gflags/lib -lgflags_static
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/protobuf/lib -llibprotobuf
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xxhash/lib -lxxhash
 
 
 
 #win32:CONFIG(release, debug|release): LIBS += -L$$PWD/SDK/Lib/ -lMvCameraControl
 #else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/SDK/Lib/ -lMvCameraControld
 
-INCLUDEPATH += $$PWD/SDK/Includes
-DEPENDPATH += $$PWD/SDK/Includes
+INCLUDEPATH += $$THIRD_PARTY/legacy/SDK/Includes
+DEPENDPATH += $$THIRD_PARTY/legacy/SDK/Includes
 
 
 RC_ICONS = sy.ico
@@ -177,28 +176,22 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 #win32:CONFIG(release, debug|release): LIBS += -L$$PWD/OpenCV/ -lopencv_world440
 
-INCLUDEPATH += $$PWD/OpenCV
-DEPENDPATH += $$PWD/OpenCV
-INCLUDEPATH += $$PWD/Bin
-DEPENDPATH += $$PWD/Bin
-INCLUDEPATH += $$PWD/../3rdparty/opencv/include/opencv2
-DEPENDPATH += $$PWD/../3rdparty/opencv/include/opencv2
-INCLUDEPATH += $$PWD/../3rdparty/Libraries/win64
-DEPENDPATH += $$PWD/../3rdparty/Libraries/win64
+INCLUDEPATH += $$THIRD_PARTY/opencv/include/opencv2
+DEPENDPATH += $$THIRD_PARTY/opencv/include/opencv2
+INCLUDEPATH += $$THIRD_PARTY/Libraries/win64
+DEPENDPATH += $$THIRD_PARTY/Libraries/win64
 
 
 
-LIBS += -L$$PWD/../3rdparty/Libraries/win64/ -lMvCameraControl
-#LIBS += -L$$PWD/../3rdparty/Libraries/win64/ -lopencv_world440
-LIBS += -L$$PWD/../3rdparty/Libraries/win64/ -lsnap7
-#LIBS += -L$$PWD/../3rdparty/Libraries/win64/ -lopencv_world4100
+LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lMvCameraControl
+LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lsnap7
 
 
 
-INCLUDEPATH += $$PWD/../3rdparty/opencv/x64/vc15/bin
-DEPENDPATH += $$PWD/../3rdparty/opencv/x64/vc15/bin
-INCLUDEPATH += $$PWD/../3rdparty/opencv/x64/vc15/lib
-DEPENDPATH += $$PWD/../3rdparty/opencv/x64/vc15/lib
+INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/bin
+DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/bin
+INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/lib
+DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/lib
 LIBS += -lopencv_core341 \
         -lopencv_imgproc341 \
         -lopencv_highgui341 \
@@ -208,24 +201,24 @@ LIBS += -lopencv_core341 \
         -lopencv_features2d
         -lopencv_xfeatures2d
 
-LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_tracking341
-LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_tracking341
+LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_tracking341
+LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_tracking341
 
 
 
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_img_hash341
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_img_hash341d
+win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_img_hash341
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_img_hash341d
 
-INCLUDEPATH += $$PWD/../3rdparty/opencv/x64/vc15/include
-DEPENDPATH += $$PWD/../3rdparty/opencv/x64/vc15/include
+INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
+DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_world341
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_world341d
+win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341d
 
-win32:CONFIG(release, debug|release): LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_xfeatures2d341
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/../3rdparty/opencv/x64/vc15/lib/ -lopencv_xfeatures2d341d
+win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_xfeatures2d341
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_xfeatures2d341d
 
-INCLUDEPATH += $$PWD/../3rdparty/opencv/x64/vc15/include
-DEPENDPATH += $$PWD/../3rdparty/opencv/x64/vc15/include
+INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
+DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 
 DISTFILES +=
