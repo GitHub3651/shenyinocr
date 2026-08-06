@@ -2189,6 +2189,12 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
                                       const TemplateMatchPreparedTemplates *preparedTemplates,
                                       const OrientedDateRoi *preparedDateRoi)
 {
+    // 普通字库模式不展示“识别内容”。二维码+三期会在外层检测完成后
+    // 写入二维码和日期状态，因此这里不能统一清空。
+    if (currentDetectModeId() != BarcodeWordDetectionMode) {
+        setLabelTextIfChanged(ui->resultlabel_7, QString());
+    }
+
     if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
         wrongremove();
         removalQueue.pop();
@@ -3473,12 +3479,8 @@ void Widget::finalizeWordTrackingNg(
             QDateTime::currentMSecsSinceEpoch();
     slot_displayAndDetect(image);
 
-    setLabelTextIfChanged(
-                ui->resultlabel_7,
-                QString("定位：失败\n"
-                        "字符检测：未执行\n"
-                        "原因：%1")
-                .arg(reason));
+    // 普通字库模式不需要展示识别内容；避免上一帧失败文案残留到后续OK结果。
+    setLabelTextIfChanged(ui->resultlabel_7, QString());
 
     if (ui->comboBox->currentIndex() == 1
             || ui->comboBox->currentIndex() == 3) {
