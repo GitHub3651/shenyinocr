@@ -8,11 +8,6 @@
 
 #include "widget.h"
 #include "ui_widget.h"
-#include "SerialPort.h"
-#include "waitting.h"
-#include "databasesetting.h"
-#include "enlarge.h"
-#include "choosebarcodedialog.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"

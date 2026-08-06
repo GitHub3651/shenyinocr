@@ -25,12 +25,8 @@
 #include <QMap>
 #include <QStringList>
 #include <QStandardItemModel>
-#include "waitting.h"
 #include <string>
 #include <QSqlDatabase>
-#include "databasesetting.h"
-#include "enlarge.h"
-#include "choosebarcodedialog.h"
 #include <windows.h>
 #include <dbt.h>
 #include <QProcess>
