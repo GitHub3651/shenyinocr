@@ -43,12 +43,15 @@ public:
     void setAutoFitPixmap(const QPixmap &pixmap);
     void clear();
 
-    // ================= 🔥 新增：双框追踪专用接口 =================
+    // ================= 模板区域绘制接口 =================
     QPolygon getDetectionPoly() const { return m_detectionPoly; }
     QRect getTrackingRect() const { return m_trackingRect; }
+    QRect getBarcodeRect() const { return m_barcodeRect; }
     bool isDetectionPolyComplete() const;
     void setTemplateDrawingEnabled(bool enabled);
     bool isTemplateDrawingEnabled() const;
+    void setBarcodeRegionRequired(bool required);
+    void retryBarcodeRegion();
     void resetDrawingStep();
 
 signals:
@@ -89,17 +92,20 @@ private:
     QVector<ColoredRect> rectangles;
     int m_color = 1;
 
-    // ================= 🔥 新增左键画框状态机 =================
+    // ================= 模板区域顺序绘制状态机 =================
     enum DrawStep {
-        STEP_TRACKING,        // tracking box 
-        STEP_DETECTION_POLY,  // detection poly 
-        STEP_DONE             // done 
+        STEP_TRACKING,
+        STEP_BARCODE,
+        STEP_DETECTION_POLY,
+        STEP_DONE
     };
     DrawStep m_currentStep = STEP_TRACKING;
 
     QPolygon m_detectionPoly;
     QPoint m_tempPolyPoint;
     QRect m_trackingRect;
+    QRect m_barcodeRect;
+    bool m_barcodeRegionRequired = false;
     bool m_isInteracting = false;
     bool m_templateDrawingEnabled = false;
     QPoint m_startPoint;

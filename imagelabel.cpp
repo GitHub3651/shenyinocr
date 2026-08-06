@@ -112,6 +112,28 @@ bool ImageLabel::isTemplateDrawingEnabled() const {
     return m_templateDrawingEnabled;
 }
 
+void ImageLabel::setBarcodeRegionRequired(bool required) {
+    if (m_barcodeRegionRequired == required) {
+        return;
+    }
+    m_barcodeRegionRequired = required;
+    resetDrawingStep();
+}
+
+void ImageLabel::retryBarcodeRegion() {
+    if (!m_barcodeRegionRequired || m_trackingRect.isNull()) {
+        resetDrawingStep();
+        return;
+    }
+
+    m_currentStep = STEP_BARCODE;
+    m_barcodeRect = QRect();
+    m_detectionPoly.clear();
+    m_tempPolyPoint = QPoint();
+    m_isInteracting = false;
+    update();
+}
+
 // =====================================================================
 // 全左键顺序画双框交互逻辑（带中文提示，不再乱码）
 // =====================================================================
@@ -119,6 +141,7 @@ bool ImageLabel::isTemplateDrawingEnabled() const {
 void ImageLabel::resetDrawingStep() {
     m_currentStep = STEP_TRACKING;
     m_trackingRect = QRect();
+    m_barcodeRect = QRect();
     m_detectionPoly.clear();
     selectionRect = QRect();
     m_isInteracting = false;
@@ -151,6 +174,13 @@ void ImageLabel::mousePressEvent(QMouseEvent *event) {
             m_trackingRect = QRect(m_startPoint, m_startPoint);
             emit signal_templateGuideEvent("tracking_started", 0);
         }
+    } else if (m_currentStep == STEP_BARCODE) {
+        if (event->button() == Qt::LeftButton) {
+            m_isInteracting = true;
+            m_startPoint = event->pos();
+            m_barcodeRect = QRect(m_startPoint, m_startPoint);
+            emit signal_templateGuideEvent("barcode_started", 0);
+        }
     } else if (m_currentStep == STEP_DETECTION_POLY) {
         if (event->button() == Qt::LeftButton) {
             m_detectionPoly << event->pos();
@@ -179,6 +209,9 @@ void ImageLabel::mouseMoveEvent(QMouseEvent *event) {
     if (m_currentStep == STEP_TRACKING && m_isInteracting) {
         m_trackingRect.setBottomRight(event->pos());
         update();
+    } else if (m_currentStep == STEP_BARCODE && m_isInteracting) {
+        m_barcodeRect.setBottomRight(event->pos());
+        update();
     } else if (m_currentStep == STEP_DETECTION_POLY) {
         m_tempPolyPoint = event->pos();
         update();
@@ -195,13 +228,30 @@ void ImageLabel::mouseReleaseEvent(QMouseEvent *event) {
     if (m_currentStep == STEP_TRACKING && event->button() == Qt::LeftButton && m_isInteracting) {
         m_isInteracting = false;
         m_trackingRect = m_trackingRect.normalized();
-        if (m_trackingRect.width() > 5) {
-            m_currentStep = STEP_DETECTION_POLY;
+        if (m_trackingRect.width() > 5 && m_trackingRect.height() > 5) {
+            m_currentStep = m_barcodeRegionRequired
+                    ? STEP_BARCODE
+                    : STEP_DETECTION_POLY;
+            m_barcodeRect = QRect();
             m_detectionPoly.clear();
             emit signal_templateGuideEvent("tracking_done", 0);
         } else {
             m_trackingRect = QRect();
             emit signal_templateGuideEvent("tracking_too_small", 0);
+        }
+        update();
+    } else if (m_currentStep == STEP_BARCODE
+               && event->button() == Qt::LeftButton
+               && m_isInteracting) {
+        m_isInteracting = false;
+        m_barcodeRect = m_barcodeRect.normalized();
+        if (m_barcodeRect.width() > 5 && m_barcodeRect.height() > 5) {
+            m_currentStep = STEP_DETECTION_POLY;
+            m_detectionPoly.clear();
+            emit signal_templateGuideEvent("barcode_done", 0);
+        } else {
+            m_barcodeRect = QRect();
+            emit signal_templateGuideEvent("barcode_too_small", 0);
         }
         update();
     }
@@ -240,6 +290,12 @@ void ImageLabel::paintEvent(QPaintEvent *event) {
     if (!m_trackingRect.isNull()) {
         painter.setPen(QPen(Qt::blue, 3, Qt::SolidLine));
         painter.drawRect(m_trackingRect);
+    }
+
+    // 画二维码区域（黄色）
+    if (!m_barcodeRect.isNull()) {
+        painter.setPen(QPen(Qt::yellow, 3, Qt::SolidLine));
+        painter.drawRect(m_barcodeRect);
     }
 
     // 画生产日期多边形 (绿色)

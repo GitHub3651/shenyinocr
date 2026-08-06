@@ -187,6 +187,7 @@ private:
     struct WordTrackingState {
         QString name;
         int profileIndex = -1;
+        std::vector<cv::Point2f> barcodePoly;
         std::vector<cv::Point2f> datePoly;
         TrackingPoseMatcher matcher;
         bool ready = false;

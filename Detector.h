@@ -13,6 +13,10 @@ struct CalibrationData {
     // 生产日期多边形，存储的是相对于“追踪锚点框中心”的相对偏移量 (dx, dy)
     std::vector<cv::Point2f> date_poly;
 
+    // 二维码矩形四角，存储的是相对于“追踪锚点框中心”的相对偏移量
+    // 顺序固定为：左上、右上、右下、左下
+    std::vector<cv::Point2f> barcode_poly;
+
     // 从本地 YAML 配置文件中反序列化加载这些数据
     bool load(const std::string& yamlPath);
 };

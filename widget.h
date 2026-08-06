@@ -477,6 +477,7 @@ private:
     QRect selectionRect1;               ///< 选择矩形1
     // 保存的框坐标
     cv::Rect2d savedTrackingBox;    // 保存的跟踪框
+    std::vector<cv::Point2f> savedBarcodePoly; // 二维码相对于定位锚点中心的四角
     std::vector<cv::Point2f> savedDatePoly; // 保存的生产日期相对多边形
     bool hasValidBoxes;              // 是否有有效的框坐标
 
@@ -525,6 +526,7 @@ private:
         QString name;
         QString dirPath;
         cv::Mat trackingTemplate;
+        std::vector<cv::Point2f> barcodePoly;
         std::vector<cv::Point2f> datePoly;
         TemplatePrivateSettings settings;
         int targetCount = 0;
@@ -544,8 +546,8 @@ private:
     BarcodeDecoderGetVersionFunction m_barcodeGetVersion = nullptr;
     BarcodeDecoderDecodeLuma8Function m_barcodeDecodeLuma8 = nullptr;
     QString m_barcodeDecoderError;
-    bool m_barcodeTemplateTrackingReadable = false;
-    QRect m_validatedBarcodeTrackingRect;
+    bool m_barcodeTemplateReadable = false;
+    QRect m_validatedBarcodeRect;
     QString m_validatedBarcodeText;
     QStringList parseWordTemplateBaseNames(const QString &targetText) const;
     QStringList wordTemplateImagePathsForKey(const QDir &directory,
@@ -605,14 +607,14 @@ private:
         unsigned int formatMask,
         unsigned int optionFlags) const;
     BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
-    bool validateBarcodeTemplateTrackingRect(
-        const QRect &uiTrackingRect,
+    bool validateBarcodeTemplateRect(
+        const QRect &uiBarcodeRect,
         const BarcodeDecodeOptions &options,
         BarcodeReadResult *barcode,
         QString *failureReason);
     QString barcodeTemplateValidationFailureText(
         const BarcodeReadResult &barcode) const;
-    void clearBarcodeTemplateTrackingValidation();
+    void clearBarcodeTemplateValidation();
 
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置

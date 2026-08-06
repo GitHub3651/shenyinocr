@@ -505,6 +505,16 @@ static std::vector<cv::Point> transformPolygon(const std::vector<cv::Point>& pol
     return transformed;
 }
 
+static QString formatPolygonPoints(const std::vector<cv::Point>& poly)
+{
+    QStringList points;
+    points.reserve(static_cast<int>(poly.size()));
+    for (const cv::Point &point : poly) {
+        points.append(QString("(%1,%2)").arg(point.x).arg(point.y));
+    }
+    return QString("[%1]").arg(points.join(","));
+}
+
 static cv::Rect expandAndClampRect(const cv::Rect& rect, int padding, const cv::Size& bounds)
 {
     cv::Rect expanded(rect.x - padding,
@@ -576,7 +586,7 @@ static OrientedDateRoi prepareOrientedDateRoi(const cv::Mat& src, const Detectio
 
 struct BarcodeWordOrientedRois
 {
-    OrientedTrackingRoi tracking;
+    OrientedBarcodeRoi barcode;
     OrientedDateRoi date;
 };
 
@@ -587,7 +597,7 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
     int datePadding)
 {
     BarcodeWordOrientedRois prepared;
-    if (src.empty() || !pose.valid || pose.trackingPoly.size() < 3) {
+    if (src.empty() || !pose.valid || pose.barcodePoly.size() != 4) {
         return prepared;
     }
 
@@ -601,36 +611,36 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
                 rotationMatrix,
                 inverseRotationMatrix);
 
-    const std::vector<cv::Point> rotatedTrackingPoly =
+    const std::vector<cv::Point> rotatedBarcodePoly =
             transformPolygon(
-                pose.trackingPoly,
+                pose.barcodePoly,
                 rotationMatrix);
-    if (rotatedTrackingPoly.size() < 3) {
+    if (rotatedBarcodePoly.size() != 4) {
         return prepared;
     }
 
-    const cv::Rect trackingBounds =
-            cv::boundingRect(rotatedTrackingPoly);
-    if (trackingBounds.width <= 0 || trackingBounds.height <= 0) {
+    const cv::Rect barcodeBounds =
+            cv::boundingRect(rotatedBarcodePoly);
+    if (barcodeBounds.width <= 0 || barcodeBounds.height <= 0) {
         return prepared;
     }
 
-    const int shorterTrackingSide =
+    const int shorterBarcodeSide =
             std::min(
-                trackingBounds.width,
-                trackingBounds.height);
-    const int trackingPaddingPixels =
+                barcodeBounds.width,
+                barcodeBounds.height);
+    const int barcodePaddingPixels =
             cvRound(
-                static_cast<double>(shorterTrackingSide)
+                static_cast<double>(shorterBarcodeSide)
                 * static_cast<double>(
                     std::max(0, barcodePaddingPercent))
                 / 100.0);
-    const cv::Rect trackingRoi =
+    const cv::Rect barcodeRoi =
             expandAndClampRect(
-                trackingBounds,
-                trackingPaddingPixels,
+                barcodeBounds,
+                barcodePaddingPixels,
                 src.size());
-    if (trackingRoi.width <= 0 || trackingRoi.height <= 0) {
+    if (barcodeRoi.width <= 0 || barcodeRoi.height <= 0) {
         return prepared;
     }
 
@@ -656,8 +666,8 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
 
     const cv::Rect combinedRoi =
             hasValidDateRoi
-            ? (trackingRoi | dateRoi)
-            : trackingRoi;
+            ? (barcodeRoi | dateRoi)
+            : barcodeRoi;
     if (combinedRoi.width <= 0 || combinedRoi.height <= 0) {
         return prepared;
     }
@@ -678,52 +688,52 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
         return prepared;
     }
 
-    const cv::Rect localTrackingRoi(
-                trackingRoi.x - combinedRoi.x,
-                trackingRoi.y - combinedRoi.y,
-                trackingRoi.width,
-                trackingRoi.height);
-    const cv::Mat trackingCrop =
-            rotatedRegion(localTrackingRoi);
-    if (trackingCrop.channels() == 1) {
-        if (trackingCrop.depth() == CV_8U) {
-            prepared.tracking.grayRoi =
-                    trackingCrop.clone();
+    const cv::Rect localBarcodeRoi(
+                barcodeRoi.x - combinedRoi.x,
+                barcodeRoi.y - combinedRoi.y,
+                barcodeRoi.width,
+                barcodeRoi.height);
+    const cv::Mat barcodeCrop =
+            rotatedRegion(localBarcodeRoi);
+    if (barcodeCrop.channels() == 1) {
+        if (barcodeCrop.depth() == CV_8U) {
+            prepared.barcode.grayRoi =
+                    barcodeCrop.clone();
         } else {
-            trackingCrop.convertTo(
-                        prepared.tracking.grayRoi,
+            barcodeCrop.convertTo(
+                        prepared.barcode.grayRoi,
                         CV_8U);
         }
-    } else if (trackingCrop.channels() == 3) {
+    } else if (barcodeCrop.channels() == 3) {
         cv::cvtColor(
-                    trackingCrop,
-                    prepared.tracking.grayRoi,
+                    barcodeCrop,
+                    prepared.barcode.grayRoi,
                     cv::COLOR_BGR2GRAY);
-    } else if (trackingCrop.channels() == 4) {
+    } else if (barcodeCrop.channels() == 4) {
         cv::cvtColor(
-                    trackingCrop,
-                    prepared.tracking.grayRoi,
+                    barcodeCrop,
+                    prepared.barcode.grayRoi,
                     cv::COLOR_BGRA2GRAY);
     }
 
-    if (!prepared.tracking.grayRoi.empty()
-            && !prepared.tracking.grayRoi.isContinuous()) {
-        prepared.tracking.grayRoi =
-                prepared.tracking.grayRoi.clone();
+    if (!prepared.barcode.grayRoi.empty()
+            && !prepared.barcode.grayRoi.isContinuous()) {
+        prepared.barcode.grayRoi =
+                prepared.barcode.grayRoi.clone();
     }
 
-    prepared.tracking.rotatedImage = rotatedRegion;
-    prepared.tracking.rotatedTrackingPoly =
-            rotatedTrackingPoly;
-    prepared.tracking.roi = trackingRoi;
-    prepared.tracking.rotationMatrix =
+    prepared.barcode.rotatedImage = rotatedRegion;
+    prepared.barcode.rotatedBarcodePoly =
+            rotatedBarcodePoly;
+    prepared.barcode.roi = barcodeRoi;
+    prepared.barcode.rotationMatrix =
             rotationMatrix;
-    prepared.tracking.inverseRotationMatrix =
+    prepared.barcode.inverseRotationMatrix =
             inverseRotationMatrix;
-    prepared.tracking.valid =
-            !prepared.tracking.grayRoi.empty()
-            && prepared.tracking.grayRoi.type() == CV_8UC1
-            && prepared.tracking.grayRoi.isContinuous();
+    prepared.barcode.valid =
+            !prepared.barcode.grayRoi.empty()
+            && prepared.barcode.grayRoi.type() == CV_8UC1
+            && prepared.barcode.grayRoi.isContinuous();
 
     if (!hasValidDateRoi) {
         return prepared;
@@ -970,6 +980,7 @@ Widget::Widget(QWidget *parent)
     // 初始化统计变量
     hasValidBoxes = false;
     savedTrackingBox = cv::Rect2d(0, 0, 0, 0);
+    savedBarcodePoly.clear();
     savedDatePoly.clear();
     recognitionCompletedFlag = false;
     isCollecting = false;
@@ -1718,6 +1729,7 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
     // 3. 核心重绘机制：只要缓存里还有上一轮检测结果，就持续绘制，直到被新结果覆盖或主动清空。
     if (!g_lastDrawResults.empty() ||
         !g_lastPose.trackingPoly.empty() ||
+        !g_lastPose.barcodePoly.empty() ||
         !g_lastPose.datePoly.empty() ||
         !g_lastStampPoly.empty() ||
         (tissueMode && g_hasLastTissueRoll)) {
@@ -1759,6 +1771,12 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
         if (!g_lastPose.trackingPoly.empty()) {
             std::vector<std::vector<cv::Point>> trackingPolys = {g_lastPose.trackingPoly};
             cv::polylines(displayImg, trackingPolys, true, cv::Scalar(255, 0, 0), boxThickness);
+        }
+
+        // 二维码独立区域：黄色
+        if (!g_lastPose.barcodePoly.empty()) {
+            std::vector<std::vector<cv::Point>> barcodePolys = {g_lastPose.barcodePoly};
+            cv::polylines(displayImg, barcodePolys, true, cv::Scalar(0, 255, 255), boxThickness);
         }
 
         // ================== 绘制喷码检测区域 ==================
@@ -1831,7 +1849,7 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
                             pose,
                             barcode,
                             "未执行",
-                            "未找到二维码追踪锚点",
+                            "未找到定位锚点",
                             0);
             } else {
                 finalizeWordTrackingNg(
@@ -2375,7 +2393,42 @@ void Widget::runBarcodeWordDetection(
                     pose,
                     barcode,
                     "未执行",
-                    "未找到二维码追踪锚点",
+                    "未找到定位锚点",
+                    elapsedMilliseconds(totalTimer));
+        return;
+    }
+
+    qDebug().noquote()
+            << QString("[BARCODE_WORD_POSE] profileIndex=%1 template=%2 score=%3 anchor=(%4,%5) angle=%6 trackingPoly=%7 barcodePoly=%8 datePoly=%9")
+               .arg(pose.wordTemplateProfileIndex)
+               .arg(templateName)
+               .arg(pose.score, 0, 'f', 4)
+               .arg(pose.anchorCenter.x, 0, 'f', 2)
+               .arg(pose.anchorCenter.y, 0, 'f', 2)
+               .arg(pose.angleDeg, 0, 'f', 2)
+               .arg(formatPolygonPoints(pose.trackingPoly))
+               .arg(formatPolygonPoints(pose.barcodePoly))
+               .arg(formatPolygonPoints(pose.datePoly));
+
+    if (pose.barcodePoly.size() != 4) {
+        barcode.status = BarcodeReadStatus::InvalidRoi;
+        barcode.errorReason = "Barcode polygon is missing or invalid";
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "未执行",
+                    "二维码区域配置无效或未映射",
+                    elapsedMilliseconds(totalTimer));
+        return;
+    }
+    if (pose.datePoly.size() < 3) {
+        finalizeBarcodeWordNg(
+                    image,
+                    pose,
+                    barcode,
+                    "未执行",
+                    "日期检测区域配置无效或未映射",
                     elapsedMilliseconds(totalTimer));
         return;
     }
@@ -2386,17 +2439,17 @@ void Widget::runBarcodeWordDetection(
                 pose,
                 profile.settings.barcodeOptions.roiPaddingPercent,
                 20);
-    const OrientedTrackingRoi &trackingRoi =
-            orientedRois.tracking;
-    if (!trackingRoi.valid) {
+    const OrientedBarcodeRoi &barcodeRoi =
+            orientedRois.barcode;
+    if (!barcodeRoi.valid) {
         barcode.status = BarcodeReadStatus::InvalidRoi;
-        barcode.errorReason = "Invalid barcode tracking ROI";
+        barcode.errorReason = "Invalid barcode ROI";
         finalizeBarcodeWordNg(
                     image,
                     pose,
                     barcode,
                     "未执行",
-                    "二维码追踪区域无效或超出图像范围",
+                    "二维码区域无效或超出图像范围",
                     elapsedMilliseconds(totalTimer));
         return;
     }
@@ -2418,7 +2471,7 @@ void Widget::runBarcodeWordDetection(
     unsigned int successfulBarcodeOptionFlags =
             BARCODE_DECODER_OPTION_NONE;
     barcode = decodeBarcodeRoi(
-                trackingRoi.grayRoi,
+                barcodeRoi.grayRoi,
                 profile.settings.barcodeOptions,
                 profile.preferredBarcodeStrategyId,
                 profile.preferredBarcodeOptionFlags,
@@ -2446,11 +2499,11 @@ void Widget::runBarcodeWordDetection(
     barcode.cornersInOriginal.reserve(barcode.cornersInRoi.size());
     for (const cv::Point2f &corner : barcode.cornersInRoi) {
         const cv::Point2f cornerInRotatedImage(
-                    corner.x + trackingRoi.roi.x,
-                    corner.y + trackingRoi.roi.y);
+                    corner.x + barcodeRoi.roi.x,
+                    corner.y + barcodeRoi.roi.y);
         barcode.cornersInOriginal.push_back(
                     transformPoint(
-                        trackingRoi.inverseRotationMatrix,
+                        barcodeRoi.inverseRotationMatrix,
                         cornerInRotatedImage));
     }
 
@@ -3170,10 +3223,10 @@ BarcodeReadResult Widget::decodeBarcodeRoi(
     return result;
 }
 
-void Widget::clearBarcodeTemplateTrackingValidation()
+void Widget::clearBarcodeTemplateValidation()
 {
-    m_barcodeTemplateTrackingReadable = false;
-    m_validatedBarcodeTrackingRect = QRect();
+    m_barcodeTemplateReadable = false;
+    m_validatedBarcodeRect = QRect();
     m_validatedBarcodeText.clear();
 }
 
@@ -3204,8 +3257,8 @@ QString Widget::barcodeTemplateValidationFailureText(
     return "当前框选区域内没有扫描到可读的 Data Matrix 二维码。";
 }
 
-bool Widget::validateBarcodeTemplateTrackingRect(
-    const QRect &uiTrackingRect,
+bool Widget::validateBarcodeTemplateRect(
+    const QRect &uiBarcodeRect,
     const BarcodeDecodeOptions &options,
     BarcodeReadResult *barcode,
     QString *failureReason)
@@ -3232,11 +3285,11 @@ bool Widget::validateBarcodeTemplateTrackingRect(
                     "Template source image is unavailable");
     }
 
-    const QRect normalizedRect = uiTrackingRect.normalized();
+    const QRect normalizedRect = uiBarcodeRect.normalized();
     if (normalizedRect.width() <= 5 || normalizedRect.height() <= 5) {
         return finishFailure(
                     BarcodeReadStatus::InvalidRoi,
-                    "Barcode tracking rectangle is too small");
+                    "Barcode rectangle is too small");
     }
 
     const QSize labelSize = imageLabel->size();
@@ -3277,7 +3330,7 @@ bool Widget::validateBarcodeTemplateTrackingRect(
     if (sourceRect.width <= 5 || sourceRect.height <= 5) {
         return finishFailure(
                     BarcodeReadStatus::InvalidRoi,
-                    "Barcode tracking rectangle is outside the source image");
+                    "Barcode rectangle is outside the source image");
     }
 
     DetectionPose templatePose;
@@ -3286,7 +3339,7 @@ bool Widget::validateBarcodeTemplateTrackingRect(
     templatePose.anchorCenter = cv::Point2f(
                 sourceRect.x + (sourceRect.width - 1) * 0.5f,
                 sourceRect.y + (sourceRect.height - 1) * 0.5f);
-    templatePose.trackingPoly = {
+    templatePose.barcodePoly = {
         cv::Point(sourceRect.x, sourceRect.y),
         cv::Point(sourceRect.x + sourceRect.width - 1, sourceRect.y),
         cv::Point(sourceRect.x + sourceRect.width - 1,
@@ -3301,25 +3354,25 @@ bool Widget::validateBarcodeTemplateTrackingRect(
                 templatePose,
                 options.roiPaddingPercent,
                 0);
-    const OrientedTrackingRoi &trackingRoi = prepared.tracking;
-    if (!trackingRoi.valid) {
+    const OrientedBarcodeRoi &barcodeRoi = prepared.barcode;
+    if (!barcodeRoi.valid) {
         return finishFailure(
                     BarcodeReadStatus::InvalidRoi,
-                    "Failed to prepare barcode tracking ROI");
+                    "Failed to prepare barcode ROI");
     }
 
     result = decodeBarcodeRoi(
-                trackingRoi.grayRoi,
+                barcodeRoi.grayRoi,
                 options);
     result.cornersInOriginal.clear();
     result.cornersInOriginal.reserve(result.cornersInRoi.size());
     for (const cv::Point2f &corner : result.cornersInRoi) {
         const cv::Point2f cornerInRotatedImage(
-                    corner.x + trackingRoi.roi.x,
-                    corner.y + trackingRoi.roi.y);
+                    corner.x + barcodeRoi.roi.x,
+                    corner.y + barcodeRoi.roi.y);
         result.cornersInOriginal.push_back(
                     transformPoint(
-                        trackingRoi.inverseRotationMatrix,
+                        barcodeRoi.inverseRotationMatrix,
                         cornerInRotatedImage));
     }
 
@@ -3331,8 +3384,8 @@ bool Widget::validateBarcodeTemplateTrackingRect(
              << sourceRect.x << sourceRect.y
              << sourceRect.width << sourceRect.height
              << "decodeRoi="
-             << trackingRoi.roi.x << trackingRoi.roi.y
-             << trackingRoi.roi.width << trackingRoi.roi.height
+             << barcodeRoi.roi.x << barcodeRoi.roi.y
+             << barcodeRoi.roi.width << barcodeRoi.roi.height
              << "paddingPercent=" << options.roiPaddingPercent
              << "maxDecodeTimeMs=" << options.maxDecodeTimeMs
              << "fallback=" << options.enableFallback
@@ -4043,6 +4096,7 @@ bool Widget::hasTemplateDrawingSelection() const
 {
     return imageLabel
             && (!imageLabel->getTrackingRect().isNull()
+                || !imageLabel->getBarcodeRect().isNull()
                 || !imageLabel->getDetectionPoly().isEmpty());
 }
 
@@ -4186,7 +4240,7 @@ bool Widget::startTemplatePreview()
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearSelection();
     }
-    clearBarcodeTemplateTrackingValidation();
+    clearBarcodeTemplateValidation();
     m_lastTemplatePreviewFrame.release();
     ++m_templatePreviewSessionId;
     m_templateCaptureState =
@@ -4242,7 +4296,9 @@ bool Widget::freezeTemplatePreview()
     const bool needsTemplateDrawing =
             ui->comboBox_4->currentIndex() == 0
             || isWordFamilyMode(currentDetectModeId());
-    clearBarcodeTemplateTrackingValidation();
+    clearBarcodeTemplateValidation();
+    imageLabel->setBarcodeRegionRequired(
+                currentDetectModeId() == BarcodeWordDetectionMode);
     imageLabel->setTemplateDrawingEnabled(
                 needsTemplateDrawing);
     if (needsTemplateDrawing) {
@@ -4643,7 +4699,7 @@ void Widget::showTemplateGuideForCurrentMode()
                         ? "二维码+三期模板制作"
                         : "字库匹配模板制作",
                     barcodeWordMode
-                        ? "请按住鼠标左键拖动，框选二维码区域作为追踪锚点。"
+                        ? "【步骤1/3】请按住鼠标左键拖动，框选稳定且不会变化的定位锚点。"
                         : "请按住鼠标左键拖动，框选定位区域。");
         return;
     }
@@ -4674,32 +4730,32 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
             : (modeIndex == 1
                ? "字库匹配模板制作"
                : "模板匹配模板制作");
-    const QString trackingRegionName =
-            barcodeWordMode ? "二维码区域" : "定位区域";
+    const QString trackingRegionName = "定位区域";
 
     if (barcodeWordMode
             && (eventName == "tracking_started"
-                || eventName == "tracking_too_small"
+                || eventName == "barcode_started"
+                || eventName == "barcode_too_small"
                 || eventName == "template_reset")) {
-        clearBarcodeTemplateTrackingValidation();
+        clearBarcodeTemplateValidation();
     }
 
-    if (barcodeWordMode && eventName == "tracking_done") {
-        const QRect trackingRect =
-                imageLabel->getTrackingRect().normalized();
+    if (barcodeWordMode && eventName == "barcode_done") {
+        const QRect barcodeRect =
+                imageLabel->getBarcodeRect().normalized();
         BarcodeReadResult barcode;
         QString failureReason;
-        if (!validateBarcodeTemplateTrackingRect(
-                    trackingRect,
+        if (!validateBarcodeTemplateRect(
+                    barcodeRect,
                     barcodeTemplateValidationOptions(),
                     &barcode,
                     &failureReason)) {
-            clearBarcodeTemplateTrackingValidation();
-            imageLabel->resetDrawingStep();
+            clearBarcodeTemplateValidation();
+            imageLabel->retryBarcodeRegion();
             if (guideVisible) {
                 updateTemplateGuideText(
                             title,
-                            "二维码扫描失败，已清空当前框线，请重新框选二维码区域。");
+                            "【步骤2/3】二维码扫描失败，定位锚点已保留，请重新框选二维码区域。");
             }
 
             QTimer::singleShot(0, this, [this, failureReason]() {
@@ -4713,13 +4769,13 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
             return;
         }
 
-        m_barcodeTemplateTrackingReadable = true;
-        m_validatedBarcodeTrackingRect = trackingRect;
+        m_barcodeTemplateReadable = true;
+        m_validatedBarcodeRect = barcodeRect;
         m_validatedBarcodeText = barcode.text;
         if (guideVisible) {
             updateTemplateGuideText(
                         title,
-                        "二维码扫描成功。请用鼠标左键依次点击喷码区域边缘，右键闭合。");
+                        "【步骤3/3】二维码扫描成功。请用鼠标左键依次点击日期区域边缘，右键闭合。");
         }
         return;
     }
@@ -4731,29 +4787,56 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     if (eventName == "tracking_started") {
         updateTemplateGuideText(
                     title,
-                    QString("松开鼠标左键完成%1。").arg(trackingRegionName));
+                    barcodeWordMode
+                        ? "【步骤1/3】松开鼠标左键完成定位锚点。"
+                        : QString("松开鼠标左键完成%1。").arg(trackingRegionName));
     } else if (eventName == "template_reset") {
         updateTemplateGuideText(
                     title,
-                    QString("已清空当前框线，请重新按住鼠标左键拖动，框选%1。")
-                    .arg(trackingRegionName));
+                    barcodeWordMode
+                        ? "【步骤1/3】已清空当前框线，请重新框选稳定定位锚点。"
+                        : QString("已清空当前框线，请重新按住鼠标左键拖动，框选%1。")
+                          .arg(trackingRegionName));
     } else if (eventName == "tracking_too_small") {
         updateTemplateGuideText(
                     title,
-                    QString("%1太小，请重新框选更大的%1。")
-                    .arg(trackingRegionName));
+                    barcodeWordMode
+                        ? "【步骤1/3】定位锚点太小，请重新框选更大的稳定定位锚点。"
+                        : QString("%1太小，请重新框选更大的%1。")
+                          .arg(trackingRegionName));
     } else if (eventName == "tracking_done") {
-        updateTemplateGuideText(title,
-                                "请用鼠标左键依次点击喷码区域边缘，右键闭合。");
+        updateTemplateGuideText(
+                    title,
+                    barcodeWordMode
+                        ? "【步骤2/3】请按住鼠标左键拖动，完整框选二维码区域，四周保留少量背景。"
+                        : "请用鼠标左键依次点击喷码区域边缘，右键闭合。");
+    } else if (eventName == "barcode_started") {
+        updateTemplateGuideText(
+                    title,
+                    "【步骤2/3】松开鼠标左键后，程序将立即验证二维码是否可读。");
+    } else if (eventName == "barcode_too_small") {
+        updateTemplateGuideText(
+                    title,
+                    "【步骤2/3】二维码区域太小，请重新框选完整二维码区域。");
     } else if (eventName == "poly_point_added") {
         updateTemplateGuideText(title,
-                                QString("已选择 %1 个点，继续点击边缘或右键闭合。").arg(pointCount));
+                                barcodeWordMode
+                                    ? QString("【步骤3/3】已选择 %1 个点，继续点击日期区域边缘或右键闭合。")
+                                      .arg(pointCount)
+                                    : QString("已选择 %1 个点，继续点击边缘或右键闭合。")
+                                      .arg(pointCount));
     } else if (eventName == "poly_too_few") {
         updateTemplateGuideText(title,
-                                QString("至少需要 3 个点，当前 %1 个，请继续点击喷码区域边缘。").arg(pointCount));
+                                barcodeWordMode
+                                    ? QString("【步骤3/3】至少需要3个点，当前%1个，请继续点击日期区域边缘。")
+                                      .arg(pointCount)
+                                    : QString("至少需要 3 个点，当前 %1 个，请继续点击喷码区域边缘。")
+                                      .arg(pointCount));
     } else if (eventName == "poly_done") {
         updateTemplateGuideText(title,
-                                "喷码检测区域已完成，请点击【保存模板】。");
+                                barcodeWordMode
+                                    ? "【步骤3/3】日期检测区域已完成，请点击【保存模板】。"
+                                    : "喷码检测区域已完成，请点击【保存模板】。");
         QTimer::singleShot(0, this, [this]() {
             if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
                 return;
@@ -4762,7 +4845,10 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
             QMessageBox saveMessageBox(this);
             saveMessageBox.setIcon(QMessageBox::Question);
             saveMessageBox.setWindowTitle("保存模板");
-            saveMessageBox.setText("喷码检测区域已闭合。\n\n是否立即保存当前产品模板？");
+            saveMessageBox.setText(
+                        currentDetectModeId() == BarcodeWordDetectionMode
+                            ? "定位锚点、二维码区域和日期检测区域均已完成。\n\n是否立即保存当前产品模板？"
+                            : "喷码检测区域已闭合。\n\n是否立即保存当前产品模板？");
             QPushButton *saveButton = saveMessageBox.addButton("保存", QMessageBox::AcceptRole);
             saveMessageBox.addButton("取消", QMessageBox::RejectRole);
             saveMessageBox.setDefaultButton(saveButton);
@@ -4887,6 +4973,7 @@ void Widget::clearCurrentSoftwareData()
     clearWordMultiTemplateState();
     currentTemplateDirPath.clear();
     m_loadedTrackingTemplate.release();
+    savedBarcodePoly.clear();
     savedDatePoly.clear();
     savedTrackingBox = cv::Rect2d();
     hasValidBoxes = false;
@@ -4965,6 +5052,7 @@ void Widget::restoreDefaultGlobalSettings()
     clearWordMultiTemplateState();
     currentTemplateDirPath.clear();
     m_loadedTrackingTemplate.release();
+    savedBarcodePoly.clear();
     savedDatePoly.clear();
     savedTrackingBox = cv::Rect2d();
     hasValidBoxes = false;
@@ -6289,11 +6377,12 @@ void Widget::setupDetectModeChangeTracking()
 
 void Widget::clearWordMultiTemplateState()
 {
-    clearBarcodeTemplateTrackingValidation();
+    clearBarcodeTemplateValidation();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
     currentTemplateDirPath.clear();
     m_loadedTrackingTemplate.release();
+    savedBarcodePoly.clear();
     savedDatePoly.clear();
     savedTrackingBox = cv::Rect2d();
     hasValidBoxes = false;
@@ -6383,7 +6472,9 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
             QDir templateDir(path);
             if (!templateDir.exists()) {
                 skippedMessages.append(QString("%1：产品模板文件夹不存在").arg(path));
-                userMessages.append(QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。").arg(path));
+                userMessages.append(
+                            QString("模板路径 %1 不存在，已跳过读取。")
+                            .arg(path));
                 continue;
             }
 
@@ -6393,8 +6484,10 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
                 skippedMessages.append(QString("%1：%2")
                                        .arg(templateDir.dirName())
                                        .arg(message));
-                userMessages.append(QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
-                                    .arg(templateDir.absolutePath()));
+                userMessages.append(
+                            QString("模板“%1”无法加载：%2")
+                            .arg(templateDir.dirName())
+                            .arg(message));
                 continue;
             }
             validPaths.append(templateDir.absolutePath());
@@ -6823,6 +6916,15 @@ bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
         if (errorMessage) *errorMessage = "calibrate_config.yaml 中缺少有效喷码检测区域";
         return false;
     }
+    if (currentDetectModeId() == BarcodeWordDetectionMode
+            && calib.barcode_poly.size() != 4) {
+        if (errorMessage) {
+            *errorMessage = QString(
+                        "使用旧版二维码区域格式，缺少有效 barcode_poly；"
+                        "请重新制作稳定定位锚点、二维码区域和日期区域");
+        }
+        return false;
+    }
 
     const QString trackingPath = templateDir.filePath("tracking_template.bmp");
     QFile trackingFile(trackingPath);
@@ -6864,6 +6966,7 @@ bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
     loadedProfile.name = templateDir.dirName();
     loadedProfile.dirPath = templateDir.absolutePath();
     loadedProfile.trackingTemplate = trackingTemplate;
+    loadedProfile.barcodePoly = calib.barcode_poly;
     loadedProfile.datePoly = calib.date_poly;
     loadedProfile.settings = privateSettings;
 
@@ -7580,7 +7683,7 @@ void Widget::on_cancel_clicked()
             imageLabel->setTemplateDrawingEnabled(false);
             imageLabel->clearSelection();
         }
-        clearBarcodeTemplateTrackingValidation();
+        clearBarcodeTemplateValidation();
         hideTemplateGuide();
         ui->statusLabel->setText(
                     m_bOpenDevice
@@ -8333,13 +8436,14 @@ void Widget::on_pushButton_5_clicked()
                     this,
                     "提示",
                     isBarcodeWordTemplateMode
-                        ? "请先点击【制作模板】拍照，并完成二维码追踪锚点和喷码检测区域框选。"
+                        ? "请先点击【制作模板】拍照，并完成定位锚点、二维码区域和日期检测区域框选。"
                         : "请先点击【制作模板】拍照，并完成定位区域和喷码检测区域框选。");
         return;
     }
 
     // 字库匹配模式下，保存前先检查框选状态，避免输入名称后才发现无法保存。
     QRect uiTrackRect = imageLabel->getTrackingRect();
+    QRect uiBarcodeRect = imageLabel->getBarcodeRect();
     QPolygon uiDetectPoly = imageLabel->getDetectionPoly();
 
     if (isWordTemplateMode) {
@@ -8348,7 +8452,7 @@ void Widget::on_pushButton_5_clicked()
                         this,
                         "提示",
                         isBarcodeWordTemplateMode
-                            ? "请先框选二维码区域作为追踪锚点。"
+                            ? "请先框选稳定定位锚点。"
                             : "请先框选定位区域。");
             return;
         }
@@ -8357,37 +8461,45 @@ void Widget::on_pushButton_5_clicked()
                         this,
                         "提示",
                         isBarcodeWordTemplateMode
-                            ? "二维码追踪锚点区域太小，请重新框选。"
+                            ? "定位锚点区域太小，请重新框选。"
                             : "定位区域太小，请重新框选。");
             return;
         }
         if (isBarcodeWordTemplateMode) {
-            const QRect normalizedTrackingRect =
-                    uiTrackRect.normalized();
-            if (!m_barcodeTemplateTrackingReadable
-                    || m_validatedBarcodeTrackingRect
-                       != normalizedTrackingRect) {
+            if (uiBarcodeRect.isNull()) {
+                QMessageBox::warning(this, "提示", "请先框选二维码区域。");
+                return;
+            }
+            if (uiBarcodeRect.width() <= 5 || uiBarcodeRect.height() <= 5) {
+                QMessageBox::warning(this, "提示", "二维码区域太小，请重新框选。");
+                return;
+            }
+            const QRect normalizedBarcodeRect =
+                    uiBarcodeRect.normalized();
+            if (!m_barcodeTemplateReadable
+                    || m_validatedBarcodeRect
+                       != normalizedBarcodeRect) {
                 BarcodeReadResult barcode;
                 QString failureReason;
-                if (!validateBarcodeTemplateTrackingRect(
-                            normalizedTrackingRect,
+                if (!validateBarcodeTemplateRect(
+                            normalizedBarcodeRect,
                             barcodeTemplateValidationOptions(),
                             &barcode,
                             &failureReason)) {
-                    clearBarcodeTemplateTrackingValidation();
-                    imageLabel->resetDrawingStep();
+                    clearBarcodeTemplateValidation();
+                    imageLabel->retryBarcodeRegion();
                     QMessageBox::warning(
                                 this,
                                 "二维码扫描失败",
                                 failureReason
-                                + "\n\n模板不能保存，请重新完整框选二维码区域，"
-                                  "扫描成功后再框选喷码检测区域。");
+                                + "\n\n定位锚点已保留。模板不能保存，"
+                                  "请重新完整框选二维码区域，扫描成功后再框选日期区域。");
                     return;
                 }
 
-                m_barcodeTemplateTrackingReadable = true;
-                m_validatedBarcodeTrackingRect =
-                        normalizedTrackingRect;
+                m_barcodeTemplateReadable = true;
+                m_validatedBarcodeRect =
+                        normalizedBarcodeRect;
                 m_validatedBarcodeText = barcode.text;
             }
         }
@@ -8456,7 +8568,7 @@ void Widget::on_pushButton_5_clicked()
 
     QLabel *hintLabel = new QLabel(
                 isBarcodeWordTemplateMode
-                    ? "保存后会将二维码区域同时作为追踪锚点和读码区域，并记录喷码检测区域。"
+                    ? "保存后会记录稳定定位锚点、独立二维码区域和日期检测区域。"
                     : "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。",
                 &inputDialog);
     hintLabel->setWordWrap(true);
@@ -8614,11 +8726,34 @@ void Widget::on_pushButton_5_clicked()
     
     cv::Point2f trackCenter(savedTrackingBox.x + savedTrackingBox.width / 2.0, 
                             savedTrackingBox.y + savedTrackingBox.height / 2.0);
+
+    std::vector<cv::Point2f> relBarcodePoly;
+    if (isBarcodeWordTemplateMode) {
+        const cv::Rect2d barcodeBox =
+                toPhysicalRect(uiBarcodeRect.normalized());
+        const std::vector<cv::Point2f> absBarcodePoly = {
+            cv::Point2f(static_cast<float>(barcodeBox.x),
+                        static_cast<float>(barcodeBox.y)),
+            cv::Point2f(static_cast<float>(barcodeBox.x + barcodeBox.width),
+                        static_cast<float>(barcodeBox.y)),
+            cv::Point2f(static_cast<float>(barcodeBox.x + barcodeBox.width),
+                        static_cast<float>(barcodeBox.y + barcodeBox.height)),
+            cv::Point2f(static_cast<float>(barcodeBox.x),
+                        static_cast<float>(barcodeBox.y + barcodeBox.height))
+        };
+        relBarcodePoly.reserve(absBarcodePoly.size());
+        for (const cv::Point2f &point : absBarcodePoly) {
+            relBarcodePoly.push_back(
+                        cv::Point2f(point.x - trackCenter.x,
+                                    point.y - trackCenter.y));
+        }
+    }
                             
     std::vector<cv::Point2f> relDatePoly;
     for (const auto& pt : absDatePoly) {
         relDatePoly.push_back(cv::Point2f(pt.x - trackCenter.x, pt.y - trackCenter.y));
     }
+    savedBarcodePoly = relBarcodePoly;
     savedDatePoly = relDatePoly;
     hasValidBoxes = true;
 
@@ -8633,6 +8768,9 @@ void Widget::on_pushButton_5_clicked()
     QString yamlPath = savePath + "/calibrate_config.yaml";
     {
         cv::FileStorage fs(yamlPath.toLocal8Bit().toStdString(), cv::FileStorage::WRITE);
+        if (isBarcodeWordTemplateMode) {
+            fs << "barcode_poly" << relBarcodePoly;
+        }
         fs << "date_poly" << relDatePoly;
         fs.release();
     }
@@ -8694,7 +8832,7 @@ void Widget::on_pushButton_5_clicked()
     }
     imageLabel->setTemplateDrawingEnabled(false);
     imageLabel->clearSelection();
-    clearBarcodeTemplateTrackingValidation();
+    clearBarcodeTemplateValidation();
     hideTemplateGuide();
     resetTemplateCaptureState();
     ui->statusLabel->setText(
@@ -8768,15 +8906,23 @@ bool Widget::saveSettingsToDir(const QString &dirPath)
     }
 
     bool datePolyFileValid = false;
+    bool barcodePolyFileValid =
+            currentDetectModeId() != BarcodeWordDetectionMode;
     const QString calibratePath = dir.absoluteFilePath("calibrate_config.yaml");
     if (QFile::exists(calibratePath)) {
         CalibrationData calib;
         if (calib.load(calibratePath.toLocal8Bit().toStdString())) {
             datePolyFileValid = !calib.date_poly.empty();
+            if (currentDetectModeId() == BarcodeWordDetectionMode) {
+                barcodePolyFileValid = calib.barcode_poly.size() == 4;
+            }
         }
     }
 
-    const bool existingTemplateFilesValid = trackingTemplateFileValid && datePolyFileValid;
+    const bool existingTemplateFilesValid =
+            trackingTemplateFileValid
+            && datePolyFileValid
+            && barcodePolyFileValid;
 
     if (currentTrackingBoxValid) {
         privateSettings.trackingBox = savedTrackingBox;
@@ -9138,16 +9284,24 @@ bool Widget::loadSettingsFromDir(const QString &dirPath, bool showErrorMessage)
         qDebug() << "警告：未找到 tracking_template.bmp";
     }
 
+    savedBarcodePoly.clear();
     savedDatePoly.clear();
     QString yamlPath = dirPath + "/calibrate_config.yaml";
     if (QFile::exists(yamlPath)) {
         CalibrationData calib;
         if (calib.load(yamlPath.toLocal8Bit().toStdString())) {
+            savedBarcodePoly = calib.barcode_poly;
             savedDatePoly = calib.date_poly;
         }
     }
 
-    const bool templateFilesValid = !m_loadedTrackingTemplate.empty() && !savedDatePoly.empty();
+    const bool barcodePolyValid =
+            currentDetectModeId() != BarcodeWordDetectionMode
+            || savedBarcodePoly.size() == 4;
+    const bool templateFilesValid =
+            !m_loadedTrackingTemplate.empty()
+            && !savedDatePoly.empty()
+            && barcodePolyValid;
     const bool trackingBoxValid = savedTrackingBox.width > 0 && savedTrackingBox.height > 0;
     if (templateFilesValid && trackingBoxValid) {
         if (!hasValidBoxes) {
@@ -9458,9 +9612,10 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
                                 "制作二维码+三期产品模板步骤：\n\n"
                                 "1. 点击【制作模板】进入实时取景。\n"
                                 "2. 调整产品位置后点击【拍照并开始框选】。\n"
-                                "3. 框选二维码区域作为追踪锚点。\n"
-                                "4. 用鼠标左键点击喷码区域边缘，右键闭合。\n"
-                                "5. 点击【保存模板】保存产品模板。";
+                                "3. 框选稳定且不会变化的定位锚点。\n"
+                                "4. 框选二维码区域并等待扫描验证。\n"
+                                "5. 用鼠标左键点击日期区域边缘，右键闭合。\n"
+                                "6. 点击【保存模板】保存产品模板。";
                         break;
                     default:
                         tooltipText = "点击后进入实时取景，再次点击冻结当前画面。";
@@ -9656,6 +9811,96 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
+    if (isBarcodeWordMode) {
+        QStringList barcodeStartErrors;
+        if (!ensureBarcodeDecoderLoaded()) {
+            barcodeStartErrors.append(
+                        QString("读码组件不可用：%1")
+                        .arg(m_barcodeDecoderError));
+        }
+
+        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+            const QString profileName = profile.name.isEmpty()
+                    ? QDir(profile.dirPath).dirName()
+                    : profile.name;
+            const QDir profileDir(profile.dirPath);
+            QStringList profileErrors;
+
+            const QString trackingPath =
+                    profileDir.filePath("tracking_template.bmp");
+            QFile trackingFile(trackingPath);
+            cv::Mat diskTrackingTemplate;
+            if (trackingFile.open(QIODevice::ReadOnly)) {
+                const QByteArray bytes = trackingFile.readAll();
+                if (!bytes.isEmpty()) {
+                    try {
+                        const std::vector<uchar> buffer(
+                                    bytes.begin(),
+                                    bytes.end());
+                        diskTrackingTemplate =
+                                cv::imdecode(buffer, cv::IMREAD_COLOR);
+                    } catch (...) {
+                        diskTrackingTemplate.release();
+                    }
+                }
+            }
+            if (profile.trackingTemplate.empty()
+                    || diskTrackingTemplate.empty()) {
+                profileErrors.append(
+                            "定位模板 tracking_template.bmp 缺失或无法读取");
+            }
+
+            CalibrationData diskCalibration;
+            const QString calibrationPath =
+                    profileDir.filePath("calibrate_config.yaml");
+            const bool calibrationValid =
+                    QFileInfo::exists(calibrationPath)
+                    && diskCalibration.load(
+                        calibrationPath.toLocal8Bit().toStdString());
+            if (!calibrationValid) {
+                profileErrors.append(
+                            "calibrate_config.yaml 缺失或无法读取");
+            } else {
+                if (diskCalibration.barcode_poly.size() != 4
+                        || profile.barcodePoly.size() != 4) {
+                    profileErrors.append(
+                                "二维码区域 barcode_poly 必须包含4个点");
+                }
+                if (diskCalibration.date_poly.size() < 3
+                        || profile.datePoly.size() < 3) {
+                    profileErrors.append(
+                                "日期区域 date_poly 至少需要3个点");
+                }
+            }
+
+            if (profile.settings.targetText.trimmed().isEmpty()
+                    || profile.targetCount <= 0) {
+                profileErrors.append("目标字符尚未设置");
+            }
+            if (profile.digitTemplates.empty()
+                    || profile.digitTemplates.size()
+                       != profile.digitTemplateTargetIndexes.size()) {
+                profileErrors.append("字符模板缺失或索引配置无效");
+            }
+
+            if (!profileErrors.isEmpty()) {
+                barcodeStartErrors.append(
+                            QString("模板“%1”：%2")
+                            .arg(profileName)
+                            .arg(profileErrors.join("；")));
+            }
+        }
+
+        if (!barcodeStartErrors.isEmpty()) {
+            QMessageBox::warning(
+                        this,
+                        "二维码+三期模板预检失败",
+                        QString("以下问题必须处理后才能启动检测：\n\n%1")
+                        .arg(barcodeStartErrors.join("\n")));
+            return;
+        }
+    }
+
     // 启动检测只检查真实模板文件，不再让历史 hasValidBoxes=false 单独阻止启动。
     QStringList productTemplateErrors;
     if (!isTissueMode && !isWordProfileMode) {
@@ -9720,6 +9965,7 @@ void Widget::on_plcbtn_clicked()
             trackingProfile.name = profileName;
             trackingProfile.profileIndex = i;
             trackingProfile.trackingTemplate = profile.trackingTemplate;
+            trackingProfile.barcodePoly = profile.barcodePoly;
             trackingProfile.datePoly = profile.datePoly;
             wordTrackingProfilesForRun.push_back(trackingProfile);
         }

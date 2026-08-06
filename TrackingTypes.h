@@ -8,6 +8,7 @@
 
 struct DetectionPose {
     bool valid = false;
+    std::vector<cv::Point> barcodePoly;
     std::vector<cv::Point> datePoly;
     std::vector<cv::Point> trackingPoly;
     cv::Point2f anchorCenter = cv::Point2f(0.0f, 0.0f);
@@ -23,6 +24,7 @@ struct WordTrackingProfile {
     QString name;
     int profileIndex = -1;
     cv::Mat trackingTemplate;
+    std::vector<cv::Point2f> barcodePoly;
     std::vector<cv::Point2f> datePoly;
 };
 
@@ -36,10 +38,10 @@ struct OrientedDateRoi {
     cv::Mat inverseRotationMatrix;
 };
 
-struct OrientedTrackingRoi {
+struct OrientedBarcodeRoi {
     bool valid = false;
     cv::Mat rotatedImage;
-    std::vector<cv::Point> rotatedTrackingPoly;
+    std::vector<cv::Point> rotatedBarcodePoly;
     cv::Rect roi;
     cv::Mat grayRoi;
     cv::Mat rotationMatrix;
@@ -76,17 +78,26 @@ inline std::vector<cv::Point> buildRotatedTrackingPoly(const cv::Point2f& center
     return poly;
 }
 
-inline std::vector<cv::Point> buildRotatedDatePoly(const cv::Point2f& center,
-                                                   const std::vector<cv::Point2f>& relDatePoly,
-                                                   float angleDeg)
+inline std::vector<cv::Point> buildRotatedRelativePoly(
+    const cv::Point2f& center,
+    const std::vector<cv::Point2f>& relativePoly,
+    float angleDeg)
 {
     std::vector<cv::Point> poly;
-    poly.reserve(relDatePoly.size());
-    for (const auto& pt : relDatePoly) {
+    poly.reserve(relativePoly.size());
+    for (const auto& pt : relativePoly) {
         const cv::Point2f rotated = rotateRelativePoint(pt, angleDeg);
         poly.emplace_back(cvRound(center.x + rotated.x), cvRound(center.y + rotated.y));
     }
     return poly;
+}
+
+inline std::vector<cv::Point> buildRotatedDatePoly(
+    const cv::Point2f& center,
+    const std::vector<cv::Point2f>& relDatePoly,
+    float angleDeg)
+{
+    return buildRotatedRelativePoly(center, relDatePoly, angleDeg);
 }
 
 inline DetectionPose buildDetectionPose(const cv::Point2f& center,

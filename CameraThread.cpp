@@ -39,6 +39,7 @@ void CameraThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackin
         WordTrackingState state;
         state.name = profile.name;
         state.profileIndex = profile.profileIndex;
+        state.barcodePoly = profile.barcodePoly;
         state.datePoly = profile.datePoly;
         state.ready = state.matcher.init(profile.trackingTemplate);
         if (state.ready) {
@@ -198,6 +199,11 @@ void CameraThread::run() {
                                     continue;
                                 }
 
+                                pose.barcodePoly =
+                                        buildRotatedRelativePoly(
+                                            pose.anchorCenter,
+                                            state.barcodePoly,
+                                            pose.angleDeg);
                                 pose.wordTemplateProfileIndex = state.profileIndex;
                                 if (!bestPose.valid || pose.score > bestPose.score) {
                                     bestPose = pose;

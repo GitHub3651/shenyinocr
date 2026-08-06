@@ -147,6 +147,7 @@ bool CalibrationData::load(const std::string& yamlPath) {
         if (!fs.isOpened()) return false;
         fs["stamp_poly"] >> stamp_poly;
         fs["date_poly"] >> date_poly; // 加载生产日期多边形
+        fs["barcode_poly"] >> barcode_poly; // 二维码区域为可选节点
         fs.release();
         return true;
     } catch (...) {
