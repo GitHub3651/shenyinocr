@@ -162,8 +162,8 @@ LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xxhash/
 #win32:CONFIG(release, debug|release): LIBS += -L$$PWD/SDK/Lib/ -lMvCameraControl
 #else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/SDK/Lib/ -lMvCameraControld
 
-INCLUDEPATH += $$THIRD_PARTY/legacy/SDK/Includes
-DEPENDPATH += $$THIRD_PARTY/legacy/SDK/Includes
+INCLUDEPATH += $$THIRD_PARTY/hikvision_mvs_sdk/include
+DEPENDPATH += $$THIRD_PARTY/hikvision_mvs_sdk/include
 
 
 RC_ICONS = sy.ico
@@ -181,7 +181,7 @@ DEPENDPATH += $$THIRD_PARTY/Libraries/win64
 
 
 
-LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lMvCameraControl
+LIBS += -L$$THIRD_PARTY/hikvision_mvs_sdk/lib/win64/ -lMvCameraControl
 LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lsnap7
 
 
