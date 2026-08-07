@@ -220,3 +220,12 @@ INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 
 DISTFILES +=
+
+# Let Qt Creator run the Release executable from its build directory.  The
+# validated dist package remains the source of runtime DLLs, models and config.
+win32:CONFIG(release, debug|release) {
+    RUNTIME_DEPLOY_SCRIPT = $$shell_path($$PROJECT_ROOT/app/deploy_runtime.ps1)
+    RUNTIME_DEPLOY_SOURCE = $$shell_path($$PROJECT_ROOT/dist/ShengYin)
+    RUNTIME_DEPLOY_DESTINATION = $$shell_path($$OUT_PWD/release)
+    QMAKE_POST_LINK += powershell -NoProfile -ExecutionPolicy Bypass -File $$RUNTIME_DEPLOY_SCRIPT -Source $$RUNTIME_DEPLOY_SOURCE -Destination $$RUNTIME_DEPLOY_DESTINATION
+}
