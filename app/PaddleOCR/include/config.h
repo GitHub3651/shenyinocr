@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 #include <QDebug>
+#include <QDir>
+#include <QFileInfo>
 #include <QString>
 
 #include "utility.h"
@@ -31,6 +33,18 @@ class OCRConfig {
 public:
   explicit OCRConfig(const std::string &config_file) {
     config_map_ = LoadConfig(config_file);
+
+    // Relative paths are resolved from the configuration file, rather than
+    // from Qt Creator's current working directory. This keeps a deployed
+    // config1.txt and its Model/ folder self-contained beside the executable.
+    const QDir configDirectory =
+        QFileInfo(QString::fromStdString(config_file)).absoluteDir();
+    const auto resolveConfigPath = [&configDirectory](const std::string &configuredPath) {
+      const QString path = QString::fromStdString(configuredPath);
+      return QDir::cleanPath(QDir::isAbsolutePath(path)
+                                 ? path
+                                 : configDirectory.absoluteFilePath(path));
+    };
 
     this->use_gpu = bool(stoi(config_map_["use_gpu"]));
 
@@ -51,15 +65,15 @@ public:
 
     this->det_db_unclip_ratio = stod(config_map_["det_db_unclip_ratio"]);
 
-    this->det_model_dir.assign(config_map_["det_model_dir"]);
+    this->det_model_dir = resolveConfigPath(config_map_["det_model_dir"]).toStdString();
 
-    this->rec_model_dir.assign(config_map_["rec_model_dir"]);
+    this->rec_model_dir = resolveConfigPath(config_map_["rec_model_dir"]).toStdString();
 
-    this->char_list_file.assign(config_map_["char_list_file"]);
+    this->char_list_file = resolveConfigPath(config_map_["char_list_file"]).toStdString();
 
     this->use_angle_cls = bool(stoi(config_map_["use_angle_cls"]));
 
-    this->cls_model_dir.assign(config_map_["cls_model_dir"]);
+    this->cls_model_dir = resolveConfigPath(config_map_["cls_model_dir"]).toStdString();
 
     this->cls_thresh = stod(config_map_["cls_thresh"]);
 

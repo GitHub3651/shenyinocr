@@ -40,6 +40,7 @@
 #include <QUrl>
 #include <QDateTime>
 #include <QApplication>
+#include <QCoreApplication>
 #include <QTranslator>
 #include <QIcon>
 #include <QCamera>
@@ -943,7 +944,9 @@ Widget::Widget(QWidget *parent)
     qDebug() << "1. initWidget执行完毕 ";
 
     // 加载OCR配置文件
-    config = new OCRConfig("config1.txt");
+    const QString configPath = QDir(QCoreApplication::applicationDirPath())
+                                   .filePath(QStringLiteral("config1.txt"));
+    config = new OCRConfig(configPath.toStdString());
     config->PrintConfigInfo();
     qDebug() << "2. config.txt 读取完毕";
 
@@ -1165,11 +1168,12 @@ void Widget::initWidget()
     m_bOpenDevice = false;
 
     // 创建图像保存文件夹
-    QString imagePath = QDir::currentPath() + "/myImage/";
-    QDir dstDir(imagePath);
-    if (!dstDir.exists())
+    const QString imagePath = QDir(QCoreApplication::applicationDirPath())
+                                  .filePath(QStringLiteral("myImage"));
+    QDir dstDir;
+    if (!dstDir.exists(imagePath))
     {
-        if (!dstDir.mkdir(imagePath))
+        if (!dstDir.mkpath(imagePath))
         {
             qDebug() << "创建Image文件夹失败！";
         }
