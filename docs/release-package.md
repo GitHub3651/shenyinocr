@@ -1,13 +1,18 @@
 # 独立发布包约定
 
-正式交付目录固定为 `dist/ShengYin/`，不得以 `build/` 或历史 `output/` 作为发布来源。当前只建立约定，不复制可执行文件、模型或 DLL。
+正式交付目录固定为 `dist/ShengYin/`；`build/` 只用于 Qt Creator 编译，`archive/legacy-output-20260807/` 保留迁移前运行目录，不作为正式发布来源。
 
-发布前需要：
+## 当前 V3 发布基线
 
-1. 先确定 OCR 模型版本（V3 或 V5），并完成对应模型组合的现场验证。
-2. 在 `dist/ShengYin/` 放入 `ShengYin.exe`、唯一运行配置、唯一模型目录、`BarcodeDecoder.dll`、`license.ini`、Qt 插件及 Paddle/OpenCV/海康/Snap7 所需运行库。
-3. 生成包含每个 DLL、模型和配置文件的路径、大小、SHA-256 的发布清单；发布前校验缺失和重复项。
-4. 从 `dist/ShengYin/` 直接启动，确认不依赖 Qt Creator 工作目录、源目录或 `output/`。
-5. 完成模板匹配、字库匹配、深度模型、纸巾检测、二维码+三期，以及相机、PLC、软硬触发、授权、二维码 DLL 和多相机入口的人工回归。
+- OCR 固定为 PP-OCRv3：英文检测、英文识别、方向分类器和 `en_dict.txt`。
+- 独立包位于 `dist/ShengYin/`，包含 `ShengYin.exe`、唯一 `config1.txt`、V3 模型、授权、二维码 DLL、Qt/Paddle/OpenCV/海康/Snap7 运行库及 `manifest.sha256`。
+- 程序从 exe 同级加载 `config1.txt`；配置中的相对模型和词典路径以该配置文件所在目录为准。
+- 2026-08-07 已从独立包直接启动，并完成五种检测模式、模板读写、相机、PLC、软硬触发、授权、二维码 DLL 和多相机入口的人工回归。
+- PP-OCRv5 服务器模型保留在 `archive/model-upgrade-v5-20260807/`，不参与当前编译、运行或发布。
 
-在以上条件通过前，`output/` 仅作为历史运行/构建目录保留，不能删除或作为正式交付依据。
+## 使用和校验
+
+1. 直接运行 `dist/ShengYin/ShengYin.exe`，不通过 Qt Creator，也不运行 `build/` 中的 exe。
+2. `manifest.sha256` 记录包内每个运行文件（不含清单自身）的 SHA-256，可用于拷贝后的完整性检查。
+3. `output/` 已归档；如需回溯旧运行环境，使用 `archive/legacy-output-20260807/`，不要将其重新作为发布目录。
+4. 现场模板和 AppData 配置保持原有位置，不随发布包迁移。
