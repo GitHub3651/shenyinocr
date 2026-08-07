@@ -173,7 +173,6 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 
-#win32:CONFIG(release, debug|release): LIBS += -L$$PWD/OpenCV/ -lopencv_world440
 
 INCLUDEPATH += $$THIRD_PARTY/opencv/include/opencv2
 DEPENDPATH += $$THIRD_PARTY/opencv/include/opencv2
