@@ -123,7 +123,6 @@ RESOURCES += \
 
 
 CONFIG += C++11
-QMAKE_LFLAGS += /MTd
 
 TRANSLATIONS += Translate_EN.ts \
                  Translate_CN.ts \
