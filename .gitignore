@@ -1,5 +1,6 @@
 # Build, deployment and archival directories
 /build/
+/build-*/
 /dist/
 /archive/
 /output/

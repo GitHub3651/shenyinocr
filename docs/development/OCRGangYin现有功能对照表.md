@@ -54,7 +54,7 @@
 | SET-007 | 相机增益应用 | 增益“设置”或检测启动 | 相机已打开 | `on_pushButton_12_clicked`→`applyCameraGainFromUi`→SDK | 整数；SDK范围；默认1 | 合法写入并保存；空/越界/SDK失败提示 | 写相机`Gain` | 保持 | `devices/camera/`+Recipe | 保留后适配 | 边界/越界/正常值，重启核对 | 已基线 | S；U |
 | SET-008 | 颜色通道应用 | “颜色通道→确认” | 线程存在 | `on_pushButton_7_clicked`→`emit choosechannel`→`MyThread/CameraThread::receivecolorchannel*` | 彩色/红/绿/蓝；默认彩色 | 后续帧按选定通道处理；无效索引回彩色 | 更新线程参数并保存 | 通道映射保持 | Recipe+detection input transform | 保留后迁移 | 同一固定彩色场景切换四项，记录处理图与重启恢复 | 已基线 | S；U |
 | SET-009 | 图像旋转应用 | “图像旋转→设置” | 线程存在 | `on_pushButton_9_clicked`→`emit rotate`→采集线程旋转 | 无/顺90/逆90/180；默认无 | 后续采集图旋转；无效索引回无 | 更新线程参数并保存 | 旋转方向保持 | Recipe+detection input transform | 保留后迁移 | 带方向标记固定场景切四项，核对方向和重启恢复 | 已基线 | S；U |
-| SET-010 | 纸巾粗糙度阈值 | 纸巾模式“设置”及启动 | 值>0 | `applyTissueRoughnessThresholdFromUi`→`TissueRollDetector::setDefaultRoughnessThreshold`→线程构造检测器 | 整机默认6.0；UI文件/检测器内部初始5.2；加载全局设置后实际应用保存值 | 合法值供后续检测器使用；非法提示且不应用 | 更新进程级原子默认并保存 | Stage 0记录差异；Stage 1统一唯一6.0来源 | `recipes/tissue_recipe.*` | 计划内优化 | 冷启动、无设置、已有设置分别记录UI与检测日志阈值；运行离线测试 | 已基线 | S；T；U |
+| SET-010 | 纸巾粗糙度阈值 | 纸巾模式“设置”及启动 | 值>0 | `applyTissueRoughnessThresholdFromUi`→`TissueRollDetector::setDefaultRoughnessThreshold`→线程构造检测器 | 整机默认6.0；UI文件/检测器内部初始5.2；加载全局设置后实际应用保存值 | 合法值供后续检测器使用；非法提示且不应用 | 更新进程级原子默认并保存 | Stage 0记录差异；Stage 1统一唯一6.0来源 | `recipes/tissue_recipe.*` | 计划内优化 | 冷启动、无设置、已有设置分别记录UI与检测日志阈值；运行离线测试 | 已基线 | S；T；U；主程序已运行；2026-08-09 Qt Creator Release连续两次测试通过，锁定内部5.2与显式6.0；真实UI阈值回归仍待用户 |
 | SET-011 | 存图策略设置 | 保存模式、类型、路径浏览 | 主窗空闲 | UI改变→`syncImmediateGlobalSettingsFromUi`→`saveSettings`；浏览按钮选目录 | 不保存/NG/OK/全部；两类都存/仅标注/仅原图；默认不保存+仅标注 | 选项控制后续存图；未选目录时依现有路径逻辑；浏览取消不变 | 写全局设置 | 详见SAVE功能 | `recipes/save_policy.*` | 保留后迁移 | 逐组合选择、重启，核对显隐和实际文件 | 已基线 | S；U |
 | SET-012 | 清空当前软件数据 | 设置页按钮 | 用户二次确认 | `clearCurrentSoftwareData`→删除全局设置→重置UI/状态 | 只针对当前用户软件数据 | 确认后恢复默认公共设置；取消不变；失败提示 | 删除`settings.ini`；不删除模板、图片、授权、日志 | 删除范围必须保持 | `system_support/settings/` | 保留 | 在测试用户数据中确认/取消各一次，核对保留项 | 已基线 | S；U |
 | SET-013 | 恢复默认设置 | 设置页按钮 | 用户确认；设备状态决定可立即应用项 | `restoreDefaultGlobalSettings`→按相机/PLC连接状态选择性恢复→dirty刷新 | `defaultGlobalSettings` | 可立即项恢复；不能立即写硬件项保持`*`待应用并提示 | 改UI/已应用设置，可能写设置 | 状态相关语义保持 | `ui/settings_controller.*` | 保留 | 相机开/关、PLC连/断四组合执行并核对星号/提示 | 已基线 | S；U |
@@ -88,7 +88,7 @@
 | DET-002 | 钢印+字符模板模式 | 模式0检测帧 | 有tracking、date、ring/stamp和字符模板 | `dispatchDetectionByMode`→`slot_readAndDetect`→`TemplateMatch::run3`+`OverlapDetector::run`→合并判定 | 目标字符数、图像阈值、定位位姿和钢印资源 | 字符数等于目标且零重叠才OK；资源/定位/匹配/重叠异常均当前按NG | Overlay、统计、存图、PLC/剔除队列 | 两条件AND及失败文本需固定样本锁定 | `detection/stamp_pipeline.*` | 保留后拆解 | STAMP三类固定样本，从原入口记录文本、框、计数、文件、PLC | 已基线 | S；U |
 | DET-003 | 字库多Profile模式 | 模式1检测帧 | 至少一个完整Profile | 采集线程并行匹配所有Profile→最佳score→`runWordTemplateDetection`→`TemplateMatch::run3` | 每Profile目标、字符图、阈值；最佳定位Profile | 匹配字符数等于目标数OK；否则NG；无定位按节流策略生成NG | Profile名/框显示、统计、存图、PLC | 自动选择和字符计数语义保持 | `detection/word_pipeline.*` | 保留后拆解 | WORD三类样本和两Profile竞争场景，记录选中Profile/分数/副作用 | 已基线 | S；U |
 | DET-004 | 深度OCR模式 | 模式2检测帧 | OCR模型已加载、模板日期区域有效 | `dispatchDetectionByMode`→`slot_readAndDetect3`→旋转裁剪日期ROI→`DBDetector::Run`→`CRNNRecognizer::RunOCR`→清洗/拼接→精确比较 | 目标文本；保留中英数字及`- . :` | 清洗拼接文本与目标完全相等OK；空/不等/模型结果异常当前为NG | OCR框/文本、统计、异步存图、PLC | 精确比较和字符清洗保持 | `detection/ocr_pipeline.*` | 保留后拆解 | OCR三类样本，记录原识别列表、清洗文本、框和最终判定 | 已基线 | S；U |
-| DET-005 | 纸巾卷粗糙度模式 | 模式3采集线程 | 相机帧；不需传统模板 | `MyThread/CameraThread`→`TissueRollDetector::processImage`→`slot_handleTissueResult` | 粗糙度阈值；当前UI应用整机值6.0；算法找内孔、外圆和环粗糙度 | 找到卷且score<threshold为OK；空图、无圆、外轮廓失败或score>=阈值为NG并带诊断 | Overlay、统计、存图、PLC | 当前边界是`>=`判NG；离线失败测试已新增 | `recipes/tissue_recipe.*`+`detection/tissue_pipeline.*` | Stage 1先迁移 | TISSUE三类样本；Qt Creator运行离线测试；记录score/阈值/圆框 | 已基线 | S；T；U |
+| DET-005 | 纸巾卷粗糙度模式 | 模式3采集线程 | 相机帧；不需传统模板 | `MyThread/CameraThread`→`TissueRollDetector::processImage`→`slot_handleTissueResult` | 粗糙度阈值；当前UI应用整机值6.0；算法找内孔、外圆和环粗糙度 | 找到卷且score<threshold为OK；空图、无圆、外轮廓失败或score>=阈值为NG并带诊断 | Overlay、统计、存图、PLC | 当前边界是`>=`判NG；离线失败测试已新增 | `recipes/tissue_recipe.*`+`detection/tissue_pipeline.*` | Stage 1先迁移 | TISSUE三类样本；Qt Creator运行离线测试；记录score/阈值/圆框 | 已基线 | S；T；U；主程序已运行；2026-08-09 Qt Creator Release连续两次测试通过，锁定空图/纯黑图失败语义；真实纸巾OK/NG样本仍待用户 |
 | DET-006 | 二维码优先+三期模式 | 模式4检测帧 | Profile含tracking、二维码4点、日期多边形、字符模板，DLL可用 | `runBarcodeWordDetection`→组合旋转ROI→`decodeBarcodeRoi`快路径/限时fallback→成功后`runWordTemplateDetection` | DataMatrix/QR格式掩码、padding8%、预算60ms、fallback、缓存首选策略 | 读码失败立即NG且不执行日期；读码成功再做三期，二者共同形成结果 | 显示码内容/日期状态、统计、存图、PLC | “读码优先、失败短路”保持 | `detection/barcode_word_pipeline.*` | 保留后拆解 | 可读OK、可读日期NG、不可读、DLL缺失、超时样本各一次 | 已基线 | S；U |
 | DET-007 | 定位失败收尾 | 字库家族采集时无有效pose | 已启动检测 | 软触发`MyThread`节流发失败；硬触发二维码模式逐触发发结果→`finalizeWordTrackingNg/finalizeBarcodeWordNg` | 软触发检测间隔；硬触发每个新回调帧 | 显示定位失败NG；二维码硬触发保证本次触发有收尾 | 增总数/NG、可存图、PLC或排队 | 软硬触发差异必须保持到Stage 4 | `runtime/`+Pipeline | 保留 | 移出视野：软触发观察频率；硬触发逐次打光记录结果数和PLC | 已基线 | S；U |
 | DET-008 | 算法/系统失败当前统计语义 | 模板缺失、读码失败、无圆、无定位等到达收尾 | 检测已启动或启动预检 | 各Pipeline失败分支→现有NG收尾 | 当前没有独立SystemError统计 | 当前把到达正式收尾的失败计入总数和产品NG；部分启动预检失败不计数 | 影响合格率、存图和PLC | Stage 1-3保持；计划的故障分类在后续阶段处理 | `detection/types`+`runtime/result_handler` | 保留当前行为 | 对每模式失败输入记录是否计数/存图/PLC，形成固定证据 | 已基线 | S；U |
@@ -175,8 +175,8 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 88 | 除MC-002、MC-003外的全部功能ID；运行证据中标U的项目仍待用户确认 |
-| 迁移中 | 0 | 尚未开始生产职责迁移 |
+| 已基线 | 88 | 除MC-002、MC-003外的全部功能ID；SET-010、DET-005离线测试门禁已通过，运行证据中标U的项目仍待用户确认 |
+| 迁移中 | 0 | 当前无代码迁移；Stage 0仍在补充实际运行证据 |
 | 已验证 | 0 | Stage 0未通过，不声称已验证新路径 |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
