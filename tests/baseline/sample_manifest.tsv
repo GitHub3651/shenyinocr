@@ -1,0 +1,16 @@
+sample_id	mode	case_kind	image_or_capture_source	template_or_profile	expected_outcome	expected_text	overlay_assertions	counter_delta	saved_files	plc_write_sequence	elapsed_ms	evidence_owner	status
+STAMP-OK-001	stamp_detection	OK	待填写	待填写	待用户验证	待填写	日期框、钢印框及重叠颜色待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+STAMP-NG-001	stamp_detection	NG	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+STAMP-FAIL-001	stamp_detection	FAILURE	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+WORD-OK-001	word_detection	OK	待填写	待填写	待用户验证	待填写	定位Profile与字符框待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+WORD-NG-001	word_detection	NG	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+WORD-FAIL-001	word_detection	FAILURE	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+OCR-OK-001	ocr_detection	OK	待填写	待填写	待用户验证	待填写	OCR框待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+OCR-NG-001	ocr_detection	NG	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+OCR-FAIL-001	ocr_detection	FAILURE	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+TISSUE-OK-001	tissue_detection	OK	待填写	不需要传统模板	待用户验证	不适用	内外圆、粗糙度分数待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+TISSUE-NG-001	tissue_detection	NG	待填写	不需要传统模板	待用户验证	不适用	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+TISSUE-FAIL-001	tissue_detection	FAILURE	待填写	不需要传统模板	待用户验证	不适用	无纸卷/空图诊断待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+BARCODE-OK-001	barcode_word_detection	OK	待填写	待填写	待用户验证	二维码内容与三期文本待填写	二维码框、日期框、字符框待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+BARCODE-NG-001	barcode_word_detection	NG	待填写	待填写	待用户验证	待填写	待记录	待填写	待填写	待填写	待填写	用户	待用户验证
+BARCODE-FAIL-001	barcode_word_detection	FAILURE	待填写	待填写	待用户验证	读码失败文本待记录	二维码/失败诊断待记录	待填写	待填写	待填写	待填写	用户	待用户验证
