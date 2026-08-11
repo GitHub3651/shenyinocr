@@ -47,14 +47,14 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | SET-001 | 全局设置读取与安全保存 | 启动及各“设置/确认”按钮 | AppData可访问 | `AppSettingsManager::loadGlobalSettings/saveGlobalSettings`→临时文件验证→替换/回滚 | 配置版本2；当前用户AppData | 合法值加载；未知ID归一化；保存失败保留旧文件并报告/日志 | 读写`settings.ini`及临时/备份 | 整机设置语义保持 | `system_support/settings/` | 保留后封装 | 保存、重启；损坏配置；模拟不可写目录，核对回退 | 已基线 | S；U |
 | SET-002 | 整机默认值 | 首次启动或恢复默认 | 无有效全局设置 | `defaultGlobalSettings`→`applyGlobalSettingsToUi` | 字库模式、全不保存、仅标注、彩色、无旋转、触发启用、间歇、曝光800、增益1、PLC `192.168.10.10/0/1`、纸巾6.0等 | UI采用默认；硬件未必立即写入 | 默认可被保存 | Stage 1仅按计划统一纸巾唯一来源 | `recipes/machine_settings.*` | 保留/计划内优化 | 备份并清除设置后启动，逐项记录；不覆盖用户现有文件 | 已基线 | S；U |
-| SET-003 | 模板私有设置 | 选择、保存、编辑模板 | 模板目录可读写 | `load/saveTemplatePrivateSettings`→`app_settings.appset`临时验证/备份 | 目标文本、阈值70、定位框、字符框、BarcodeOptions；配置v2 | 合法加载；失败拒绝模板或保留旧配置；保存失败不覆盖旧配置 | 读写模板目录配置 | 后续迁入Recipe，格式兼容 | `recipes/repository/` | 保留后迁移 | 有效/损坏/只读目录分别加载与保存，核对提示和旧文件 | 已基线 | S；U |
+| SET-003 | 模板私有设置 | 选择、保存、编辑模板 | 模板目录可读写 | `load/saveTemplatePrivateSettings`→`app_settings.appset`临时验证/备份 | 目标文本、阈值70、定位框、字符框、BarcodeOptions；配置v2 | 合法加载；失败拒绝模板或保留旧配置；保存失败不覆盖旧配置 | 读写模板目录配置 | 后续迁入Recipe，格式兼容 | `recipes/repository/` | 保留后迁移 | 有效/损坏/只读目录分别加载与保存，核对提示和旧文件 | 已基线 | S；T；U；ProductRecipe基础Schema/校验/快照测试已通过，旧INI入口尚未迁移 |
 | SET-004 | 未应用标记与启动确认 | 编辑带绑定的参数 | 参数可编辑 | `setupGlobalSettingBindings`/模板dirty跟踪→标签加`*`→启动`dirtySettingsMessage` | UI值与`m_appliedGlobalSettings`/Profile比较 | 启动前列出未应用项；取消不启动；继续会恢复已应用值后运行 | 标签变化；可能丢弃未应用UI值 | 保持“应用”和“编辑”边界 | `ui/settings_controller.*` | 保留 | 修改相机、PLC、阈值但不确认，启动后分别选取消/继续 | 已基线 | S；U |
 | SET-005 | 运行中参数禁用 | 检测/模板状态变化 | 硬件或模板操作进行中 | `updateHardwareParameterUiEnabled`+`registerHardwareAction` | 相机打开、PLC连接、操作状态 | 运行中禁止会改变设备/关键参数的控件；不同连接状态允许不同字段 | 控件状态改变 | 防止中途改运行快照 | `ui/settings_controller.*` | 保留 | 在空闲、相机开/关、PLC连/断、检测中逐项核对 | 已基线 | S；U |
 | SET-006 | 相机曝光应用 | 曝光“设置”或检测启动 | 相机已打开 | `on_sureButton_clicked`→`queryCameraExposureRange`→`applyCameraExposureValue` | 整数曝光；相机SDK给最小/最大；默认800 | 范围内写入；越界/SDK失败提示；打开相机时保存值会按范围调整并提示 | 写相机`ExposureTime`；成功保存设置 | 数值与生效时机保持 | `devices/camera/`+Recipe | 保留后适配 | 最小、最大、越界、正常值各一次；重启开相机核对 | 已基线 | S；U |
 | SET-007 | 相机增益应用 | 增益“设置”或检测启动 | 相机已打开 | `on_pushButton_12_clicked`→`applyCameraGainFromUi`→SDK | 整数；SDK范围；默认1 | 合法写入并保存；空/越界/SDK失败提示 | 写相机`Gain` | 保持 | `devices/camera/`+Recipe | 保留后适配 | 边界/越界/正常值，重启核对 | 已基线 | S；U |
 | SET-008 | 颜色通道应用 | “颜色通道→确认” | 线程存在 | `on_pushButton_7_clicked`→`emit choosechannel`→`MyThread/CameraThread::receivecolorchannel*` | 彩色/红/绿/蓝；默认彩色 | 后续帧按选定通道处理；无效索引回彩色 | 更新线程参数并保存 | 通道映射保持 | Recipe+detection input transform | 保留后迁移 | 同一固定彩色场景切换四项，记录处理图与重启恢复 | 已基线 | S；U |
 | SET-009 | 图像旋转应用 | “图像旋转→设置” | 线程存在 | `on_pushButton_9_clicked`→`emit rotate`→采集线程旋转 | 无/顺90/逆90/180；默认无 | 后续采集图旋转；无效索引回无 | 更新线程参数并保存 | 旋转方向保持 | Recipe+detection input transform | 保留后迁移 | 带方向标记固定场景切四项，核对方向和重启恢复 | 已基线 | S；U |
-| SET-010 | 纸巾粗糙度阈值 | 纸巾模式“设置”及启动 | 值>0 | `applyTissueRoughnessThresholdFromUi`→`TissueRollDetector::setDefaultRoughnessThreshold`→线程构造检测器 | 整机默认6.0；UI文件/检测器内部初始5.2；加载全局设置后实际应用保存值 | 合法值供后续检测器使用；非法提示且不应用 | 更新进程级原子默认并保存 | Stage 0记录差异；Stage 1统一唯一6.0来源 | `recipes/tissue_recipe.*` | 计划内优化 | 冷启动、无设置、已有设置分别记录UI与检测日志阈值；运行离线测试 | 已基线 | S；T；U；主程序已运行；2026-08-09 Qt Creator Release连续两次测试通过，锁定内部5.2与显式6.0；真实UI阈值回归仍待用户 |
+| SET-010 | 纸巾粗糙度阈值 | 纸巾模式“设置”及启动 | 值>0 | `applyTissueRoughnessThresholdFromUi`→`TissueRollDetector::setDefaultRoughnessThreshold`→线程构造检测器 | 整机默认6.0；UI文件/检测器内部初始5.2；加载全局设置后实际应用保存值 | 合法值供后续检测器使用；非法提示且不应用 | 更新进程级原子默认并保存 | Stage 0记录差异；Stage 1统一唯一6.0来源 | `recipes/tissue_recipe.*` | 计划内优化 | 冷启动、无设置、已有设置分别记录UI与检测日志阈值；运行离线测试 | 已基线 | S；T；U；ProductRecipe新配方6.0和旧纸巾基线测试均已通过，旧UI/检测器来源尚未切换 |
 | SET-011 | 存图策略设置 | 保存模式、类型、路径浏览 | 主窗空闲 | UI改变→`syncImmediateGlobalSettingsFromUi`→`saveSettings`；浏览按钮选目录 | 不保存/NG/OK/全部；两类都存/仅标注/仅原图；默认不保存+仅标注 | 选项控制后续存图；未选目录时依现有路径逻辑；浏览取消不变 | 写全局设置 | 详见SAVE功能 | `recipes/save_policy.*` | 保留后迁移 | 逐组合选择、重启，核对显隐和实际文件 | 已基线 | S；U |
 | SET-012 | 清空当前软件数据 | 设置页按钮 | 用户二次确认 | `clearCurrentSoftwareData`→删除全局设置→重置UI/状态 | 只针对当前用户软件数据 | 确认后恢复默认公共设置；取消不变；失败提示 | 删除`settings.ini`；不删除模板、图片、授权、日志 | 删除范围必须保持 | `system_support/settings/` | 保留 | 在测试用户数据中确认/取消各一次，核对保留项 | 已基线 | S；U |
 | SET-013 | 恢复默认设置 | 设置页按钮 | 用户确认；设备状态决定可立即应用项 | `restoreDefaultGlobalSettings`→按相机/PLC连接状态选择性恢复→dirty刷新 | `defaultGlobalSettings` | 可立即项恢复；不能立即写硬件项保持`*`待应用并提示 | 改UI/已应用设置，可能写设置 | 状态相关语义保持 | `ui/settings_controller.*` | 保留 | 相机开/关、PLC连/断四组合执行并核对星号/提示 | 已基线 | S；U |
@@ -68,10 +68,10 @@
 | TPL-003 | 定位矩形绘制 | 冻结模板图后左键拖动 | 钢印/字库/二维码模式 | `ImageLabel::mousePress/Move/Release`→`m_trackingRect`→引导事件 | 显示坐标，保存时换算到原图 | 形成归一化定位框；过小/无框不能完成保存 | 仅UI选择状态 | 独立登记ImageLabel行为 | `ui/widgets/image_label.*` | 保留后移动 | 不同比例窗口画框，核对显示与保存后物理框 | 已基线 | S；U |
 | TPL-004 | 二维码矩形与即时读码 | 二维码模式第二个矩形 | 已有定位框 | `ImageLabel`→`validateBarcodeTemplateRect`→`decodeBarcodeRoi` | BarcodeOptions默认DataMatrix、padding8%、预算60ms、fallback开 | 可读则保留框并继续日期多边形；不可读弹原因、清二维码/日期但保留定位框 | 动态加载/调用`BarcodeDecoder.dll` | 二维码必须先验证 | `ui/template_editor/`+`detection/barcode/` | 保留 | 可读、不可读、越界二维码框各一次，核对清理范围 | 已基线 | S；U |
 | TPL-005 | 日期多边形绘制与闭合 | 左键逐点、右键闭合 | 已有前置框 | `ImageLabel`多边形状态→`signal_templateGuideEvent` | 至少3点 | 闭合后可保存/提示；点数不足保持绘制；Esc清理当前选择 | UI状态 | 保持鼠标/键盘语义 | `ui/widgets/image_label.*` | 保留后移动 | 2点右键、3+点右键、Esc，核对状态与提示 | 已基线 | S；U |
-| TPL-006 | 坐标换算与通用模板保存 | “保存模板” | 必需框完整，用户给产品名和根目录 | `on_pushButton_5_clicked`→UI坐标换原图→写`template_raw.png`/`tracking_template.bmp`/YAML→`saveSettingsToDir` | 产品目录名合法；覆盖需确认 | 保存并重新加载；非法名/路径/文件失败提示；同名覆盖会先清空且不可恢复 | 创建/覆盖产品目录与资源 | 当前覆盖语义保持，未来Recipe仓储化 | `recipes/template_repository.*` | 保留后迁移 | 新目录、非法名、同名取消/覆盖、只读目录各一次 | 已基线 | S；U |
+| TPL-006 | 坐标换算与通用模板保存 | “保存模板” | 必需框完整，用户给产品名和根目录 | `on_pushButton_5_clicked`→UI坐标换原图→写`template_raw.png`/`tracking_template.bmp`/YAML→`saveSettingsToDir` | 产品目录名合法；覆盖需确认 | 保存并重新加载；非法名/路径/文件失败提示；同名覆盖会先清空且不可恢复 | 创建/覆盖产品目录与资源 | 当前覆盖语义保持，未来Recipe仓储化 | `recipes/template_repository.*` | 保留后迁移 | 新目录、非法名、同名取消/覆盖、只读目录各一次 | 已基线 | S；T；U；基础Schema的ID/模式/参数/assets路径测试已通过，旧保存入口尚未迁移 |
 | TPL-007 | 钢印环与钢印区域标定 | 钢印模板保存过程中 | 通用框已保存 | `on_pushButton_5_clicked`→`getQuickRectROI`→`getPolygonROI`→写`template_ring.bmp`和`stamp_poly`→`OverlapDetector::init` | OpenCV交互ROI；相对吸管口中心坐标 | 有效ROI初始化重叠引擎；无效选择不生成完整钢印资源 | 额外写模板/YAML，打开OpenCV交互窗 | 保持标定次序与坐标 | `recipes/stamp/` | 保留后迁移 | 有效/取消/过小ROI，核对文件、YAML和后续检测 | 已基线 | S；U |
-| TPL-008 | 单模板选择与校验 | “选择模板”非字库家族 | 空闲状态 | `on_pushButton_4_clicked`→目录对话框→`loadSettingsFromDir`→读tracking/YAML→`initOverlapDetectorFromCurrentDir` | 目录中的私有配置和资源 | 合法模板显示名称并可启动；无效配置给严重警告且不可启动 | 保存模板路径历史、加载图像/引擎 | 保持失败不误启动 | `recipes/repository/` | 保留后迁移 | 合法、缺tracking、缺date_poly、损坏配置目录各一次 | 已基线 | S；U |
-| TPL-009 | 字库家族多Profile选择 | “选择模板”字库/二维码模式，可勾多目录 | 空闲状态 | 可勾选目录模型→逐项`loadWordTemplateProfileFromDir`→保留有效项→`refreshWordTemplateEditorCombo` | 每Profile配置、定位模板、YAML、目标文本、字符图片 | 至少一个有效则加载并列出跳过/待目标项；全无效保留旧模板 | 加载多份Mat和配置、保存历史 | 保持部分成功策略 | `recipes/profile_repository.*` | 保留后迁移 | 混合有效/无效/待目标目录，核对数量、提示和旧状态 | 已基线 | S；U |
+| TPL-008 | 单模板选择与校验 | “选择模板”非字库家族 | 空闲状态 | `on_pushButton_4_clicked`→目录对话框→`loadSettingsFromDir`→读tracking/YAML→`initOverlapDetectorFromCurrentDir` | 目录中的私有配置和资源 | 合法模板显示名称并可启动；无效配置给严重警告且不可启动 | 保存模板路径历史、加载图像/引擎 | 保持失败不误启动 | `recipes/repository/` | 保留后迁移 | 合法、缺tracking、缺date_poly、损坏配置目录各一次 | 已基线 | S；T；U；JSON字段和资源路径校验测试已通过，旧目录加载入口尚未迁移 |
+| TPL-009 | 字库家族多Profile选择 | “选择模板”字库/二维码模式，可勾多目录 | 空闲状态 | 可勾选目录模型→逐项`loadWordTemplateProfileFromDir`→保留有效项→`refreshWordTemplateEditorCombo` | 每Profile配置、定位模板、YAML、目标文本、字符图片 | 至少一个有效则加载并列出跳过/待目标项；全无效保留旧模板 | 加载多份Mat和配置、保存历史 | 保持部分成功策略 | `recipes/profile_repository.*` | 保留后迁移 | 混合有效/无效/待目标目录，核对数量、提示和旧状态 | 已基线 | S；T；U；ProductRecipe模式/资产映射测试已通过，多Profile仍由旧Widget缓存 |
 | TPL-010 | 当前Profile编辑器 | 多Profile加载后下拉选择 | 至少一个Profile | `refreshWordTemplateEditorCombo`→`setCurrentWordTemplateEditIndex`→应用目标/阈值/原图 | Profile顺序和目录名 | 切换只改变当前编辑对象，不改变其余Profile | UI切换，持有Profile缓存 | 保持编辑对象边界 | `ui/template_editor/` | 保留 | 加载2+Profile，往返切换核对文本、阈值、原图 | 已基线 | S；U |
 | TPL-011 | 单Profile目标字符 | “确认字符” | 字库家族且当前Profile有效 | `on_textsure_btn_clicked`→解析基本字符/变体→保存私有设置→加载字符模板→刷新缓存 | `dateEdit`；允许括号变体命名 | 全部模板存在则成功；缺图片时配置可保存但提示未加载项 | 写Profile配置、加载Mat | 保持字符解析和部分失败提示 | `recipes/word/` | 保留后迁移 | 普通、中英数字、变体、缺图目标各一次 | 已基线 | S；U |
 | TPL-012 | 批量目标字符 | “批量确认字符” | 已加载多个Profile | `on_batchTextsure_btn_clicked`→逐Profile保存并重载 | 当前输入应用所有选择Profile | 汇总成功/失败；失败Profile不冒充成功 | 批量写多个配置、重载缓存 | 保持逐项结果 | `recipes/word/` | 保留后迁移 | 2个可写+1个只读Profile批量操作，核对汇总与文件 | 已基线 | S；U |
@@ -175,8 +175,8 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 88 | 除MC-002、MC-003外的全部功能ID；SET-010、DET-005离线测试门禁已通过，运行证据中标U的项目仍待用户确认 |
-| 迁移中 | 0 | 当前无代码迁移；Stage 0仍在补充实际运行证据 |
+| 已基线 | 88 | 除MC-002、MC-003外的功能ID；ProductRecipe/JSON校验/只读快照已通过Qt Creator门禁，相关旧功能入口未切换 |
+| 迁移中 | 0 | 当前切片已收口；下一切片开始时再标记受影响功能ID |
 | 已验证 | 0 | Stage 0未通过，不声称已验证新路径 |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
@@ -198,6 +198,6 @@
 | 资源 | 路径/来源 | 覆盖功能 | 可重复条件 | 当前状态 |
 |---|---|---|---|---|
 | 五模式样本清单 | `tests/baseline/sample_manifest.tsv` | DET-002..008、RES、SAVE、PLC | 用户填写每模式OK/NG/FAILURE的固定图、模板、文本、Overlay、计数、存图、PLC和耗时 | 已建清单，15份实际证据待用户 |
-| 纸巾离线基线测试 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | SET-010、DET-005 | Qt Creator打开`tests/tests.pro`，Run qmake、Build并运行测试 | 源码已建，待用户Qt Creator验证 |
-| 生产主程序构建 | `app/AutoOCRproject.pro` | 全部主程序功能 | Qt 5.14.2/MSVC2017 x64 Release，Run qmake、Rebuild、Run | 待用户验证 |
+| 纸巾离线基线测试 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | SET-010、DET-005 | Qt Creator打开`tests/tests.pro`，Run qmake、Build并运行测试 | 2026-08-09连续两次`6 passed, 0 failed`；2026-08-12用户确认当前切片复验通过 |
+| 生产主程序构建 | `app/AutoOCRproject.pro` | 全部主程序功能 | Qt 5.14.2/MSVC2017 x64 Release，Run qmake、Rebuild、Run | 2026-08-12用户确认含基础配方源文件的当前主工程通过 |
 | 运行与性能记录 | `docs/development/OCRGangYin重构执行记录.md` | 内存、P50/P95、慢盘、停止/重启 | 用户按执行记录步骤填写真实数值 | 待用户验证 |

@@ -50,6 +50,7 @@ CONFIG(release, debug|release) {
 
 SOURCES += \
     appsettingsmanager.cpp \
+    recipes/product_recipe.cpp \
     CameraThread.cpp \
     DetectionModes.cpp \
     Detector.cpp \
@@ -81,6 +82,7 @@ SOURCES += \
 
 HEADERS += \
     appsettingsmanager.h \
+    recipes/product_recipe.h \
     BarcodeDecoderApi.h \
     BarcodeTypes.h \
     CameraThread.h \

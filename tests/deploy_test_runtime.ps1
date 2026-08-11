@@ -1,8 +1,7 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
-    [string]$SourceDll,
+    [Parameter(Mandatory = $false)]
+    [string]$SourceDll = '',
 
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
@@ -113,7 +112,11 @@ function Copy-VerifiedRuntimeDll
 $destinationPath = [System.IO.Path]::GetFullPath($Destination)
 New-Item -ItemType Directory -Force -Path $destinationPath | Out-Null
 $targetMachine = Get-PeMachine -ImagePath $TargetExecutable
+$runtimeDlls = @($QtCoreDll, $QtTestDll)
+if (-not [string]::IsNullOrWhiteSpace($SourceDll)) {
+    $runtimeDlls += $SourceDll
+}
 
-foreach ($runtimeDll in @($SourceDll, $QtCoreDll, $QtTestDll)) {
+foreach ($runtimeDll in $runtimeDlls) {
     Copy-VerifiedRuntimeDll -RuntimeDll $runtimeDll -DestinationDirectory $destinationPath -ExpectedMachine $targetMachine
 }
