@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 1 配方与算法拆分（按用户风险接受条件进入）
-- 当前切片：字库家族Profile资产清单组装（已完成）
-- 阶段结论：**Stage 1进行中**。旧Profile字段映射已形成提交`0e3af42`；本切片已按旧目录真实文件和最终Profile顺序生成新配方资产键、相对目标和源路径，并通过用户Qt Creator测试及主程序门禁；旧目录、加载判定和检测行为保持不变。
+- 当前切片：多Profile完整ProductRecipe候选组装（已完成）
+- 阶段结论：**Stage 1进行中**。Profile资产清单已形成提交`1d4b5ea`；多Profile参数和资产清单现可合并为单份完整`ProductRecipe`候选与`assetSourcePaths`，且已通过用户Qt Creator测试及主程序门禁。旧目录、选择/保存入口、加载判定和检测行为保持不变。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -96,12 +96,20 @@
 - 本切片目标：新增`recipes/template_profile_mapper.*`，无损转换`TemplatePrivateSettings`与`RecipeProfile`的目标文本、阈值、定位框、字符框/源图尺寸、二维码选项和资源键；旧Profile加载成功后额外缓存规范化RecipeProfile，旧目标字符、阈值和字符切割写入成功后同步刷新该缓存。
 - 保持边界：不切换旧INI或目录格式，不调用RecipeStore保存，不改变旧资源校验、自动修复、部分成功、提示、Profile顺序、检测缓存、UI、相机、PLC、统计或存图。
 
-## Stage 1当前字库家族Profile资产清单切片
+## Stage 1已完成字库家族Profile资产清单切片
 
 - 受影响功能ID：`SET-003`、`TPL-006`、`TPL-009`、`TPL-015`；四项开始前均为`已基线`。
 - 旧资源事实：Profile目录根部固定使用`tracking_template.bmp`、`calibrate_config.yaml`和可选`template_raw.png`；字符模板为根部`png/jpg/jpeg/bmp/tiff`，排除`template_raw.png`、`tracking_template.bmp`、`template_ring.bmp`，精确文件名及`_/-/(n)`变体均参与旧加载。
 - 本切片目标：新增`recipes/template_profile_assets.*`，按最终Profile索引生成不冲突的顶层资产键、`assets/profiles/<index>/...`目标相对路径、源绝对路径和Profile逻辑键；集合加载/恢复、保存重载及字符切割成功后刷新内存清单。
 - 保持边界：不改变旧文件名、目录、字符枚举顺序、加载/部分成功判定、UI提示、RecipeStore正式写入、检测、相机、PLC、统计或存图；资源不存在时不抢先改变旧入口结果。
+
+## Stage 1已完成多Profile ProductRecipe候选组装切片
+
+- 受影响功能ID：`SET-003`、`TPL-006`、`TPL-009`；三项开始前均为`已基线`。
+- 旧数据交接事实：字库家族的`m_wordTemplateProfiles`已按最终加载顺序保留`RecipeProfile`与`TemplateProfileAssetManifest`；`RecipeStore::saveRecipe`接收完整`ProductRecipe`和与资产键对齐的源路径表，两者之间尚缺独立组装边界。
+- 本切片目标：新增`recipes/template_recipe_assembler.*`，保留调用方提供的UUID、显示名和Word/BarcodeWord模式，按原顺序拷贝Profile参数，以资产清单刷新每Profile的资源引用，合并顶层资产目标和源路径，最后通过`validateProductRecipe`。
+- 失败语义：空Profile集、非字库家族模式、清单三表不对齐、必需定位/YAML资产缺失、悬空引用、键或目标路径冲突及最终Schema无效均拒绝，调用方输出对象保持不变。
+- 保持边界：不自行生成或改写产品身份，不执行RecipeStore写盘，不接管旧模板选择/保存，不修改Widget、旧INI、检测、相机、PLC、统计或存图。
 
 ## 功能状态变化
 
@@ -121,6 +129,7 @@
 | SET-003、TPL-006、TPL-008 | 已基线 | 已基线 | 为旧模板保存/加载入口补齐类型化Profile参数、字符框、二维码参数及资源引用JSON合同；旧入口本切片不改，基础能力验证后恢复基线状态 | Agent静态检查、两个配方测试和主工程门禁均通过；TPL-009..015保持旧入口基线状态 |
 | SET-003、TPL-009、TPL-011..015 | 已基线 | 已基线 | 旧字库家族Profile加载及后续设置写入成功后同步生成规范化RecipeProfile缓存，并用双向映射测试锁定字段无损 | Agent静态检查、`product_recipe_test`和主工程门禁均通过；旧INI和成功/失败策略不变；TPL-008保持基线 |
 | SET-003、TPL-006、TPL-009、TPL-015 | 已基线 | 已基线 | 按Profile顺序和旧目录实际资源生成可交给RecipeStore的规范化资产清单，并在资源集合改变后刷新 | Agent静态检查通过；2026-08-12用户确认扩展后的`product_recipe_test`与主工程Run qmake/Rebuild/Run及模式切换全部通过；旧加载/保存/切割行为不变 |
+| SET-003、TPL-006、TPL-009 | 已基线 | 已基线 | 将多Profile参数和资产清单组装为完整`ProductRecipe`候选及与RecipeStore入参一致的源资产表 | Agent静态检查通过；2026-08-12用户确认扩展后的`product_recipe_test`与主工程Run qmake/Rebuild/Run及模式切换全部通过；旧选择/保存/检测行为不变 |
 | MC-001 | 无对照表 | 已基线 | 当前多相机窗口入口仍可达 | 源码静态核对；实际入口待用户 |
 | MC-002..003 | 无对照表 | 已延期 | 计划3.6明确本轮不扩建/迁移多相机；当前窗口控制按钮未接底层Controller | 源码/UI零接线核对；计划依据 |
 | TOOL-001..002 | 无对照表 | 已基线 | 独立授权工程和条码DLL工程仍是当前可进入/部署能力 | 工程/源码静态核对；构建待用户 |
@@ -222,6 +231,9 @@
 | Stage 1 Profile资产清单切片边界 | 白名单、旧资源枚举规则、Profile命名空间、刷新接入点、测试和Git差异检查 | 只新增内存资产清单及测试；不改变旧目录读写、检测或硬件 | 10个工作区条目；主/测试工程各2个清单文件条目；3张资产映射表；5类字符扩展名及3个系统模板排除项完整；3个Profile集合安装点和1个字符切割刷新点全部接入；6项ProductRecipe业务测试；受保护旧设置/切割对话框/RecipeStore/检测线程/相机/PLC文件0改动；90个ID唯一且77/4/7/2；`git diff --check`通过 | 通过 |
 | Stage 1 Profile资产清单测试 | 用户在Qt Creator Release运行`product_recipe_test` | 新增资源清单业务测试通过，原5项业务测试继续通过 | 2026-08-12用户确认包含QtTest自动初始化/清理的预期`8 passed, 0 failed`全部通过 | 通过（用户证据） |
 | Stage 1 Profile资产清单主程序门禁 | 用户Run qmake、Rebuild、Run并切换字库或二维码模式 | 主窗口正常启动；旧Profile加载与模式切换不变 | 2026-08-12用户确认Run qmake、Rebuild、Run及字库家族模式切换全部正常 | 通过（用户证据） |
+| Stage 1多Profile配方组装切片边界 | 白名单、工程清单、组装依赖、身份/顺序/资产不变量、失败不改写、测试和Git差异检查 | 只新增纯Qt Core组装器及测试；不改Widget、RecipeStore、旧INI、检测或硬件 | 8个工作区条目；主/测试工程各2个组装器清单项；Word/BarcodeWord模式门禁、必需定位/YAML资产、三表对齐、键/目标冲突、最终Schema和成功后单点输出赋值均存在；7项ProductRecipe业务测试；现有生产源文0改动；90个ID唯一且78/3/7/2；`git diff --check`通过 | 通过 |
+| Stage 1多Profile配方组装测试 | 用户在Qt Creator Release运行`product_recipe_test` | 两Profile顺序/参数/资产合并、不完整源映射、目标冲突及失败不改写通过，原6项业务测试继续通过 | 2026-08-12用户确认包含QtTest自动初始化/清理的预期`9 passed, 0 failed`全部通过 | 通过（用户证据） |
+| Stage 1多Profile配方组装主程序门禁 | 用户Run qmake、Rebuild、Run并切换字库或二维码模式 | 新组装器可编译链接；主窗口正常启动；旧Profile加载与模式切换不变 | 2026-08-12用户确认Run qmake、Rebuild、Run及字库家族模式切换全部正常 | 通过（用户证据） |
 | Stage 1配方测试构建与编码修复 | 用户在Qt Creator/MSVC 2017 Release构建并运行`product_recipe_test` | 4项业务测试通过 | 首次因无BOM UTF-8中文字面量被代码页936解析而报`C4819/C2001/C1057`；改用C++11 Unicode转义后，2026-08-12 00:58用户复验为`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | 当前纸巾Pipeline测试 | 用户在Qt Creator Release tests工程Run qmake、构建并运行`tissue_roll_detector_baseline_test` | 配方6.0默认、显式阈值、空图和纯黑图4项业务测试通过 | 2026-08-12用户确认新纸巾Pipeline测试汇总`6 passed, 0 failed` | 通过（用户证据） |
 | 固定样本清单 | 解析TSV必填字段并按模式分组 | 15行、五模式各3类 | 15行；每模式OK/NG/FAILURE各一项；0行缺关键字段 | 通过 |
@@ -236,21 +248,21 @@
 
 ## 用户Qt Creator门禁
 
-### A. 当前Profile资产清单切片：主程序构建与启动
+### A. 当前多Profile配方组装切片：主程序构建与启动
 
 1. Qt Creator打开 `app/AutoOCRproject.pro`。
 2. 选择Qt 5.14.2、MSVC 2017 64-bit Kit和Release配置。
-3. 本切片新增`recipes/template_profile_assets.*`并修改主工程清单，先执行Run qmake，再Rebuild并Run。
+3. 本切片新增`recipes/template_recipe_assembler.*`并修改主工程清单，先执行Run qmake，再Rebuild并Run。
 4. 确认Release部署脚本完成、授权有效、主窗正常打开。
 5. 切换到“字库匹配”或“二维码+三期”；若有现成模板，选择一次并确认原Profile仍能正常加载。没有现成模板时只反馈主窗口和模式切换结果，不临时制作生产模板。
 6. 反馈完整构建结论和启动结论；失败时提供首个错误及相关上下文。
 
-### B. Stage 1 Profile资产清单测试
+### B. Stage 1多Profile配方组装测试
 
 1. Qt Creator另开 `tests/tests.pro`。
-2. `product_recipe_test`工程清单已增加资产清单源码，先执行Run qmake。
-3. Build并运行`product_recipe_test`，确认原5项及新增资源/变体/命名空间测试共6项业务测试通过。
-4. 加上QtTest自动初始化/清理，汇总应为`8 passed, 0 failed`。
+2. `product_recipe_test`工程清单已增加配方组装器源码，先执行Run qmake。
+3. Build并运行`product_recipe_test`，确认原6项及新增多Profile组装/失败不改写测试共7项业务测试通过。
+4. 加上QtTest自动初始化/清理，汇总应为`9 passed, 0 failed`。
 
 ### C. 本切片不要求重复运行的目标
 
@@ -341,6 +353,11 @@
 - [x] Profile资产清单切片Agent静态检查通过；未执行构建、链接、测试或主程序。
 - [x] Profile资产清单`product_recipe_test`门禁：2026-08-12用户确认预期`8 passed, 0 failed`全部通过。
 - [x] Profile资产清单主程序门禁：2026-08-12用户确认Run qmake、Rebuild、Run及模式切换全部正常。
+- [x] Profile资产清单切片已创建独立提交`1d4b5ea`。
+- [x] 开始多Profile配方组装切片时工作区干净，HEAD为`1d4b5ea`。
+- [x] 多Profile配方组装切片Agent静态检查通过；未执行构建、链接、测试或主程序。
+- [x] 多Profile配方组装`product_recipe_test`门禁：2026-08-12用户确认预期`9 passed, 0 failed`全部通过。
+- [x] 多Profile配方组装主程序门禁：2026-08-12用户确认Run qmake、Rebuild、Run及模式切换全部正常。
 
 ## 本地提交记录
 
@@ -358,6 +375,7 @@
 | `c3ef246` | Stage 1 RecipeStore基础事务存储 | SET-003、TPL-006、TPL-008 | UUID目录加载、资源复制、临时目录重载校验、备份替换和提交失败恢复 | Agent静态检查、两个配方测试及主程序门禁均通过；旧模板入口保持基线 |
 | `0174003` | Stage 1 Profile配方数据合同 | SET-003、TPL-006、TPL-008 | 类型化Profile/字符框/二维码参数、Schema 1 JSON及资源键引用校验 | Agent静态检查、两个配方测试及主程序门禁均通过；旧模板入口保持基线 |
 | `0e3af42` | Stage 1旧Profile数据映射 | SET-003、TPL-009、TPL-011..015 | 旧私有设置与RecipeProfile双向映射、加载及编辑成功后的规范化内存缓存 | Agent静态检查、`product_recipe_test`及主工程模式切换门禁均通过；旧INI保持事实来源 |
+| `1d4b5ea` | Stage 1 Profile资产清单 | SET-003、TPL-006、TPL-009、TPL-015 | 按Profile顺序枚举定位/YAML/原图/字符资源，建立逻辑键、目标相对路径和源绝对路径清单 | Agent静态检查、`product_recipe_test`及主工程模式切换门禁均通过；旧目录读写不变 |
 
 ## 未解决事项
 
@@ -369,7 +387,7 @@
 
 ## 结论
 
-- 当前切片：Stage 1字库家族Profile资产清单组装；用户Qt Creator测试与主程序门禁已通过，切片完成。
+- 当前切片：Stage 1多Profile完整ProductRecipe候选组装；用户Qt Creator测试与主程序门禁已通过，切片完成。
 - 当前阶段：Stage 1进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线81 / 迁移中0 / 已验证7 / 已延期2 / 已确认删除0。
-- 下一允许动作：把多Profile的规范化参数与资产清单组装为一份完整`ProductRecipe`候选及源资产映射；不切换旧持久化入口。
+- 下一允许动作：进入Stage 1模板工作流入口切换的下一最小切片；优先建立配方目录查询/列表边界，不一次性改写旧选择、保存和编辑入口。

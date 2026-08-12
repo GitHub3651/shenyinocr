@@ -4,7 +4,9 @@
 #include "product_recipe.h"
 #include "template_profile_assets.h"
 #include "template_profile_mapper.h"
+#include "template_recipe_assembler.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
@@ -27,6 +29,7 @@ private slots:
     void runtimeSnapshotIsIndependentFromEditableRecipe();
     void templatePrivateSettingsMappingRetainsProfileFields();
     void templateProfileAssetManifestPreservesVariantsAndNamespaces();
+    void templateRecipeAssemblyMergesProfilesAndRejectsInvalidManifests();
 };
 
 namespace {
@@ -322,6 +325,118 @@ void ProductRecipeTest::templateProfileAssetManifestPreservesVariantsAndNamespac
         QVERIFY(!second.recipeAssets.contains(it.key()));
         QVERIFY(!second.recipeAssets.values().contains(it.value()));
     }
+}
+
+void ProductRecipeTest::templateRecipeAssemblyMergesProfilesAndRejectsInvalidManifests()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    auto createProfileDirectory = [&temporaryDirectory](
+            const QString &directoryName,
+            const QString &characterFileName) {
+        const QString directoryPath =
+                temporaryDirectory.filePath(directoryName);
+        if (!QDir().mkpath(directoryPath)) {
+            return QString();
+        }
+        const QStringList fileNames = {
+            QStringLiteral("tracking_template.bmp"),
+            QStringLiteral("calibrate_config.yaml"),
+            characterFileName
+        };
+        for (const QString &fileName : fileNames) {
+            QFile file(QDir(directoryPath).filePath(fileName));
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                    || file.write("asset") != 5) {
+                return QString();
+            }
+        }
+        return directoryPath;
+    };
+
+    const QString firstDirectory = createProfileDirectory(
+                QStringLiteral("profile-a"), QStringLiteral("A.png"));
+    const QString secondDirectory = createProfileDirectory(
+                QStringLiteral("profile-b"), QStringLiteral("B.png"));
+    QVERIFY(!firstDirectory.isEmpty());
+    QVERIFY(!secondDirectory.isEmpty());
+
+    TemplateRecipeProfileSource firstSource;
+    firstSource.profile = validProfile(QStringLiteral("profile-a"));
+    firstSource.assetManifest =
+            buildTemplateProfileAssetManifest(firstDirectory, 0);
+    TemplateRecipeProfileSource secondSource;
+    secondSource.profile = validProfile(QStringLiteral("profile-b"));
+    secondSource.profile.imageThreshold = 63.0;
+    secondSource.assetManifest =
+            buildTemplateProfileAssetManifest(secondDirectory, 1);
+
+    const ProductRecipe recipeHeader =
+            createProductRecipe(QStringLiteral("assembled-product"),
+                                DetectionMode::BarcodeWord);
+    const QVector<TemplateRecipeProfileSource> profileSources = {
+        firstSource,
+        secondSource
+    };
+    TemplateRecipeAssembly assembly;
+    QString errorMessage;
+    QVERIFY2(assembleTemplateProductRecipe(recipeHeader,
+                                           profileSources,
+                                           &assembly,
+                                           &errorMessage),
+             qPrintable(errorMessage));
+
+    QCOMPARE(assembly.recipe.recipeId, recipeHeader.recipeId);
+    QCOMPARE(assembly.recipe.displayName, recipeHeader.displayName);
+    QCOMPARE(assembly.recipe.profiles.size(), 2);
+    QCOMPARE(assembly.recipe.profiles.at(0).name,
+             QStringLiteral("profile-a"));
+    QCOMPARE(assembly.recipe.profiles.at(1).name,
+             QStringLiteral("profile-b"));
+    QCOMPARE(assembly.recipe.profiles.at(1).imageThreshold, 63.0);
+    QVERIFY(assembly.recipe.profiles.at(0).assetKeys
+            == firstSource.assetManifest.profileAssetKeys);
+    QVERIFY(assembly.recipe.profiles.at(1).assetKeys
+            == secondSource.assetManifest.profileAssetKeys);
+    QCOMPARE(assembly.recipe.assets.size(), 6);
+    QVERIFY(assembly.assetSourcePaths.keys()
+            == assembly.recipe.assets.keys());
+    QVERIFY2(validateProductRecipe(assembly.recipe, &errorMessage),
+             qPrintable(errorMessage));
+
+    QVector<TemplateRecipeProfileSource> incompleteSources = profileSources;
+    const QString missingSourceKey =
+            incompleteSources[1].assetManifest.profileAssetKeys.value(
+                QStringLiteral("calibration"));
+    incompleteSources[1].assetManifest.assetSourcePaths.remove(
+                missingSourceKey);
+    TemplateRecipeAssembly unchanged = assembly;
+    const QString unchangedRecipeId = unchanged.recipe.recipeId;
+    QVERIFY(!assembleTemplateProductRecipe(recipeHeader,
+                                           incompleteSources,
+                                           &unchanged,
+                                           &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("maps do not match")));
+    QCOMPARE(unchanged.recipe.recipeId, unchangedRecipeId);
+    QCOMPARE(unchanged.recipe.profiles.size(), 2);
+
+    QVector<TemplateRecipeProfileSource> collidingSources = profileSources;
+    const QString firstTrackingKey =
+            collidingSources[0].assetManifest.profileAssetKeys.value(
+                QStringLiteral("trackingTemplate"));
+    const QString secondTrackingKey =
+            collidingSources[1].assetManifest.profileAssetKeys.value(
+                QStringLiteral("trackingTemplate"));
+    collidingSources[1].assetManifest.recipeAssets[secondTrackingKey] =
+            collidingSources[0].assetManifest.recipeAssets.value(
+                firstTrackingKey);
+    QVERIFY(!assembleTemplateProductRecipe(recipeHeader,
+                                           collidingSources,
+                                           &unchanged,
+                                           &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("Duplicate recipe asset destination")));
+    QCOMPARE(unchanged.recipe.recipeId, unchangedRecipeId);
 }
 
 QTEST_APPLESS_MAIN(ProductRecipeTest)
