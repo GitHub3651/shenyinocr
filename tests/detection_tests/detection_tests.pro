@@ -3,7 +3,9 @@ CONFIG += ordered
 
 SUBDIRS += \
     tissue_roll_detector_baseline_test \
-    ocr_detection_pipeline_test
+    ocr_detection_pipeline_test \
+    stamp_detection_pipeline_test
 
 tissue_roll_detector_baseline_test.subdir = tissue_roll_detector_baseline_test
 ocr_detection_pipeline_test.subdir = ocr_detection_pipeline_test
+stamp_detection_pipeline_test.subdir = stamp_detection_pipeline_test

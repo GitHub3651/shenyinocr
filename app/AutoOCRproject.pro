@@ -52,6 +52,7 @@ SOURCES += \
     appsettingsmanager.cpp \
     recipes/product_recipe.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
+    detection/stamp/stamp_detection_pipeline.cpp \
     detection/tissue/tissue_detection_pipeline.cpp \
     CameraThread.cpp \
     DetectionModes.cpp \
@@ -86,6 +87,7 @@ HEADERS += \
     appsettingsmanager.h \
     recipes/product_recipe.h \
     detection/ocr/ocr_detection_pipeline.h \
+    detection/stamp/stamp_detection_pipeline.h \
     detection/tissue/tissue_detection_pipeline.h \
     BarcodeDecoderApi.h \
     BarcodeTypes.h \

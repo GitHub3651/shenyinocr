@@ -13,6 +13,7 @@
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
 #include "detection/ocr/ocr_detection_pipeline.h"
+#include "detection/stamp/stamp_detection_pipeline.h"
 
 
 // Qt核心组件
@@ -2091,31 +2092,45 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
 
     cv::Mat croppedImage = oriented.croppedImage.clone();
 
-    emit imgshibie(&croppedImage);
     ui->imagenum->setText(QString::number(totalImages));
 
     QString targetString = ui->dateEdit->toPlainText();
-    int targetNum = 0;
-    QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
-    QRegularExpressionMatchIterator matchIt = regex.globalMatch(targetString);
-    while (matchIt.hasNext()) { matchIt.next(); targetNum++; }
-    if (targetNum == 0 && !targetString.isEmpty()) targetNum = targetString.length();
-
-    int detectNum = templatematch->run3(digitTemplates);
-    bool charIsOk = (detectNum == targetNum);
-
-    // ===================== 2. 钢印防重叠检测 (完全无 Padding) =====================
-    bool overlapIsOk = false;
     g_lastStampPoly.clear();
 
+    StampDetectionPipeline::OverlapDetectionFunction detectOverlap;
     if (!QFile::exists(currentTemplateDirPath + "/calibrate_config.yaml")) {
         qDebug() << "[ERROR] Missing overlap config!";
-        overlapIsOk = false;
     } else {
-        DetectResult overlapRes = overlapDetector.processImage(*image, pose.datePoly);
-        overlapIsOk = overlapRes.isOk;
+        detectOverlap = [this](
+                const cv::Mat &sourceImage,
+                const std::vector<cv::Point> &datePoly) {
+            const DetectResult overlap =
+                    overlapDetector.processImage(sourceImage, datePoly);
+            StampOverlapResult result;
+            result.isOk = overlap.isOk;
+            result.finalStampPoly = overlap.finalStampPoly;
+            return result;
+        };
+    }
 
-        g_lastStampPoly = overlapRes.finalStampPoly;
+    const bool hasOverlapDetection = static_cast<bool>(detectOverlap);
+    const StampDetectionPipeline stampPipeline;
+    const StampDetectionResult stampResult =
+            stampPipeline.detect(
+                croppedImage,
+                *image,
+                pose.datePoly,
+                targetString,
+                [this](cv::Mat &dateRoi) {
+        emit imgshibie(&dateRoi);
+        return templatematch->run3(digitTemplates);
+    },
+                detectOverlap);
+
+    const bool charIsOk = stampResult.characterIsOk;
+    const bool overlapIsOk = stampResult.overlapIsOk;
+    g_lastStampPoly = stampResult.finalStampPoly;
+    if (hasOverlapDetection) {
         g_lastStampIsOverlap = !overlapIsOk;
     }
 
@@ -2128,7 +2143,7 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
 
     // ===================== 4. 综合判定与 PLC 剔除输出 =====================
     if (j % x == 0) {
-        if (!charIsOk || !overlapIsOk) {
+        if (!stampResult.isOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
                 saveResultImages("png", "ng", *image);
             }

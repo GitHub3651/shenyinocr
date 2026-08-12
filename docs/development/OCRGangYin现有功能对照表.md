@@ -31,7 +31,7 @@
 
 | ID | 功能分类 | 当前入口/触发 | 前置条件和操作步骤 | 当前文件、关键函数和调用链 | 输入/设置、默认值及生效时机 | 当前正常结果和失败路径 | 副作用（磁盘/统计/PLC/线程） | 当前基线 | 目标模块/位置 | 动作 | 从原入口执行的验证方法 | 状态 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| UI-001 | 模式与参数页面 | “识别模式”下拉框 | 非检测/非模板忙碌状态 | `comboBox_4::currentIndexChanged`→`setupDetectModeChangeTracking`→存旧模式路径→`restoreTemplatesForMode`→更新可见参数 | 五模式固定顺序：钢印、字库、OCR、纸巾、二维码+三期 | 切换对应参数和模板历史；无效历史保留空状态并可提示 | 保存当前模式和模板历史 | 五个现有入口不可丢失 | `ui/pages/` | 保留 | 依次切换五模式，核对控件显隐、模板名、历史恢复 | 已基线 | S；U |
+| UI-001 | 模式与参数页面 | “识别模式”下拉框 | 非检测/非模板忙碌状态 | `comboBox_4::currentIndexChanged`→`setupDetectModeChangeTracking`→存旧模式路径→`restoreTemplatesForMode`→更新可见参数 | 界面固定顺序：模板匹配、字库匹配、深度模型、纸巾检测、二维码+三期；内部ID依次为stamp/word/ocr/tissue/barcode_word | 切换对应参数和模板历史；无效历史保留空状态并可提示 | 保存当前模式和模板历史 | 五个现有入口不可丢失 | `ui/pages/` | 保留 | 依次切换五模式，核对控件显隐、模板名、历史恢复 | 已基线 | S；U |
 | UI-002 | 操作状态与按钮使能 | 开相机、预览、冻结、检测、停止、关闭 | 任意主流程状态变化 | `updateOperationUiState`+`updateHardwareParameterUiEnabled` | `CameraClosed/CameraReady/TemplatePreviewing/TemplateFrozen/Detecting/Stopping` | 只允许当前状态合法动作；非法重复启动/关相机给提示 | 控件enable/style变化 | 状态机可观察行为保持 | `ui/controllers/main_page_controller.*` | 保留后抽离 | 逐状态截图并尝试每个顶栏按钮，核对禁用/提示 | 已基线 | S；U |
 | UI-003 | 图像自适应显示 | 相机帧、检测结果、模板原图 | `ImageLabel`有图像 | `ImageLabel::setPixmap/resizeEvent`→按宽高比缩放居中 | 当前控件尺寸 | 缩放但不改变原图；空图清空 | 仅UI缓存QPixmap | 保持缩放、居中和重绘 | `ui/widgets/image_label.*` | 保留后移动 | 用横图/竖图并调整窗口，核对比例、居中和Overlay位置 | 已基线 | S；U |
 | UI-004 | 结果帧绑定显示 | 字库家族产生检测结果 | 检测运行 | `handleStreamingFrame`→`shouldSuppressStreamingFrame`；检测完成更新`m_latestAnnotatedResult` | 字库/二维码模式启用结果绑定 | 结果出现后流帧不覆盖上一完整结果；新正式结果替换 | 持有最近标注图 | 保持画面、框、OK/NG来自同帧 | `ui/presenters/result_presenter.*` | 保留 | 连续移动产品，确认结果图不被实时帧覆盖且下一结果可替换 | 已基线 | S；U |
@@ -85,7 +85,7 @@
 | ID | 功能分类 | 当前入口/触发 | 前置条件和操作步骤 | 当前文件、关键函数和调用链 | 输入/设置、默认值及生效时机 | 当前正常结果和失败路径 | 副作用（磁盘/统计/PLC/线程） | 当前基线 | 目标模块/位置 | 动作 | 从原入口执行的验证方法 | 状态 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | DET-001 | 共同定位与位姿 | 软/硬采集线程获得帧 | 非纸巾模式且模板有效 | `MyThread/CameraThread`→`TrackingPoseMatcher::setTemplate/match`→`DetectionPose`→`dispatchDetectionByMode` | tracking模板；-45..45度、步长2、金字塔0.2、阈值0.3 | 匹配成功映射日期/二维码多边形；失败产生对应NG路径或跳过 | 线程持有模板旋转缓存；无直接PLC | 定位范围、阈值和坐标变换保持 | `detection/common/pose_matcher.*` | 保留后迁移 | 固定角度/位移/无目标样本，记录pose、Profile和结果 | 已基线 | S；U |
-| DET-002 | 钢印+字符模板模式 | 模式0检测帧 | 有tracking、date、ring/stamp和字符模板 | `dispatchDetectionByMode`→`slot_readAndDetect`→`TemplateMatch::run3`+`OverlapDetector::run`→合并判定 | 目标字符数、图像阈值、定位位姿和钢印资源 | 字符数等于目标且零重叠才OK；资源/定位/匹配/重叠异常均当前按NG | Overlay、统计、存图、PLC/剔除队列 | 两条件AND及失败文本需固定样本锁定 | `detection/stamp_pipeline.*` | 保留后拆解 | STAMP三类固定样本，从原入口记录文本、框、计数、文件、PLC | 已基线 | S；U |
+| DET-002 | 模板匹配模式（内部钢印+字符检测） | 界面“模板匹配”（索引0）检测帧 | 有tracking、date、ring/stamp和字符模板 | `dispatchDetectionByMode`→`slot_readAndDetect3`→`TemplateMatch::run3`+`OverlapDetector::processImage`→合并判定 | 目标字符数、图像阈值、定位位姿和钢印资源 | 字符数等于目标且零重叠才OK；资源/定位/匹配/重叠异常均当前按NG | Overlay、统计、存图、PLC/剔除队列 | 两条件AND及失败文本需固定样本锁定 | `detection/stamp/stamp_detection_pipeline.*` | Stage 1拆解 | Pipeline纯逻辑测试；主程序“模板匹配”入口；STAMP固定样本风险按用户决定延期 | 已验证 | S；T；U；2026-08-12 14:58测试`6 passed, 0 failed`、退出码0；用户截图确认主程序正常运行且界面“模板匹配”入口存在；原算法和结果收尾保持旧入口 |
 | DET-003 | 字库多Profile模式 | 模式1检测帧 | 至少一个完整Profile | 采集线程并行匹配所有Profile→最佳score→`runWordTemplateDetection`→`TemplateMatch::run3` | 每Profile目标、字符图、阈值；最佳定位Profile | 匹配字符数等于目标数OK；否则NG；无定位按节流策略生成NG | Profile名/框显示、统计、存图、PLC | 自动选择和字符计数语义保持 | `detection/word_pipeline.*` | 保留后拆解 | WORD三类样本和两Profile竞争场景，记录选中Profile/分数/副作用 | 已基线 | S；U |
 | DET-004 | 深度OCR模式 | 模式2检测帧 | OCR模型已加载、模板日期区域有效 | `dispatchDetectionByMode`→`slot_readAndDetect`→旋转裁剪日期ROI→`DBDetector::Run`→`CRNNRecognizer::Run`→清洗/换行拼接→非空且精确比较 | 目标文本；按字节保留ASCII字母数字、所有高位字节及`- . :`；非空行用`\n`拼接 | 清洗拼接文本非空且与目标完全相等OK；空或不等为NG；无效图/日期ROI当前直接返回 | 识别文本、统计、异步存图、PLC | 精确比较、字节清洗、无OCR框Overlay和现有收尾保持 | `detection/ocr/ocr_detection_pipeline.*` | Stage 1拆解 | OCR纯逻辑测试；原入口OCR样本记录原识别列表、清洗文本和最终判定 | 已验证 | S；T；U；2026-08-12 14:24 OCR Pipeline测试及纸巾子工程回归均`6 passed, 0 failed`；用户随后确认主程序Run qmake/Rebuild/Run及OCR模式切换通过 |
 | DET-005 | 纸巾卷粗糙度模式 | 模式3采集线程 | 相机帧；不需传统模板 | `MyThread/CameraThread`→运行内`TissueDetectionPipeline`→`TissueRollDetector::processImage`→`slot_handleTissueResult` | 运行参数副本中的粗糙度阈值；算法找内孔、外圆和环粗糙度 | 找到卷且score<threshold为OK；空图、无圆、外轮廓失败或score>=阈值为NG并带诊断 | Overlay、统计、存图、PLC | 当前边界是`>=`判NG；结果收尾和外部副作用不变 | `recipes/product_recipe.*`+`detection/tissue/tissue_detection_pipeline.*` | Stage 1先迁移 | TISSUE三类样本；Qt Creator运行离线测试；记录score/阈值/圆框 | 已验证 | S；T；U；2026-08-12纸巾Pipeline的6.0默认、显式阈值、空图和纯黑图4项业务测试全部通过，汇总`6 passed, 0 failed` |
@@ -175,9 +175,9 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 84 | 除已验证纸巾/深度OCR切片及MC-002、MC-003外的功能ID |
+| 已基线 | 83 | 除已验证模板匹配/纸巾/深度OCR切片及MC-002、MC-003外的功能ID |
 | 迁移中 | 0 | 无 |
-| 已验证 | 4 | SET-010、DET-004、DET-005、RUN-001；纸巾参数/Pipeline与深度OCR Pipeline切片通过Agent静态检查和用户Qt Creator门禁 |
+| 已验证 | 5 | SET-010、DET-002、DET-004、DET-005、RUN-001；三个Pipeline切片通过Agent静态检查和用户Qt Creator门禁 |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
 
