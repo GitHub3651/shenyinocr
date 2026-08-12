@@ -23,6 +23,8 @@ private slots:
     void selectionFailurePreservesPreviousOutput();
     void profileLoadPlanOrdersCharacterVariantsByTarget();
     void profileLoadPlanReportsPendingTargetsWithoutPartialAssets();
+    void recipeLoadPlanPreservesProfileOrderAndTargetUnits();
+    void recipeLoadPlanFailurePreservesPreviousOutput();
 };
 
 namespace {
@@ -648,6 +650,159 @@ void RecipeStoreTest::profileLoadPlanReportsPendingTargetsWithoutPartialAssets()
                 &errorMessage));
     QVERIFY(errorMessage.contains(QStringLiteral("calibration")));
     QCOMPARE(unchangedPlan.profile.name, QStringLiteral("sentinel"));
+}
+
+void RecipeStoreTest::recipeLoadPlanPreservesProfileOrderAndTargetUnits()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString firstTrackingPath =
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("first-tracking.bmp"));
+    const QString firstCalibrationPath =
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("first-calibration.yaml"));
+    const QString firstAPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("A(2).png"));
+    const QString firstBPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("B.png"));
+    const QString secondTrackingPath =
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("second-tracking.bmp"));
+    const QString secondCalibrationPath =
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("second-calibration.yaml"));
+    const QString secondCharacterPath =
+            QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("3.png"));
+    const QStringList assetPaths = QStringList()
+            << firstTrackingPath
+            << firstCalibrationPath
+            << firstAPath
+            << firstBPath
+            << secondTrackingPath
+            << secondCalibrationPath
+            << secondCharacterPath;
+    for (const QString &path : assetPaths) {
+        QVERIFY(writeBytes(path, path.toUtf8()));
+    }
+
+    ProductRecipe recipe = createProductRecipe(
+                QStringLiteral("ordered-recipe"), DetectionMode::Word);
+    RecipeProfile firstProfile;
+    firstProfile.name = QStringLiteral("first");
+    firstProfile.targetText = QStringLiteral("A(2)B");
+    RecipeProfile secondProfile;
+    secondProfile.name = QStringLiteral("second");
+    secondProfile.targetText = QStringLiteral("3");
+    recipe.profiles.append(firstProfile);
+    recipe.profiles.append(secondProfile);
+
+    ResolvedRecipeProfile firstResolved;
+    firstResolved.profile = firstProfile;
+    firstResolved.assetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), firstTrackingPath);
+    firstResolved.assetPathsByRole.insert(
+                QStringLiteral("calibration"), firstCalibrationPath);
+    firstResolved.assetPathsByRole.insert(
+                QStringLiteral("character/A(2).png"), firstAPath);
+    firstResolved.assetPathsByRole.insert(
+                QStringLiteral("character/B.png"), firstBPath);
+    ResolvedRecipeProfile secondResolved;
+    secondResolved.profile = secondProfile;
+    secondResolved.assetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), secondTrackingPath);
+    secondResolved.assetPathsByRole.insert(
+                QStringLiteral("calibration"), secondCalibrationPath);
+    secondResolved.assetPathsByRole.insert(
+                QStringLiteral("character/3.png"), secondCharacterPath);
+
+    RecipeSelection selection;
+    selection.recipe = ProductRecipeSnapshot(new ProductRecipe(recipe));
+    selection.recipeDirectoryPath = temporaryDirectory.path();
+    selection.profiles.append(firstResolved);
+    selection.profiles.append(secondResolved);
+
+    TemplateRecipeLoadPlan loadPlan;
+    QString errorMessage;
+    QVERIFY2(buildTemplateRecipeLoadPlan(selection,
+                                         &loadPlan,
+                                         &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(loadPlan.recipe->recipeId, recipe.recipeId);
+    QCOMPARE(loadPlan.recipeDirectoryPath, temporaryDirectory.path());
+    QCOMPARE(loadPlan.profiles.size(), 2);
+    QCOMPARE(loadPlan.profiles.at(0).profile.name,
+             QStringLiteral("first"));
+    QCOMPARE(loadPlan.profiles.at(0).targetUnits.join(QStringLiteral("|")),
+             QStringLiteral("a(2)|b"));
+    QCOMPARE(loadPlan.profiles.at(0).characterTemplates.size(), 2);
+    QCOMPARE(loadPlan.profiles.at(0).characterTemplates.at(0).targetIndex, 0);
+    QCOMPARE(loadPlan.profiles.at(0).characterTemplates.at(1).targetIndex, 1);
+    QCOMPARE(loadPlan.profiles.at(1).profile.name,
+             QStringLiteral("second"));
+    QCOMPARE(loadPlan.profiles.at(1).targetUnits,
+             QStringList() << QStringLiteral("3"));
+    QCOMPARE(parseTemplateTargetUnits(QStringLiteral("---")).size(), 0);
+}
+
+void RecipeStoreTest::recipeLoadPlanFailurePreservesPreviousOutput()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString trackingPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("calibration.yaml"));
+    QVERIFY(writeBytes(trackingPath, QByteArray("tracking")));
+    QVERIFY(writeBytes(calibrationPath, QByteArray("calibration")));
+
+    ProductRecipe recipe = createProductRecipe(
+                QStringLiteral("invalid-second"), DetectionMode::Word);
+    RecipeProfile firstProfile;
+    firstProfile.name = QStringLiteral("first");
+    RecipeProfile secondProfile;
+    secondProfile.name = QStringLiteral("second");
+    recipe.profiles.append(firstProfile);
+    recipe.profiles.append(secondProfile);
+
+    ResolvedRecipeProfile firstResolved;
+    firstResolved.profile = firstProfile;
+    firstResolved.assetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), trackingPath);
+    firstResolved.assetPathsByRole.insert(
+                QStringLiteral("calibration"), calibrationPath);
+    ResolvedRecipeProfile secondResolved;
+    secondResolved.profile = secondProfile;
+    secondResolved.assetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), trackingPath);
+
+    RecipeSelection selection;
+    selection.recipe = ProductRecipeSnapshot(new ProductRecipe(recipe));
+    selection.profiles.append(firstResolved);
+    selection.profiles.append(secondResolved);
+
+    ProductRecipe sentinelRecipe = createProductRecipe(
+                QStringLiteral("sentinel"), DetectionMode::Word);
+    TemplateRecipeLoadPlan unchangedPlan;
+    unchangedPlan.recipe =
+            ProductRecipeSnapshot(new ProductRecipe(sentinelRecipe));
+    TemplateProfileLoadPlan sentinelProfile;
+    sentinelProfile.profile.name = QStringLiteral("sentinel-profile");
+    unchangedPlan.profiles.append(sentinelProfile);
+
+    QString errorMessage;
+    QVERIFY(!buildTemplateRecipeLoadPlan(selection,
+                                         &unchangedPlan,
+                                         &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("second")));
+    QVERIFY(errorMessage.contains(QStringLiteral("calibration")));
+    QCOMPARE(unchangedPlan.recipe->recipeId, sentinelRecipe.recipeId);
+    QCOMPARE(unchangedPlan.profiles.size(), 1);
+    QCOMPARE(unchangedPlan.profiles.first().profile.name,
+             QStringLiteral("sentinel-profile"));
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

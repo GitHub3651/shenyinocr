@@ -547,7 +547,6 @@ private:
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
     QString m_validatedBarcodeText;
-    QStringList parseWordTemplateBaseNames(const QString &targetText) const;
     QStringList wordTemplateImagePathsForKey(const QDir &directory,
                                              const QString &searchKey,
                                              bool includeVariants = true) const;
@@ -564,6 +563,11 @@ private:
         const RecipeSelection &selection,
         int profileIndex,
         WordTemplateProfile *profile,
+        QString *errorMessage);
+    bool loadWordTemplateProfilesFromRecipeSelection(
+        const RecipeSelection &selection,
+        std::vector<WordTemplateProfile> *profiles,
+        QStringList *pendingMessages,
         QString *errorMessage);
     void refreshWordTemplateProfileDigitCache(
         WordTemplateProfile *profile) const;

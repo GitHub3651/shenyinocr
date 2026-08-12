@@ -6150,7 +6150,7 @@ void Widget::showManualCharacterTemplateCropDialog()
     const QString targetText = ui->dateEdit->toPlainText();
     QString reloadMessage;
     if (!targetText.trimmed().isEmpty()) {
-        const QStringList baseNames = parseWordTemplateBaseNames(targetText);
+        const QStringList baseNames = parseTemplateTargetUnits(targetText);
         std::vector<cv::Mat> reloadedTemplates;
         std::vector<int> reloadedTemplateTargetIndexes;
         QString loadError;
@@ -6780,28 +6780,6 @@ void Widget::displayWordTemplateRawImage(const QString &dirPath)
                                  .arg(QDir(dirPath).dirName()));
 }
 
-QStringList Widget::parseWordTemplateBaseNames(const QString &targetText) const
-{
-    QStringList baseNames;
-    QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
-    QRegularExpressionMatchIterator matchIt = regex.globalMatch(targetText);
-
-    while (matchIt.hasNext()) {
-        QRegularExpressionMatch match = matchIt.next();
-        QString unit;
-        if (!match.captured(1).isEmpty()) unit = match.captured(1);
-        else if (!match.captured(2).isEmpty()) unit = match.captured(2);
-        else if (!match.captured(3).isEmpty()) unit = match.captured(3);
-        else if (!match.captured(4).isEmpty()) unit = match.captured(4);
-
-        if (!unit.isEmpty()) {
-            baseNames.append(unit.toLower());
-        }
-    }
-
-    return baseNames;
-}
-
 QStringList Widget::wordTemplateImagePathsForKey(const QDir &directory,
                                                  const QString &searchKey,
                                                  bool includeVariants) const
@@ -7011,7 +6989,7 @@ bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
     loadedProfile.settings = privateSettings;
     refreshWordTemplateRecipeProfile(&loadedProfile);
 
-    const QStringList baseNames = parseWordTemplateBaseNames(privateSettings.targetText);
+    const QStringList baseNames = parseTemplateTargetUnits(privateSettings.targetText);
     loadedProfile.targetCount = baseNames.size();
     QString pendingMessage;
     if (privateSettings.targetText.trimmed().isEmpty() || baseNames.isEmpty()) {
@@ -7068,7 +7046,7 @@ bool Widget::loadWordTemplateProfileFromRecipeSelection(
     const ResolvedRecipeProfile &resolvedProfile =
             selection.profiles.at(profileIndex);
     const QStringList targetUnits =
-            parseWordTemplateBaseNames(resolvedProfile.profile.targetText);
+            parseTemplateTargetUnits(resolvedProfile.profile.targetText);
     TemplateProfileLoadPlan loadPlan;
     if (!buildTemplateProfileLoadPlan(resolvedProfile,
                                       targetUnits,
@@ -7190,6 +7168,76 @@ bool Widget::loadWordTemplateProfileFromRecipeSelection(
     *profile = loadedProfile;
     if (errorMessage) {
         *errorMessage = pendingMessage;
+    }
+    return true;
+}
+
+bool Widget::loadWordTemplateProfilesFromRecipeSelection(
+        const RecipeSelection &selection,
+        std::vector<WordTemplateProfile> *profiles,
+        QStringList *pendingMessages,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!profiles) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "Internal template profile collection output is null.");
+        }
+        return false;
+    }
+
+    TemplateRecipeLoadPlan recipeLoadPlan;
+    if (!buildTemplateRecipeLoadPlan(selection,
+                                     &recipeLoadPlan,
+                                     errorMessage)) {
+        return false;
+    }
+
+    std::vector<WordTemplateProfile> loadedProfiles;
+    loadedProfiles.reserve(
+                static_cast<size_t>(recipeLoadPlan.profiles.size()));
+    QStringList loadedPendingMessages;
+    for (int profileIndex = 0;
+         profileIndex < recipeLoadPlan.profiles.size();
+         ++profileIndex) {
+        WordTemplateProfile loadedProfile;
+        QString profileMessage;
+        if (!loadWordTemplateProfileFromRecipeSelection(
+                    selection,
+                    profileIndex,
+                    &loadedProfile,
+                    &profileMessage)) {
+            if (errorMessage) {
+                const QString profileName =
+                        recipeLoadPlan.profiles.at(profileIndex)
+                        .profile.name.trimmed().isEmpty()
+                        ? QString::number(profileIndex + 1)
+                        : recipeLoadPlan.profiles.at(profileIndex)
+                          .profile.name;
+                *errorMessage = QStringLiteral(
+                            "Recipe profile %1 cache cannot be assembled: %2")
+                        .arg(profileName, profileMessage);
+            }
+            return false;
+        }
+
+        if (!profileMessage.trimmed().isEmpty()) {
+            const QString profileName = loadedProfile.name.trimmed().isEmpty()
+                    ? QString::number(profileIndex + 1)
+                    : loadedProfile.name;
+            loadedPendingMessages.append(
+                        QStringLiteral("%1: %2")
+                        .arg(profileName, profileMessage));
+        }
+        loadedProfiles.push_back(loadedProfile);
+    }
+
+    profiles->swap(loadedProfiles);
+    if (pendingMessages) {
+        *pendingMessages = loadedPendingMessages;
     }
     return true;
 }
@@ -8120,7 +8168,7 @@ void Widget::on_textsure_btn_clicked()
         std::vector<cv::Mat> tempTemplates;
         std::vector<int> tempTemplateTargetIndexes;
         QString loadError;
-        const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+        const QStringList baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
         if (!newMubiaozifu.trimmed().isEmpty()
                 && !loadWordDigitTemplatesFromDir(profile.dirPath,
                                                   baseNamesToFind,
@@ -8184,7 +8232,7 @@ void Widget::on_textsure_btn_clicked()
         std::vector<cv::Mat> tempTemplates;
         std::vector<int> tempTemplateTargetIndexes;
         QString loadError;
-        const QStringList baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+        const QStringList baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
         const bool includeVariantTemplates = false;
 
         if (!loadWordDigitTemplatesFromDir(currentTemplateDirPath,
@@ -8238,7 +8286,7 @@ void Widget::on_batchTextsure_btn_clicked()
     const bool needLoadDigitTemplates = !newMubiaozifu.trimmed().isEmpty();
     QStringList baseNamesToFind;
     if (needLoadDigitTemplates) {
-        baseNamesToFind = parseWordTemplateBaseNames(newMubiaozifu);
+        baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
         if (baseNamesToFind.isEmpty()) {
             showParameterInfoAsError("提示", "目标字符解析失败");
             return;

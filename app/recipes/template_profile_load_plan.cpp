@@ -2,6 +2,7 @@
 
 #include <QFileInfo>
 #include <QMap>
+#include <QRegularExpression>
 
 #include <algorithm>
 
@@ -149,6 +150,34 @@ QVector<CharacterAssetCandidate> matchingCharacterAssets(
 
 } // namespace
 
+QStringList parseTemplateTargetUnits(const QString &targetText)
+{
+    QStringList targetUnits;
+    const QRegularExpression expression(
+                R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
+    QRegularExpressionMatchIterator matches =
+            expression.globalMatch(targetText);
+
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        QString targetUnit;
+        if (!match.captured(1).isEmpty()) {
+            targetUnit = match.captured(1);
+        } else if (!match.captured(2).isEmpty()) {
+            targetUnit = match.captured(2);
+        } else if (!match.captured(3).isEmpty()) {
+            targetUnit = match.captured(3);
+        } else if (!match.captured(4).isEmpty()) {
+            targetUnit = match.captured(4);
+        }
+
+        if (!targetUnit.isEmpty()) {
+            targetUnits.append(targetUnit.toLower());
+        }
+    }
+    return targetUnits;
+}
+
 bool buildTemplateProfileLoadPlan(
         const ResolvedRecipeProfile &resolvedProfile,
         const QStringList &targetUnits,
@@ -231,6 +260,68 @@ bool buildTemplateProfileLoadPlan(
         candidate.pendingTargetMessage =
                 QStringLiteral("Character assets are incomplete for targets: %1")
                 .arg(missingTargets.join(QLatin1Char(' ')));
+    }
+
+    *loadPlan = candidate;
+    return true;
+}
+
+bool buildTemplateRecipeLoadPlan(
+        const RecipeSelection &selection,
+        TemplateRecipeLoadPlan *loadPlan,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!loadPlan) {
+        setError(errorMessage,
+                 QStringLiteral("TemplateRecipeLoadPlan output is null."));
+        return false;
+    }
+    if (!selection.recipe
+            || (selection.recipe->detectionMode != DetectionMode::Word
+                && selection.recipe->detectionMode
+                   != DetectionMode::BarcodeWord)) {
+        setError(errorMessage,
+                 QStringLiteral("Selected recipe is not a word-family recipe."));
+        return false;
+    }
+    if (selection.profiles.isEmpty()
+            || selection.profiles.size()
+               != selection.recipe->profiles.size()) {
+        setError(errorMessage,
+                 QStringLiteral("Selected recipe profile collection is incomplete."));
+        return false;
+    }
+
+    TemplateRecipeLoadPlan candidate;
+    candidate.recipe = selection.recipe;
+    candidate.recipeDirectoryPath = selection.recipeDirectoryPath;
+    candidate.profiles.reserve(selection.profiles.size());
+    for (int profileIndex = 0;
+         profileIndex < selection.profiles.size();
+         ++profileIndex) {
+        const ResolvedRecipeProfile &resolvedProfile =
+                selection.profiles.at(profileIndex);
+        TemplateProfileLoadPlan profilePlan;
+        QString profileError;
+        if (!buildTemplateProfileLoadPlan(
+                    resolvedProfile,
+                    parseTemplateTargetUnits(
+                        resolvedProfile.profile.targetText),
+                    &profilePlan,
+                    &profileError)) {
+            const QString profileName =
+                    resolvedProfile.profile.name.trimmed().isEmpty()
+                    ? QString::number(profileIndex + 1)
+                    : resolvedProfile.profile.name;
+            setError(errorMessage,
+                     QStringLiteral("Recipe profile %1 cannot be loaded: %2")
+                     .arg(profileName, profileError));
+            return false;
+        }
+        candidate.profiles.append(profilePlan);
     }
 
     *loadPlan = candidate;
