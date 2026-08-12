@@ -583,6 +583,10 @@ private:
         WordTemplateProfile *profile) const;
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
+    bool saveWordTemplatePrivateSettings(
+        int profileIndex,
+        const TemplatePrivateSettings &settings,
+        QString *errorMessage);
     void refreshWordTemplateRecipeAssets();
     void prepareWordTemplateRecipeDraft(const WordTemplateProfile &profile);
     bool publishWordTemplateRecipeDraft(QString *errorMessage);

@@ -7437,6 +7437,53 @@ void Widget::refreshWordTemplateRecipeProfile(
                                                      assetKeys);
 }
 
+bool Widget::saveWordTemplatePrivateSettings(
+        int profileIndex,
+        const TemplatePrivateSettings &settings,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (profileIndex < 0
+            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("当前产品模板Profile无效。");
+        }
+        return false;
+    }
+
+    const WordTemplateProfile &profile =
+            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+    if (profile.resolvedAssetPathsByRole.isEmpty()) {
+        return AppSettingsManager::saveTemplatePrivateSettings(
+                    profile.dirPath,
+                    settings,
+                    errorMessage);
+    }
+
+    if (!m_wordTemplateRecipeEditSession.isActive()
+            || profileIndex
+               >= m_wordTemplateRecipeEditSession.recipe().profiles.size()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "当前已发布配方没有有效的编辑会话。");
+        }
+        return false;
+    }
+
+    const RecipeProfile candidateProfile =
+            recipeProfileFromTemplatePrivateSettings(
+                profile.name,
+                settings,
+                profile.recipeProfile.assetKeys);
+    TemplateRecipeEditSession validationSession =
+            m_wordTemplateRecipeEditSession;
+    return validationSession.updateProfile(profileIndex,
+                                           candidateProfile,
+                                           errorMessage);
+}
+
 void Widget::refreshWordTemplateRecipeAssets()
 {
     for (int profileIndex = 0;
@@ -8469,9 +8516,9 @@ void Widget::on_textsure_btn_clicked()
         TemplatePrivateSettings updatedSettings = profile.settings;
         updatedSettings.targetText = newMubiaozifu;
         QString saveError;
-        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
-                                                             updatedSettings,
-                                                             &saveError)) {
+        if (!saveWordTemplatePrivateSettings(profileIndex,
+                                             updatedSettings,
+                                             &saveError)) {
             showParameterCritical("严重警告",
                                   QString("当前模板 [%1] 的目标字符写入失败：\n%2")
                                   .arg(profile.name)
@@ -8593,7 +8640,11 @@ void Widget::on_batchTextsure_btn_clicked()
     int successCount = 0;
     QStringList failedMessages;
 
-    for (WordTemplateProfile &profile : m_wordTemplateProfiles) {
+    for (int profileIndex = 0;
+         profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
+         ++profileIndex) {
+        WordTemplateProfile &profile =
+                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
         const QString profileName = profile.name.isEmpty()
                 ? QDir(profile.dirPath).dirName()
                 : profile.name;
@@ -8624,9 +8675,9 @@ void Widget::on_batchTextsure_btn_clicked()
         TemplatePrivateSettings updatedSettings = profile.settings;
         updatedSettings.targetText = newMubiaozifu;
         QString saveError;
-        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
-                                                             updatedSettings,
-                                                             &saveError)) {
+        if (!saveWordTemplatePrivateSettings(profileIndex,
+                                             updatedSettings,
+                                             &saveError)) {
             failedMessages.append(QString("%1：目标字符写入失败，%2").arg(profileName).arg(saveError));
             continue;
         }
@@ -8739,9 +8790,9 @@ void Widget::on_batchImageThresholdButton_clicked()
         TemplatePrivateSettings updatedSettings = profile.settings;
         updatedSettings.imageThreshold = thresholdValue;
         QString saveError;
-        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
-                                                             updatedSettings,
-                                                             &saveError)) {
+        if (!saveWordTemplatePrivateSettings(i,
+                                             updatedSettings,
+                                             &saveError)) {
             failedMessages.append(
                         QString("%1：图像合格阈值写入失败，%2")
                         .arg(profileName)
@@ -9002,9 +9053,9 @@ void Widget::on_pushButton_3_clicked()
         TemplatePrivateSettings updatedSettings = profile.settings;
         updatedSettings.imageThreshold = thresholdValue;
         QString saveError;
-        if (!AppSettingsManager::saveTemplatePrivateSettings(profile.dirPath,
-                                                             updatedSettings,
-                                                             &saveError)) {
+        if (!saveWordTemplatePrivateSettings(profileIndex,
+                                             updatedSettings,
+                                             &saveError)) {
             showParameterCritical("严重警告",
                                   QString("当前模板 [%1] 的图像阈值写入失败：\n%2")
                                   .arg(profile.name)
