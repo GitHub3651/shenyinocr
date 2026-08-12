@@ -560,6 +560,12 @@ private:
                                        std::vector<int> *templateTargetIndexes,
                                        QString *errorMessage,
                                        bool includeVariants = true) const;
+    bool loadWordDigitTemplatesFromProfile(
+        const WordTemplateProfile &profile,
+        const QStringList &baseNames,
+        std::vector<cv::Mat> *templates,
+        std::vector<int> *templateTargetIndexes,
+        QString *errorMessage) const;
     bool loadWordTemplateProfileFromDir(const QString &dirPath,
                                         WordTemplateProfile *profile,
                                         QString *errorMessage);
@@ -592,7 +598,14 @@ private:
     void applyWordTemplateEditorSelection(int comboIndex);
     void setCurrentWordTemplateEditIndex(int profileIndex);
     int currentWordTemplateProfileIndex() const;
+    QString wordTemplateProfileAssetPath(
+        const WordTemplateProfile &profile,
+        const QString &role,
+        const QString &legacyFileName) const;
+    void displayWordTemplateRawImage(const WordTemplateProfile &profile);
     void displayWordTemplateRawImage(const QString &dirPath);
+    void displayWordTemplateRawImageFile(const QString &rawImagePath,
+                                         const QString &templateName);
     void runWordTemplateDetection(cv::Mat *image,
                                   const DetectionPose &pose,
                                   const std::vector<cv::Mat> &templates,

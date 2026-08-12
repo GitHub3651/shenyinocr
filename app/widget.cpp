@@ -6755,7 +6755,7 @@ void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
              << profile.dirPath
              << "threshold:" << profile.settings.imageThreshold;
 
-    displayWordTemplateRawImage(profile.dirPath);
+    displayWordTemplateRawImage(profile);
 }
 
 int Widget::currentWordTemplateProfileIndex() const
@@ -6767,13 +6767,55 @@ int Widget::currentWordTemplateProfileIndex() const
     return m_currentWordTemplateEditIndex;
 }
 
+QString Widget::wordTemplateProfileAssetPath(
+        const WordTemplateProfile &profile,
+        const QString &role,
+        const QString &legacyFileName) const
+{
+    const QString resolvedPath =
+            profile.resolvedAssetPathsByRole.value(role).trimmed();
+    if (!resolvedPath.isEmpty()) {
+        return QFileInfo(resolvedPath).absoluteFilePath();
+    }
+
+    if (profile.dirPath.trimmed().isEmpty()
+            || legacyFileName.trimmed().isEmpty()) {
+        return QString();
+    }
+    return QDir(profile.dirPath).filePath(legacyFileName);
+}
+
+void Widget::displayWordTemplateRawImage(
+        const WordTemplateProfile &profile)
+{
+    const QString rawImagePath = wordTemplateProfileAssetPath(
+                profile,
+                QStringLiteral("rawImage"),
+                QStringLiteral("template_raw.png"));
+    const QString templateName = profile.name.trimmed().isEmpty()
+            ? QDir(profile.dirPath).dirName()
+            : profile.name.trimmed();
+    displayWordTemplateRawImageFile(rawImagePath, templateName);
+}
+
 void Widget::displayWordTemplateRawImage(const QString &dirPath)
 {
-    if (!ui || !ui->image_undetected || dirPath.isEmpty()) {
+    if (dirPath.trimmed().isEmpty()) {
+        return;
+    }
+    displayWordTemplateRawImageFile(
+                QDir(dirPath).filePath(QStringLiteral("template_raw.png")),
+                QDir(dirPath).dirName());
+}
+
+void Widget::displayWordTemplateRawImageFile(
+        const QString &rawImagePath,
+        const QString &templateName)
+{
+    if (!ui || !ui->image_undetected || rawImagePath.trimmed().isEmpty()) {
         return;
     }
 
-    const QString rawImagePath = QDir(dirPath).filePath("template_raw.png");
     if (!QFile::exists(rawImagePath)) {
         qDebug() << "[WORD_TEMPLATE_PROFILE] template_raw.png not found:" << rawImagePath;
         return;
@@ -6795,7 +6837,7 @@ void Widget::displayWordTemplateRawImage(const QString &dirPath)
         imageLabel->clearSelection();
     }
     updateImageDisplayStatusText(QString("正在显示模板【%1】的产品图像")
-                                 .arg(QDir(dirPath).dirName()));
+                                 .arg(templateName));
 }
 
 QStringList Widget::wordTemplateImagePathsForKey(const QDir &directory,
@@ -6917,6 +6959,95 @@ bool Widget::loadWordDigitTemplatesFromDir(const QString &dirPath,
         return false;
     }
 
+    return !templates->empty();
+}
+
+bool Widget::loadWordDigitTemplatesFromProfile(
+        const WordTemplateProfile &profile,
+        const QStringList &baseNames,
+        std::vector<cv::Mat> *templates,
+        std::vector<int> *templateTargetIndexes,
+        QString *errorMessage) const
+{
+    if (profile.resolvedAssetPathsByRole.isEmpty()) {
+        return loadWordDigitTemplatesFromDir(profile.dirPath,
+                                             baseNames,
+                                             templates,
+                                             templateTargetIndexes,
+                                             errorMessage,
+                                             true);
+    }
+    if (!templates || !templateTargetIndexes) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("内部参数无效");
+        }
+        return false;
+    }
+
+    templates->clear();
+    templateTargetIndexes->clear();
+    if (baseNames.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("目标字符为空或解析失败");
+        }
+        return false;
+    }
+
+    ResolvedRecipeProfile resolvedProfile;
+    resolvedProfile.profile = profile.recipeProfile;
+    resolvedProfile.assetPathsByRole = profile.resolvedAssetPathsByRole;
+    TemplateProfileLoadPlan loadPlan;
+    QString planError;
+    if (!buildTemplateProfileLoadPlan(resolvedProfile,
+                                      baseNames,
+                                      &loadPlan,
+                                      &planError)) {
+        if (errorMessage) {
+            *errorMessage = planError;
+        }
+        return false;
+    }
+    if (!loadPlan.pendingTargetMessage.isEmpty()
+            || loadPlan.characterTemplates.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = loadPlan.pendingTargetMessage.isEmpty()
+                    ? QStringLiteral("未找到对应字符图片")
+                    : loadPlan.pendingTargetMessage;
+        }
+        return false;
+    }
+
+    QStringList failedNames;
+    for (const TemplateCharacterLoadItem &item : loadPlan.characterTemplates) {
+        QFile file(item.absoluteFilePath);
+        cv::Mat templateImage;
+        if (file.open(QIODevice::ReadOnly)) {
+            const QByteArray data = file.readAll();
+            try {
+                const std::vector<uchar> buffer(data.begin(), data.end());
+                templateImage = cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
+            } catch (...) {
+                templateImage.release();
+            }
+        }
+
+        if (templateImage.empty()) {
+            failedNames.append(item.fileName);
+            continue;
+        }
+        templates->push_back(templateImage);
+        templateTargetIndexes->push_back(item.targetIndex);
+    }
+
+    if (!failedNames.isEmpty()) {
+        templates->clear();
+        templateTargetIndexes->clear();
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("以下字符图片读取失败：\n[ %1 ]")
+                    .arg(failedNames.join(QLatin1Char(' ')));
+        }
+        return false;
+    }
     return !templates->empty();
 }
 
@@ -8322,11 +8453,12 @@ void Widget::on_textsure_btn_clicked()
         QString loadError;
         const QStringList baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
         if (!newMubiaozifu.trimmed().isEmpty()
-                && !loadWordDigitTemplatesFromDir(profile.dirPath,
-                                                  baseNamesToFind,
-                                                  &tempTemplates,
-                                                  &tempTemplateTargetIndexes,
-                                                  &loadError)) {
+                && !loadWordDigitTemplatesFromProfile(
+                    profile,
+                    baseNamesToFind,
+                    &tempTemplates,
+                    &tempTemplateTargetIndexes,
+                    &loadError)) {
             showParameterCritical("严重警告",
                 QString("当前模板 [%1] 字符图片加载失败：\n%2\n\n本次更新已撤销。")
                 .arg(profile.name)
@@ -8476,11 +8608,12 @@ void Widget::on_batchTextsure_btn_clicked()
         std::vector<int> tempTemplateTargetIndexes;
         if (needLoadDigitTemplates) {
             QString loadError;
-            if (!loadWordDigitTemplatesFromDir(profile.dirPath,
-                                               baseNamesToFind,
-                                               &tempTemplates,
-                                               &tempTemplateTargetIndexes,
-                                               &loadError)) {
+            if (!loadWordDigitTemplatesFromProfile(
+                        profile,
+                        baseNamesToFind,
+                        &tempTemplates,
+                        &tempTemplateTargetIndexes,
+                        &loadError)) {
                 failedMessages.append(QString("%1：%2")
                                       .arg(profileName)
                                       .arg(loadError));
