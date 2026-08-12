@@ -15,13 +15,16 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_selection.cpp \
-    $$PROJECT_ROOT/app/recipes/template_profile_load_plan.cpp
+    $$PROJECT_ROOT/app/recipes/template_profile_load_plan.cpp \
+    $$PROJECT_ROOT/app/recipes/template_recipe_assembler.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
     $$PROJECT_ROOT/app/recipes/recipe_store.h \
     $$PROJECT_ROOT/app/recipes/recipe_selection.h \
-    $$PROJECT_ROOT/app/recipes/template_profile_load_plan.h
+    $$PROJECT_ROOT/app/recipes/template_profile_load_plan.h \
+    $$PROJECT_ROOT/app/recipes/template_profile_assets.h \
+    $$PROJECT_ROOT/app/recipes/template_recipe_assembler.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app/recipes

@@ -1,6 +1,7 @@
 #include "template_recipe_assembler.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QSet>
 
 namespace {
@@ -66,6 +67,59 @@ bool validateManifest(const TemplateProfileAssetManifest &manifest,
     return true;
 }
 
+bool isWordFamily(DetectionMode mode)
+{
+    return mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord;
+}
+
+bool resolveSelectedAssetSource(const RecipeSelection &selection,
+                                const QString &profileName,
+                                const QString &role,
+                                const QString &assetKey,
+                                const QString &resolvedPath,
+                                QString *absoluteSourcePath,
+                                QString *errorMessage)
+{
+    if (!selection.recipe->assets.contains(assetKey)) {
+        setError(errorMessage,
+                 QStringLiteral("Selected recipe profile %1 has an invalid asset key for role %2.")
+                 .arg(profileName, role));
+        return false;
+    }
+
+    const QFileInfo sourceInfo(resolvedPath);
+    if (!sourceInfo.exists()
+            || sourceInfo.isSymLink()
+            || !sourceInfo.isFile()
+            || sourceInfo.size() <= 0) {
+        setError(errorMessage,
+                 QStringLiteral("Selected recipe profile %1 has a missing or invalid asset for role %2.")
+                 .arg(profileName, role));
+        return false;
+    }
+
+    const QString expectedPath = QDir(selection.recipeDirectoryPath).filePath(
+                QDir::cleanPath(QDir::fromNativeSeparators(
+                                    selection.recipe->assets.value(assetKey))));
+    const QString canonicalSourcePath = sourceInfo.canonicalFilePath();
+    const QString canonicalExpectedPath = QFileInfo(expectedPath)
+            .canonicalFilePath();
+    if (canonicalSourcePath.isEmpty()
+            || canonicalExpectedPath.isEmpty()
+            || QDir::cleanPath(canonicalSourcePath).compare(
+                QDir::cleanPath(canonicalExpectedPath),
+                Qt::CaseInsensitive) != 0) {
+        setError(errorMessage,
+                 QStringLiteral("Selected recipe profile %1 asset path does not match role %2.")
+                 .arg(profileName, role));
+        return false;
+    }
+
+    *absoluteSourcePath = sourceInfo.absoluteFilePath();
+    return true;
+}
+
 } // namespace
 
 bool assembleTemplateProductRecipe(
@@ -82,8 +136,7 @@ bool assembleTemplateProductRecipe(
                  QStringLiteral("Template recipe assembly output is null."));
         return false;
     }
-    if (recipeHeader.detectionMode != DetectionMode::Word
-            && recipeHeader.detectionMode != DetectionMode::BarcodeWord) {
+    if (!isWordFamily(recipeHeader.detectionMode)) {
         setError(errorMessage,
                  QStringLiteral("Template recipe assembly only supports the word family."));
         return false;
@@ -138,6 +191,121 @@ bool assembleTemplateProductRecipe(
         candidate.recipe.profiles.append(profile);
     }
 
+    if (!validateProductRecipe(candidate.recipe, errorMessage)) {
+        return false;
+    }
+
+    *assembly = candidate;
+    return true;
+}
+
+bool assembleSelectedTemplateRecipe(
+        const RecipeSelection &selection,
+        TemplateRecipeAssembly *assembly,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!assembly) {
+        setError(errorMessage,
+                 QStringLiteral("Selected template recipe assembly output is null."));
+        return false;
+    }
+    if (!selection.recipe) {
+        setError(errorMessage,
+                 QStringLiteral("Selected template recipe snapshot is null."));
+        return false;
+    }
+    if (!isWordFamily(selection.recipe->detectionMode)) {
+        setError(errorMessage,
+                 QStringLiteral("Selected template recipe assembly only supports the word family."));
+        return false;
+    }
+    if (selection.recipeDirectoryPath.trimmed().isEmpty()) {
+        setError(errorMessage,
+                 QStringLiteral("Selected template recipe directory is empty."));
+        return false;
+    }
+    if (selection.recipe->profiles.isEmpty()
+            || selection.profiles.size()
+            != selection.recipe->profiles.size()) {
+        setError(errorMessage,
+                 QStringLiteral("Selected template recipe profile count does not match the snapshot."));
+        return false;
+    }
+
+    TemplateRecipeAssembly candidate;
+    candidate.recipe = *selection.recipe;
+
+    for (int profileIndex = 0;
+         profileIndex < candidate.recipe.profiles.size();
+         ++profileIndex) {
+        const RecipeProfile &recipeProfile =
+                candidate.recipe.profiles.at(profileIndex);
+        const ResolvedRecipeProfile &resolvedProfile =
+                selection.profiles.at(profileIndex);
+        const QString profileName = recipeProfile.name;
+        if (resolvedProfile.profile.name != recipeProfile.name
+                || resolvedProfile.profile.assetKeys
+                != recipeProfile.assetKeys) {
+            setError(errorMessage,
+                     QStringLiteral("Selected recipe profile mapping does not match the snapshot: %1")
+                     .arg(profileName));
+            return false;
+        }
+
+        for (auto it = recipeProfile.assetKeys.constBegin();
+             it != recipeProfile.assetKeys.constEnd();
+             ++it) {
+            const QString role = it.key();
+            const QString assetKey = it.value();
+            if (!resolvedProfile.assetPathsByRole.contains(role)) {
+                setError(errorMessage,
+                         QStringLiteral("Selected recipe profile %1 is missing asset role %2.")
+                         .arg(profileName, role));
+                return false;
+            }
+
+            QString sourcePath;
+            if (!resolveSelectedAssetSource(
+                        selection,
+                        profileName,
+                        role,
+                        assetKey,
+                        resolvedProfile.assetPathsByRole.value(role),
+                        &sourcePath,
+                        errorMessage)) {
+                return false;
+            }
+
+            if (candidate.assetSourcePaths.contains(assetKey)
+                    && QFileInfo(candidate.assetSourcePaths.value(assetKey))
+                    .absoluteFilePath().compare(
+                        QFileInfo(sourcePath).absoluteFilePath(),
+                        Qt::CaseInsensitive) != 0) {
+                setError(errorMessage,
+                         QStringLiteral("Selected recipe asset source is inconsistent: %1")
+                         .arg(assetKey));
+                return false;
+            }
+            candidate.assetSourcePaths.insert(assetKey, sourcePath);
+        }
+
+        if (resolvedProfile.assetPathsByRole.size()
+                != recipeProfile.assetKeys.size()) {
+            setError(errorMessage,
+                     QStringLiteral("Selected recipe profile %1 contains an unexpected asset role.")
+                     .arg(profileName));
+            return false;
+        }
+    }
+
+    if (candidate.assetSourcePaths.size() != candidate.recipe.assets.size()) {
+        setError(errorMessage,
+                 QStringLiteral("Selected template recipe has unresolved asset sources."));
+        return false;
+    }
     if (!validateProductRecipe(candidate.recipe, errorMessage)) {
         return false;
     }

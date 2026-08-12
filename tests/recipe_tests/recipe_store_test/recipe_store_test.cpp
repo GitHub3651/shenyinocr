@@ -3,6 +3,7 @@
 #include "recipe_selection.h"
 #include "recipe_store.h"
 #include "template_profile_load_plan.h"
+#include "template_recipe_assembler.h"
 
 #include <QDir>
 #include <QFile>
@@ -25,6 +26,8 @@ private slots:
     void profileLoadPlanReportsPendingTargetsWithoutPartialAssets();
     void recipeLoadPlanPreservesProfileOrderAndTargetUnits();
     void recipeLoadPlanFailurePreservesPreviousOutput();
+    void selectedRecipeAssemblyCanBeSavedBackFromInternalAssets();
+    void selectedRecipeAssemblyFailurePreservesPreviousOutput();
 };
 
 namespace {
@@ -803,6 +806,180 @@ void RecipeStoreTest::recipeLoadPlanFailurePreservesPreviousOutput()
     QCOMPARE(unchangedPlan.profiles.size(), 1);
     QCOMPARE(unchangedPlan.profiles.first().profile.name,
              QStringLiteral("sentinel-profile"));
+}
+
+void RecipeStoreTest::selectedRecipeAssemblyCanBeSavedBackFromInternalAssets()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString firstTracking = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("first-tracking.bmp"));
+    const QString firstCalibration = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("first-calibration.yaml"));
+    const QString secondTracking = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("second-tracking.bmp"));
+    const QString secondCalibration = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("second-calibration.yaml"));
+    QVERIFY(writeBytes(firstTracking, QByteArray("first-tracking")));
+    QVERIFY(writeBytes(firstCalibration, QByteArray("first-calibration")));
+    QVERIFY(writeBytes(secondTracking, QByteArray("second-tracking")));
+    QVERIFY(writeBytes(secondCalibration, QByteArray("second-calibration")));
+
+    ProductRecipe recipe = createProductRecipe(
+                QStringLiteral("before-edit"), DetectionMode::Word);
+    RecipeProfile firstProfile;
+    firstProfile.name = QStringLiteral("first");
+    firstProfile.targetText = QStringLiteral("AB");
+    firstProfile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    firstProfile.hasValidBoxes = true;
+    firstProfile.assetKeys.insert(QStringLiteral("trackingTemplate"),
+                                  QStringLiteral("firstTracking"));
+    firstProfile.assetKeys.insert(QStringLiteral("calibration"),
+                                  QStringLiteral("firstCalibration"));
+    RecipeProfile secondProfile = firstProfile;
+    secondProfile.name = QStringLiteral("second");
+    secondProfile.targetText = QStringLiteral("CD");
+    secondProfile.assetKeys[QStringLiteral("trackingTemplate")] =
+            QStringLiteral("secondTracking");
+    secondProfile.assetKeys[QStringLiteral("calibration")] =
+            QStringLiteral("secondCalibration");
+    recipe.profiles.append(firstProfile);
+    recipe.profiles.append(secondProfile);
+    recipe.assets.insert(QStringLiteral("firstTracking"),
+                         QStringLiteral("assets/profiles/0/tracking.bmp"));
+    recipe.assets.insert(QStringLiteral("firstCalibration"),
+                         QStringLiteral("assets/profiles/0/calibration.yaml"));
+    recipe.assets.insert(QStringLiteral("secondTracking"),
+                         QStringLiteral("assets/profiles/1/tracking.bmp"));
+    recipe.assets.insert(QStringLiteral("secondCalibration"),
+                         QStringLiteral("assets/profiles/1/calibration.yaml"));
+
+    QMap<QString, QString> sources;
+    sources.insert(QStringLiteral("firstTracking"), firstTracking);
+    sources.insert(QStringLiteral("firstCalibration"), firstCalibration);
+    sources.insert(QStringLiteral("secondTracking"), secondTracking);
+    sources.insert(QStringLiteral("secondCalibration"), secondCalibration);
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    QString errorMessage;
+    QVERIFY2(store.saveRecipe(recipe, sources, &errorMessage),
+             qPrintable(errorMessage));
+
+    RecipeSelection selection;
+    QVERIFY2(loadRecipeSelection(store,
+                                 recipe.recipeId,
+                                 DetectionMode::Word,
+                                 &selection,
+                                 &errorMessage),
+             qPrintable(errorMessage));
+    TemplateRecipeAssembly assembly;
+    QVERIFY2(assembleSelectedTemplateRecipe(selection,
+                                            &assembly,
+                                            &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(assembly.recipe.recipeId, recipe.recipeId);
+    QCOMPARE(assembly.recipe.profiles.size(), 2);
+    QCOMPARE(assembly.recipe.profiles.at(0).name, QStringLiteral("first"));
+    QCOMPARE(assembly.recipe.profiles.at(1).name, QStringLiteral("second"));
+    QCOMPARE(assembly.assetSourcePaths.size(), recipe.assets.size());
+    for (auto it = assembly.assetSourcePaths.constBegin();
+         it != assembly.assetSourcePaths.constEnd();
+         ++it) {
+        QVERIFY(QFileInfo(it.value()).absoluteFilePath().startsWith(
+                    QFileInfo(selection.recipeDirectoryPath)
+                    .absoluteFilePath()));
+    }
+
+    assembly.recipe.displayName = QStringLiteral("after-edit");
+    QVERIFY2(store.saveRecipe(assembly.recipe,
+                              assembly.assetSourcePaths,
+                              &errorMessage),
+             qPrintable(errorMessage));
+
+    ProductRecipe reloaded;
+    QVERIFY2(store.loadRecipe(recipe.recipeId, &reloaded, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(reloaded.displayName, QStringLiteral("after-edit"));
+    QCOMPARE(reloaded.profiles.size(), 2);
+    QCOMPARE(reloaded.profiles.at(0).name, QStringLiteral("first"));
+    QCOMPARE(reloaded.profiles.at(0).targetText, QStringLiteral("AB"));
+    QCOMPARE(reloaded.profiles.at(1).name, QStringLiteral("second"));
+    QCOMPARE(reloaded.profiles.at(1).targetText, QStringLiteral("CD"));
+    QVERIFY(reloaded.assets == recipe.assets);
+    const QDir recipeDirectory(store.recipeDirectoryPath(recipe.recipeId));
+    QCOMPARE(readBytes(recipeDirectory.filePath(
+                           QStringLiteral("assets/profiles/0/tracking.bmp"))),
+             QByteArray("first-tracking"));
+    QCOMPARE(readBytes(recipeDirectory.filePath(
+                           QStringLiteral("assets/profiles/1/calibration.yaml"))),
+             QByteArray("second-calibration"));
+}
+
+void RecipeStoreTest::selectedRecipeAssemblyFailurePreservesPreviousOutput()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString tracking = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibration = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("calibration.yaml"));
+    QVERIFY(writeBytes(tracking, QByteArray("tracking")));
+    QVERIFY(writeBytes(calibration, QByteArray("calibration")));
+
+    ProductRecipe recipe = createProductRecipe(
+                QStringLiteral("editable"), DetectionMode::Word);
+    RecipeProfile profile;
+    profile.name = QStringLiteral("profile");
+    profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    profile.hasValidBoxes = true;
+    profile.assetKeys.insert(QStringLiteral("trackingTemplate"),
+                             QStringLiteral("tracking"));
+    profile.assetKeys.insert(QStringLiteral("calibration"),
+                             QStringLiteral("calibration"));
+    recipe.profiles.append(profile);
+    recipe.assets.insert(QStringLiteral("tracking"),
+                         QStringLiteral("assets/tracking.bmp"));
+    recipe.assets.insert(QStringLiteral("calibration"),
+                         QStringLiteral("assets/calibration.yaml"));
+    QMap<QString, QString> sources;
+    sources.insert(QStringLiteral("tracking"), tracking);
+    sources.insert(QStringLiteral("calibration"), calibration);
+
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    QString errorMessage;
+    QVERIFY2(store.saveRecipe(recipe, sources, &errorMessage),
+             qPrintable(errorMessage));
+    RecipeSelection selection;
+    QVERIFY2(loadRecipeSelection(store,
+                                 recipe.recipeId,
+                                 DetectionMode::Word,
+                                 &selection,
+                                 &errorMessage),
+             qPrintable(errorMessage));
+    selection.profiles[0].assetPathsByRole.remove(
+                QStringLiteral("calibration"));
+
+    TemplateRecipeAssembly unchangedAssembly;
+    unchangedAssembly.recipe = createProductRecipe(
+                QStringLiteral("sentinel"), DetectionMode::Word);
+    unchangedAssembly.assetSourcePaths.insert(QStringLiteral("sentinel"),
+                                              QStringLiteral("sentinel-path"));
+    const QString sentinelRecipeId = unchangedAssembly.recipe.recipeId;
+
+    QVERIFY(!assembleSelectedTemplateRecipe(selection,
+                                             &unchangedAssembly,
+                                             &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("profile")));
+    QVERIFY(errorMessage.contains(QStringLiteral("calibration")));
+    QCOMPARE(unchangedAssembly.recipe.recipeId, sentinelRecipeId);
+    QCOMPARE(unchangedAssembly.recipe.displayName, QStringLiteral("sentinel"));
+    QCOMPARE(unchangedAssembly.assetSourcePaths.size(), 1);
+    QCOMPARE(unchangedAssembly.assetSourcePaths.value(
+                 QStringLiteral("sentinel")),
+             QStringLiteral("sentinel-path"));
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)
