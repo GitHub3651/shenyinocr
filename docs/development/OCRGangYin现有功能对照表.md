@@ -89,7 +89,7 @@
 | DET-003 | 字库多Profile模式 | 界面“字库匹配”（索引1）检测帧 | 至少一个完整Profile | 采集线程并行匹配所有Profile→最佳score→`runWordTemplateDetection`→`WordDetectionPipeline`窄回调→`TemplateMatch::run3` | 每Profile目标、字符图、阈值；最佳定位Profile | 匹配字符数等于目标数OK；否则NG；无定位按节流策略生成NG | Profile名/框显示、统计、存图、PLC | 自动选择和字符计数语义保持 | `detection/word/word_detection_pipeline.*` | Stage 1拆解 | Pipeline纯逻辑测试；主程序“字库匹配”入口；固定样本风险按用户决定延期 | 已验证 | S；T；U；2026-08-12 15:43字库Pipeline测试`6 passed, 0 failed`、退出码0；用户随后确认主程序Run qmake/Rebuild/Run及“字库匹配”模式切换通过；多Profile最佳定位、Overlay及结果收尾保持旧入口 |
 | DET-004 | 深度OCR模式 | 模式2检测帧 | OCR模型已加载、模板日期区域有效 | `dispatchDetectionByMode`→`slot_readAndDetect`→旋转裁剪日期ROI→`DBDetector::Run`→`CRNNRecognizer::Run`→清洗/换行拼接→非空且精确比较 | 目标文本；按字节保留ASCII字母数字、所有高位字节及`- . :`；非空行用`\n`拼接 | 清洗拼接文本非空且与目标完全相等OK；空或不等为NG；无效图/日期ROI当前直接返回 | 识别文本、统计、异步存图、PLC | 精确比较、字节清洗、无OCR框Overlay和现有收尾保持 | `detection/ocr/ocr_detection_pipeline.*` | Stage 1拆解 | OCR纯逻辑测试；原入口OCR样本记录原识别列表、清洗文本和最终判定 | 已验证 | S；T；U；2026-08-12 14:24 OCR Pipeline测试及纸巾子工程回归均`6 passed, 0 failed`；用户随后确认主程序Run qmake/Rebuild/Run及OCR模式切换通过 |
 | DET-005 | 纸巾卷粗糙度模式 | 模式3采集线程 | 相机帧；不需传统模板 | `MyThread/CameraThread`→运行内`TissueDetectionPipeline`→`TissueRollDetector::processImage`→`slot_handleTissueResult` | 运行参数副本中的粗糙度阈值；算法找内孔、外圆和环粗糙度 | 找到卷且score<threshold为OK；空图、无圆、外轮廓失败或score>=阈值为NG并带诊断 | Overlay、统计、存图、PLC | 当前边界是`>=`判NG；结果收尾和外部副作用不变 | `recipes/product_recipe.*`+`detection/tissue/tissue_detection_pipeline.*` | Stage 1先迁移 | TISSUE三类样本；Qt Creator运行离线测试；记录score/阈值/圆框 | 已验证 | S；T；U；2026-08-12纸巾Pipeline的6.0默认、显式阈值、空图和纯黑图4项业务测试全部通过，汇总`6 passed, 0 failed` |
-| DET-006 | 二维码优先+三期模式 | 模式4检测帧 | Profile含tracking、二维码4点、日期多边形、字符模板，DLL可用 | `runBarcodeWordDetection`→组合旋转ROI→`decodeBarcodeRoi`快路径/限时fallback→成功后`runWordTemplateDetection` | DataMatrix/QR格式掩码、padding8%、预算60ms、fallback、缓存首选策略 | 读码失败立即NG且不执行日期；读码成功再做三期，二者共同形成结果 | 显示码内容/日期状态、统计、存图、PLC | “读码优先、失败短路”保持 | `detection/barcode_word_pipeline.*` | 保留后拆解 | 可读OK、可读日期NG、不可读、DLL缺失、超时样本各一次 | 已基线 | S；T；U；字库切片会复用其成功读码后的字符子流程；二维码优先、失败短路和最终组合判定尚未迁移 |
+| DET-006 | 二维码优先+三期模式 | 界面“二维码+三期”（索引4）检测帧 | Profile含tracking、二维码4点、日期多边形、字符模板，DLL可用 | `runBarcodeWordDetection`→组合旋转ROI→`decodeBarcodeRoi`快路径/限时fallback→`BarcodeWordDetectionPipeline`→成功后`runWordTemplateDetection` | DataMatrix/QR格式掩码、padding8%、预算60ms、fallback、缓存首选策略 | 读码失败立即NG且不执行日期；读码成功再做三期，二者共同形成结果 | 显示码内容/日期状态、统计、存图、PLC | “读码优先、失败短路”保持 | `detection/barcode_word/barcode_word_detection_pipeline.*` | Stage 1拆解 | Pipeline纯逻辑测试；主程序“二维码+三期”入口；固定样本风险按用户决定延期 | 已验证 | S；T；U；2026-08-12 16:48 Pipeline测试`6 passed, 0 failed`、退出码0；用户随后确认主程序Run qmake/Rebuild/Run及“二维码+三期”模式切换无问题；多Profile选择、ROI、DLL解码、Overlay和结果收尾保持旧入口 |
 | DET-007 | 定位失败收尾 | 字库家族采集时无有效pose | 已启动检测 | 软触发`MyThread`节流发失败；硬触发二维码模式逐触发发结果→`finalizeWordTrackingNg/finalizeBarcodeWordNg` | 软触发检测间隔；硬触发每个新回调帧 | 显示定位失败NG；二维码硬触发保证本次触发有收尾 | 增总数/NG、可存图、PLC或排队 | 软硬触发差异必须保持到Stage 4 | `runtime/`+Pipeline | 保留 | 移出视野：软触发观察频率；硬触发逐次打光记录结果数和PLC | 已基线 | S；U |
 | DET-008 | 算法/系统失败当前统计语义 | 模板缺失、读码失败、无圆、无定位等到达收尾 | 检测已启动或启动预检 | 各Pipeline失败分支→现有NG收尾 | 当前没有独立SystemError统计 | 当前把到达正式收尾的失败计入总数和产品NG；部分启动预检失败不计数 | 影响合格率、存图和PLC | Stage 1-3保持；计划的故障分类在后续阶段处理 | `detection/types`+`runtime/result_handler` | 保留当前行为 | 对每模式失败输入记录是否计数/存图/PLC，形成固定证据 | 已基线 | S；U |
 
@@ -175,9 +175,9 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 82 | 除已验证模板匹配/字库匹配/纸巾/深度OCR切片及MC-002、MC-003外的功能ID |
+| 已基线 | 81 | 除已验证五种Pipeline切片相关功能及MC-002、MC-003外的功能ID |
 | 迁移中 | 0 | 无 |
-| 已验证 | 6 | SET-010、DET-002、DET-003、DET-004、DET-005、RUN-001；四个Pipeline切片通过Agent静态检查和用户Qt Creator门禁 |
+| 已验证 | 7 | SET-010、DET-002、DET-003、DET-004、DET-005、DET-006、RUN-001；五个Pipeline切片通过Agent静态检查和用户Qt Creator门禁 |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
 

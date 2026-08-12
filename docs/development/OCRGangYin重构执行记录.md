@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 1 配方与算法拆分（按用户风险接受条件进入）
-- 当前切片：字库匹配模式（已验证，待提交）
-- 阶段结论：**Stage 1进行中**。基础配方、纸巾、深度OCR和模板匹配切片已分别提交为`8d9c400`、`e590703`、`c8e3113`和`5113ea5`。字库匹配代码、测试和主程序门禁均已通过，允许形成独立提交。
+- 当前切片：二维码+三期模式（已验证，待提交）
+- 阶段结论：**Stage 1进行中**。基础配方、纸巾、深度OCR、模板匹配和字库匹配切片已分别提交为`8d9c400`、`e590703`、`c8e3113`、`5113ea5`和`a7404c1`。二维码+三期切片已通过用户Qt Creator测试与主程序门禁，正在形成独立提交。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -56,6 +56,15 @@
 - 本切片目标：将目标字符解析、原`TemplateMatch`窄回调和数量判定提取到`detection/word/word_detection_pipeline.*`；保留匹配框供旧入口映射和诊断。
 - 保持边界：不改多Profile并行选择、最高score规则、日期ROI padding=20、模板阈值、字符匹配算法、匹配框、诊断文本、Overlay、统计、存图、PLC、相机或触发时序。
 
+## Stage 1已完成二维码+三期切片
+
+- 主要功能ID：`DET-006`；`DET-003`提供已经验证的字符检测子流程，`DET-007`定位失败收尾和`DET-008`当前失败计数语义只登记边界，本切片不修改其状态。
+- 旧调用链：模式4→软/硬线程多Profile最高score定位→`dispatchDetectionByMode`→`runBarcodeWordDetection`→二维码/日期组合旋转ROI→`decodeBarcodeRoi`原图快路径及60ms内fallback→读码失败立即`finalizeBarcodeWordNg`→读码成功才调用`runWordTemplateDetection`→原UI、统计、存图、PLC和延迟剔除收尾。
+- 当前失败路径：无定位、无效Profile/模板、二维码4点或日期多边形缺失、组合ROI越界、DLL不可用、不可读、解码超时/内部错误均不执行日期字符检测；读码成功但日期ROI无效也形成一次NG；日期字符少/多沿用字库NG。
+- 当前状态与缓存：成功策略和option flags缓存到本次运行Profile；连续3次读码失败清除首选策略；解码角点映射回原图；硬触发定位失败仍逐触发形成一次NG。
+- 本切片目标：将“读码结果优先→不可读时短路→可读时调用日期字符窄回调→组合最终判定”提取到`detection/barcode_word/barcode_word_detection_pipeline.*`。
+- 保持边界：不改多Profile选择、软硬触发差异、ROI padding=8%/日期20像素、DLL加载与ABI、DataMatrix/QR掩码、60ms预算、fallback顺序、策略缓存、角点映射、文本、Overlay、统计、存图、PLC或相机时序。
+
 ## 功能状态变化
 
 | 功能范围 | 修改前状态 | 修改后状态 | 本次为何涉及 | 验证证据 |
@@ -68,6 +77,7 @@
 | DET-004 | 已基线 | 已验证 | 深度OCR识别编排、按字节文本清洗与精确判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 14:24 OCR测试及纸巾子工程回归均`6 passed, 0 failed`；用户随后确认主工程Run qmake/Rebuild/Run及OCR模式切换通过 |
 | DET-002 | 已基线 | 已验证 | 模板匹配目标字符计数、旧字符匹配/重叠调用和两条件AND判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 14:58测试`6 passed, 0 failed`、退出码0；用户截图确认主程序运行及“模板匹配”入口 |
 | DET-003 | 已基线 | 已验证 | 字库目标字符解析、原字符匹配回调和数量判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 15:43 Pipeline测试`6 passed, 0 failed`、退出码0；用户随后确认主程序及“字库匹配”模式门禁通过 |
+| DET-006 | 已基线 | 已验证 | 二维码优先、失败短路、读码成功后日期检测和组合判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 16:48 Pipeline测试`6 passed, 0 failed`、退出码0；用户随后确认主程序Run qmake/Rebuild/Run及模式切换无问题 |
 | MC-001 | 无对照表 | 已基线 | 当前多相机窗口入口仍可达 | 源码静态核对；实际入口待用户 |
 | MC-002..003 | 无对照表 | 已延期 | 计划3.6明确本轮不扩建/迁移多相机；当前窗口控制按钮未接底层Controller | 源码/UI零接线核对；计划依据 |
 | TOOL-001..002 | 无对照表 | 已基线 | 独立授权工程和条码DLL工程仍是当前可进入/部署能力 | 工程/源码静态核对；构建待用户 |
@@ -104,11 +114,13 @@
 | 纸巾离线回归 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | 验证配方6.0唯一默认、显式阈值传递和原失败诊断 | 保留4项业务测试；用户已验证 | 测试目标名保持不变 |
 | 深度OCR识别编排与判定 | `app/detection/ocr/ocr_detection_pipeline.*` | Pipeline调用窄识别回调，按旧规则清洗/拼接并生成精确判定 | 原Paddle调用和返回顺序不变；检测模块不依赖Paddle类 | `Widget::slot_readAndDetect`仍负责ROI和结果收尾 |
 | 深度OCR离线回归 | `tests/detection_tests/ocr_detection_pipeline_test/` | 新增4项内存假识别测试，覆盖字节清洗/顺序、精确OK、空NG和不等NG | 不加载Paddle、不调用UI/相机/PLC/存图 | 原生产OCR入口保留 |
-| 检测测试子目标组装 | `tests/detection_tests/detection_tests.pro` | `subdirs`集合保留纸巾/OCR/钢印目标并新增字库目标 | 四个目标独立运行且继续执行x64运行库校验 | `tests/tests.pro`顶层入口不变 |
+| 检测测试子目标组装 | `tests/detection_tests/detection_tests.pro` | `subdirs`集合保留纸巾/OCR/钢印/字库目标并新增二维码+三期目标 | 五个目标独立运行；需要OpenCV的目标继续执行x64运行库校验 | `tests/tests.pro`顶层入口不变 |
 | 钢印目标字符计数、算法编排和组合判定 | `app/detection/stamp/stamp_detection_pipeline.*` | Pipeline通过窄回调调用原字符匹配和重叠检测，返回两项子判定与钢印多边形 | 原正则/回退计数、字符数量相等且无重叠才OK、缺配置NG均保持 | `Widget::slot_readAndDetect3`继续负责ROI、Overlay和结果收尾 |
 | 钢印Pipeline离线回归 | `tests/detection_tests/stamp_detection_pipeline_test/` | 新增4项内存假回调测试 | 覆盖变体/回退计数、两条件OK、字符NG和重叠/缺配置NG；不运行视觉算法或外部副作用 | 原生产钢印入口保留 |
 | 字库目标字符解析、算法编排和数量判定 | `app/detection/word/word_detection_pipeline.*` | Pipeline解析原目标单元，通过窄回调调用原字符匹配，并返回目标数、检测数和判定 | 原正则、无可解析单元时按字符串长度回退、数量相等OK均保持 | `Widget::runWordTemplateDetection`继续负责阈值、ROI、诊断、Overlay和结果收尾 |
 | 字库Pipeline离线回归 | `tests/detection_tests/word_detection_pipeline_test/` | 新增4项内存假回调测试 | 覆盖变体/回退解析、数量相等OK、少/多均NG；不运行视觉算法或外部副作用 | 原生产字库入口保留；二维码模式仅复用成功读码后的字符子流程 |
+| 二维码优先、日期子流程和组合判定 | `app/detection/barcode_word/barcode_word_detection_pipeline.*` | Pipeline接收读码是否可读和日期检测窄回调，明确是否执行日期、是否产出结果及最终判定 | 不可读绝不调用日期；可读但无日期阶段不输出OK；日期OK/NG决定组合结果 | `Widget::runBarcodeWordDetection`继续负责ROI、DLL解码、缓存、角点、文本和结果收尾 |
+| 二维码+三期Pipeline离线回归 | `tests/detection_tests/barcode_word_detection_pipeline_test/` | 新增4项内存假回调测试 | 覆盖不可读短路、日期阶段不可用、可读+日期OK及可读+日期NG；不加载DLL或运行外部副作用 | 原生产二维码+三期入口保留 |
 
 ## 已确认的关键现状
 
@@ -127,7 +139,7 @@
 | 工作区起点 | `git status --short --branch`、`git rev-parse HEAD`、`git log` | 基线干净且HEAD可记录 | 基线分支`codex/repo-layout`干净；HEAD=`1c8d564...`；已新建专用分支 | 通过 |
 | 源码/UI候选盘点 | Skill清单脚本输出到系统临时目录；再人工读取入口和调用链 | 不修改仓库，覆盖所有候选 | 盘点68个app源/工程/UI文件约32377行；已人工核对矩阵，不把脚本输出当功能证据 | 通过 |
 | 可见控件反向核对 | 解析`widget.ui`和`multicamerawidget.ui`并与槽/显式连接对照 | 所有按钮/输入/自定义控件有去留 | 已覆盖；确认多相机除返回外未接线 | 通过 |
-| 功能ID与状态 | 解析矩阵正式功能行（不含`DIFF-*`已知差异项）并检查ID/状态 | 90个唯一ID；当前为82已基线、0迁移中、6已验证、2已延期 | 90/90唯一；82/0/6/2，与统计一致 | 通过 |
+| 功能ID与状态 | 解析矩阵正式功能行（不含`DIFF-*`已知差异项）并检查ID/状态 | 90个唯一ID；二维码+三期切片验证后为81已基线、0迁移中、7已验证、2已延期 | 90/90唯一；81/0/7/2，与统计一致 | 通过 |
 | 禁止强杀线程 | 全仓搜索`QThread::terminate`/`.terminate()` | 不存在运行时强杀 | 0处命中 | 通过 |
 | Stage 1配方工程清单 | 静态核对主工程及`tests/tests.pro`的源文件、子工程和运行库部署参数 | 所有路径存在；旧检测子工程保留；新配方测试4项 | PowerShell脚本解析0错误；必需路径0缺失；5模式ID和7个JSON关键字0缺失；旧生产实现文件0改动 | 通过 |
 | Stage 1纸巾切片边界 | 搜索旧默认API/5.2字面量、核对两线程设置和`start()`顺序、解析UI/工程清单 | 无进程级默认；参数在线程启动前固定；新文件都纳入主/测试工程 | 旧API和5.2字面量0命中；软/硬触发均在`start()`前调用运行参数应用；UI XML和工程路径静态检查通过 | 通过 |
@@ -141,6 +153,9 @@
 | Stage 1字库匹配切片边界 | 白名单核对、工程路径/子目标解析、旧调用与Widget判定搜索、Pipeline禁止依赖、正则与测试方法检查、Git差异检查 | 只改当前10个文件；两个原字符匹配分支各保留1处；Pipeline不依赖UI/算法类/PLC/存图；4项业务测试；状态与文档一致 | 10个文件且无额外差异；90个ID唯一；原匹配调用由窄回调承接；多Profile选择及二维码优先链未改；Pipeline边界违规0处；测试4项；`git diff --check`通过 | 通过 |
 | Stage 1字库匹配Pipeline测试 | 用户在Qt Creator Release运行`word_detection_pipeline_test` | 目标解析/回退、数量相等OK、少NG、多NG共4项业务测试通过 | 2026-08-12 15:43:04汇总`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | Stage 1字库匹配主程序门禁 | 用户在Qt Creator Release对主工程Run qmake、Rebuild、Run并切到“字库匹配” | 新Pipeline可编译链接；主程序正常启动；现有模式入口和目标文本正常 | 2026-08-12用户确认“没问题”；按用户风险接受条件不要求生产样本 | 通过（用户证据） |
+| Stage 1二维码+三期切片边界 | 白名单核对、工程路径/子目标解析、原解码与日期子流程搜索、Pipeline禁止依赖、测试方法、受保护线程/解码/config差异和Git检查 | 只改当前10个文件；原DLL解码和日期子流程各保留1处；Pipeline不依赖UI/OpenCV/DLL/算法类/PLC/存图；4项业务测试；状态与文档一致 | 10个文件且无额外差异；90个ID唯一；用户门禁前为81/1/6/2，门禁后为81/0/7/2；多Profile、线程、ROI、DLL与配置文件0改动；Pipeline边界违规0处；测试4项；部署脚本和`git diff --check`通过；测试工程补充`QMAKE_PROJECT_DEPTH = 0`以规避jom误判相对依赖路径 | 通过 |
+| Stage 1二维码+三期Pipeline测试 | 用户在Qt Creator Release运行`barcode_word_detection_pipeline_test` | 不可读短路、日期阶段不可用、可读+日期OK、可读+日期NG共4项业务测试通过 | 首次构建由jom报告相对依赖不存在，改用绝对项目深度后重新生成；2026-08-12 16:48:00汇总`6 passed, 0 failed, 0 skipped`，0ms，退出码0 | 通过（用户证据） |
+| Stage 1二维码+三期主程序门禁 | 用户在Qt Creator Release对主工程Run qmake、Rebuild、Run并切到“二维码+三期” | 新Pipeline可编译链接；主程序正常启动；现有模式入口和目标文本正常 | 2026-08-12用户确认“没问题”；按用户风险接受条件不要求生产样本 | 通过（用户证据） |
 | Stage 1配方测试构建与编码修复 | 用户在Qt Creator/MSVC 2017 Release构建并运行`product_recipe_test` | 4项业务测试通过 | 首次因无BOM UTF-8中文字面量被代码页936解析而报`C4819/C2001/C1057`；改用C++11 Unicode转义后，2026-08-12 00:58用户复验为`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | 当前纸巾Pipeline测试 | 用户在Qt Creator Release tests工程Run qmake、构建并运行`tissue_roll_detector_baseline_test` | 配方6.0默认、显式阈值、空图和纯黑图4项业务测试通过 | 2026-08-12用户确认新纸巾Pipeline测试汇总`6 passed, 0 failed` | 通过（用户证据） |
 | 固定样本清单 | 解析TSV必填字段并按模式分组 | 15行、五模式各3类 | 15行；每模式OK/NG/FAILURE各一项；0行缺关键字段 | 通过 |
@@ -155,26 +170,26 @@
 
 ## 用户Qt Creator门禁
 
-### A. 当前字库匹配切片：主程序构建与启动
+### A. 当前二维码+三期切片：主程序构建与启动
 
 1. Qt Creator打开 `app/AutoOCRproject.pro`。
 2. 选择Qt 5.14.2、MSVC 2017 64-bit Kit和Release配置。
-3. 当前切片新增`detection/word/word_detection_pipeline.*`并修改主工程清单，必须先执行Run qmake。
+3. 当前切片新增`detection/barcode_word/barcode_word_detection_pipeline.*`并修改主工程清单，必须先执行Run qmake。
 4. Rebuild并Run，确认Release部署脚本完成、授权有效、主窗正常打开。
-5. 切到界面“字库匹配”模式，确认主界面仍能正常切换且目标文本保留；本门禁按用户决定不要求补做生产样本。
+5. 切到界面“二维码+三期”模式，确认主界面仍能正常切换且目标文本保留；本门禁按用户决定不要求补做生产样本。
 6. 反馈Qt Creator完整构建结论和启动结论；失败时提供首个错误及相关上下文，不要跳过。
 
-### B. Stage 1字库匹配 Pipeline测试
+### B. Stage 1二维码+三期 Pipeline测试
 
 1. Qt Creator另开 `tests/tests.pro`。
 2. 使用与主程序相同Kit，执行Run qmake。
-3. Build并运行`word_detection_pipeline_test`。
-4. 预期4个业务测试全部通过：`targetParserPreservesVariantsAndFallbackCount`、`exactDetectedCountIsOk`、`fewerDetectedCharactersAreNg`、`moreDetectedCharactersAreNg`。
+3. Build并运行`barcode_word_detection_pipeline_test`。
+4. 预期4个业务测试全部通过：`unreadableBarcodeShortCircuitsDateDetection`、`readableBarcodeWithoutDateStageDoesNotExecute`、`readableBarcodeAndDateOkAreOk`、`readableBarcodeAndDateNgAreNg`。
 5. 加上QtTest自动的初始化/清理，汇总应为`6 passed, 0 failed`。
 
 ### C. 本切片不要求重复运行的目标
 
-`product_recipe_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`和`stamp_detection_pipeline_test`的源码/子工程均未修改，不作为本切片必选门禁。
+`product_recipe_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`、`stamp_detection_pipeline_test`和`word_detection_pipeline_test`的源码/子工程均未修改，不作为本切片必选门禁。
 
 ### D. 已延期：五模式原入口固定样本
 
@@ -230,6 +245,10 @@
 - [x] 字库匹配切片Agent静态检查通过；未执行构建、链接、测试或主程序。
 - [x] 字库匹配切片`word_detection_pipeline_test`门禁：2026-08-12 15:43:04，`6 passed, 0 failed`，退出码0。
 - [x] 字库匹配切片主程序Run qmake/Rebuild/Run及“字库匹配”模式切换门禁：2026-08-12用户确认“没问题”。
+- [x] 二维码+三期切片已将读码优先、不可读短路、日期窄回调和组合判定提取到Pipeline；多Profile、ROI、DLL解码/缓存和结果收尾保留。
+- [x] 二维码+三期切片Agent静态检查通过；未执行构建、链接、测试或主程序。
+- [x] 二维码+三期切片`barcode_word_detection_pipeline_test`门禁：2026-08-12 16:48:00，`6 passed, 0 failed`，退出码0。
+- [x] 二维码+三期切片主程序Run qmake/Rebuild/Run及模式切换门禁：2026-08-12用户确认“没问题”。
 - [x] 开始本切片时工作区干净；当前只包含本切片代码、测试、工程清单和记录修改。
 
 ## 本地提交记录
@@ -242,6 +261,7 @@
 | `e590703` | Stage 1纸巾配方与检测 | SET-010、DET-005、RUN-001 | 唯一6.0默认、显式参数副本、纸巾Pipeline和离线测试 | Agent静态检查、主程序启动/阈值显示和纸巾测试`6 passed, 0 failed`均通过 |
 | `c8e3113` | Stage 1深度OCR模式 | DET-004 | OCR识别窄回调、字节清洗、换行拼接、精确判定和离线测试 | Agent静态检查、OCR/纸巾测试及主程序OCR模式门禁均通过 |
 | `5113ea5` | Stage 1模板匹配模式 | DET-002 | 钢印+字符检测窄回调、目标计数、两条件AND判定和离线测试 | Agent静态检查、钢印Pipeline测试及主程序“模板匹配”入口门禁均通过 |
+| `a7404c1` | Stage 1字库匹配模式 | DET-003 | 目标字符解析、原字符匹配窄回调、数量判定和离线测试 | Agent静态检查、字库Pipeline测试及主程序“字库匹配”入口门禁均通过 |
 
 ## 未解决事项
 
@@ -253,7 +273,7 @@
 
 ## 结论
 
-- 当前切片：Stage 1字库匹配模式；代码实现、Agent静态检查、Pipeline测试和主程序门禁均已通过，允许形成独立提交。
+- 当前切片：Stage 1二维码+三期模式；代码实现、测试工程、Agent静态检查、Pipeline测试及主程序门禁均已完成。
 - 当前阶段：Stage 1进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线82 / 迁移中0 / 已验证6 / 已延期2 / 已确认删除0。
-- 下一允许动作：形成字库匹配独立提交，然后按Stage 1顺序追踪“二维码+三期”最小切片。
+- 功能状态计数：待盘点0 / 已基线81 / 迁移中0 / 已验证7 / 已延期2 / 已确认删除0。
+- 下一允许动作：形成二维码+三期独立提交，然后按Stage 1顺序进入模板编辑、字符框与多Profile公共职责的下一个最小切片。

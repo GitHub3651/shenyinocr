@@ -12,6 +12,7 @@
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
+#include "detection/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/ocr/ocr_detection_pipeline.h"
 #include "detection/stamp/stamp_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
@@ -2520,7 +2521,51 @@ void Widget::runBarcodeWordDetection(
                         cornerInRotatedImage));
     }
 
-    if (!barcode.readable) {
+    const OrientedDateRoi &dateRoi =
+            orientedRois.date;
+    BarcodeWordDetectionPipeline::DateDetectionFunction detectDate;
+    if (dateRoi.valid) {
+        detectDate = [this,
+                      image,
+                      &pose,
+                      &profile,
+                      &templateName,
+                      &barcode,
+                      &dateRoi]() {
+            qDebug().noquote()
+                    << QString("[BARCODE_WORD] template=%1 barcode=OK barcodeMs=%2 text=\"%3\" date=START")
+                       .arg(templateName)
+                       .arg(barcode.elapsedMs, 0, 'f', 3)
+                       .arg(barcode.text);
+
+            const int totalBeforeDate = totalImages;
+            const int ngBeforeDate = ngImages;
+            runWordTemplateDetection(
+                        image,
+                        pose,
+                        profile.digitTemplates,
+                        profile.digitTemplateTargetIndexes,
+                        profile.settings.targetText,
+                        QString::number(profile.settings.imageThreshold),
+                        templateName,
+                        &profile.preparedDigitTemplates,
+                        &dateRoi);
+
+            BarcodeWordDateDetectionResult dateResult;
+            dateResult.resultProduced = totalImages > totalBeforeDate;
+            dateResult.isOk = dateResult.resultProduced
+                    && ngImages == ngBeforeDate;
+            return dateResult;
+        };
+    }
+
+    const BarcodeWordDetectionPipeline barcodeWordPipeline;
+    const BarcodeWordDetectionResult barcodeWordResult =
+            barcodeWordPipeline.detect(
+                barcode.readable,
+                detectDate);
+
+    if (!barcodeWordResult.barcodeIsReadable) {
         QString reason;
         if (barcode.status == BarcodeReadStatus::Timeout) {
             reason = "二维码读取超时";
@@ -2543,9 +2588,7 @@ void Widget::runBarcodeWordDetection(
     }
 
     // 日期区域无效也必须形成一次最终NG，不能进入原字库函数后无结果返回。
-    const OrientedDateRoi &dateRoi =
-            orientedRois.date;
-    if (!dateRoi.valid) {
+    if (!barcodeWordResult.dateDetectionExecuted) {
         finalizeBarcodeWordNg(
                     image,
                     pose,
@@ -2556,31 +2599,11 @@ void Widget::runBarcodeWordDetection(
         return;
     }
 
-    qDebug().noquote()
-            << QString("[BARCODE_WORD] template=%1 barcode=OK barcodeMs=%2 text=\"%3\" date=START")
-               .arg(templateName)
-               .arg(barcode.elapsedMs, 0, 'f', 3)
-               .arg(barcode.text);
-
-    const int totalBeforeDate = totalImages;
-    const int ngBeforeDate = ngImages;
-    runWordTemplateDetection(
-                image,
-                pose,
-                profile.digitTemplates,
-                profile.digitTemplateTargetIndexes,
-                profile.settings.targetText,
-                QString::number(profile.settings.imageThreshold),
-                templateName,
-                &profile.preparedDigitTemplates,
-                &dateRoi);
-
     QString dateState = "已执行";
     QString finalState = "已输出";
-    if (totalImages > totalBeforeDate) {
-        const bool dateIsOk = (ngImages == ngBeforeDate);
-        dateState = dateIsOk ? "正确" : "错误";
-        finalState = dateIsOk ? "OK" : "NG";
+    if (barcodeWordResult.dateResultProduced) {
+        dateState = barcodeWordResult.dateIsOk ? "正确" : "错误";
+        finalState = barcodeWordResult.isOk ? "OK" : "NG";
     }
 
     QStringList resultLines;
