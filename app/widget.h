@@ -192,10 +192,6 @@ private slots:
     void closeEvent(QCloseEvent *event) override; ///< 关闭事件
     void slot_saveBoxesFromThread(DetectionPose pose); ///接收运行时姿态
 
-    // ========== 字符处理函数 ==========
-    bool isChineseChar(unsigned char c);         ///< 判断是否为中文字符
-    bool isAlnumOrChinese(char c);              ///< 判断是否为字母数字或中文
-
     // ========== 模式和功能按钮 ==========
     void on_plcmodebtn_clicked();       ///< PLC模式按钮
     void on_eliminatebutton_clicked();  ///< 消除按钮

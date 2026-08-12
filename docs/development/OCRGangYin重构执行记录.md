@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 1 配方与算法拆分（按用户风险接受条件进入）
-- 当前切片：纸巾配方与纸巾检测（已验证，待形成独立提交）
-- 阶段结论：**Stage 1进行中**。基础配方切片已形成独立提交`8d9c400`；纸巾切片已于2026-08-12通过Agent静态检查、用户Qt Creator Release主工程Run qmake/Rebuild/Run、阈值显示及`tissue_roll_detector_baseline_test`门禁。
+- 当前切片：深度OCR模式（已验证，待形成独立提交）
+- 阶段结论：**Stage 1进行中**。基础配方切片提交为`8d9c400`；纸巾切片提交为`e590703`；深度OCR切片已通过Agent静态检查、两个检测测试门禁及用户Qt Creator主程序门禁。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -24,13 +24,21 @@
 - 本切片目标：新增基础`ProductRecipe`、固定五种模式ID、Schema 1 JSON解析/序列化、字段/资源相对路径校验和`shared_ptr<const ProductRecipe>`只读运行快照；暂不接管旧UI、模板目录或检测入口。
 - 保持边界：不改变旧配置读写、模板制作、检测判定、线程、相机、PLC、统计或存图行为；代码切片只由用户在Qt Creator构建和运行测试。
 
-## Stage 1当前切片范围
+## Stage 1已完成纸巾切片
 
 - 受影响功能ID：`SET-010`、`DET-005`、`RUN-001`。
 - 旧调用链：纸巾UI阈值→`TissueRollDetector::setDefaultRoughnessThreshold`进程级原子值→`MyThread/CameraThread`无参构造检测器→`processImage`→现有结果槽、统计、存图和PLC。
 - 已知差异：正常主窗加载整机设置后实际应用值是6.0或用户保存值，但绕过主窗直接构造检测器时仍有5.2的第二默认。
 - 本切片目标：删除检测器进程级默认；由UI在启动前将`TissueRecipeParameters`显式复制到软/硬触发线程；线程为本次运行构造只读纸巾Pipeline。
 - 保持边界：不改粗糙度计算、`score >= threshold`判NG边界、空图/无圆诊断、Overlay、统计、存图、PLC、相机和触发时序。
+
+## Stage 1当前深度OCR切片范围
+
+- 受影响功能ID：`DET-004`。
+- 旧调用链：模式2→`dispatchDetectionByMode`→`slot_readAndDetect`→`prepareOrientedDateRoi`→`DBDetector::Run`→`CRNNRecognizer::Run`→Widget按字节清洗/换行拼接→非空且与目标文本精确相等为OK→现有UI、统计、存图和PLC收尾。
+- 当前清洗规则：逐字节保留ASCII字母数字、所有高位字节及`- . :`；清洗后空行丢弃，其余按Paddle返回顺序用`\n`拼接。
+- 本切片目标：将Paddle识别调用编排、原文本清洗和精确判定提取为`detection/ocr/ocr_detection_pipeline.*`；Widget暂时以窄回调提供已有Paddle对象，Stage 2再迁入`IOcrEngine`适配器。
+- 保持边界：不改Paddle模型/参数、ROI旋转裁剪、识别顺序、精确比较、空结果NG、识别文本显示、统计、存图、PLC和延迟剔除。
 
 ## 功能状态变化
 
@@ -41,6 +49,7 @@
 | SET-010、DET-005 | 已基线 | 已基线 | 新增纸巾离线基线测试工程；修复测试运行库架构后锁定内部默认值、显式阈值、空图和纯黑图失败语义，不改变生产实现 | 主程序运行通过；Qt Creator Release连续两次`6 passed, 0 failed`、退出码0；真实纸巾样本仍待Stage 0回归 |
 | SET-003、SET-010、TPL-006、TPL-008、TPL-009 | 已基线 | 已基线 | 新增基础配方Schema、五模式ID、资产路径校验和运行快照；尚未接管旧功能入口，不冒充为完整功能新路径验证 | Agent静态检查、主工程Rebuild/Run、`product_recipe_test`及旧纸巾测试均已通过；旧入口保持基线状态 |
 | SET-010、DET-005、RUN-001 | 已基线 | 已验证 | 纸巾阈值从进程级默认改为启动前显式参数副本，旧检测器由新Pipeline组装 | Agent静态检查通过；2026-08-12 13:49用户确认主程序退出码0、阈值显示正常，纸巾测试`6 passed, 0 failed` |
+| DET-004 | 已基线 | 已验证 | 深度OCR识别编排、按字节文本清洗与精确判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 14:24 OCR测试及纸巾子工程回归均`6 passed, 0 failed`；用户随后确认主工程Run qmake/Rebuild/Run及OCR模式切换通过 |
 | MC-001 | 无对照表 | 已基线 | 当前多相机窗口入口仍可达 | 源码静态核对；实际入口待用户 |
 | MC-002..003 | 无对照表 | 已延期 | 计划3.6明确本轮不扩建/迁移多相机；当前窗口控制按钮未接底层Controller | 源码/UI零接线核对；计划依据 |
 | TOOL-001..002 | 无对照表 | 已基线 | 独立授权工程和条码DLL工程仍是当前可进入/部署能力 | 工程/源码静态核对；构建待用户 |
@@ -74,7 +83,10 @@
 | 基础配方回归 | `tests/recipe_tests/product_recipe_test.cpp` | 新增4项业务测试并纳入`tests/tests.pro` | 验证数据合同，不读写用户模板 | 原纸巾基线测试子工程保留 |
 | 纸巾运行组装 | `app/detection/tissue/tissue_detection_pipeline.*` | Pipeline仅接收显式`TissueRecipeParameters`，内部组装原`TissueRollDetector` | 删除进程级可变默认；粗糙度计算和判定不变 | `TissueRollDetector::processImage`算法保留 |
 | 软/硬触发纸巾参数 | `MyThread` / `CameraThread` | 主界面在`start()`前复制参数，线程`run()`构造本次运行的`const TissueDetectionPipeline` | 纸巾切片形成运行内只读参数；不改相机/触发顺序 | 原结果信号、统计、存图和PLC链保留 |
-| 纸巾离线回归 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | 改为验证配方6.0唯一默认、显式阈值传递和原失败诊断 | 保留4项业务测试；待Qt Creator执行 | 测试目标名保持不变 |
+| 纸巾离线回归 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | 验证配方6.0唯一默认、显式阈值传递和原失败诊断 | 保留4项业务测试；用户已验证 | 测试目标名保持不变 |
+| 深度OCR识别编排与判定 | `app/detection/ocr/ocr_detection_pipeline.*` | Pipeline调用窄识别回调，按旧规则清洗/拼接并生成精确判定 | 原Paddle调用和返回顺序不变；检测模块不依赖Paddle类 | `Widget::slot_readAndDetect`仍负责ROI和结果收尾 |
+| 深度OCR离线回归 | `tests/detection_tests/ocr_detection_pipeline_test/` | 新增4项内存假识别测试，覆盖字节清洗/顺序、精确OK、空NG和不等NG | 不加载Paddle、不调用UI/相机/PLC/存图 | 原生产OCR入口保留 |
+| 检测测试子目标组装 | `tests/detection_tests/detection_tests.pro` | 改为`subdirs`集合，保留纸巾目标并新增OCR目标 | 两个目标仍独立运行且继续执行x64运行库校验 | `tests/tests.pro`顶层入口不变 |
 
 ## 已确认的关键现状
 
@@ -93,10 +105,14 @@
 | 工作区起点 | `git status --short --branch`、`git rev-parse HEAD`、`git log` | 基线干净且HEAD可记录 | 基线分支`codex/repo-layout`干净；HEAD=`1c8d564...`；已新建专用分支 | 通过 |
 | 源码/UI候选盘点 | Skill清单脚本输出到系统临时目录；再人工读取入口和调用链 | 不修改仓库，覆盖所有候选 | 盘点68个app源/工程/UI文件约32377行；已人工核对矩阵，不把脚本输出当功能证据 | 通过 |
 | 可见控件反向核对 | 解析`widget.ui`和`multicamerawidget.ui`并与槽/显式连接对照 | 所有按钮/输入/自定义控件有去留 | 已覆盖；确认多相机除返回外未接线 | 通过 |
-| 功能ID与状态 | 解析矩阵正式功能行（不含`DIFF-*`已知差异项）并检查ID/状态 | 90个唯一ID；纸巾切片关闭后为85已基线、0迁移中、3已验证、2已延期 | 90/90唯一；85/0/3/2，与统计一致 | 通过 |
+| 功能ID与状态 | 解析矩阵正式功能行（不含`DIFF-*`已知差异项）并检查ID/状态 | 90个唯一ID；当前深度OCR切片为84已基线、1迁移中、3已验证、2已延期 | 90/90唯一；84/1/3/2，与统计一致 | 通过 |
 | 禁止强杀线程 | 全仓搜索`QThread::terminate`/`.terminate()` | 不存在运行时强杀 | 0处命中 | 通过 |
 | Stage 1配方工程清单 | 静态核对主工程及`tests/tests.pro`的源文件、子工程和运行库部署参数 | 所有路径存在；旧检测子工程保留；新配方测试4项 | PowerShell脚本解析0错误；必需路径0缺失；5模式ID和7个JSON关键字0缺失；旧生产实现文件0改动 | 通过 |
 | Stage 1纸巾切片边界 | 搜索旧默认API/5.2字面量、核对两线程设置和`start()`顺序、解析UI/工程清单 | 无进程级默认；参数在线程启动前固定；新文件都纳入主/测试工程 | 旧API和5.2字面量0命中；软/硬触发均在`start()`前调用运行参数应用；UI XML和工程路径静态检查通过 | 通过 |
+| Stage 1深度OCR切片边界 | 搜索旧Widget清洗帮助函数、Paddle调用、Pipeline依赖、测试方法和qmake清单 | 旧帮助函数零引用；Paddle检测/识别调用保留；Pipeline无UI/Paddle/PLC/存图依赖；4项测试和两个检测子目标路径完整 | 旧帮助函数0命中；Paddle调用2处保留于窄回调；Pipeline边界禁止符号0命中；必需路径0缺失；OCR业务测试4项；部署脚本解析0错误 | 通过 |
+| Stage 1深度OCR Pipeline测试 | 用户在Qt Creator Release运行`ocr_detection_pipeline_test` | 字节清洗/顺序、精确OK、空NG、不等NG共4项业务测试通过 | 2026-08-12 14:24:19汇总`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
+| 纸巾测试子工程结构回归 | 用户在Qt Creator Release运行`tissue_roll_detector_baseline_test` | 嵌套`subdirs`后原4项业务测试仍通过 | 2026-08-12 14:24:46汇总`6 passed, 0 failed, 0 skipped`，3ms，退出码0 | 通过（用户证据） |
+| Stage 1深度OCR主程序门禁 | 用户在Qt Creator Release对`app/AutoOCRproject.pro`执行Run qmake、Rebuild、Run并切换深度OCR模式 | 主程序正常构建启动；模式切换和目标文本保持正常 | 2026-08-12用户确认“主程序也通过了” | 通过（用户证据） |
 | Stage 1配方测试构建与编码修复 | 用户在Qt Creator/MSVC 2017 Release构建并运行`product_recipe_test` | 4项业务测试通过 | 首次因无BOM UTF-8中文字面量被代码页936解析而报`C4819/C2001/C1057`；改用C++11 Unicode转义后，2026-08-12 00:58用户复验为`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | 当前纸巾Pipeline测试 | 用户在Qt Creator Release tests工程Run qmake、构建并运行`tissue_roll_detector_baseline_test` | 配方6.0默认、显式阈值、空图和纯黑图4项业务测试通过 | 2026-08-12用户确认新纸巾Pipeline测试汇总`6 passed, 0 failed` | 通过（用户证据） |
 | 固定样本清单 | 解析TSV必填字段并按模式分组 | 15行、五模式各3类 | 15行；每模式OK/NG/FAILURE各一项；0行缺关键字段 | 通过 |
@@ -115,22 +131,22 @@
 
 1. Qt Creator打开 `app/AutoOCRproject.pro`。
 2. 选择Qt 5.14.2、MSVC 2017 64-bit Kit和Release配置。
-3. 当前切片新增`detection/tissue/tissue_detection_pipeline.*`并修改`.ui`，必须先执行Run qmake。
+3. 当前切片新增`detection/ocr/ocr_detection_pipeline.*`并修改主工程清单，必须先执行Run qmake。
 4. Rebuild并Run，确认Release部署脚本完成、授权有效、主窗正常打开。
-5. 切到纸巾模式，确认阈值显示已保存值；没有保存值时显示`6.000`。本门禁不要求补做五模式样本。
+5. 切到深度OCR模式，确认主界面仍能正常切换且目标文本保留；本门禁按用户决定不要求补做生产样本。
 6. 反馈Qt Creator完整构建结论和启动结论；失败时提供首个错误及相关上下文，不要跳过。
 
-### B. Stage 1纸巾Pipeline测试
+### B. Stage 1深度OCR Pipeline测试
 
 1. Qt Creator另开 `tests/tests.pro`。
 2. 使用与主程序相同Kit，执行Run qmake。
-3. Build并运行`tissue_roll_detector_baseline_test`。
-4. 预期4个业务测试全部通过：`recipeDefaultIsSixPointZero`、`explicitRecipeThresholdIsRetainedByPipeline`、`emptyImageIsRejectedWithCurrentDiagnostic`、`blankImageIsRejectedWithoutAFalseRoll`。
+3. `detection_tests.pro`已改为子目标集合，Build并运行`ocr_detection_pipeline_test`。
+4. 预期4个业务测试全部通过：`cleaningPreservesCurrentByteRulesAndLineOrder`、`exactNonEmptyMatchIsOk`、`emptyCleanedTextIsNg`、`differentTextIsNg`。
 5. 加上QtTest自动的初始化/清理，汇总应为`6 passed, 0 failed`。
 
-### C. 已通过：Stage 1基础配方测试
+### C. 纸巾子目标结构回归
 
-`product_recipe_test`已在基础配方切片中通过，本纸巾切片未修改其源码，不作为本次必选门禁。
+Build并运行`tissue_roll_detector_baseline_test`，确认改为嵌套`subdirs`后原4项业务测试仍通过，汇总应为`6 passed, 0 failed`。`product_recipe_test`本切片未修改，不作为必选门禁。
 
 ### D. 已延期：五模式原入口固定样本
 
@@ -173,6 +189,11 @@
 - [x] 纸巾切片已从旧代码中提取Pipeline并接入软/硬触发线程；旧算法函数、结果信号与收尾链保留。
 - [x] 纸巾切片Agent静态检查通过；未执行构建、链接、测试或主程序。
 - [x] 纸巾切片用户Qt Creator主工程和`tissue_roll_detector_baseline_test`门禁通过：2026-08-12 13:49主程序退出码0，阈值显示正常，测试`6 passed, 0 failed`。
+- [x] 深度OCR切片已将识别编排、文本清洗和判定提取到Pipeline；旧Paddle调用及UI/统计/存图/PLC收尾保留。
+- [x] 深度OCR切片Agent静态检查通过；未执行构建、链接、测试或主程序。
+- [x] 深度OCR切片`ocr_detection_pipeline_test`门禁：2026-08-12 14:24:19，`6 passed, 0 failed`，退出码0。
+- [x] 纸巾测试子工程结构回归：2026-08-12 14:24:46，`6 passed, 0 failed`，退出码0。
+- [x] 深度OCR切片用户Qt Creator主工程Run qmake/Rebuild/Run及OCR模式切换门禁：2026-08-12用户确认通过。
 - [x] 开始本切片时工作区干净；当前只包含本切片代码、测试、工程清单和记录修改。
 
 ## 本地提交记录
@@ -182,6 +203,7 @@
 | `030aaa0` | Stage 0功能盘点 | 全部90个ID | 功能矩阵、执行记录、固定样本清单 | Agent静态核对通过；纯文档提交 |
 | `b783026` | Stage 0首个离线测试 | SET-010、DET-005 | tests工程、纸巾基线测试和架构安全的测试运行库部署 | Qt Creator Release连续两次测试通过 |
 | `8d9c400` | Stage 1基础配方 | SET-003、SET-010、TPL-006、TPL-008、TPL-009 | ProductRecipe、Schema 1 JSON校验、只读运行快照和配方测试 | 主工程、`product_recipe_test`和纸巾基线测试均通过 |
+| `e590703` | Stage 1纸巾配方与检测 | SET-010、DET-005、RUN-001 | 唯一6.0默认、显式参数副本、纸巾Pipeline和离线测试 | Agent静态检查、主程序启动/阈值显示和纸巾测试`6 passed, 0 failed`均通过 |
 
 ## 未解决事项
 
@@ -193,7 +215,7 @@
 
 ## 结论
 
-- 当前切片：Stage 1纸巾配方与纸巾检测已完成实现、Agent静态检查和用户Qt Creator门禁。
+- 当前切片：Stage 1深度OCR模式；代码实现、Agent静态检查、OCR Pipeline测试、纸巾子工程回归和用户Qt Creator主工程门禁均已通过，允许形成独立提交。
 - 当前阶段：Stage 1进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线85 / 迁移中0 / 已验证3 / 已延期2 / 已确认删除0。
-- 下一允许动作：形成纸巾切片独立提交，然后按Stage 1顺序进入“深度OCR模式”最小切片。
+- 功能状态计数：待盘点0 / 已基线84 / 迁移中0 / 已验证4 / 已延期2 / 已确认删除0。
+- 下一允许动作：形成深度OCR独立提交，然后按Stage 1顺序追踪模板匹配模式最小切片。

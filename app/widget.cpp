@@ -12,6 +12,7 @@
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
+#include "detection/ocr/ocr_detection_pipeline.h"
 
 
 // Qt核心组件
@@ -1974,36 +1975,22 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     std::string target_string = target_qstring.toStdString();
     ui->imagenum->setText(QString::number(totalImages));
 
-    std::vector<std::vector<std::vector<int>>> boxes;
-    det->Run(croppedImage, boxes);
+    const OcrDetectionPipeline ocrPipeline;
+    const OcrDetectionResult ocrResult =
+            ocrPipeline.detect(
+                croppedImage,
+                target_string,
+                [this](cv::Mat &ocrImage) {
+        std::vector<std::vector<std::vector<int>>> boxes;
+        det->Run(ocrImage, boxes);
 
-    // 使用原生 Run 函数确保识别率与 MainWindow 一致
-    std::vector<std::string> raw_str_res;
-    rec->Run(boxes, croppedImage, cls, raw_str_res);
+        // 保留原生 Run 调用，不改Paddle识别参数和返回顺序。
+        std::vector<std::string> rawText;
+        rec->Run(boxes, ocrImage, cls, rawText);
+        return rawText;
+    });
 
-    // 只需要提取字符串，不需要再计算坐标 Rect 映射到 UI 了
-    std::vector<std::string> sorted_res = raw_str_res;
-    // 如果有多行文字，可以根据 boxes 里的 y 坐标对 raw_str_res 进行排序，
-    // 这里为了简洁，假设识别顺序正常，直接处理结果。
-
-    allResults.clear();
-
-    // ================== 3. 结果清洗与拼接 ==================
-    for (size_t i = 0; i < sorted_res.size(); i++)
-    {
-        std::string res_str = sorted_res[i];
-
-        // 过滤字符
-        res_str.erase(std::remove_if(res_str.begin(), res_str.end(), [this](char c)
-        {
-            return !(isAlnumOrChinese(c) || c == '-' || c == '.' || c == ':');
-        }), res_str.end());
-
-        if (res_str.empty()) continue;
-
-        if (!allResults.empty()) allResults += '\n';
-        allResults += res_str;
-    }
+    allResults = ocrResult.recognizedText;
 
     // ================== 4. UI 文本更新与 PLC 判定 ==================
     setLabelTextIfChanged(
@@ -2031,7 +2018,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
         }
         else
         {
-            if (allResults == target_string)
+            if (ocrResult.isOk)
             {
                 totalImages++;
                 if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3))
@@ -7859,16 +7846,6 @@ void Widget::on_cancel_clicked()
 }
 
 
-
-bool Widget::isChineseChar(unsigned char c)
-{
-    return (c & 0x80) != 0;
-}
-
-bool Widget::isAlnumOrChinese(char c)
-{
-    return std::isalnum(static_cast<unsigned char>(c)) || isChineseChar(static_cast<unsigned char>(c));
-}
 
 /**
  * @brief 目标字符确定按钮点击槽函数

@@ -87,7 +87,7 @@
 | DET-001 | 共同定位与位姿 | 软/硬采集线程获得帧 | 非纸巾模式且模板有效 | `MyThread/CameraThread`→`TrackingPoseMatcher::setTemplate/match`→`DetectionPose`→`dispatchDetectionByMode` | tracking模板；-45..45度、步长2、金字塔0.2、阈值0.3 | 匹配成功映射日期/二维码多边形；失败产生对应NG路径或跳过 | 线程持有模板旋转缓存；无直接PLC | 定位范围、阈值和坐标变换保持 | `detection/common/pose_matcher.*` | 保留后迁移 | 固定角度/位移/无目标样本，记录pose、Profile和结果 | 已基线 | S；U |
 | DET-002 | 钢印+字符模板模式 | 模式0检测帧 | 有tracking、date、ring/stamp和字符模板 | `dispatchDetectionByMode`→`slot_readAndDetect`→`TemplateMatch::run3`+`OverlapDetector::run`→合并判定 | 目标字符数、图像阈值、定位位姿和钢印资源 | 字符数等于目标且零重叠才OK；资源/定位/匹配/重叠异常均当前按NG | Overlay、统计、存图、PLC/剔除队列 | 两条件AND及失败文本需固定样本锁定 | `detection/stamp_pipeline.*` | 保留后拆解 | STAMP三类固定样本，从原入口记录文本、框、计数、文件、PLC | 已基线 | S；U |
 | DET-003 | 字库多Profile模式 | 模式1检测帧 | 至少一个完整Profile | 采集线程并行匹配所有Profile→最佳score→`runWordTemplateDetection`→`TemplateMatch::run3` | 每Profile目标、字符图、阈值；最佳定位Profile | 匹配字符数等于目标数OK；否则NG；无定位按节流策略生成NG | Profile名/框显示、统计、存图、PLC | 自动选择和字符计数语义保持 | `detection/word_pipeline.*` | 保留后拆解 | WORD三类样本和两Profile竞争场景，记录选中Profile/分数/副作用 | 已基线 | S；U |
-| DET-004 | 深度OCR模式 | 模式2检测帧 | OCR模型已加载、模板日期区域有效 | `dispatchDetectionByMode`→`slot_readAndDetect3`→旋转裁剪日期ROI→`DBDetector::Run`→`CRNNRecognizer::RunOCR`→清洗/拼接→精确比较 | 目标文本；保留中英数字及`- . :` | 清洗拼接文本与目标完全相等OK；空/不等/模型结果异常当前为NG | OCR框/文本、统计、异步存图、PLC | 精确比较和字符清洗保持 | `detection/ocr_pipeline.*` | 保留后拆解 | OCR三类样本，记录原识别列表、清洗文本、框和最终判定 | 已基线 | S；U |
+| DET-004 | 深度OCR模式 | 模式2检测帧 | OCR模型已加载、模板日期区域有效 | `dispatchDetectionByMode`→`slot_readAndDetect`→旋转裁剪日期ROI→`DBDetector::Run`→`CRNNRecognizer::Run`→清洗/换行拼接→非空且精确比较 | 目标文本；按字节保留ASCII字母数字、所有高位字节及`- . :`；非空行用`\n`拼接 | 清洗拼接文本非空且与目标完全相等OK；空或不等为NG；无效图/日期ROI当前直接返回 | 识别文本、统计、异步存图、PLC | 精确比较、字节清洗、无OCR框Overlay和现有收尾保持 | `detection/ocr/ocr_detection_pipeline.*` | Stage 1拆解 | OCR纯逻辑测试；原入口OCR样本记录原识别列表、清洗文本和最终判定 | 已验证 | S；T；U；2026-08-12 14:24 OCR Pipeline测试及纸巾子工程回归均`6 passed, 0 failed`；用户随后确认主程序Run qmake/Rebuild/Run及OCR模式切换通过 |
 | DET-005 | 纸巾卷粗糙度模式 | 模式3采集线程 | 相机帧；不需传统模板 | `MyThread/CameraThread`→运行内`TissueDetectionPipeline`→`TissueRollDetector::processImage`→`slot_handleTissueResult` | 运行参数副本中的粗糙度阈值；算法找内孔、外圆和环粗糙度 | 找到卷且score<threshold为OK；空图、无圆、外轮廓失败或score>=阈值为NG并带诊断 | Overlay、统计、存图、PLC | 当前边界是`>=`判NG；结果收尾和外部副作用不变 | `recipes/product_recipe.*`+`detection/tissue/tissue_detection_pipeline.*` | Stage 1先迁移 | TISSUE三类样本；Qt Creator运行离线测试；记录score/阈值/圆框 | 已验证 | S；T；U；2026-08-12纸巾Pipeline的6.0默认、显式阈值、空图和纯黑图4项业务测试全部通过，汇总`6 passed, 0 failed` |
 | DET-006 | 二维码优先+三期模式 | 模式4检测帧 | Profile含tracking、二维码4点、日期多边形、字符模板，DLL可用 | `runBarcodeWordDetection`→组合旋转ROI→`decodeBarcodeRoi`快路径/限时fallback→成功后`runWordTemplateDetection` | DataMatrix/QR格式掩码、padding8%、预算60ms、fallback、缓存首选策略 | 读码失败立即NG且不执行日期；读码成功再做三期，二者共同形成结果 | 显示码内容/日期状态、统计、存图、PLC | “读码优先、失败短路”保持 | `detection/barcode_word_pipeline.*` | 保留后拆解 | 可读OK、可读日期NG、不可读、DLL缺失、超时样本各一次 | 已基线 | S；U |
 | DET-007 | 定位失败收尾 | 字库家族采集时无有效pose | 已启动检测 | 软触发`MyThread`节流发失败；硬触发二维码模式逐触发发结果→`finalizeWordTrackingNg/finalizeBarcodeWordNg` | 软触发检测间隔；硬触发每个新回调帧 | 显示定位失败NG；二维码硬触发保证本次触发有收尾 | 增总数/NG、可存图、PLC或排队 | 软硬触发差异必须保持到Stage 4 | `runtime/`+Pipeline | 保留 | 移出视野：软触发观察频率；硬触发逐次打光记录结果数和PLC | 已基线 | S；U |
@@ -175,9 +175,9 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 85 | 除已验证纸巾切片及MC-002、MC-003外的功能ID |
-| 迁移中 | 0 | 当前无未关闭代码切片 |
-| 已验证 | 3 | SET-010、DET-005、RUN-001；纸巾参数/Pipeline切片通过Agent静态检查和用户Qt Creator门禁 |
+| 已基线 | 84 | 除已验证纸巾/深度OCR切片及MC-002、MC-003外的功能ID |
+| 迁移中 | 0 | 无 |
+| 已验证 | 4 | SET-010、DET-004、DET-005、RUN-001；纸巾参数/Pipeline与深度OCR Pipeline切片通过Agent静态检查和用户Qt Creator门禁 |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
 
@@ -199,5 +199,5 @@
 |---|---|---|---|---|
 | 五模式样本清单 | `tests/baseline/sample_manifest.tsv` | DET-002..008、RES、SAVE、PLC | 用户填写每模式OK/NG/FAILURE的固定图、模板、文本、Overlay、计数、存图、PLC和耗时 | 已建清单，15份实际证据待用户 |
 | 纸巾离线基线测试 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | SET-010、DET-005 | Qt Creator打开`tests/tests.pro`，Run qmake、Build并运行测试 | 2026-08-12用户确认纸巾Pipeline切片的4项业务测试全部通过，汇总`6 passed, 0 failed` |
-| 生产主程序构建 | `app/AutoOCRproject.pro` | 全部主程序功能 | Qt 5.14.2/MSVC2017 x64 Release，Run qmake、Rebuild、Run | 2026-08-12 13:49用户确认含纸巾Pipeline的主程序正常启动，纸巾阈值显示正常，退出码0 |
+| 生产主程序构建 | `app/AutoOCRproject.pro` | 全部主程序功能 | Qt 5.14.2/MSVC2017 x64 Release，Run qmake、Rebuild、Run | 2026-08-12用户先后确认含纸巾Pipeline和深度OCR Pipeline的主程序正常构建运行；纸巾阈值与OCR模式切换正常 |
 | 运行与性能记录 | `docs/development/OCRGangYin重构执行记录.md` | 内存、P50/P95、慢盘、停止/重启 | 用户按执行记录步骤填写真实数值 | 待用户验证 |
