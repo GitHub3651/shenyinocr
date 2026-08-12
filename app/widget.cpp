@@ -8648,9 +8648,30 @@ void Widget::on_batchImageThresholdButton_clicked()
         return;
     }
 
+    QString recipePublishMessage;
+    if (m_wordTemplateRecipeEditSession.isActive()) {
+        QVector<int> profileIndexes;
+        for (int profileIndex = 0;
+             profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
+             ++profileIndex) {
+            profileIndexes.append(profileIndex);
+        }
+
+        QString publishError;
+        if (publishWordTemplateRecipeEdits(profileIndexes, &publishError)) {
+            recipePublishMessage =
+                    "\n产品配方已使用原配方编号重新发布。";
+        } else {
+            recipePublishMessage =
+                    QString("\n\n图像阈值已批量保存到当前模板，但产品配方重新发布失败：\n%1")
+                    .arg(publishError);
+        }
+    }
+
     showParameterInfo(
                 "提示",
-                "已将当前图像合格阈值保存到所有已选择的产品模板。");
+                QString("已将当前图像合格阈值保存到所有已选择的产品模板。%1")
+                .arg(recipePublishMessage));
 }
 
 
