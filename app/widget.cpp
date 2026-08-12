@@ -8823,10 +8823,25 @@ void Widget::on_pushButton_3_clicked()
         refreshWordTemplateRecipeProfile(&profile);
         emit ssim(thresholdValue);
         refreshTemplateImageThresholdDirty();
+
+        QString recipePublishMessage;
+        if (m_wordTemplateRecipeEditSession.isActive()) {
+            QString publishError;
+            if (publishWordTemplateRecipeEdit(profileIndex, &publishError)) {
+                recipePublishMessage =
+                        "\n产品配方已使用原配方编号重新发布。";
+            } else {
+                recipePublishMessage =
+                        QString("\n\n图像阈值已保存到当前模板，但产品配方重新发布失败：\n%1")
+                        .arg(publishError);
+            }
+        }
+
         showParameterInfo("提示",
-                          QString("模板 [%1] 图像阈值设置成功：%2")
+                          QString("模板 [%1] 图像阈值设置成功：%2%3")
                           .arg(profile.name)
-                          .arg(thresholdText));
+                          .arg(thresholdText)
+                          .arg(recipePublishMessage));
         return;
     }
 
