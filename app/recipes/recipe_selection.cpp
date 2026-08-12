@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QSet>
 
 namespace {
 
@@ -121,5 +122,71 @@ bool loadRecipeSelection(const RecipeStore &store,
     }
 
     *selection = candidate;
+    return true;
+}
+
+bool loadRecipeSelectionBatch(const RecipeStore &store,
+                              const QStringList &recipeIds,
+                              DetectionMode expectedMode,
+                              RecipeSelectionBatch *batch,
+                              QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!batch) {
+        setError(errorMessage,
+                 QStringLiteral("RecipeSelectionBatch output is null."));
+        return false;
+    }
+    if (recipeIds.isEmpty()) {
+        setError(errorMessage,
+                 QStringLiteral("Recipe selection batch is empty."));
+        return false;
+    }
+
+    RecipeSelectionBatch candidate;
+    QSet<QString> normalizedRecipeIds;
+    for (const QString &requestedRecipeId : recipeIds) {
+        const QString recipeId = requestedRecipeId.trimmed();
+        const QString normalizedRecipeId = recipeId.toLower();
+        if (normalizedRecipeIds.contains(normalizedRecipeId)) {
+            continue;
+        }
+        normalizedRecipeIds.insert(normalizedRecipeId);
+
+        RecipeSelection selection;
+        QString selectionError;
+        if (!loadRecipeSelection(store,
+                                 recipeId,
+                                 expectedMode,
+                                 &selection,
+                                 &selectionError)) {
+            RecipeSelectionIssue issue;
+            issue.recipeId = recipeId;
+            issue.message = selectionError;
+            candidate.rejectedSelections.append(issue);
+            continue;
+        }
+        candidate.selections.append(selection);
+    }
+
+    if (candidate.selections.isEmpty()) {
+        QStringList issueDescriptions;
+        for (const RecipeSelectionIssue &issue :
+             candidate.rejectedSelections) {
+            issueDescriptions.append(
+                        QStringLiteral("%1: %2")
+                        .arg(issue.recipeId, issue.message));
+        }
+        setError(errorMessage,
+                 issueDescriptions.isEmpty()
+                 ? QStringLiteral("No unique recipe was selected.")
+                 : QStringLiteral("No selected recipe could be loaded: %1")
+                   .arg(issueDescriptions.join(QStringLiteral("; "))));
+        return false;
+    }
+
+    *batch = candidate;
     return true;
 }
