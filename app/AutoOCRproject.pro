@@ -54,6 +54,7 @@ SOURCES += \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/stamp/stamp_detection_pipeline.cpp \
     detection/tissue/tissue_detection_pipeline.cpp \
+    detection/word/word_detection_pipeline.cpp \
     CameraThread.cpp \
     DetectionModes.cpp \
     Detector.cpp \
@@ -89,6 +90,7 @@ HEADERS += \
     detection/ocr/ocr_detection_pipeline.h \
     detection/stamp/stamp_detection_pipeline.h \
     detection/tissue/tissue_detection_pipeline.h \
+    detection/word/word_detection_pipeline.h \
     BarcodeDecoderApi.h \
     BarcodeTypes.h \
     CameraThread.h \

@@ -14,6 +14,7 @@
 #include "DetectionModes.h"
 #include "detection/ocr/ocr_detection_pipeline.h"
 #include "detection/stamp/stamp_detection_pipeline.h"
+#include "detection/word/word_detection_pipeline.h"
 
 
 // Qt核心组件
@@ -2239,39 +2240,44 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
             oriented.croppedImage;
     ui->imagenum->setText(QString::number(totalImages));
 
-    int targetNum = 0;
-    QRegularExpression regex(R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
-    QRegularExpressionMatchIterator matchIt = regex.globalMatch(targetString);
-    while (matchIt.hasNext()) { matchIt.next(); targetNum++; }
-    if (targetNum == 0 && !targetString.isEmpty()) targetNum = targetString.length();
-
     int thresholdValue = 0;
     bool thresholdOk = parseIntValue(imageThresholdText, &thresholdValue);
     if (!thresholdOk) {
         thresholdOk = parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue);
     }
-    if (thresholdOk) {
-        templatematch->ssimvalue(thresholdValue);
-    }
 
-    int detectNum = 0;
-    if (preparedTemplates
-            && preparedTemplates->isValid()) {
-        detectNum =
-                templatematch->run3(
-                    croppedImage,
-                    *preparedTemplates,
-                    templateTargetIndexes);
-    } else {
-        emit imgshibie(&croppedImage);
-        detectNum =
-                templatematch->run3(
+    const WordDetectionPipeline wordPipeline;
+    const WordDetectionResult wordResult =
+            wordPipeline.detect(
+                croppedImage,
+                targetString,
+                [this,
+                 thresholdOk,
+                 thresholdValue,
+                 preparedTemplates,
+                 &templates,
+                 &templateTargetIndexes](cv::Mat &dateRoi) {
+        if (thresholdOk) {
+            templatematch->ssimvalue(thresholdValue);
+        }
+        if (preparedTemplates
+                && preparedTemplates->isValid()) {
+            return templatematch->run3(
+                        dateRoi,
+                        *preparedTemplates,
+                        templateTargetIndexes);
+        }
+
+        emit imgshibie(&dateRoi);
+        return templatematch->run3(
                     templates,
                     templateTargetIndexes);
-    }
-    QString judgeResult = (detectNum == targetNum ? "ok" : "no");
+    });
+    const int targetNum = wordResult.targetCharacterCount;
+    const int detectNum = wordResult.detectedCharacterCount;
+    const QString judgeResult = wordResult.isOk ? "ok" : "no";
 
-    const QStringList targetUnits = parseWordTemplateBaseNames(targetString);
+    const QStringList targetUnits = wordResult.targetUnits;
     QStringList detectedUnits;
     QStringList matchDetails;
     detectedUnits.reserve(static_cast<int>(templatematch->lastMatchResults.size()));
@@ -2346,7 +2352,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     slot_displayAndDetect(image);
 
     if (j % x == 0) {
-        if (judgeResult == "no") {
+        if (!wordResult.isOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
                 saveWordResultImages("png", "ng", *image);
             }

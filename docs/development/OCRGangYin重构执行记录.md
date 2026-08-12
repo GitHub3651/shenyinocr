@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 1 配方与算法拆分（按用户风险接受条件进入）
-- 当前切片：模板匹配模式（已验证，待形成独立提交）
-- 阶段结论：**Stage 1进行中**。基础配方、纸巾和深度OCR切片已分别提交为`8d9c400`、`e590703`和`c8e3113`；模板匹配切片已通过Agent静态检查、Pipeline测试及主程序入口门禁。
+- 当前切片：字库匹配模式（已验证，待提交）
+- 阶段结论：**Stage 1进行中**。基础配方、纸巾、深度OCR和模板匹配切片已分别提交为`8d9c400`、`e590703`、`c8e3113`和`5113ea5`。字库匹配代码、测试和主程序门禁均已通过，允许形成独立提交。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -40,13 +40,21 @@
 - 本切片目标：将Paddle识别调用编排、原文本清洗和精确判定提取为`detection/ocr/ocr_detection_pipeline.*`；Widget暂时以窄回调提供已有Paddle对象，Stage 2再迁入`IOcrEngine`适配器。
 - 保持边界：不改Paddle模型/参数、ROI旋转裁剪、识别顺序、精确比较、空结果NG、识别文本显示、统计、存图、PLC和延迟剔除。
 
-## Stage 1当前模板匹配切片范围
+## Stage 1已完成模板匹配切片
 
 - 受影响功能ID：`DET-002`；界面正式名称为“模板匹配”，内部稳定ID为`stamp_detection`，业务内容是钢印+字符检测；`DET-001`仅提供已有定位位姿和日期ROI，本切片不修改其参数、算法或状态。
 - 旧调用链：模式0→`dispatchDetectionByMode`→`slot_readAndDetect3`→`prepareOrientedDateRoi`→目标文本字符计数→`TemplateMatch::run3`→`OverlapDetector::processImage`→字符数量相等且钢印无重叠才OK→原UI、统计、存图、PLC和延迟剔除收尾。
 - 当前失败路径：无效图直接返回；日期ROI越界弹警告并返回；字符数量不等为NG；缺少`calibrate_config.yaml`或重叠检测返回失败为NG；两项均失败显示组合错误。
 - 本切片目标：将目标字符计数、两个旧算法的窄回调编排、钢印多边形结果和两条件AND判定提取到`detection/stamp/stamp_detection_pipeline.*`。
 - 保持边界：不改定位、ROI padding=20、字符匹配阈值/框、拉环/重叠算法、错误文案、Overlay、统计、存图、PLC、延迟剔除、相机或线程时序。
+
+## Stage 1已完成字库匹配切片
+
+- 主要功能ID：`DET-003`；`DET-006`在读码成功后复用相同字符子流程，本切片只登记间接影响，不迁移二维码优先、失败短路或组合判定。
+- 旧调用链：软/硬采集线程并行运行各Profile的`TrackingPoseMatcher`并选最高score→`DetectionPose::wordTemplateProfileIndex`→`Widget::dispatchDetectionByMode`选Profile→`runWordTemplateDetection`→日期ROI→目标字符解析/阈值应用→`TemplateMatch::run3`→检测数等于目标数OK→原Overlay、统计、存图、PLC和延迟剔除收尾。
+- 当前失败路径：无定位由`finalizeWordTrackingNg`收尾；无效Profile索引/无目标模板直接返回；无效图或日期ROI直接返回；检测数量少于或多于目标均NG。
+- 本切片目标：将目标字符解析、原`TemplateMatch`窄回调和数量判定提取到`detection/word/word_detection_pipeline.*`；保留匹配框供旧入口映射和诊断。
+- 保持边界：不改多Profile并行选择、最高score规则、日期ROI padding=20、模板阈值、字符匹配算法、匹配框、诊断文本、Overlay、统计、存图、PLC、相机或触发时序。
 
 ## 功能状态变化
 
@@ -59,6 +67,7 @@
 | SET-010、DET-005、RUN-001 | 已基线 | 已验证 | 纸巾阈值从进程级默认改为启动前显式参数副本，旧检测器由新Pipeline组装 | Agent静态检查通过；2026-08-12 13:49用户确认主程序退出码0、阈值显示正常，纸巾测试`6 passed, 0 failed` |
 | DET-004 | 已基线 | 已验证 | 深度OCR识别编排、按字节文本清洗与精确判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 14:24 OCR测试及纸巾子工程回归均`6 passed, 0 failed`；用户随后确认主工程Run qmake/Rebuild/Run及OCR模式切换通过 |
 | DET-002 | 已基线 | 已验证 | 模板匹配目标字符计数、旧字符匹配/重叠调用和两条件AND判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 14:58测试`6 passed, 0 failed`、退出码0；用户截图确认主程序运行及“模板匹配”入口 |
+| DET-003 | 已基线 | 已验证 | 字库目标字符解析、原字符匹配回调和数量判定从Widget提取到新Pipeline | Agent静态检查通过；2026-08-12 15:43 Pipeline测试`6 passed, 0 failed`、退出码0；用户随后确认主程序及“字库匹配”模式门禁通过 |
 | MC-001 | 无对照表 | 已基线 | 当前多相机窗口入口仍可达 | 源码静态核对；实际入口待用户 |
 | MC-002..003 | 无对照表 | 已延期 | 计划3.6明确本轮不扩建/迁移多相机；当前窗口控制按钮未接底层Controller | 源码/UI零接线核对；计划依据 |
 | TOOL-001..002 | 无对照表 | 已基线 | 独立授权工程和条码DLL工程仍是当前可进入/部署能力 | 工程/源码静态核对；构建待用户 |
@@ -95,9 +104,11 @@
 | 纸巾离线回归 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | 验证配方6.0唯一默认、显式阈值传递和原失败诊断 | 保留4项业务测试；用户已验证 | 测试目标名保持不变 |
 | 深度OCR识别编排与判定 | `app/detection/ocr/ocr_detection_pipeline.*` | Pipeline调用窄识别回调，按旧规则清洗/拼接并生成精确判定 | 原Paddle调用和返回顺序不变；检测模块不依赖Paddle类 | `Widget::slot_readAndDetect`仍负责ROI和结果收尾 |
 | 深度OCR离线回归 | `tests/detection_tests/ocr_detection_pipeline_test/` | 新增4项内存假识别测试，覆盖字节清洗/顺序、精确OK、空NG和不等NG | 不加载Paddle、不调用UI/相机/PLC/存图 | 原生产OCR入口保留 |
-| 检测测试子目标组装 | `tests/detection_tests/detection_tests.pro` | `subdirs`集合保留纸巾/OCR目标并新增钢印目标 | 三个目标独立运行且继续执行x64运行库校验 | `tests/tests.pro`顶层入口不变 |
+| 检测测试子目标组装 | `tests/detection_tests/detection_tests.pro` | `subdirs`集合保留纸巾/OCR/钢印目标并新增字库目标 | 四个目标独立运行且继续执行x64运行库校验 | `tests/tests.pro`顶层入口不变 |
 | 钢印目标字符计数、算法编排和组合判定 | `app/detection/stamp/stamp_detection_pipeline.*` | Pipeline通过窄回调调用原字符匹配和重叠检测，返回两项子判定与钢印多边形 | 原正则/回退计数、字符数量相等且无重叠才OK、缺配置NG均保持 | `Widget::slot_readAndDetect3`继续负责ROI、Overlay和结果收尾 |
 | 钢印Pipeline离线回归 | `tests/detection_tests/stamp_detection_pipeline_test/` | 新增4项内存假回调测试 | 覆盖变体/回退计数、两条件OK、字符NG和重叠/缺配置NG；不运行视觉算法或外部副作用 | 原生产钢印入口保留 |
+| 字库目标字符解析、算法编排和数量判定 | `app/detection/word/word_detection_pipeline.*` | Pipeline解析原目标单元，通过窄回调调用原字符匹配，并返回目标数、检测数和判定 | 原正则、无可解析单元时按字符串长度回退、数量相等OK均保持 | `Widget::runWordTemplateDetection`继续负责阈值、ROI、诊断、Overlay和结果收尾 |
+| 字库Pipeline离线回归 | `tests/detection_tests/word_detection_pipeline_test/` | 新增4项内存假回调测试 | 覆盖变体/回退解析、数量相等OK、少/多均NG；不运行视觉算法或外部副作用 | 原生产字库入口保留；二维码模式仅复用成功读码后的字符子流程 |
 
 ## 已确认的关键现状
 
@@ -116,7 +127,7 @@
 | 工作区起点 | `git status --short --branch`、`git rev-parse HEAD`、`git log` | 基线干净且HEAD可记录 | 基线分支`codex/repo-layout`干净；HEAD=`1c8d564...`；已新建专用分支 | 通过 |
 | 源码/UI候选盘点 | Skill清单脚本输出到系统临时目录；再人工读取入口和调用链 | 不修改仓库，覆盖所有候选 | 盘点68个app源/工程/UI文件约32377行；已人工核对矩阵，不把脚本输出当功能证据 | 通过 |
 | 可见控件反向核对 | 解析`widget.ui`和`multicamerawidget.ui`并与槽/显式连接对照 | 所有按钮/输入/自定义控件有去留 | 已覆盖；确认多相机除返回外未接线 | 通过 |
-| 功能ID与状态 | 解析矩阵正式功能行（不含`DIFF-*`已知差异项）并检查ID/状态 | 90个唯一ID；当前模板匹配切片为83已基线、1迁移中、4已验证、2已延期 | 90/90唯一；83/1/4/2，与统计一致 | 通过 |
+| 功能ID与状态 | 解析矩阵正式功能行（不含`DIFF-*`已知差异项）并检查ID/状态 | 90个唯一ID；当前为82已基线、0迁移中、6已验证、2已延期 | 90/90唯一；82/0/6/2，与统计一致 | 通过 |
 | 禁止强杀线程 | 全仓搜索`QThread::terminate`/`.terminate()` | 不存在运行时强杀 | 0处命中 | 通过 |
 | Stage 1配方工程清单 | 静态核对主工程及`tests/tests.pro`的源文件、子工程和运行库部署参数 | 所有路径存在；旧检测子工程保留；新配方测试4项 | PowerShell脚本解析0错误；必需路径0缺失；5模式ID和7个JSON关键字0缺失；旧生产实现文件0改动 | 通过 |
 | Stage 1纸巾切片边界 | 搜索旧默认API/5.2字面量、核对两线程设置和`start()`顺序、解析UI/工程清单 | 无进程级默认；参数在线程启动前固定；新文件都纳入主/测试工程 | 旧API和5.2字面量0命中；软/硬触发均在`start()`前调用运行参数应用；UI XML和工程路径静态检查通过 | 通过 |
@@ -127,6 +138,9 @@
 | Stage 1模板匹配切片边界 | 白名单核对、工程路径/子目标解析、旧调用和旧Widget判定搜索、Pipeline禁止依赖、正则字面量、测试方法、部署脚本与Git差异检查 | 只改当前10个文件；原算法调用各保留1处；Pipeline不依赖UI/算法类/PLC/存图；4项业务测试；状态与文档一致 | 10个文件且无额外差异；90个ID唯一；旧字符匹配/重叠调用各1处；旧Widget组合判定0处；Pipeline边界违规0处；测试4项；部署脚本和`git diff --check`通过 | 通过 |
 | Stage 1模板匹配Pipeline测试 | 用户在Qt Creator Release运行`stamp_detection_pipeline_test` | 目标计数、两条件OK、字符NG、重叠/缺配置NG共4项业务测试通过 | 2026-08-12 14:58:41汇总`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | Stage 1模板匹配主程序入口 | 用户在Qt Creator运行主程序并检查识别模式下拉框索引0 | 主程序正常运行；现有界面入口保持“模板匹配”，不新增或重命名为“钢印模式” | 2026-08-12用户截图确认主程序运行，五个入口完整；`.ui`静态核对“模板匹配”为索引0，代码映射到`stamp_detection`和`slot_readAndDetect3` | 通过（用户证据+静态映射） |
+| Stage 1字库匹配切片边界 | 白名单核对、工程路径/子目标解析、旧调用与Widget判定搜索、Pipeline禁止依赖、正则与测试方法检查、Git差异检查 | 只改当前10个文件；两个原字符匹配分支各保留1处；Pipeline不依赖UI/算法类/PLC/存图；4项业务测试；状态与文档一致 | 10个文件且无额外差异；90个ID唯一；原匹配调用由窄回调承接；多Profile选择及二维码优先链未改；Pipeline边界违规0处；测试4项；`git diff --check`通过 | 通过 |
+| Stage 1字库匹配Pipeline测试 | 用户在Qt Creator Release运行`word_detection_pipeline_test` | 目标解析/回退、数量相等OK、少NG、多NG共4项业务测试通过 | 2026-08-12 15:43:04汇总`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
+| Stage 1字库匹配主程序门禁 | 用户在Qt Creator Release对主工程Run qmake、Rebuild、Run并切到“字库匹配” | 新Pipeline可编译链接；主程序正常启动；现有模式入口和目标文本正常 | 2026-08-12用户确认“没问题”；按用户风险接受条件不要求生产样本 | 通过（用户证据） |
 | Stage 1配方测试构建与编码修复 | 用户在Qt Creator/MSVC 2017 Release构建并运行`product_recipe_test` | 4项业务测试通过 | 首次因无BOM UTF-8中文字面量被代码页936解析而报`C4819/C2001/C1057`；改用C++11 Unicode转义后，2026-08-12 00:58用户复验为`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | 当前纸巾Pipeline测试 | 用户在Qt Creator Release tests工程Run qmake、构建并运行`tissue_roll_detector_baseline_test` | 配方6.0默认、显式阈值、空图和纯黑图4项业务测试通过 | 2026-08-12用户确认新纸巾Pipeline测试汇总`6 passed, 0 failed` | 通过（用户证据） |
 | 固定样本清单 | 解析TSV必填字段并按模式分组 | 15行、五模式各3类 | 15行；每模式OK/NG/FAILURE各一项；0行缺关键字段 | 通过 |
@@ -141,26 +155,26 @@
 
 ## 用户Qt Creator门禁
 
-### A. 主程序构建与启动
+### A. 当前字库匹配切片：主程序构建与启动
 
 1. Qt Creator打开 `app/AutoOCRproject.pro`。
 2. 选择Qt 5.14.2、MSVC 2017 64-bit Kit和Release配置。
-3. 当前切片新增`detection/stamp/stamp_detection_pipeline.*`并修改主工程清单，必须先执行Run qmake。
+3. 当前切片新增`detection/word/word_detection_pipeline.*`并修改主工程清单，必须先执行Run qmake。
 4. Rebuild并Run，确认Release部署脚本完成、授权有效、主窗正常打开。
-5. 切到界面“模板匹配”模式（内部为钢印+字符检测），确认主界面仍能正常切换且目标文本保留；本门禁按用户决定不要求补做生产样本。
+5. 切到界面“字库匹配”模式，确认主界面仍能正常切换且目标文本保留；本门禁按用户决定不要求补做生产样本。
 6. 反馈Qt Creator完整构建结论和启动结论；失败时提供首个错误及相关上下文，不要跳过。
 
-### B. Stage 1模板匹配 Pipeline测试
+### B. Stage 1字库匹配 Pipeline测试
 
 1. Qt Creator另开 `tests/tests.pro`。
 2. 使用与主程序相同Kit，执行Run qmake。
-3. Build并运行`stamp_detection_pipeline_test`。
-4. 预期4个业务测试全部通过：`targetCountPreservesVariantAndFallbackRules`、`matchingCharactersAndClearStampAreOk`、`characterMismatchIsNgEvenWhenStampIsClear`、`overlapFailureOrMissingConfigurationIsNg`。
+3. Build并运行`word_detection_pipeline_test`。
+4. 预期4个业务测试全部通过：`targetParserPreservesVariantsAndFallbackCount`、`exactDetectedCountIsOk`、`fewerDetectedCharactersAreNg`、`moreDetectedCharactersAreNg`。
 5. 加上QtTest自动的初始化/清理，汇总应为`6 passed, 0 failed`。
 
 ### C. 本切片不要求重复运行的目标
 
-`product_recipe_test`、`tissue_roll_detector_baseline_test`和`ocr_detection_pipeline_test`的源码/子工程均未修改，不作为本切片必选门禁。
+`product_recipe_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`和`stamp_detection_pipeline_test`的源码/子工程均未修改，不作为本切片必选门禁。
 
 ### D. 已延期：五模式原入口固定样本
 
@@ -212,6 +226,10 @@
 - [x] 模板匹配切片Agent静态检查通过；未执行构建、链接、测试或主程序。
 - [x] 模板匹配切片`stamp_detection_pipeline_test`门禁：2026-08-12 14:58:41，`6 passed, 0 failed`，退出码0。
 - [x] 模板匹配切片主程序入口门禁：2026-08-12用户截图确认主程序运行且界面“模板匹配”入口存在；“钢印模式”是此前不准确的验证用语，不改变现有UI名称。
+- [x] 字库匹配切片已将目标字符解析、原算法窄回调和数量判定提取到Pipeline；多Profile选择、二维码优先链和结果收尾保留。
+- [x] 字库匹配切片Agent静态检查通过；未执行构建、链接、测试或主程序。
+- [x] 字库匹配切片`word_detection_pipeline_test`门禁：2026-08-12 15:43:04，`6 passed, 0 failed`，退出码0。
+- [x] 字库匹配切片主程序Run qmake/Rebuild/Run及“字库匹配”模式切换门禁：2026-08-12用户确认“没问题”。
 - [x] 开始本切片时工作区干净；当前只包含本切片代码、测试、工程清单和记录修改。
 
 ## 本地提交记录
@@ -223,6 +241,7 @@
 | `8d9c400` | Stage 1基础配方 | SET-003、SET-010、TPL-006、TPL-008、TPL-009 | ProductRecipe、Schema 1 JSON校验、只读运行快照和配方测试 | 主工程、`product_recipe_test`和纸巾基线测试均通过 |
 | `e590703` | Stage 1纸巾配方与检测 | SET-010、DET-005、RUN-001 | 唯一6.0默认、显式参数副本、纸巾Pipeline和离线测试 | Agent静态检查、主程序启动/阈值显示和纸巾测试`6 passed, 0 failed`均通过 |
 | `c8e3113` | Stage 1深度OCR模式 | DET-004 | OCR识别窄回调、字节清洗、换行拼接、精确判定和离线测试 | Agent静态检查、OCR/纸巾测试及主程序OCR模式门禁均通过 |
+| `5113ea5` | Stage 1模板匹配模式 | DET-002 | 钢印+字符检测窄回调、目标计数、两条件AND判定和离线测试 | Agent静态检查、钢印Pipeline测试及主程序“模板匹配”入口门禁均通过 |
 
 ## 未解决事项
 
@@ -234,7 +253,7 @@
 
 ## 结论
 
-- 当前切片：Stage 1模板匹配模式；代码实现、Agent静态检查、Pipeline测试和主程序“模板匹配”入口门禁均已通过，允许形成独立提交。
+- 当前切片：Stage 1字库匹配模式；代码实现、Agent静态检查、Pipeline测试和主程序门禁均已通过，允许形成独立提交。
 - 当前阶段：Stage 1进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线83 / 迁移中0 / 已验证5 / 已延期2 / 已确认删除0。
-- 下一允许动作：形成模板匹配独立提交，然后按Stage 1顺序追踪字库匹配模式最小切片。
+- 功能状态计数：待盘点0 / 已基线82 / 迁移中0 / 已验证6 / 已延期2 / 已确认删除0。
+- 下一允许动作：形成字库匹配独立提交，然后按Stage 1顺序追踪“二维码+三期”最小切片。
