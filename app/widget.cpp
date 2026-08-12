@@ -6430,6 +6430,7 @@ void Widget::clearWordMultiTemplateState()
 {
     clearBarcodeTemplateValidation();
     m_wordTemplateRecipeDraftSession.reset();
+    m_wordTemplateRecipeEditSession.reset();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
     currentTemplateDirPath.clear();
@@ -6558,6 +6559,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         }
 
         m_wordTemplateRecipeDraftSession.reset();
+        m_wordTemplateRecipeEditSession.reset();
         m_wordTemplateProfiles.swap(loadedProfiles);
         refreshWordTemplateRecipeAssets();
         if (validPaths != paths) {
@@ -6592,6 +6594,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
 
     if (!m_wordTemplateProfiles.empty()) {
         m_wordTemplateRecipeDraftSession.reset();
+        m_wordTemplateRecipeEditSession.reset();
         m_wordTemplateProfiles.clear();
         refreshWordTemplateEditorCombo();
     }
@@ -7322,6 +7325,7 @@ void Widget::prepareWordTemplateRecipeDraft(
         const WordTemplateProfile &profile)
 {
     m_wordTemplateRecipeDraftSession.reset();
+    m_wordTemplateRecipeEditSession.reset();
 
     DetectionMode detectionMode;
     if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
@@ -7378,7 +7382,59 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
         return false;
     }
 
+    QString editSessionError;
+    if (!m_wordTemplateRecipeEditSession.begin(publishedSelection,
+                                               &editSessionError)) {
+        if (errorMessage) {
+            *errorMessage = QString(
+                        "产品配方已经发布，但无法建立后续编辑会话：%1")
+                    .arg(editSessionError);
+        }
+        return false;
+    }
+
     qDebug() << "[RECIPE_PUBLISH] published word recipe:"
+             << publishedSelection.recipe->recipeId
+             << publishedSelection.recipeDirectoryPath;
+    return true;
+}
+
+bool Widget::publishWordTemplateRecipeEdit(int profileIndex,
+                                           QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_wordTemplateRecipeEditSession.isActive()) {
+        return true;
+    }
+    if (profileIndex < 0
+            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
+        if (errorMessage) {
+            *errorMessage = "当前配方编辑Profile无效。";
+        }
+        return false;
+    }
+
+    const WordTemplateProfile &profile =
+            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+    if (!m_wordTemplateRecipeEditSession.updateProfile(
+                profileIndex,
+                profile.recipeProfile,
+                errorMessage)) {
+        return false;
+    }
+
+    const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
+                            .filePath("recipes"));
+    RecipeSelection publishedSelection;
+    if (!m_wordTemplateRecipeEditSession.publish(store,
+                                                 &publishedSelection,
+                                                 errorMessage)) {
+        return false;
+    }
+
+    qDebug() << "[RECIPE_PUBLISH] republished word recipe:"
              << publishedSelection.recipe->recipeId
              << publishedSelection.recipeDirectoryPath;
     return true;
@@ -8288,9 +8344,21 @@ void Widget::on_textsure_btn_clicked()
         const QString profileName = profile.name.isEmpty()
                 ? QDir(profile.dirPath).dirName()
                 : profile.name;
+        QString recipePublishMessage;
+        if (m_wordTemplateRecipeEditSession.isActive()) {
+            QString publishError;
+            if (publishWordTemplateRecipeEdit(profileIndex, &publishError)) {
+                recipePublishMessage = "\n产品配方已使用原配方编号重新发布。";
+            } else {
+                recipePublishMessage =
+                        QString("\n\n目标字符已保存到当前模板，但产品配方重新发布失败：\n%1")
+                        .arg(publishError);
+            }
+        }
         showParameterInfo("提示",
-                          QString("已更新产品模板 %1 的目标字符。\n其他产品模板未修改。")
-                          .arg(profileName));
+                          QString("已更新产品模板 %1 的目标字符。\n其他产品模板未修改。%2")
+                          .arg(profileName)
+                          .arg(recipePublishMessage));
         return;
     }
 
@@ -9472,6 +9540,7 @@ void Widget::on_pushButton_4_clicked()
             }
 
             m_wordTemplateRecipeDraftSession.reset();
+            m_wordTemplateRecipeEditSession.reset();
             m_wordTemplateProfiles.swap(loadedProfiles);
             refreshWordTemplateRecipeAssets();
             currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
@@ -9518,6 +9587,7 @@ void Widget::on_pushButton_4_clicked()
     if (dirPath.isEmpty()) return;
 
     m_wordTemplateRecipeDraftSession.reset();
+    m_wordTemplateRecipeEditSession.reset();
     m_wordTemplateProfiles.clear();
     refreshWordTemplateEditorCombo();
     currentTemplateDirPath = dirPath;

@@ -73,6 +73,7 @@
 #include "appsettingsmanager.h"
 #include "recipes/template_profile_assets.h"
 #include "recipes/template_recipe_draft_session.h"
+#include "recipes/template_recipe_edit_session.h"
 #include "BarcodeDecoderApi.h"
 #include "BarcodeTypes.h"
 
@@ -540,6 +541,7 @@ private:
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession; ///< 本次新建字库配方的编辑发布会话
+    TemplateRecipeEditSession m_wordTemplateRecipeEditSession; ///< 当前已发布字库配方的参数编辑会话
     std::vector<WordTemplateProfile> m_runningBarcodeWordProfiles; ///< 二维码+三期启动时的只读Profile快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
     HMODULE m_barcodeDecoderModule = nullptr;
@@ -578,6 +580,8 @@ private:
     void refreshWordTemplateRecipeAssets();
     void prepareWordTemplateRecipeDraft(const WordTemplateProfile &profile);
     bool publishWordTemplateRecipeDraft(QString *errorMessage);
+    bool publishWordTemplateRecipeEdit(int profileIndex,
+                                       QString *errorMessage);
     void setupWordTemplateEditorCombo();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
