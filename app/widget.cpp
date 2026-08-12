@@ -7017,12 +7017,25 @@ bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
         return false;
     }
 
-    TissueRollDetector::setDefaultRoughnessThreshold(threshold);
+    applyTissueRecipeParametersToThreads(threshold);
     ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(threshold, 'f', 3));
     if (showMessage) {
         showParameterInfo("提示", "粗糙度阈值设置成功");
     }
     return true;
+}
+
+void Widget::applyTissueRecipeParametersToThreads(
+        double roughnessThreshold)
+{
+    TissueRecipeParameters parameters;
+    parameters.roughnessThreshold = roughnessThreshold;
+    if (myThread) {
+        myThread->setTissueRecipeParameters(parameters);
+    }
+    if (cameraThread) {
+        cameraThread->setTissueRecipeParameters(parameters);
+    }
 }
 
 bool Widget::queryCameraExposureRange(int *minimumValue,
@@ -7332,7 +7345,7 @@ bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSucc
         break;
     }
 
-    TissueRollDetector::setDefaultRoughnessThreshold(tissueThreshold);
+    applyTissueRecipeParametersToThreads(tissueThreshold);
     ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(tissueThreshold, 'f', 3));
 
     emit rotate(angleValue);

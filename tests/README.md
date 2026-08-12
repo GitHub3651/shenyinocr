@@ -13,8 +13,12 @@
 `recipe_tests`验证Stage 1基础产品配方的五种模式ID、Schema 1 JSON往返、
 非法字段/越界资源路径拒绝和不可变运行快照；它不读写旧模板目录，也不改变主程序入口。
 
+`detection_tests`验证Stage 1纸巾切片：配方唯一默认阈值为6.0，
+显式`TissueRecipeParameters`能传入纸巾Pipeline，空图与纯黑图仍按原有诊断拒绝。
+测试不会调用相机、PLC、存图或主界面。
+
 测试目标链接完成后会把当前Kit的`Qt5Core.dll`、`Qt5Test.dll`
-（Debug为带`d`后缀版本）复到EXE目录；纸巾检测目标还会复制主程序
+（Debug为带`d`后缀版本）复制到EXE目录；纸巾检测目标还会复制主程序
 Release发布包使用的x64 `opencv_world341.dll`，
 并读取PE头确认每个DLL与目标EXE架构一致，再逐个校验源文件和目标文件的SHA-256。
 这样即使Qt Creator把SUBDIRS工程配置为

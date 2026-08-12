@@ -1,35 +1,38 @@
 #include <QtTest/QtTest>
 
-#include "TissueRollDetector.h"
+#include "detection/tissue/tissue_detection_pipeline.h"
 
 class TissueRollDetectorBaselineTest : public QObject
 {
     Q_OBJECT
 
 private slots:
-    void currentInternalDefaultIsFivePointTwo();
-    void explicitRecipeThresholdIsRetained();
+    void recipeDefaultIsSixPointZero();
+    void explicitRecipeThresholdIsRetainedByPipeline();
     void emptyImageIsRejectedWithCurrentDiagnostic();
     void blankImageIsRejectedWithoutAFalseRoll();
 };
 
-void TissueRollDetectorBaselineTest::currentInternalDefaultIsFivePointTwo()
+void TissueRollDetectorBaselineTest::recipeDefaultIsSixPointZero()
 {
-    QCOMPARE(TissueRollDetector::defaultRoughnessThreshold(), 5.2);
-    const TissueRollConfig currentDefaultConfig;
-    QCOMPARE(currentDefaultConfig.roughnessThreshold, 5.2);
+    const TissueRecipeParameters parameters;
+    QCOMPARE(parameters.roughnessThreshold, 6.0);
 }
 
-void TissueRollDetectorBaselineTest::explicitRecipeThresholdIsRetained()
+void TissueRollDetectorBaselineTest::explicitRecipeThresholdIsRetainedByPipeline()
 {
-    const TissueRollConfig config(6.0);
-    QCOMPARE(config.roughnessThreshold, 6.0);
+    TissueRecipeParameters parameters;
+    parameters.roughnessThreshold = 9.25;
+    const TissueDetectionPipeline pipeline(parameters);
+
+    QCOMPARE(pipeline.roughnessThreshold(), 9.25);
 }
 
 void TissueRollDetectorBaselineTest::emptyImageIsRejectedWithCurrentDiagnostic()
 {
-    const TissueRollDetector detector(TissueRollConfig(6.0));
-    const TissueRollResult result = detector.processImage(cv::Mat());
+    const TissueRecipeParameters parameters;
+    const TissueDetectionPipeline pipeline(parameters);
+    const TissueRollResult result = pipeline.detect(cv::Mat());
 
     QVERIFY(!result.isOk);
     QVERIFY(!result.rollFound);
@@ -40,15 +43,18 @@ void TissueRollDetectorBaselineTest::emptyImageIsRejectedWithCurrentDiagnostic()
 
 void TissueRollDetectorBaselineTest::blankImageIsRejectedWithoutAFalseRoll()
 {
-    const TissueRollDetector detector(TissueRollConfig(6.0));
+    const TissueRecipeParameters parameters;
+    const TissueDetectionPipeline pipeline(parameters);
     const cv::Mat image = cv::Mat::zeros(128, 128, CV_8UC3);
-    const TissueRollResult result = detector.processImage(image);
+    const TissueRollResult result = pipeline.detect(image);
 
     QVERIFY(!result.isOk);
     QVERIFY(!result.rollFound);
     QCOMPARE(result.imageWidth, image.cols);
     QCOMPARE(result.imageHeight, image.rows);
     QVERIFY(QString::fromStdString(result.message).contains(QStringLiteral("rollFound=false")));
+    QVERIFY(QString::fromStdString(result.message).contains(
+                QStringLiteral("thresholds(rough<6.000)")));
 }
 
 QTEST_APPLESS_MAIN(TissueRollDetectorBaselineTest)

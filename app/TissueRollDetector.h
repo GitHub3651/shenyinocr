@@ -5,13 +5,7 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 
-struct TissueRollConfig
-{
-    TissueRollConfig();
-    explicit TissueRollConfig(double roughnessThresholdValue);
-
-    double roughnessThreshold;
-};
+#include "recipes/product_recipe.h"
 
 struct TissueRollItem
 {
@@ -44,15 +38,14 @@ Q_DECLARE_METATYPE(TissueRollResult)
 class TissueRollDetector
 {
 public:
-    explicit TissueRollDetector(const TissueRollConfig& config = TissueRollConfig());
-
-    static void setDefaultRoughnessThreshold(double threshold);
-    static double defaultRoughnessThreshold();
+    explicit TissueRollDetector(
+            const TissueRecipeParameters &parameters);
 
     TissueRollResult processImage(const cv::Mat& image) const;
+    double roughnessThreshold() const;
 
 private:
-    TissueRollConfig m_config;
+    TissueRecipeParameters m_parameters;
 };
 
 #endif // TISSUEROLLDETECTOR_H

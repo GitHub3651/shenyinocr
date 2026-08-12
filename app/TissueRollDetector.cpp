@@ -1,7 +1,6 @@
 #include "TissueRollDetector.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -31,27 +30,9 @@ struct OuterRadiusResult
     std::string rejectReason;
 };
 
-const int kRoughnessThresholdScale = 1000;
-std::atomic<int> g_defaultRoughnessThresholdScaled(5200);
-
 double clampDouble(double value, double low, double high)
 {
     return std::max(low, std::min(value, high));
-}
-
-int roughnessThresholdToScaled(double threshold)
-{
-    return static_cast<int>(std::round(clampDouble(threshold, 0.001, 1000.0) * kRoughnessThresholdScale));
-}
-
-double loadDefaultRoughnessThreshold()
-{
-    return static_cast<double>(g_defaultRoughnessThresholdScaled.load()) / kRoughnessThresholdScale;
-}
-
-void storeDefaultRoughnessThreshold(double threshold)
-{
-    g_defaultRoughnessThresholdScaled.store(roughnessThresholdToScaled(threshold));
 }
 
 cv::Rect clampRect(const cv::Rect& rect, const cv::Size& bounds)
@@ -563,29 +544,10 @@ std::string baseMessage(int imageWidth,
 
 } // namespace
 
-TissueRollConfig::TissueRollConfig()
-    : roughnessThreshold(loadDefaultRoughnessThreshold())
+TissueRollDetector::TissueRollDetector(
+        const TissueRecipeParameters &parameters)
+    : m_parameters(parameters)
 {
-}
-
-TissueRollConfig::TissueRollConfig(double roughnessThresholdValue)
-    : roughnessThreshold(roughnessThresholdValue)
-{
-}
-
-TissueRollDetector::TissueRollDetector(const TissueRollConfig& config)
-    : m_config(config)
-{
-}
-
-void TissueRollDetector::setDefaultRoughnessThreshold(double threshold)
-{
-    storeDefaultRoughnessThreshold(threshold);
-}
-
-double TissueRollDetector::defaultRoughnessThreshold()
-{
-    return loadDefaultRoughnessThreshold();
 }
 
 TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
@@ -623,7 +585,7 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
                                            result.imageHeight,
                                            workBgr.cols,
                                            workBgr.rows,
-                                           m_config.roughnessThreshold);
+                                           m_parameters.roughnessThreshold);
 
     InnerGeometry innerSmall;
     std::string rejectReason;
@@ -661,7 +623,8 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
     const int ringPixelCount = cv::countNonZero(ringMaskRoi);
 
     const double roughnessScore = computeRoughnessScore(grayRoi, ringMaskRoi);
-    const bool roughnessNg = roughnessScore >= m_config.roughnessThreshold;
+    const bool roughnessNg =
+            roughnessScore >= m_parameters.roughnessThreshold;
     const bool rollOk = !roughnessNg;
 
     OuterGeometry outer = scaleOuterGeometry(outerSmall, scaleX, scaleY, bgr.size());
@@ -706,4 +669,9 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
 
     result.message = message.str();
     return result;
+}
+
+double TissueRollDetector::roughnessThreshold() const
+{
+    return m_parameters.roughnessThreshold;
 }

@@ -312,6 +312,7 @@ private:
     void updateImageSaveOptionsVisibility();
     void updateTissueRoughnessUiVisibility();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
+    void applyTissueRecipeParametersToThreads(double roughnessThreshold);
     void setupTemplateGuide();
     void adjustTemplateGuideHeight();
     void showTemplateGuideForCurrentMode();

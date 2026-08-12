@@ -51,6 +51,7 @@ CONFIG(release, debug|release) {
 SOURCES += \
     appsettingsmanager.cpp \
     recipes/product_recipe.cpp \
+    detection/tissue/tissue_detection_pipeline.cpp \
     CameraThread.cpp \
     DetectionModes.cpp \
     Detector.cpp \
@@ -83,6 +84,7 @@ SOURCES += \
 HEADERS += \
     appsettingsmanager.h \
     recipes/product_recipe.h \
+    detection/tissue/tissue_detection_pipeline.h \
     BarcodeDecoderApi.h \
     BarcodeTypes.h \
     CameraThread.h \

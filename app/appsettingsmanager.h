@@ -2,6 +2,7 @@
 #define APPSETTINGSMANAGER_H
 
 #include "BarcodeTypes.h"
+#include "recipes/product_recipe.h"
 
 #include <QByteArray>
 #include <QRect>
@@ -42,7 +43,8 @@ struct GlobalSettings
     int rejectTime = 300;
     int rejectPosition = 0;
 
-    double tissueRoughnessThreshold = 6.0;
+    double tissueRoughnessThreshold =
+            TissueRecipeParameters().roughnessThreshold;
     QMap<QString, QStringList> templateDirPathsByMode;
     QByteArray rightPanelSplitterState;
 };

@@ -1,0 +1,20 @@
+#ifndef DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
+#define DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
+
+#include "TissueRollDetector.h"
+#include "recipes/product_recipe.h"
+
+class TissueDetectionPipeline
+{
+public:
+    explicit TissueDetectionPipeline(
+            const TissueRecipeParameters &parameters);
+
+    TissueRollResult detect(const cv::Mat &image) const;
+    double roughnessThreshold() const;
+
+private:
+    TissueRollDetector m_detector;
+};
+
+#endif // DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
