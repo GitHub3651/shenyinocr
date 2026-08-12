@@ -4,6 +4,7 @@
 #include "recipe_store.h"
 #include "template_profile_load_plan.h"
 #include "template_recipe_assembler.h"
+#include "template_recipe_draft_session.h"
 #include "template_recipe_publisher.h"
 
 #include <QDir>
@@ -34,6 +35,7 @@ private slots:
     void publishingCommitsASelectableRecipe();
     void publishingFailurePreservesPreviousRecipeAndOutput();
     void republishingSameHeaderKeepsIdentityAndReplacesAssets();
+    void draftSessionRejectsChangedSourceAndKeepsIdentity();
 };
 
 namespace {
@@ -1344,6 +1346,120 @@ void RecipeStoreTest::republishingSameHeaderKeepsIdentityAndReplacesAssets()
              qPrintable(errorMessage));
     QCOMPARE(catalog.recipes.size(), 1);
     QCOMPARE(catalog.recipes.first().recipeId, stableRecipeId);
+}
+
+void RecipeStoreTest::draftSessionRejectsChangedSourceAndKeepsIdentity()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString sourceDirectory = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("source"));
+    const QString otherDirectory = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("other"));
+    QVERIFY(QDir().mkpath(sourceDirectory));
+    QVERIFY(QDir().mkpath(otherDirectory));
+    const QString trackingSource = QDir(sourceDirectory).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationSource = QDir(sourceDirectory).filePath(
+                QStringLiteral("calibration.yaml"));
+    QVERIFY(writeBytes(trackingSource, QByteArray("tracking-v1")));
+    QVERIFY(writeBytes(calibrationSource, QByteArray("calibration")));
+
+    ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("draft-session"), DetectionMode::BarcodeWord);
+    const QString stableRecipeId = recipeHeader.recipeId;
+    TemplateRecipeDraftSession session;
+    QString errorMessage;
+    QVERIFY2(session.begin(recipeHeader,
+                           sourceDirectory,
+                           &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(session.isActive());
+    QCOMPARE(session.recipeHeader().recipeId, stableRecipeId);
+
+    ProductRecipe invalidHeader = recipeHeader;
+    invalidHeader.detectionMode = DetectionMode::Tissue;
+    QVERIFY(!session.begin(invalidHeader,
+                           otherDirectory,
+                           &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("word family")));
+    QVERIFY(session.isActive());
+    QCOMPARE(session.recipeHeader().recipeId, stableRecipeId);
+    QCOMPARE(QFileInfo(session.sourceDirectoryPath()).canonicalFilePath(),
+             QFileInfo(sourceDirectory).canonicalFilePath());
+
+    TemplateRecipeProfileSource profileSource;
+    profileSource.profile.name = QStringLiteral("profile");
+    profileSource.profile.targetText = QStringLiteral("A");
+    profileSource.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    profileSource.profile.hasValidBoxes = true;
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("tracking"));
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("calibration"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("tracking"),
+                QStringLiteral("assets/tracking.bmp"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("assets/calibration.yaml"));
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("tracking"), trackingSource);
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("calibration"), calibrationSource);
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.append(profileSource);
+
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    RecipeSelection selection;
+    selection.recipeDirectoryPath = QStringLiteral("sentinel");
+    QVERIFY(!session.publish(store,
+                             otherDirectory,
+                             profileSources,
+                             &selection,
+                             &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("source directory changed")));
+    QCOMPARE(selection.recipeDirectoryPath, QStringLiteral("sentinel"));
+
+    QVERIFY2(session.publish(store,
+                             sourceDirectory,
+                             profileSources,
+                             &selection,
+                             &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(selection.recipe->recipeId, stableRecipeId);
+    QCOMPARE(session.recipeHeader().recipeId, stableRecipeId);
+    QCOMPARE(selection.profiles.first().profile.targetText,
+             QStringLiteral("A"));
+
+    QVERIFY(writeBytes(trackingSource, QByteArray("tracking-v2")));
+    profileSource.profile.targetText = QStringLiteral("B");
+    profileSources[0] = profileSource;
+    QVERIFY2(session.publish(store,
+                             sourceDirectory,
+                             profileSources,
+                             &selection,
+                             &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(selection.recipe->recipeId, stableRecipeId);
+    QCOMPARE(selection.profiles.first().profile.targetText,
+             QStringLiteral("B"));
+    QCOMPARE(readBytes(selection.profiles.first().assetPathsByRole.value(
+                           QStringLiteral("trackingTemplate"))),
+             QByteArray("tracking-v2"));
+
+    RecipeCatalog catalog;
+    QVERIFY2(store.listRecipes(&catalog, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(catalog.recipes.size(), 1);
+    QCOMPARE(catalog.recipes.first().recipeId, stableRecipeId);
+
+    session.reset();
+    QVERIFY(!session.isActive());
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

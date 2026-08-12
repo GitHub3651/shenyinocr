@@ -11,7 +11,6 @@
 #include "recipes/recipe_selection.h"
 #include "recipes/template_profile_load_plan.h"
 #include "recipes/template_profile_mapper.h"
-#include "recipes/template_recipe_publisher.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
@@ -6176,7 +6175,7 @@ void Widget::showManualCharacterTemplateCropDialog()
     }
 
     QString recipePublishMessage;
-    if (reloadMessage.isEmpty() && m_hasWordTemplateRecipeDraft) {
+    if (reloadMessage.isEmpty() && m_wordTemplateRecipeDraftSession.isActive()) {
         QString publishError;
         if (!publishWordTemplateRecipeDraft(&publishError)) {
             recipePublishMessage =
@@ -6430,7 +6429,7 @@ void Widget::setupDetectModeChangeTracking()
 void Widget::clearWordMultiTemplateState()
 {
     clearBarcodeTemplateValidation();
-    resetWordTemplateRecipeDraft();
+    m_wordTemplateRecipeDraftSession.reset();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
     currentTemplateDirPath.clear();
@@ -6558,7 +6557,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
             return;
         }
 
-        resetWordTemplateRecipeDraft();
+        m_wordTemplateRecipeDraftSession.reset();
         m_wordTemplateProfiles.swap(loadedProfiles);
         refreshWordTemplateRecipeAssets();
         if (validPaths != paths) {
@@ -6592,6 +6591,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
     }
 
     if (!m_wordTemplateProfiles.empty()) {
+        m_wordTemplateRecipeDraftSession.reset();
         m_wordTemplateProfiles.clear();
         refreshWordTemplateEditorCombo();
     }
@@ -7318,16 +7318,10 @@ void Widget::refreshWordTemplateRecipeAssets()
     }
 }
 
-void Widget::resetWordTemplateRecipeDraft()
-{
-    m_hasWordTemplateRecipeDraft = false;
-    m_wordTemplateRecipeDraftSourceDir.clear();
-}
-
 void Widget::prepareWordTemplateRecipeDraft(
         const WordTemplateProfile &profile)
 {
-    resetWordTemplateRecipeDraft();
+    m_wordTemplateRecipeDraftSession.reset();
 
     DetectionMode detectionMode;
     if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
@@ -7340,11 +7334,15 @@ void Widget::prepareWordTemplateRecipeDraft(
     const QString displayName = profile.name.trimmed().isEmpty()
             ? QDir(profile.dirPath).dirName()
             : profile.name.trimmed();
-    m_wordTemplateRecipeDraftHeader =
+    const ProductRecipe recipeHeader =
             createProductRecipe(displayName, detectionMode);
-    m_wordTemplateRecipeDraftSourceDir =
-            QDir::cleanPath(QFileInfo(profile.dirPath).absoluteFilePath());
-    m_hasWordTemplateRecipeDraft = true;
+    QString sessionError;
+    if (!m_wordTemplateRecipeDraftSession.begin(recipeHeader,
+                                                profile.dirPath,
+                                                &sessionError)) {
+        qWarning() << "[RECIPE_DRAFT] cannot begin word recipe draft:"
+                   << sessionError;
+    }
 }
 
 bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
@@ -7352,7 +7350,7 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
     if (errorMessage) {
         errorMessage->clear();
     }
-    if (!m_hasWordTemplateRecipeDraft) {
+    if (!m_wordTemplateRecipeDraftSession.isActive()) {
         return true;
     }
     if (m_wordTemplateProfiles.size() != 1) {
@@ -7363,16 +7361,6 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
     }
 
     const WordTemplateProfile &profile = m_wordTemplateProfiles.front();
-    const QString currentSourceDir =
-            QDir::cleanPath(QFileInfo(profile.dirPath).absoluteFilePath());
-    if (currentSourceDir.compare(m_wordTemplateRecipeDraftSourceDir,
-                                 Qt::CaseInsensitive) != 0) {
-        if (errorMessage) {
-            *errorMessage = "当前产品模板与待同步的新建配方不一致。";
-        }
-        return false;
-    }
-
     TemplateRecipeProfileSource profileSource;
     profileSource.profile = profile.recipeProfile;
     profileSource.assetManifest = profile.recipeAssetManifest;
@@ -7382,17 +7370,16 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
     const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
                             .filePath("recipes"));
     RecipeSelection publishedSelection;
-    if (!publishTemplateRecipe(store,
-                               m_wordTemplateRecipeDraftHeader,
-                               profileSources,
-                               &publishedSelection,
-                               errorMessage)) {
+    if (!m_wordTemplateRecipeDraftSession.publish(store,
+                                                  profile.dirPath,
+                                                  profileSources,
+                                                  &publishedSelection,
+                                                  errorMessage)) {
         return false;
     }
 
-    m_wordTemplateRecipeDraftHeader = *publishedSelection.recipe;
     qDebug() << "[RECIPE_PUBLISH] published word recipe:"
-             << m_wordTemplateRecipeDraftHeader.recipeId
+             << publishedSelection.recipe->recipeId
              << publishedSelection.recipeDirectoryPath;
     return true;
 }
@@ -9484,7 +9471,7 @@ void Widget::on_pushButton_4_clicked()
                 return;
             }
 
-            resetWordTemplateRecipeDraft();
+            m_wordTemplateRecipeDraftSession.reset();
             m_wordTemplateProfiles.swap(loadedProfiles);
             refreshWordTemplateRecipeAssets();
             currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
@@ -9530,6 +9517,7 @@ void Widget::on_pushButton_4_clicked()
 
     if (dirPath.isEmpty()) return;
 
+    m_wordTemplateRecipeDraftSession.reset();
     m_wordTemplateProfiles.clear();
     refreshWordTemplateEditorCombo();
     currentTemplateDirPath = dirPath;

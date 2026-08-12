@@ -72,6 +72,7 @@
 #include "TrackingTypes.h"
 #include "appsettingsmanager.h"
 #include "recipes/template_profile_assets.h"
+#include "recipes/template_recipe_draft_session.h"
 #include "BarcodeDecoderApi.h"
 #include "BarcodeTypes.h"
 
@@ -538,9 +539,7 @@ private:
     };
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
-    ProductRecipe m_wordTemplateRecipeDraftHeader; ///< 本次新建字库模板待发布的稳定配方身份
-    QString m_wordTemplateRecipeDraftSourceDir; ///< 防止旧目录切换后误发布到待建配方
-    bool m_hasWordTemplateRecipeDraft = false; ///< 仅本次新建且尚在当前编辑会话的模板可发布
+    TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession; ///< 本次新建字库配方的编辑发布会话
     std::vector<WordTemplateProfile> m_runningBarcodeWordProfiles; ///< 二维码+三期启动时的只读Profile快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
     HMODULE m_barcodeDecoderModule = nullptr;
@@ -577,7 +576,6 @@ private:
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
     void refreshWordTemplateRecipeAssets();
-    void resetWordTemplateRecipeDraft();
     void prepareWordTemplateRecipeDraft(const WordTemplateProfile &profile);
     bool publishWordTemplateRecipeDraft(QString *errorMessage);
     void setupWordTemplateEditorCombo();
