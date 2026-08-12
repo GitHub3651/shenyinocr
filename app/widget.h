@@ -582,6 +582,9 @@ private:
     bool publishWordTemplateRecipeDraft(QString *errorMessage);
     bool publishWordTemplateRecipeEdit(int profileIndex,
                                        QString *errorMessage);
+    bool publishWordTemplateRecipeEdits(
+        const QVector<int> &profileIndexes,
+        QString *errorMessage);
     void setupWordTemplateEditorCombo();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();

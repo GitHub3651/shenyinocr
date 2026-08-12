@@ -7402,25 +7402,40 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
 bool Widget::publishWordTemplateRecipeEdit(int profileIndex,
                                            QString *errorMessage)
 {
+    QVector<int> profileIndexes;
+    profileIndexes.append(profileIndex);
+    return publishWordTemplateRecipeEdits(profileIndexes, errorMessage);
+}
+
+bool Widget::publishWordTemplateRecipeEdits(
+        const QVector<int> &profileIndexes,
+        QString *errorMessage)
+{
     if (errorMessage) {
         errorMessage->clear();
     }
     if (!m_wordTemplateRecipeEditSession.isActive()) {
         return true;
     }
-    if (profileIndex < 0
-            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
-        if (errorMessage) {
-            *errorMessage = "当前配方编辑Profile无效。";
+    QVector<RecipeProfile> updatedProfiles =
+            m_wordTemplateRecipeEditSession.recipe().profiles;
+    for (int profileIndex : profileIndexes) {
+        if (profileIndex < 0
+                || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())
+                || profileIndex >= updatedProfiles.size()) {
+            if (errorMessage) {
+                *errorMessage = "当前配方编辑Profile无效。";
+            }
+            return false;
         }
-        return false;
+
+        updatedProfiles[profileIndex] =
+                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)]
+                .recipeProfile;
     }
 
-    const WordTemplateProfile &profile =
-            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-    if (!m_wordTemplateRecipeEditSession.updateProfile(
-                profileIndex,
-                profile.recipeProfile,
+    if (!m_wordTemplateRecipeEditSession.updateProfiles(
+                updatedProfiles,
                 errorMessage)) {
         return false;
     }
@@ -8515,7 +8530,31 @@ void Widget::on_batchTextsure_btn_clicked()
     }
 
     refreshTemplateTargetTextDirty();
-    showParameterInfo("提示", "已将当前目标字符保存到所有已选择的产品模板。");
+
+    QString recipePublishMessage;
+    if (m_wordTemplateRecipeEditSession.isActive()) {
+        QVector<int> profileIndexes;
+        for (int profileIndex = 0;
+             profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
+             ++profileIndex) {
+            profileIndexes.append(profileIndex);
+        }
+
+        QString publishError;
+        if (publishWordTemplateRecipeEdits(profileIndexes, &publishError)) {
+            recipePublishMessage =
+                    "\n产品配方已使用原配方编号重新发布。";
+        } else {
+            recipePublishMessage =
+                    QString("\n\n目标字符已批量保存到当前模板，但产品配方重新发布失败：\n%1")
+                    .arg(publishError);
+        }
+    }
+
+    showParameterInfo(
+                "提示",
+                QString("已将当前目标字符保存到所有已选择的产品模板。%1")
+                .arg(recipePublishMessage));
 }
 
 void Widget::on_batchImageThresholdButton_clicked()
