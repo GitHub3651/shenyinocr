@@ -51,6 +51,7 @@ CONFIG(release, debug|release) {
 SOURCES += \
     appsettingsmanager.cpp \
     recipes/product_recipe.cpp \
+    detection/common/profile_pose_selector.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/barcode_word/barcode_word_detection_pipeline.cpp \
     detection/stamp/stamp_detection_pipeline.cpp \
@@ -88,6 +89,7 @@ SOURCES += \
 HEADERS += \
     appsettingsmanager.h \
     recipes/product_recipe.h \
+    detection/common/profile_pose_selector.h \
     detection/ocr/ocr_detection_pipeline.h \
     detection/barcode_word/barcode_word_detection_pipeline.h \
     detection/stamp/stamp_detection_pipeline.h \

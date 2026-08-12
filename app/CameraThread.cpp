@@ -1,5 +1,6 @@
 ﻿// CameraThread.cpp
 #include "CameraThread.h"
+#include "detection/common/profile_pose_selector.h"
 #include <QDebug>
 
 CameraThread::CameraThread(QObject *parent, CMvCamera *camera) :
@@ -152,8 +153,7 @@ void CameraThread::run() {
                     cv::Mat displayImage = image->clone();
                     if (m_wordTemplateProfileMode && !m_wordTrackingProfiles.empty()) {
                         const auto trackingStart = std::chrono::steady_clock::now();
-                        DetectionPose bestPose;
-                        QString bestName;
+                        ProfilePoseSelector profilePoseSelector;
                         cv::Mat sharedTrackingGray;
                         cv::Mat sharedTrackingSmallGray;
                         const bool framePrepared =
@@ -202,24 +202,17 @@ void CameraThread::run() {
                                  ++i) {
                                 const WordTrackingState &state =
                                         m_wordTrackingProfiles[i];
-                                DetectionPose pose =
-                                        profilePoses[i];
-                                if (!pose.valid) {
-                                    continue;
-                                }
-
-                                pose.barcodePoly =
-                                        buildRotatedRelativePoly(
-                                            pose.anchorCenter,
-                                            state.barcodePoly,
-                                            pose.angleDeg);
-                                pose.wordTemplateProfileIndex = state.profileIndex;
-                                if (!bestPose.valid || pose.score > bestPose.score) {
-                                    bestPose = pose;
-                                    bestName = state.name;
-                                }
+                                profilePoseSelector.consider(
+                                            profilePoses[i],
+                                            state.profileIndex,
+                                            state.name,
+                                            state.barcodePoly);
                             }
                         }
+                        DetectionPose bestPose =
+                                profilePoseSelector.selection().pose;
+                        const QString bestName =
+                                profilePoseSelector.selection().profileName;
                         bestPose.trackingElapsedMs =
                                 std::chrono::duration<double, std::milli>(
                                     std::chrono::steady_clock::now() - trackingStart).count();
