@@ -88,6 +88,7 @@ class QComboBox;
 class QFrame;
 class QDialog;
 class QPushButton;
+struct RecipeSelection;
 
 /**
  * @brief 主窗口类
@@ -525,6 +526,7 @@ private:
         TemplatePrivateSettings settings;
         RecipeProfile recipeProfile;
         TemplateProfileAssetManifest recipeAssetManifest;
+        QMap<QString, QString> resolvedAssetPathsByRole;
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
         std::vector<int> digitTemplateTargetIndexes;
@@ -558,6 +560,11 @@ private:
     bool loadWordTemplateProfileFromDir(const QString &dirPath,
                                         WordTemplateProfile *profile,
                                         QString *errorMessage);
+    bool loadWordTemplateProfileFromRecipeSelection(
+        const RecipeSelection &selection,
+        int profileIndex,
+        WordTemplateProfile *profile,
+        QString *errorMessage);
     void refreshWordTemplateProfileDigitCache(
         WordTemplateProfile *profile) const;
     void refreshWordTemplateRecipeProfile(

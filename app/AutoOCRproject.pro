@@ -54,6 +54,7 @@ SOURCES += \
     recipes/recipe_store.cpp \
     recipes/recipe_selection.cpp \
     recipes/template_profile_assets.cpp \
+    recipes/template_profile_load_plan.cpp \
     recipes/template_recipe_assembler.cpp \
     recipes/template_profile_mapper.cpp \
     detection/common/profile_pose_selector.cpp \
@@ -97,6 +98,7 @@ HEADERS += \
     recipes/recipe_store.h \
     recipes/recipe_selection.h \
     recipes/template_profile_assets.h \
+    recipes/template_profile_load_plan.h \
     recipes/template_recipe_assembler.h \
     recipes/template_profile_mapper.h \
     detection/common/profile_pose_selector.h \

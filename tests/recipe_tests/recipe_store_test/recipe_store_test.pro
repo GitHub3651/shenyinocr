@@ -14,12 +14,14 @@ SOURCES += \
     recipe_store_test.cpp \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
-    $$PROJECT_ROOT/app/recipes/recipe_selection.cpp
+    $$PROJECT_ROOT/app/recipes/recipe_selection.cpp \
+    $$PROJECT_ROOT/app/recipes/template_profile_load_plan.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
     $$PROJECT_ROOT/app/recipes/recipe_store.h \
-    $$PROJECT_ROOT/app/recipes/recipe_selection.h
+    $$PROJECT_ROOT/app/recipes/recipe_selection.h \
+    $$PROJECT_ROOT/app/recipes/template_profile_load_plan.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app/recipes

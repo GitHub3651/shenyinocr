@@ -2,6 +2,7 @@
 
 #include "recipe_selection.h"
 #include "recipe_store.h"
+#include "template_profile_load_plan.h"
 
 #include <QDir>
 #include <QFile>
@@ -20,6 +21,8 @@ private slots:
     void catalogListsValidatedRecipesAndReportsInvalidDirectories();
     void selectionResolvesOrderedProfileAssets();
     void selectionFailurePreservesPreviousOutput();
+    void profileLoadPlanOrdersCharacterVariantsByTarget();
+    void profileLoadPlanReportsPendingTargetsWithoutPartialAssets();
 };
 
 namespace {
@@ -521,6 +524,130 @@ void RecipeStoreTest::selectionFailurePreservesPreviousOutput()
     QVERIFY(errorMessage.contains(QStringLiteral("required runtime assets")));
     QCOMPARE(selection.recipe->recipeId, originalRecipeId);
     QCOMPARE(selection.profiles.size(), originalProfileCount);
+}
+
+void RecipeStoreTest::profileLoadPlanOrdersCharacterVariantsByTarget()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString trackingPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("calibration.yaml"));
+    const QString rawImagePath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("raw.png"));
+    const QString aExactPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("A.png"));
+    const QString aParenthesizedPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("A(1).png"));
+    const QString aUnderscorePath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("A_2.png"));
+    const QString bExactPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("B.png"));
+    const QStringList assetPaths = QStringList()
+            << trackingPath
+            << calibrationPath
+            << rawImagePath
+            << aExactPath
+            << aParenthesizedPath
+            << aUnderscorePath
+            << bExactPath;
+    for (const QString &path : assetPaths) {
+        QVERIFY(writeBytes(path, path.toUtf8()));
+    }
+
+    ResolvedRecipeProfile resolvedProfile;
+    resolvedProfile.profile.name = QStringLiteral("ordered-profile");
+    resolvedProfile.profile.targetText = QStringLiteral("AB");
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), trackingPath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("calibration"), calibrationPath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("rawImage"), rawImagePath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("character/B.png"), bExactPath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("character/A_2.png"), aUnderscorePath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("character/A.png"), aExactPath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("character/A(1).png"),
+                aParenthesizedPath);
+
+    TemplateProfileLoadPlan loadPlan;
+    QString errorMessage;
+    QVERIFY2(buildTemplateProfileLoadPlan(
+                 resolvedProfile,
+                 QStringList() << QStringLiteral("a") << QStringLiteral("b"),
+                 &loadPlan,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(loadPlan.profile.name, QStringLiteral("ordered-profile"));
+    QCOMPARE(loadPlan.rawImagePath, QFileInfo(rawImagePath).absoluteFilePath());
+    QVERIFY(loadPlan.pendingTargetMessage.isEmpty());
+    QCOMPARE(loadPlan.characterTemplates.size(), 4);
+    QCOMPARE(loadPlan.characterTemplates.at(0).fileName,
+             QStringLiteral("A.png"));
+    QCOMPARE(loadPlan.characterTemplates.at(1).fileName,
+             QStringLiteral("A(1).png"));
+    QCOMPARE(loadPlan.characterTemplates.at(2).fileName,
+             QStringLiteral("A_2.png"));
+    QCOMPARE(loadPlan.characterTemplates.at(3).fileName,
+             QStringLiteral("B.png"));
+    QCOMPARE(loadPlan.characterTemplates.at(0).targetIndex, 0);
+    QCOMPARE(loadPlan.characterTemplates.at(1).targetIndex, 0);
+    QCOMPARE(loadPlan.characterTemplates.at(2).targetIndex, 0);
+    QCOMPARE(loadPlan.characterTemplates.at(3).targetIndex, 1);
+}
+
+void RecipeStoreTest::profileLoadPlanReportsPendingTargetsWithoutPartialAssets()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString trackingPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("calibration.yaml"));
+    const QString aExactPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("A.png"));
+    QVERIFY(writeBytes(trackingPath, QByteArray("tracking")));
+    QVERIFY(writeBytes(calibrationPath, QByteArray("calibration")));
+    QVERIFY(writeBytes(aExactPath, QByteArray("a")));
+
+    ResolvedRecipeProfile resolvedProfile;
+    resolvedProfile.profile.name = QStringLiteral("pending-profile");
+    resolvedProfile.profile.targetText = QStringLiteral("AB");
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), trackingPath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("calibration"), calibrationPath);
+    resolvedProfile.assetPathsByRole.insert(
+                QStringLiteral("character/A.png"), aExactPath);
+
+    TemplateProfileLoadPlan loadPlan;
+    QString errorMessage;
+    QVERIFY2(buildTemplateProfileLoadPlan(
+                 resolvedProfile,
+                 QStringList() << QStringLiteral("a") << QStringLiteral("b"),
+                 &loadPlan,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(loadPlan.pendingTargetMessage.contains(QStringLiteral("b")));
+    QVERIFY(loadPlan.characterTemplates.isEmpty());
+
+    TemplateProfileLoadPlan unchangedPlan = loadPlan;
+    unchangedPlan.profile.name = QStringLiteral("sentinel");
+    resolvedProfile.assetPathsByRole.remove(QStringLiteral("calibration"));
+    QVERIFY(!buildTemplateProfileLoadPlan(
+                resolvedProfile,
+                QStringList() << QStringLiteral("a"),
+                &unchangedPlan,
+                &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("calibration")));
+    QCOMPARE(unchangedPlan.profile.name, QStringLiteral("sentinel"));
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

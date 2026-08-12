@@ -8,6 +8,8 @@
 
 #include "widget.h"
 #include "ui_widget.h"
+#include "recipes/recipe_selection.h"
+#include "recipes/template_profile_load_plan.h"
 #include "recipes/template_profile_mapper.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
@@ -7029,6 +7031,166 @@ bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
                 &loadedProfile);
     *profile = loadedProfile;
     if (errorMessage) *errorMessage = pendingMessage;
+    return true;
+}
+
+bool Widget::loadWordTemplateProfileFromRecipeSelection(
+        const RecipeSelection &selection,
+        int profileIndex,
+        WordTemplateProfile *profile,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!profile) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Internal template profile output is null.");
+        }
+        return false;
+    }
+    if (!selection.recipe
+            || (selection.recipe->detectionMode != DetectionMode::Word
+                && selection.recipe->detectionMode
+                   != DetectionMode::BarcodeWord)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Selected recipe is not a word-family recipe.");
+        }
+        return false;
+    }
+    if (profileIndex < 0 || profileIndex >= selection.profiles.size()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Selected recipe profile index is invalid.");
+        }
+        return false;
+    }
+
+    const ResolvedRecipeProfile &resolvedProfile =
+            selection.profiles.at(profileIndex);
+    const QStringList targetUnits =
+            parseWordTemplateBaseNames(resolvedProfile.profile.targetText);
+    TemplateProfileLoadPlan loadPlan;
+    if (!buildTemplateProfileLoadPlan(resolvedProfile,
+                                      targetUnits,
+                                      &loadPlan,
+                                      errorMessage)) {
+        return false;
+    }
+
+    CalibrationData calibration;
+    if (!calibration.load(
+                loadPlan.calibrationPath.toLocal8Bit().toStdString())
+            || calibration.date_poly.empty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "Selected recipe calibration has no valid date polygon.");
+        }
+        return false;
+    }
+    if (selection.recipe->detectionMode == DetectionMode::BarcodeWord
+            && calibration.barcode_poly.size() != 4) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "Selected barcode recipe must contain a four-point barcode polygon.");
+        }
+        return false;
+    }
+
+    cv::Mat trackingTemplate;
+    QFile trackingFile(loadPlan.trackingTemplatePath);
+    if (trackingFile.open(QIODevice::ReadOnly)) {
+        const QByteArray bytes = trackingFile.readAll();
+        try {
+            const std::vector<uchar> buffer(bytes.begin(), bytes.end());
+            trackingTemplate = cv::imdecode(buffer, cv::IMREAD_COLOR);
+        } catch (...) {
+            trackingTemplate.release();
+        }
+    }
+    if (trackingTemplate.empty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "Selected recipe tracking template cannot be decoded.");
+        }
+        return false;
+    }
+
+    WordTemplateProfile loadedProfile;
+    loadedProfile.name = loadPlan.profile.name;
+    loadedProfile.dirPath = selection.recipeDirectoryPath;
+    loadedProfile.trackingTemplate = trackingTemplate;
+    loadedProfile.barcodePoly = calibration.barcode_poly;
+    loadedProfile.datePoly = calibration.date_poly;
+    loadedProfile.settings =
+            templatePrivateSettingsFromRecipeProfile(loadPlan.profile);
+    loadedProfile.recipeProfile = loadPlan.profile;
+    loadedProfile.resolvedAssetPathsByRole =
+            resolvedProfile.assetPathsByRole;
+    loadedProfile.targetCount = loadPlan.targetUnits.size();
+    loadedProfile.recipeAssetManifest.profileAssetKeys =
+            loadPlan.profile.assetKeys;
+
+    for (auto it = loadPlan.profile.assetKeys.constBegin();
+         it != loadPlan.profile.assetKeys.constEnd();
+         ++it) {
+        const QString assetKey = it.value();
+        const QString sourcePath =
+                resolvedProfile.assetPathsByRole.value(it.key());
+        const QString relativePath =
+                selection.recipe->assets.value(assetKey);
+        if (!sourcePath.isEmpty()) {
+            loadedProfile.recipeAssetManifest.assetSourcePaths.insert(
+                        assetKey,
+                        sourcePath);
+        }
+        if (!relativePath.isEmpty()) {
+            loadedProfile.recipeAssetManifest.recipeAssets.insert(
+                        assetKey,
+                        relativePath);
+        }
+    }
+
+    QString pendingMessage = loadPlan.pendingTargetMessage;
+    if (pendingMessage.isEmpty()) {
+        QStringList failedCharacterFiles;
+        for (const TemplateCharacterLoadItem &item :
+             loadPlan.characterTemplates) {
+            QFile characterFile(item.absoluteFilePath);
+            cv::Mat characterTemplate;
+            if (characterFile.open(QIODevice::ReadOnly)) {
+                const QByteArray bytes = characterFile.readAll();
+                try {
+                    const std::vector<uchar> buffer(bytes.begin(), bytes.end());
+                    characterTemplate =
+                            cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
+                } catch (...) {
+                    characterTemplate.release();
+                }
+            }
+
+            if (characterTemplate.empty()) {
+                failedCharacterFiles.append(item.fileName);
+                continue;
+            }
+            loadedProfile.digitTemplates.push_back(characterTemplate);
+            loadedProfile.digitTemplateTargetIndexes.push_back(
+                        item.targetIndex);
+        }
+
+        if (!failedCharacterFiles.isEmpty()) {
+            loadedProfile.digitTemplates.clear();
+            loadedProfile.digitTemplateTargetIndexes.clear();
+            pendingMessage = QStringLiteral(
+                        "Character assets cannot be decoded: %1")
+                    .arg(failedCharacterFiles.join(QLatin1Char(' ')));
+        }
+    }
+
+    refreshWordTemplateProfileDigitCache(&loadedProfile);
+    *profile = loadedProfile;
+    if (errorMessage) {
+        *errorMessage = pendingMessage;
+    }
     return true;
 }
 
