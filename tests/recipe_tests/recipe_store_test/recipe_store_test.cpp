@@ -16,6 +16,7 @@ private slots:
     void successfulOverwriteReplacesWholeDirectory();
     void missingAssetSourcePreservesPreviousRecipe();
     void validationAndCommitFailuresPreservePreviousRecipe();
+    void catalogListsValidatedRecipesAndReportsInvalidDirectories();
 };
 
 namespace {
@@ -277,6 +278,91 @@ void RecipeStoreTest::validationAndCommitFailuresPreservePreviousRecipe()
                 << recipe.recipeId + QStringLiteral(".bak.*"),
                 QDir::Dirs | QDir::NoDotAndDotDot);
     QVERIFY(transactionDirectories.isEmpty());
+}
+
+void RecipeStoreTest::catalogListsValidatedRecipesAndReportsInvalidDirectories()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString recipesRoot = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("recipes"));
+    const RecipeStore store(recipesRoot);
+    RecipeCatalog catalog;
+    QString errorMessage;
+    QVERIFY2(store.listRecipes(&catalog, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(catalog.recipes.isEmpty());
+    QVERIFY(catalog.invalidRecipes.isEmpty());
+    QVERIFY(!QFileInfo::exists(recipesRoot));
+
+    ProductRecipe wordRecipe = recipeWithAsset(
+                QStringLiteral("zeta-product"),
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("assets/tracking_template.bmp"));
+    const QString assetSourcePath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("source.bmp"));
+    QVERIFY(writeBytes(assetSourcePath, QByteArray("image-bytes")));
+    QMap<QString, QString> wordSources;
+    wordSources.insert(QStringLiteral("trackingTemplate"), assetSourcePath);
+    QVERIFY2(store.saveRecipe(wordRecipe, wordSources, &errorMessage),
+             qPrintable(errorMessage));
+
+    ProductRecipe tissueRecipe = createProductRecipe(
+                QStringLiteral("Alpha-product"), DetectionMode::Tissue);
+    QVERIFY2(store.saveRecipe(tissueRecipe,
+                              QMap<QString, QString>(),
+                              &errorMessage),
+             qPrintable(errorMessage));
+
+    const QString invalidRecipeId =
+            QStringLiteral("11111111-2222-3333-4444-555555555555");
+    const QString invalidDirectory = QDir(recipesRoot).filePath(
+                invalidRecipeId);
+    QVERIFY(QDir().mkpath(invalidDirectory));
+    QVERIFY(writeBytes(QDir(invalidDirectory).filePath(
+                           QStringLiteral("recipe.json")),
+                       QByteArray("not-json")));
+    QVERIFY(QDir().mkpath(QDir(recipesRoot).filePath(
+                              wordRecipe.recipeId
+                              + QStringLiteral(".tmp.ignored"))));
+    QVERIFY(QDir().mkpath(QDir(recipesRoot).filePath(
+                              QStringLiteral("not-a-recipe"))));
+    QVERIFY(QDir().mkpath(QDir(recipesRoot).filePath(
+                              QStringLiteral(
+                                  "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE"))));
+
+    QVERIFY2(store.listRecipes(&catalog, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(catalog.recipes.size(), 2);
+    QCOMPARE(catalog.recipes.at(0).recipeId, tissueRecipe.recipeId);
+    QCOMPARE(catalog.recipes.at(0).displayName,
+             QStringLiteral("Alpha-product"));
+    QCOMPARE(detectionModeId(catalog.recipes.at(0).detectionMode),
+             QStringLiteral("tissue_detection"));
+    QCOMPARE(catalog.recipes.at(0).profileCount, 0);
+    QCOMPARE(catalog.recipes.at(1).recipeId, wordRecipe.recipeId);
+    QCOMPARE(catalog.recipes.at(1).displayName,
+             QStringLiteral("zeta-product"));
+    QCOMPARE(detectionModeId(catalog.recipes.at(1).detectionMode),
+             QStringLiteral("word_detection"));
+    QCOMPARE(catalog.recipes.at(1).profileCount, 1);
+    QCOMPARE(catalog.invalidRecipes.size(), 1);
+    QCOMPARE(catalog.invalidRecipes.first().directoryName,
+             invalidRecipeId);
+    QVERIFY(catalog.invalidRecipes.first().message.contains(
+                QStringLiteral("recipe.json")));
+
+    const QString invalidRootPath = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("recipes-file"));
+    QVERIFY(writeBytes(invalidRootPath, QByteArray("not-a-directory")));
+    const RecipeStore invalidRootStore(invalidRootPath);
+    const RecipeCatalog unchangedCatalog = catalog;
+    QVERIFY(!invalidRootStore.listRecipes(&catalog, &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("Recipe root")));
+    QCOMPARE(catalog.recipes.size(), unchangedCatalog.recipes.size());
+    QCOMPARE(catalog.invalidRecipes.size(),
+             unchangedCatalog.invalidRecipes.size());
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

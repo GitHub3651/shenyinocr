@@ -8,6 +8,8 @@
 #include <QSet>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace {
 
 void setError(QString *errorMessage, const QString &message)
@@ -201,6 +203,88 @@ bool RecipeStore::loadRecipe(const QString &recipeId,
                                    recipeId.trimmed().toLower(),
                                    recipe,
                                    errorMessage);
+}
+
+bool RecipeStore::listRecipes(RecipeCatalog *catalog,
+                              QString *errorMessage) const
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!catalog) {
+        setError(errorMessage, QStringLiteral("RecipeCatalog output is null."));
+        return false;
+    }
+    if (m_recipesRootPath.isEmpty()) {
+        setError(errorMessage, QStringLiteral("Recipe root path is empty."));
+        return false;
+    }
+
+    const QFileInfo rootInfo(m_recipesRootPath);
+    if (rootInfo.isSymLink()) {
+        setError(errorMessage,
+                 QStringLiteral("Recipe root is not a readable regular directory: %1")
+                 .arg(m_recipesRootPath));
+        return false;
+    }
+    if (!rootInfo.exists()) {
+        *catalog = RecipeCatalog();
+        return true;
+    }
+    if (!rootInfo.isDir() || !rootInfo.isReadable()) {
+        setError(errorMessage,
+                 QStringLiteral("Recipe root is not a readable regular directory: %1")
+                 .arg(m_recipesRootPath));
+        return false;
+    }
+
+    RecipeCatalog candidate;
+    const QFileInfoList directories = QDir(m_recipesRootPath).entryInfoList(
+                QDir::Dirs | QDir::NoDotAndDotDot,
+                QDir::Name | QDir::IgnoreCase);
+    for (const QFileInfo &directoryInfo : directories) {
+        const QString directoryName = directoryInfo.fileName();
+        if (directoryName != directoryName.toLower()
+                || !isCanonicalRecipeId(directoryName)) {
+            continue;
+        }
+
+        ProductRecipe recipe;
+        QString loadError;
+        if (!loadRecipeFromDirectory(directoryInfo.absoluteFilePath(),
+                                     directoryName.toLower(),
+                                     &recipe,
+                                     &loadError)) {
+            RecipeCatalogIssue issue;
+            issue.directoryName = directoryName;
+            issue.message = loadError;
+            candidate.invalidRecipes.append(issue);
+            continue;
+        }
+
+        RecipeCatalogEntry entry;
+        entry.recipeId = recipe.recipeId;
+        entry.displayName = recipe.displayName;
+        entry.detectionMode = recipe.detectionMode;
+        entry.profileCount = recipe.profiles.size();
+        candidate.recipes.append(entry);
+    }
+
+    std::sort(candidate.recipes.begin(),
+              candidate.recipes.end(),
+              [](const RecipeCatalogEntry &left,
+                 const RecipeCatalogEntry &right) {
+        const int nameComparison = QString::compare(left.displayName,
+                                                    right.displayName,
+                                                    Qt::CaseInsensitive);
+        if (nameComparison != 0) {
+            return nameComparison < 0;
+        }
+        return left.recipeId < right.recipeId;
+    });
+
+    *catalog = candidate;
+    return true;
 }
 
 bool RecipeStore::saveRecipe(

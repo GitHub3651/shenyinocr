@@ -5,8 +5,29 @@
 
 #include <QMap>
 #include <QString>
+#include <QVector>
 
 #include <functional>
+
+struct RecipeCatalogEntry
+{
+    QString recipeId;
+    QString displayName;
+    DetectionMode detectionMode = DetectionMode::Stamp;
+    int profileCount = 0;
+};
+
+struct RecipeCatalogIssue
+{
+    QString directoryName;
+    QString message;
+};
+
+struct RecipeCatalog
+{
+    QVector<RecipeCatalogEntry> recipes;
+    QVector<RecipeCatalogIssue> invalidRecipes;
+};
 
 class RecipeStore
 {
@@ -30,6 +51,9 @@ public:
     bool loadRecipe(const QString &recipeId,
                     ProductRecipe *recipe,
                     QString *errorMessage = nullptr) const;
+
+    bool listRecipes(RecipeCatalog *catalog,
+                     QString *errorMessage = nullptr) const;
 
     bool saveRecipe(const ProductRecipe &recipe,
                     const QMap<QString, QString> &assetSourcePaths,
