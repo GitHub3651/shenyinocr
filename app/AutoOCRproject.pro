@@ -52,6 +52,7 @@ SOURCES += \
     appsettingsmanager.cpp \
     recipes/product_recipe.cpp \
     recipes/recipe_store.cpp \
+    recipes/recipe_selection.cpp \
     recipes/template_profile_assets.cpp \
     recipes/template_recipe_assembler.cpp \
     recipes/template_profile_mapper.cpp \
@@ -94,6 +95,7 @@ HEADERS += \
     appsettingsmanager.h \
     recipes/product_recipe.h \
     recipes/recipe_store.h \
+    recipes/recipe_selection.h \
     recipes/template_profile_assets.h \
     recipes/template_recipe_assembler.h \
     recipes/template_profile_mapper.h \

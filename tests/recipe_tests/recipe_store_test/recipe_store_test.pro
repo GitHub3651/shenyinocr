@@ -13,11 +13,13 @@ PROJECT_ROOT = $$clean_path($$PWD/../../..)
 SOURCES += \
     recipe_store_test.cpp \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
-    $$PROJECT_ROOT/app/recipes/recipe_store.cpp
+    $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
+    $$PROJECT_ROOT/app/recipes/recipe_selection.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
-    $$PROJECT_ROOT/app/recipes/recipe_store.h
+    $$PROJECT_ROOT/app/recipes/recipe_store.h \
+    $$PROJECT_ROOT/app/recipes/recipe_selection.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app/recipes
