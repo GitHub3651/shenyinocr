@@ -10524,11 +10524,13 @@ void Widget::on_plcbtn_clicked()
             const QString profileName = profile.name.isEmpty()
                     ? QDir(profile.dirPath).dirName()
                     : profile.name;
-            const QDir profileDir(profile.dirPath);
             QStringList profileErrors;
 
             const QString trackingPath =
-                    profileDir.filePath("tracking_template.bmp");
+                    wordTemplateProfileAssetPath(
+                        profile,
+                        QStringLiteral("trackingTemplate"),
+                        QStringLiteral("tracking_template.bmp"));
             QFile trackingFile(trackingPath);
             cv::Mat diskTrackingTemplate;
             if (trackingFile.open(QIODevice::ReadOnly)) {
@@ -10553,7 +10555,10 @@ void Widget::on_plcbtn_clicked()
 
             CalibrationData diskCalibration;
             const QString calibrationPath =
-                    profileDir.filePath("calibrate_config.yaml");
+                    wordTemplateProfileAssetPath(
+                        profile,
+                        QStringLiteral("calibration"),
+                        QStringLiteral("calibrate_config.yaml"));
             const bool calibrationValid =
                     QFileInfo::exists(calibrationPath)
                     && diskCalibration.load(
