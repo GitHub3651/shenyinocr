@@ -85,6 +85,47 @@ bool TemplateRecipeEditSession::updateProfile(
     return true;
 }
 
+bool TemplateRecipeEditSession::updateProfiles(
+        const QVector<RecipeProfile> &profiles,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_isActive) {
+        setError(errorMessage,
+                 QStringLiteral("Template recipe edit session is not active."));
+        return false;
+    }
+    if (profiles.size() != m_assembly.recipe.profiles.size()) {
+        setError(errorMessage,
+                 QStringLiteral("Template recipe edit profile count does not match the current recipe."));
+        return false;
+    }
+
+    for (int profileIndex = 0; profileIndex < profiles.size(); ++profileIndex) {
+        const RecipeProfile &currentProfile =
+                m_assembly.recipe.profiles.at(profileIndex);
+        const RecipeProfile &updatedProfile = profiles.at(profileIndex);
+        if (updatedProfile.name != currentProfile.name
+                || updatedProfile.assetKeys != currentProfile.assetKeys) {
+            setError(errorMessage,
+                     QStringLiteral("Template recipe edit cannot change profile identity or asset bindings at index %1.")
+                     .arg(profileIndex));
+            return false;
+        }
+    }
+
+    ProductRecipe candidate = m_assembly.recipe;
+    candidate.profiles = profiles;
+    if (!validateProductRecipe(candidate, errorMessage)) {
+        return false;
+    }
+
+    m_assembly.recipe = candidate;
+    return true;
+}
+
 bool TemplateRecipeEditSession::publish(
         const RecipeStore &store,
         RecipeSelection *publishedSelection,

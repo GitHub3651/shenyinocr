@@ -39,6 +39,7 @@ private slots:
     void draftSessionRejectsChangedSourceAndKeepsIdentity();
     void editSessionRepublishesProfileChangesWithSameIdentity();
     void editSessionRejectsInvalidChangesAndPreservesState();
+    void editSessionUpdatesProfilesAtomically();
 };
 
 namespace {
@@ -1660,6 +1661,115 @@ void RecipeStoreTest::editSessionRejectsInvalidChangesAndPreservesState()
 
     session.reset();
     QVERIFY(!session.isActive());
+}
+
+void RecipeStoreTest::editSessionUpdatesProfilesAtomically()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString firstTracking = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("first-tracking.bmp"));
+    const QString firstCalibration = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("first-calibration.yaml"));
+    const QString secondTracking = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("second-tracking.bmp"));
+    const QString secondCalibration = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("second-calibration.yaml"));
+    QVERIFY(writeBytes(firstTracking, QByteArray("first-tracking")));
+    QVERIFY(writeBytes(firstCalibration, QByteArray("first-calibration")));
+    QVERIFY(writeBytes(secondTracking, QByteArray("second-tracking")));
+    QVERIFY(writeBytes(secondCalibration, QByteArray("second-calibration")));
+
+    ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("batch-editable"), DetectionMode::Word);
+    const QString stableRecipeId = recipeHeader.recipeId;
+    QVector<TemplateRecipeProfileSource> profileSources;
+    for (int profileIndex = 0; profileIndex < 2; ++profileIndex) {
+        const bool isFirst = profileIndex == 0;
+        const QString prefix = isFirst
+                ? QStringLiteral("first")
+                : QStringLiteral("second");
+        TemplateRecipeProfileSource profileSource;
+        profileSource.profile.name = prefix;
+        profileSource.profile.targetText = isFirst
+                ? QStringLiteral("A")
+                : QStringLiteral("B");
+        profileSource.profile.imageThreshold = isFirst ? 70 : 75;
+        profileSource.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+        profileSource.profile.hasValidBoxes = true;
+        profileSource.assetManifest.profileAssetKeys.insert(
+                    QStringLiteral("trackingTemplate"),
+                    prefix + QStringLiteral("Tracking"));
+        profileSource.assetManifest.profileAssetKeys.insert(
+                    QStringLiteral("calibration"),
+                    prefix + QStringLiteral("Calibration"));
+        profileSource.assetManifest.recipeAssets.insert(
+                    prefix + QStringLiteral("Tracking"),
+                    QStringLiteral("assets/profiles/%1/tracking.bmp")
+                    .arg(profileIndex));
+        profileSource.assetManifest.recipeAssets.insert(
+                    prefix + QStringLiteral("Calibration"),
+                    QStringLiteral("assets/profiles/%1/calibration.yaml")
+                    .arg(profileIndex));
+        profileSource.assetManifest.assetSourcePaths.insert(
+                    prefix + QStringLiteral("Tracking"),
+                    isFirst ? firstTracking : secondTracking);
+        profileSource.assetManifest.assetSourcePaths.insert(
+                    prefix + QStringLiteral("Calibration"),
+                    isFirst ? firstCalibration : secondCalibration);
+        profileSources.append(profileSource);
+    }
+
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    RecipeSelection selection;
+    QString errorMessage;
+    QVERIFY2(publishTemplateRecipe(store,
+                                   recipeHeader,
+                                   profileSources,
+                                   &selection,
+                                   &errorMessage),
+             qPrintable(errorMessage));
+
+    TemplateRecipeEditSession session;
+    QVERIFY2(session.begin(selection, &errorMessage),
+             qPrintable(errorMessage));
+    QVector<RecipeProfile> updatedProfiles = session.recipe().profiles;
+    updatedProfiles[0].targetText = QStringLiteral("C");
+    updatedProfiles[0].imageThreshold = 81;
+    updatedProfiles[1].targetText = QStringLiteral("D");
+    updatedProfiles[1].imageThreshold = 82;
+    QVERIFY2(session.updateProfiles(updatedProfiles, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(session.recipe().profiles.at(0).targetText, QStringLiteral("C"));
+    QCOMPARE(session.recipe().profiles.at(1).targetText, QStringLiteral("D"));
+
+    QVector<RecipeProfile> invalidProfiles = session.recipe().profiles;
+    invalidProfiles[0].targetText = QStringLiteral("E");
+    invalidProfiles[1].name = QStringLiteral("changed-identity");
+    QVERIFY(!session.updateProfiles(invalidProfiles, &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("index 1")));
+    QCOMPARE(session.recipe().profiles.at(0).targetText, QStringLiteral("C"));
+    QCOMPARE(session.recipe().profiles.at(1).targetText, QStringLiteral("D"));
+
+    RecipeSelection publishedSelection;
+    QVERIFY2(session.publish(store,
+                             &publishedSelection,
+                             &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(publishedSelection.recipe->recipeId, stableRecipeId);
+    QCOMPARE(publishedSelection.profiles.size(), 2);
+    QCOMPARE(publishedSelection.profiles.at(0).profile.name,
+             QStringLiteral("first"));
+    QCOMPARE(publishedSelection.profiles.at(0).profile.targetText,
+             QStringLiteral("C"));
+    QCOMPARE(publishedSelection.profiles.at(0).profile.imageThreshold, 81.0);
+    QCOMPARE(publishedSelection.profiles.at(1).profile.name,
+             QStringLiteral("second"));
+    QCOMPARE(publishedSelection.profiles.at(1).profile.targetText,
+             QStringLiteral("D"));
+    QCOMPARE(publishedSelection.profiles.at(1).profile.imageThreshold, 82.0);
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

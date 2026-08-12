@@ -18,6 +18,9 @@ public:
                        const RecipeProfile &profile,
                        QString *errorMessage = nullptr);
 
+    bool updateProfiles(const QVector<RecipeProfile> &profiles,
+                        QString *errorMessage = nullptr);
+
     bool publish(const RecipeStore &store,
                  RecipeSelection *publishedSelection,
                  QString *errorMessage = nullptr);
