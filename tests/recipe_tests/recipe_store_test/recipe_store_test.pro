@@ -18,6 +18,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/template_profile_load_plan.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_assembler.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_draft_session.cpp \
+    $$PROJECT_ROOT/app/recipes/template_recipe_edit_session.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_publisher.cpp
 
 HEADERS += \
@@ -28,6 +29,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/recipes/template_profile_assets.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_assembler.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_draft_session.h \
+    $$PROJECT_ROOT/app/recipes/template_recipe_edit_session.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_publisher.h
 
 INCLUDEPATH += \

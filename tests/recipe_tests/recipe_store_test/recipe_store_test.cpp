@@ -5,6 +5,7 @@
 #include "template_profile_load_plan.h"
 #include "template_recipe_assembler.h"
 #include "template_recipe_draft_session.h"
+#include "template_recipe_edit_session.h"
 #include "template_recipe_publisher.h"
 
 #include <QDir>
@@ -36,6 +37,8 @@ private slots:
     void publishingFailurePreservesPreviousRecipeAndOutput();
     void republishingSameHeaderKeepsIdentityAndReplacesAssets();
     void draftSessionRejectsChangedSourceAndKeepsIdentity();
+    void editSessionRepublishesProfileChangesWithSameIdentity();
+    void editSessionRejectsInvalidChangesAndPreservesState();
 };
 
 namespace {
@@ -1457,6 +1460,203 @@ void RecipeStoreTest::draftSessionRejectsChangedSourceAndKeepsIdentity()
              qPrintable(errorMessage));
     QCOMPARE(catalog.recipes.size(), 1);
     QCOMPARE(catalog.recipes.first().recipeId, stableRecipeId);
+
+    session.reset();
+    QVERIFY(!session.isActive());
+}
+
+void RecipeStoreTest::editSessionRepublishesProfileChangesWithSameIdentity()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString trackingSource = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationSource = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("calibration.yaml"));
+    QVERIFY(writeBytes(trackingSource, QByteArray("tracking")));
+    QVERIFY(writeBytes(calibrationSource, QByteArray("calibration")));
+
+    ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("editable"), DetectionMode::Word);
+    const QString stableRecipeId = recipeHeader.recipeId;
+    TemplateRecipeProfileSource profileSource;
+    profileSource.profile.name = QStringLiteral("profile");
+    profileSource.profile.targetText = QStringLiteral("A");
+    profileSource.profile.imageThreshold = 70;
+    profileSource.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    profileSource.profile.hasValidBoxes = true;
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("tracking"));
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("calibration"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("tracking"),
+                QStringLiteral("assets/tracking.bmp"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("assets/calibration.yaml"));
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("tracking"), trackingSource);
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("calibration"), calibrationSource);
+
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.append(profileSource);
+    RecipeSelection selection;
+    QString errorMessage;
+    QVERIFY2(publishTemplateRecipe(store,
+                                   recipeHeader,
+                                   profileSources,
+                                   &selection,
+                                   &errorMessage),
+             qPrintable(errorMessage));
+
+    TemplateRecipeEditSession session;
+    QVERIFY2(session.begin(selection, &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(session.isActive());
+    QCOMPARE(session.recipe().recipeId, stableRecipeId);
+
+    RecipeProfile editedProfile = session.recipe().profiles.first();
+    editedProfile.targetText = QStringLiteral("B");
+    editedProfile.imageThreshold = 82;
+    QVERIFY2(session.updateProfile(0, editedProfile, &errorMessage),
+             qPrintable(errorMessage));
+
+    RecipeSelection publishedSelection;
+    QVERIFY2(session.publish(store,
+                             &publishedSelection,
+                             &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(publishedSelection.recipe->recipeId, stableRecipeId);
+    QCOMPARE(publishedSelection.profiles.first().profile.targetText,
+             QStringLiteral("B"));
+    QCOMPARE(publishedSelection.profiles.first().profile.imageThreshold, 82.0);
+    QCOMPARE(session.recipe().recipeId, stableRecipeId);
+    QCOMPARE(session.recipe().profiles.first().targetText,
+             QStringLiteral("B"));
+    QCOMPARE(readBytes(publishedSelection.profiles.first()
+                       .assetPathsByRole.value(
+                           QStringLiteral("trackingTemplate"))),
+             QByteArray("tracking"));
+
+    RecipeCatalog catalog;
+    QVERIFY2(store.listRecipes(&catalog, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(catalog.recipes.size(), 1);
+    QCOMPARE(catalog.recipes.first().recipeId, stableRecipeId);
+}
+
+void RecipeStoreTest::editSessionRejectsInvalidChangesAndPreservesState()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString trackingSource = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationSource = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("calibration.yaml"));
+    QVERIFY(writeBytes(trackingSource, QByteArray("tracking")));
+    QVERIFY(writeBytes(calibrationSource, QByteArray("calibration")));
+
+    ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("editable"), DetectionMode::BarcodeWord);
+    TemplateRecipeProfileSource profileSource;
+    profileSource.profile.name = QStringLiteral("profile");
+    profileSource.profile.targetText = QStringLiteral("A");
+    profileSource.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    profileSource.profile.hasValidBoxes = true;
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("tracking"));
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("calibration"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("tracking"),
+                QStringLiteral("assets/tracking.bmp"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("assets/calibration.yaml"));
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("tracking"), trackingSource);
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("calibration"), calibrationSource);
+
+    const QString recipesRoot = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("recipes"));
+    const RecipeStore store(recipesRoot);
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.append(profileSource);
+    RecipeSelection selection;
+    QString errorMessage;
+    QVERIFY2(publishTemplateRecipe(store,
+                                   recipeHeader,
+                                   profileSources,
+                                   &selection,
+                                   &errorMessage),
+             qPrintable(errorMessage));
+
+    TemplateRecipeEditSession session;
+    QVERIFY2(session.begin(selection, &errorMessage),
+             qPrintable(errorMessage));
+
+    RecipeProfile invalidProfile = session.recipe().profiles.first();
+    invalidProfile.assetKeys.remove(QStringLiteral("calibration"));
+    QVERIFY(!session.updateProfile(0, invalidProfile, &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("asset bindings")));
+    QCOMPARE(session.recipe().profiles.first().targetText,
+             QStringLiteral("A"));
+
+    RecipeProfile editedProfile = session.recipe().profiles.first();
+    editedProfile.targetText = QStringLiteral("B");
+    QVERIFY2(session.updateProfile(0, editedProfile, &errorMessage),
+             qPrintable(errorMessage));
+
+    const RecipeStore rejectingStore(
+                recipesRoot,
+                [](const ProductRecipe &,
+                   const QString &,
+                   const QString &,
+                   QString *assetError) {
+        if (assetError) {
+            *assetError = QStringLiteral("forced validation failure");
+        }
+        return false;
+    });
+    RecipeSelection unchangedSelection = selection;
+    QVERIFY(!session.publish(rejectingStore,
+                             &unchangedSelection,
+                             &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("forced validation failure")));
+    QCOMPARE(unchangedSelection.recipe->recipeId,
+             selection.recipe->recipeId);
+    QCOMPARE(unchangedSelection.profiles.first().profile.targetText,
+             QStringLiteral("A"));
+    QCOMPARE(session.recipe().profiles.first().targetText,
+             QStringLiteral("B"));
+
+    ProductRecipe storedRecipe;
+    QVERIFY2(store.loadRecipe(recipeHeader.recipeId,
+                              &storedRecipe,
+                              &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(storedRecipe.profiles.first().targetText,
+             QStringLiteral("A"));
+
+    QVERIFY2(session.publish(store,
+                             &unchangedSelection,
+                             &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(unchangedSelection.recipe->recipeId,
+             recipeHeader.recipeId);
+    QCOMPARE(unchangedSelection.profiles.first().profile.targetText,
+             QStringLiteral("B"));
 
     session.reset();
     QVERIFY(!session.isActive());
