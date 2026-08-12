@@ -21,6 +21,21 @@ private slots:
     void runtimeSnapshotIsIndependentFromEditableRecipe();
 };
 
+namespace {
+
+RecipeProfile validProfile(const QString &name)
+{
+    RecipeProfile profile;
+    profile.name = name;
+    profile.targetText = QStringLiteral("A1");
+    profile.imageThreshold = 70.0;
+    profile.trackingBox = QRectF(10.0, 20.0, 120.0, 80.0);
+    profile.hasValidBoxes = true;
+    return profile;
+}
+
+} // namespace
+
 void ProductRecipeTest::newTissueRecipeUsesCanonicalIdentityAndSixPointZeroDefault()
 {
     const ProductRecipe recipe =
@@ -51,6 +66,25 @@ void ProductRecipeTest::jsonRoundTripRetainsModeParametersAndAssets()
                            QStringLiteral("assets/tracking_template.bmp"));
     original.assets.insert(QStringLiteral("calibration"),
                            QStringLiteral("assets/calibrate_config.yaml"));
+    original.assets.insert(QStringLiteral("characterA"),
+                           QStringLiteral("assets/character_templates/A.bmp"));
+    RecipeProfile profile = validProfile(QStringLiteral("profile-1"));
+    profile.characterSourceImageSize = QSize(200, 100);
+    RecipeCharacterBox characterBox;
+    characterBox.name = QStringLiteral("A");
+    characterBox.rect = QRect(5, 6, 20, 30);
+    profile.characterBoxes.append(characterBox);
+    profile.barcodeParameters.formatMask = 3u;
+    profile.barcodeParameters.roiPaddingPercent = 12;
+    profile.barcodeParameters.maxDecodeTimeMs = 75;
+    profile.barcodeParameters.enableFallback = false;
+    profile.assetKeys.insert(QStringLiteral("trackingTemplate"),
+                             QStringLiteral("trackingTemplate"));
+    profile.assetKeys.insert(QStringLiteral("calibration"),
+                             QStringLiteral("calibration"));
+    profile.assetKeys.insert(QStringLiteral("character/A"),
+                             QStringLiteral("characterA"));
+    original.profiles.append(profile);
 
     ProductRecipe loaded;
     QString errorMessage;
@@ -65,6 +99,25 @@ void ProductRecipeTest::jsonRoundTripRetainsModeParametersAndAssets()
     QCOMPARE(detectionModeId(loaded.detectionMode),
              QStringLiteral("barcode_word_detection"));
     QVERIFY(loaded.assets == original.assets);
+    QCOMPARE(loaded.profiles.size(), 1);
+    const RecipeProfile loadedProfile = loaded.profiles.first();
+    QCOMPARE(loadedProfile.name, profile.name);
+    QCOMPARE(loadedProfile.targetText, profile.targetText);
+    QCOMPARE(loadedProfile.imageThreshold, profile.imageThreshold);
+    QCOMPARE(loadedProfile.trackingBox, profile.trackingBox);
+    QCOMPARE(loadedProfile.hasValidBoxes, true);
+    QCOMPARE(loadedProfile.characterSourceImageSize,
+             profile.characterSourceImageSize);
+    QCOMPARE(loadedProfile.characterBoxes.size(), 1);
+    QCOMPARE(loadedProfile.characterBoxes.first().name,
+             characterBox.name);
+    QCOMPARE(loadedProfile.characterBoxes.first().rect,
+             characterBox.rect);
+    QCOMPARE(loadedProfile.barcodeParameters.formatMask, 3u);
+    QCOMPARE(loadedProfile.barcodeParameters.roiPaddingPercent, 12);
+    QCOMPARE(loadedProfile.barcodeParameters.maxDecodeTimeMs, 75);
+    QCOMPARE(loadedProfile.barcodeParameters.enableFallback, false);
+    QVERIFY(loadedProfile.assetKeys == profile.assetKeys);
 }
 
 void ProductRecipeTest::invalidFieldsAndEscapingAssetAreRejected()
@@ -82,6 +135,25 @@ void ProductRecipeTest::invalidFieldsAndEscapingAssetAreRejected()
                           QStringLiteral("../outside.bmp"));
     QVERIFY(!validateProductRecipe(invalid, &errorMessage));
     QVERIFY(errorMessage.contains(QStringLiteral("assets/")));
+
+    ProductRecipe invalidProfileRecipe =
+            createProductRecipe(QStringLiteral("invalid-profile"),
+                                DetectionMode::Word);
+    invalidProfileRecipe.assets.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("assets/tracking_template.bmp"));
+    RecipeProfile invalidProfile = validProfile(QStringLiteral("profile"));
+    QCOMPARE(invalidProfile.characterSourceImageSize, QSize(0, 0));
+    invalidProfile.assetKeys.insert(QStringLiteral("calibration"),
+                                    QStringLiteral("missingAsset"));
+    invalidProfileRecipe.profiles.append(invalidProfile);
+    QVERIFY(!validateProductRecipe(invalidProfileRecipe, &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("asset reference")));
+
+    invalidProfileRecipe.profiles[0].assetKeys.clear();
+    invalidProfileRecipe.profiles[0].hasValidBoxes = false;
+    QVERIFY(!validateProductRecipe(invalidProfileRecipe, &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("trackingBox")));
 
     ProductRecipe unchanged =
             createProductRecipe(QStringLiteral("\u4fdd\u7559\u5bf9\u8c61"),

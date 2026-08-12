@@ -10,8 +10,8 @@
 4. Build `product_recipe_test`、`recipe_store_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`、`stamp_detection_pipeline_test`、`word_detection_pipeline_test`、`barcode_word_detection_pipeline_test`和`profile_pose_selector_test`。
 5. 分别运行八个测试目标，确认各自4个业务测试函数全部通过。
 
-`recipe_tests`包含两个独立目标。`product_recipe_test`验证五种模式ID、Schema 1 JSON往返、
-非法字段/越界资源路径拒绝和不可变运行快照；`recipe_store_test`只在系统临时目录验证
+`recipe_tests`包含两个独立目标。`product_recipe_test`验证五种模式ID、Schema 1 Profile参数JSON往返、
+无效定位/阈值/字符框/二维码参数、悬空或越界资源拒绝和不可变运行快照；`recipe_store_test`只在系统临时目录验证
 `recipe.json`及资源复制、整目录覆盖，以及资源缺失、校验失败或目录提交失败时保留旧配方。
 它们不读写用户模板目录，也不改变主程序入口。
 

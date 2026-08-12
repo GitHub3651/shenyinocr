@@ -3,7 +3,11 @@
 
 #include <QJsonObject>
 #include <QMap>
+#include <QRect>
+#include <QRectF>
+#include <QSize>
 #include <QString>
+#include <QVector>
 
 #include <memory>
 
@@ -21,6 +25,33 @@ struct TissueRecipeParameters
     double roughnessThreshold = 6.0;
 };
 
+struct BarcodeRecipeParameters
+{
+    unsigned int formatMask = 1u;
+    int roiPaddingPercent = 8;
+    int maxDecodeTimeMs = 60;
+    bool enableFallback = true;
+};
+
+struct RecipeCharacterBox
+{
+    QString name;
+    QRect rect;
+};
+
+struct RecipeProfile
+{
+    QString name;
+    QString targetText;
+    double imageThreshold = 70.0;
+    QRectF trackingBox;
+    bool hasValidBoxes = false;
+    QSize characterSourceImageSize = QSize(0, 0);
+    QVector<RecipeCharacterBox> characterBoxes;
+    BarcodeRecipeParameters barcodeParameters;
+    QMap<QString, QString> assetKeys;
+};
+
 struct ProductRecipe
 {
     static const int CurrentSchemaVersion = 1;
@@ -30,6 +61,7 @@ struct ProductRecipe
     QString displayName;
     DetectionMode detectionMode = DetectionMode::Stamp;
     TissueRecipeParameters tissueParameters;
+    QVector<RecipeProfile> profiles;
     QMap<QString, QString> assets;
 };
 

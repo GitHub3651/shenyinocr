@@ -42,6 +42,12 @@ ProductRecipe recipeWithAsset(const QString &displayName,
 {
     ProductRecipe recipe = createProductRecipe(displayName, DetectionMode::Word);
     recipe.assets.insert(assetKey, relativeAssetPath);
+    RecipeProfile profile;
+    profile.name = QStringLiteral("profile");
+    profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    profile.hasValidBoxes = true;
+    profile.assetKeys.insert(QStringLiteral("testAsset"), assetKey);
+    recipe.profiles.append(profile);
     return recipe;
 }
 
@@ -135,6 +141,9 @@ void RecipeStoreTest::successfulOverwriteReplacesWholeDirectory()
     recipe.assets.clear();
     recipe.assets.insert(QStringLiteral("newAsset"),
                          QStringLiteral("assets/new.bin"));
+    recipe.profiles[0].assetKeys.clear();
+    recipe.profiles[0].assetKeys.insert(QStringLiteral("testAsset"),
+                                        QStringLiteral("newAsset"));
     QMap<QString, QString> secondSources;
     secondSources.insert(QStringLiteral("newAsset"), secondSource);
     QVERIFY2(store.saveRecipe(recipe, secondSources, &errorMessage),
