@@ -11,6 +11,7 @@
 #include "recipes/recipe_selection.h"
 #include "recipes/template_profile_load_plan.h"
 #include "recipes/template_profile_mapper.h"
+#include "recipes/template_recipe_publisher.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
@@ -38,6 +39,7 @@
 #include <QHeaderView>
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QString>
 #include <QPixmap>
 #include <QMessageBox>
@@ -6173,10 +6175,21 @@ void Widget::showManualCharacterTemplateCropDialog()
         }
     }
 
+    QString recipePublishMessage;
+    if (reloadMessage.isEmpty() && m_hasWordTemplateRecipeDraft) {
+        QString publishError;
+        if (!publishWordTemplateRecipeDraft(&publishError)) {
+            recipePublishMessage =
+                    QString("\n\n字符模板已保存，但新产品配方同步失败：\n%1")
+                    .arg(publishError);
+        }
+    }
+
     showParameterInfo("提示",
-                      QString("已保存 %1 张字符模板图片。%2")
+                      QString("已保存 %1 张字符模板图片。%2%3")
                       .arg(dialog.savedCount())
-                      .arg(reloadMessage));
+                      .arg(reloadMessage)
+                      .arg(recipePublishMessage));
 }
 
 void Widget::setupWordTemplateEditorCombo()
@@ -6417,6 +6430,7 @@ void Widget::setupDetectModeChangeTracking()
 void Widget::clearWordMultiTemplateState()
 {
     clearBarcodeTemplateValidation();
+    resetWordTemplateRecipeDraft();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
     currentTemplateDirPath.clear();
@@ -6544,6 +6558,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
             return;
         }
 
+        resetWordTemplateRecipeDraft();
         m_wordTemplateProfiles.swap(loadedProfiles);
         refreshWordTemplateRecipeAssets();
         if (validPaths != paths) {
@@ -7301,6 +7316,85 @@ void Widget::refreshWordTemplateRecipeAssets()
         profile.recipeProfile.assetKeys =
                 profile.recipeAssetManifest.profileAssetKeys;
     }
+}
+
+void Widget::resetWordTemplateRecipeDraft()
+{
+    m_hasWordTemplateRecipeDraft = false;
+    m_wordTemplateRecipeDraftSourceDir.clear();
+}
+
+void Widget::prepareWordTemplateRecipeDraft(
+        const WordTemplateProfile &profile)
+{
+    resetWordTemplateRecipeDraft();
+
+    DetectionMode detectionMode;
+    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
+            || (detectionMode != DetectionMode::Word
+                && detectionMode != DetectionMode::BarcodeWord)
+            || profile.dirPath.trimmed().isEmpty()) {
+        return;
+    }
+
+    const QString displayName = profile.name.trimmed().isEmpty()
+            ? QDir(profile.dirPath).dirName()
+            : profile.name.trimmed();
+    m_wordTemplateRecipeDraftHeader =
+            createProductRecipe(displayName, detectionMode);
+    m_wordTemplateRecipeDraftSourceDir =
+            QDir::cleanPath(QFileInfo(profile.dirPath).absoluteFilePath());
+    m_hasWordTemplateRecipeDraft = true;
+}
+
+bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_hasWordTemplateRecipeDraft) {
+        return true;
+    }
+    if (m_wordTemplateProfiles.size() != 1) {
+        if (errorMessage) {
+            *errorMessage = "本次新建配方只允许包含一个产品模板。";
+        }
+        return false;
+    }
+
+    const WordTemplateProfile &profile = m_wordTemplateProfiles.front();
+    const QString currentSourceDir =
+            QDir::cleanPath(QFileInfo(profile.dirPath).absoluteFilePath());
+    if (currentSourceDir.compare(m_wordTemplateRecipeDraftSourceDir,
+                                 Qt::CaseInsensitive) != 0) {
+        if (errorMessage) {
+            *errorMessage = "当前产品模板与待同步的新建配方不一致。";
+        }
+        return false;
+    }
+
+    TemplateRecipeProfileSource profileSource;
+    profileSource.profile = profile.recipeProfile;
+    profileSource.assetManifest = profile.recipeAssetManifest;
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.append(profileSource);
+
+    const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
+                            .filePath("recipes"));
+    RecipeSelection publishedSelection;
+    if (!publishTemplateRecipe(store,
+                               m_wordTemplateRecipeDraftHeader,
+                               profileSources,
+                               &publishedSelection,
+                               errorMessage)) {
+        return false;
+    }
+
+    m_wordTemplateRecipeDraftHeader = *publishedSelection.recipe;
+    qDebug() << "[RECIPE_PUBLISH] published word recipe:"
+             << m_wordTemplateRecipeDraftHeader.recipeId
+             << publishedSelection.recipeDirectoryPath;
+    return true;
 }
 
 void Widget::applyTissueRecipeParametersToThreads(
@@ -9112,6 +9206,7 @@ void Widget::on_pushButton_5_clicked()
         m_wordTemplateProfiles.clear();
         m_wordTemplateProfiles.push_back(savedProfile);
         refreshWordTemplateRecipeAssets();
+        prepareWordTemplateRecipeDraft(m_wordTemplateProfiles.front());
         m_currentWordTemplateEditIndex = 0;
         refreshWordTemplateEditorCombo();
         storeCurrentTemplatePathsForMode(currentDetectModeId());
@@ -9389,6 +9484,7 @@ void Widget::on_pushButton_4_clicked()
                 return;
             }
 
+            resetWordTemplateRecipeDraft();
             m_wordTemplateProfiles.swap(loadedProfiles);
             refreshWordTemplateRecipeAssets();
             currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
