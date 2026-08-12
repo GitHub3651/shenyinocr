@@ -1,6 +1,8 @@
 #include <QtTest/QtTest>
 
+#include "appsettingsmanager.h"
 #include "product_recipe.h"
+#include "template_profile_mapper.h"
 
 #include <QJsonObject>
 #include <QUuid>
@@ -19,6 +21,7 @@ private slots:
     void jsonRoundTripRetainsModeParametersAndAssets();
     void invalidFieldsAndEscapingAssetAreRejected();
     void runtimeSnapshotIsIndependentFromEditableRecipe();
+    void templatePrivateSettingsMappingRetainsProfileFields();
 };
 
 namespace {
@@ -179,6 +182,77 @@ void ProductRecipeTest::runtimeSnapshotIsIndependentFromEditableRecipe()
 
     QCOMPARE(snapshot->displayName, QStringLiteral("\u7eb8\u5dfeA"));
     QCOMPARE(snapshot->tissueParameters.roughnessThreshold, 6.0);
+}
+
+void ProductRecipeTest::templatePrivateSettingsMappingRetainsProfileFields()
+{
+    TemplatePrivateSettings source;
+    source.targetText = QStringLiteral("A1");
+    source.imageThreshold = 63.0;
+    source.trackingBox = cv::Rect2d(10.5, 20.25, 120.0, 80.0);
+    source.hasValidBoxes = true;
+    source.characterSourceImageSize = QSize(200, 100);
+    CharacterTemplateBox characterBox;
+    characterBox.name = QStringLiteral("A");
+    characterBox.rect = QRect(5, 6, 20, 30);
+    source.characterBoxes.append(characterBox);
+    source.barcodeOptions.formatMask = 3u;
+    source.barcodeOptions.roiPaddingPercent = 12;
+    source.barcodeOptions.maxDecodeTimeMs = 75;
+    source.barcodeOptions.enableFallback = false;
+
+    QMap<QString, QString> assetKeys;
+    assetKeys.insert(QStringLiteral("trackingTemplate"),
+                     QStringLiteral("profileTracking"));
+    assetKeys.insert(QStringLiteral("calibration"),
+                     QStringLiteral("profileCalibration"));
+    const RecipeProfile profile =
+            recipeProfileFromTemplatePrivateSettings(
+                QStringLiteral("profile-1"), source, assetKeys);
+
+    QCOMPARE(profile.name, QStringLiteral("profile-1"));
+    QCOMPARE(profile.targetText, source.targetText);
+    QCOMPARE(profile.imageThreshold, source.imageThreshold);
+    QCOMPARE(profile.trackingBox,
+             QRectF(source.trackingBox.x,
+                    source.trackingBox.y,
+                    source.trackingBox.width,
+                    source.trackingBox.height));
+    QCOMPARE(profile.hasValidBoxes, source.hasValidBoxes);
+    QCOMPARE(profile.characterSourceImageSize,
+             source.characterSourceImageSize);
+    QCOMPARE(profile.characterBoxes.size(), 1);
+    QCOMPARE(profile.characterBoxes.first().name, characterBox.name);
+    QCOMPARE(profile.characterBoxes.first().rect, characterBox.rect);
+    QCOMPARE(profile.barcodeParameters.formatMask, 3u);
+    QCOMPARE(profile.barcodeParameters.roiPaddingPercent, 12);
+    QCOMPARE(profile.barcodeParameters.maxDecodeTimeMs, 75);
+    QCOMPARE(profile.barcodeParameters.enableFallback, false);
+    QVERIFY(profile.assetKeys == assetKeys);
+
+    const TemplatePrivateSettings restored =
+            templatePrivateSettingsFromRecipeProfile(profile);
+    QCOMPARE(restored.configVersion, source.configVersion);
+    QCOMPARE(restored.targetText, source.targetText);
+    QCOMPARE(restored.imageThreshold, source.imageThreshold);
+    QCOMPARE(restored.trackingBox.x, source.trackingBox.x);
+    QCOMPARE(restored.trackingBox.y, source.trackingBox.y);
+    QCOMPARE(restored.trackingBox.width, source.trackingBox.width);
+    QCOMPARE(restored.trackingBox.height, source.trackingBox.height);
+    QCOMPARE(restored.hasValidBoxes, source.hasValidBoxes);
+    QCOMPARE(restored.characterSourceImageSize,
+             source.characterSourceImageSize);
+    QCOMPARE(restored.characterBoxes.size(), 1);
+    QCOMPARE(restored.characterBoxes.first().name, characterBox.name);
+    QCOMPARE(restored.characterBoxes.first().rect, characterBox.rect);
+    QCOMPARE(restored.barcodeOptions.formatMask,
+             source.barcodeOptions.formatMask);
+    QCOMPARE(restored.barcodeOptions.roiPaddingPercent,
+             source.barcodeOptions.roiPaddingPercent);
+    QCOMPARE(restored.barcodeOptions.maxDecodeTimeMs,
+             source.barcodeOptions.maxDecodeTimeMs);
+    QCOMPARE(restored.barcodeOptions.enableFallback,
+             source.barcodeOptions.enableFallback);
 }
 
 QTEST_APPLESS_MAIN(ProductRecipeTest)

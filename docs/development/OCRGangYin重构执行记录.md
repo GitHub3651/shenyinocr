@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 1 配方与算法拆分（按用户风险接受条件进入）
-- 当前切片：Profile配方数据合同（用户门禁通过，待创建独立提交）
-- 阶段结论：**Stage 1进行中**。RecipeStore基础事务存储已形成提交`c3ef246`。Profile合同的两个配方测试和主程序门禁均已通过；旧模板制作、选择、编辑和私有INI入口保持原样，本基础切片可形成回退点。
+- 当前切片：旧模板Profile到新`RecipeProfile`的无损映射（用户门禁通过，待创建独立提交）
+- 阶段结论：**Stage 1进行中**。Profile配方数据合同已形成提交`0174003`。旧Profile映射测试和主工程门禁均已通过；旧INI、资源校验、部分成功策略和检测行为保持不变，本切片可形成回退点。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -89,6 +89,13 @@
 - 校验边界：纸巾配方禁止混入Profile；非纸巾至少一个Profile；拒绝无效定位框、越界阈值、非法字符框/源图尺寸、非法二维码参数和悬空资源键引用；JSON失败继续保持调用方对象不变。
 - 保持边界：不修改`Widget`、`AppSettingsManager`、旧目录/INI、ROI/YAML/图片生成、Profile选择与编辑、检测、相机、PLC、统计或存图；不要求兼容尚未投入使用的旧版新Schema数据。
 
+## Stage 1已完成旧模板Profile映射切片
+
+- 受影响功能ID：`SET-003`、`TPL-009`、`TPL-011..015`；七项开始前均为`已基线`。`TPL-008`的非字库单模板入口不经过本加载链，保持基线。
+- 旧调用链：字库/二维码选择一个或多个目录→`loadWordTemplateProfileFromDir`→读取`app_settings.appset`、YAML、定位图和字符图→构造`WordTemplateProfile`→保留有效项并维持部分成功策略。
+- 本切片目标：新增`recipes/template_profile_mapper.*`，无损转换`TemplatePrivateSettings`与`RecipeProfile`的目标文本、阈值、定位框、字符框/源图尺寸、二维码选项和资源键；旧Profile加载成功后额外缓存规范化RecipeProfile，旧目标字符、阈值和字符切割写入成功后同步刷新该缓存。
+- 保持边界：不切换旧INI或目录格式，不调用RecipeStore保存，不改变旧资源校验、自动修复、部分成功、提示、Profile顺序、检测缓存、UI、相机、PLC、统计或存图。
+
 ## 功能状态变化
 
 | 功能范围 | 修改前状态 | 修改后状态 | 本次为何涉及 | 验证证据 |
@@ -105,6 +112,7 @@
 | DET-003、DET-006 | 已验证 | 已验证 | 软/硬触发线程重复的多Profile最高分选择、同分顺序和二维码多边形映射提取到公共Selector | Agent静态检查通过；2026-08-12 17:19测试`6 passed, 0 failed`、退出码0；用户确认主工程正常 |
 | SET-003、TPL-006、TPL-008 | 已基线 | 已基线 | 新增RecipeStore加载、资源复制、临时目录重载校验和可回滚整目录替换；旧入口本切片不改，基础能力验证后恢复基线状态 | Agent静态检查、`recipe_store_test`、重组后的`product_recipe_test`和主工程门禁均通过 |
 | SET-003、TPL-006、TPL-008 | 已基线 | 已基线 | 为旧模板保存/加载入口补齐类型化Profile参数、字符框、二维码参数及资源引用JSON合同；旧入口本切片不改，基础能力验证后恢复基线状态 | Agent静态检查、两个配方测试和主工程门禁均通过；TPL-009..015保持旧入口基线状态 |
+| SET-003、TPL-009、TPL-011..015 | 已基线 | 已基线 | 旧字库家族Profile加载及后续设置写入成功后同步生成规范化RecipeProfile缓存，并用双向映射测试锁定字段无损 | Agent静态检查、`product_recipe_test`和主工程门禁均通过；旧INI和成功/失败策略不变；TPL-008保持基线 |
 | MC-001 | 无对照表 | 已基线 | 当前多相机窗口入口仍可达 | 源码静态核对；实际入口待用户 |
 | MC-002..003 | 无对照表 | 已延期 | 计划3.6明确本轮不扩建/迁移多相机；当前窗口控制按钮未接底层Controller | 源码/UI零接线核对；计划依据 |
 | TOOL-001..002 | 无对照表 | 已基线 | 独立授权工程和条码DLL工程仍是当前可进入/部署能力 | 工程/源码静态核对；构建待用户 |
@@ -200,6 +208,9 @@
 | Stage 1 Profile合同ProductRecipe测试 | 用户在Qt Creator Release运行`product_recipe_test` | 完整Barcode Profile往返、非法Profile拒绝和原纸巾/快照业务测试共4项通过 | 2026-08-12 18:54:57首次运行汇总`5 passed, 1 failed`、退出码1；默认`QSize()`为`(-1,-1)`，导致悬空资源测试被字符源图尺寸校验提前拒绝；显式初始化为`(0,0)`后，用户确认复验全部PASS | 通过（用户证据） |
 | Stage 1 Profile合同RecipeStore回归 | 用户在Qt Creator Release运行`recipe_store_test` | 带Profile资源引用的保存/加载、覆盖及两类失败保旧共4项通过 | 2026-08-12 18:55:56首次运行汇总`2 passed, 4 failed`、退出码4；4项均因默认`QSize()`为`(-1,-1)`而在保存前校验失败；显式初始化为`(0,0)`后，用户确认复验全部PASS | 通过（用户证据） |
 | Stage 1 Profile合同主程序门禁 | 用户在Qt Creator Release对主工程Rebuild、Run | 扩展后的ProductRecipe可编译链接；主窗口正常启动；旧模板入口行为不变 | 2026-08-12用户确认“主窗口启动正常” | 通过（用户证据） |
+| Stage 1旧Profile映射切片边界 | 白名单、依赖、双向字段映射、旧加载/编辑接入点、测试和Git差异检查 | 只新增映射器、规范化内存缓存和映射测试；不改旧INI/资源校验/检测/硬件 | 10个工作区条目；主/测试工程各2个映射器条目；11类字段0缺失；1个加载入口及5个设置成功赋值全部同步、0个遗漏；5项ProductRecipe业务测试；受保护旧设置实现、字符切割对话框、检测线程、相机和PLC文件0改动；90个ID唯一且74/7/7/2；`git diff --check`通过 | 通过 |
+| Stage 1旧Profile映射测试 | 用户在Qt Creator Release运行`product_recipe_test` | 新增映射业务测试通过，原4项业务测试继续通过 | 2026-08-12 20:29:09汇总`7 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
+| Stage 1旧Profile映射主程序门禁 | 用户Run qmake、Rebuild、Run并选择字库或二维码模式 | 主窗口正常启动；模式切换不受新缓存影响 | 2026-08-12用户确认主工程Run qmake、Rebuild、Run及模式切换没有问题 | 通过（用户证据） |
 | Stage 1配方测试构建与编码修复 | 用户在Qt Creator/MSVC 2017 Release构建并运行`product_recipe_test` | 4项业务测试通过 | 首次因无BOM UTF-8中文字面量被代码页936解析而报`C4819/C2001/C1057`；改用C++11 Unicode转义后，2026-08-12 00:58用户复验为`6 passed, 0 failed, 0 skipped`，1ms，退出码0 | 通过（用户证据） |
 | 当前纸巾Pipeline测试 | 用户在Qt Creator Release tests工程Run qmake、构建并运行`tissue_roll_detector_baseline_test` | 配方6.0默认、显式阈值、空图和纯黑图4项业务测试通过 | 2026-08-12用户确认新纸巾Pipeline测试汇总`6 passed, 0 failed` | 通过（用户证据） |
 | 固定样本清单 | 解析TSV必填字段并按模式分组 | 15行、五模式各3类 | 15行；每模式OK/NG/FAILURE各一项；0行缺关键字段 | 通过 |
@@ -214,25 +225,25 @@
 
 ## 用户Qt Creator门禁
 
-### A. 当前Profile配方合同切片：主程序构建与启动
+### A. 当前旧Profile映射切片：主程序构建与启动
 
 1. Qt Creator打开 `app/AutoOCRproject.pro`。
 2. 选择Qt 5.14.2、MSVC 2017 64-bit Kit和Release配置。
-3. 本切片没有修改`.pro`或增删文件，直接Rebuild并Run即可。
+3. 本切片新增`recipes/template_profile_mapper.*`并修改主工程清单，先执行Run qmake，再Rebuild并Run。
 4. 确认Release部署脚本完成、授权有效、主窗正常打开。
-5. 本切片尚未接管旧模板入口，不要求重复模板操作。
+5. 切换到“字库匹配”或“二维码+三期”；若有现成模板，选择一次并确认Profile名称、目标字符和阈值仍能正常显示。没有现成模板时只反馈主窗口和模式切换结果，不临时制作生产模板。
 6. 反馈完整构建结论和启动结论；失败时提供首个错误及相关上下文。
 
-### B. Stage 1 Profile合同及RecipeStore回归测试
+### B. Stage 1旧Profile映射测试
 
 1. Qt Creator另开 `tests/tests.pro`。
-2. 工程清单未改变，Build并运行`product_recipe_test`，确认扩展后的4项业务测试通过。
-3. Build并运行`recipe_store_test`，确认带Profile资源引用后的4项事务测试仍通过。
-4. 两个目标各自加上QtTest自动初始化/清理，汇总均应为`6 passed, 0 failed`。
+2. `product_recipe_test`工程清单已增加映射器源码，先执行Run qmake。
+3. Build并运行`product_recipe_test`，确认原4项及新增双向映射测试共5项业务测试通过。
+4. 加上QtTest自动初始化/清理，汇总应为`7 passed, 0 failed`。
 
 ### C. 本切片不要求重复运行的目标
 
-所有`detection_tests`源码/子工程均未修改，不作为本切片必选门禁。
+`recipe_store_test`和所有`detection_tests`源码/子工程均未修改，不作为本切片必选门禁。
 
 ### D. 已延期：五模式原入口固定样本
 
@@ -309,6 +320,11 @@
 - [x] Profile合同`product_recipe_test`门禁：2026-08-12首次运行`5 passed, 1 failed`；修复默认`QSize(-1,-1)`问题后，用户确认复验全部PASS。
 - [x] Profile合同`recipe_store_test`回归：2026-08-12首次运行`2 passed, 4 failed`；修复同一默认尺寸问题后，用户确认复验全部PASS。
 - [x] Profile合同主程序Rebuild/Run门禁：2026-08-12用户确认主窗口启动正常。
+- [x] Profile配方数据合同切片已创建独立提交`0174003`。
+- [x] 开始旧Profile映射切片时工作区干净，HEAD为`0174003`。
+- [x] 旧Profile映射切片Agent静态检查通过；未执行构建、链接、测试或主程序。
+- [x] 旧Profile映射`product_recipe_test`门禁：2026-08-12 20:29:09，`7 passed, 0 failed`，退出码0。
+- [x] 旧Profile映射主程序与模式切换门禁：2026-08-12用户确认Run qmake、Rebuild、Run均没有问题。
 
 ## 本地提交记录
 
@@ -324,6 +340,7 @@
 | `f2658f2` | Stage 1二维码+三期模式 | DET-006 | 读码优先、失败短路、日期子流程组合判定和离线测试 | Agent静态检查、二维码Pipeline测试及主程序模式门禁均通过 |
 | `1d24601` | Stage 1多Profile最高分选择 | DET-003、DET-006 | 无效Pose跳过、严格最高分、同分先到优先、Profile索引和二维码多边形映射 | Agent静态检查、Profile选择测试及主工程门禁均通过 |
 | `c3ef246` | Stage 1 RecipeStore基础事务存储 | SET-003、TPL-006、TPL-008 | UUID目录加载、资源复制、临时目录重载校验、备份替换和提交失败恢复 | Agent静态检查、两个配方测试及主程序门禁均通过；旧模板入口保持基线 |
+| `0174003` | Stage 1 Profile配方数据合同 | SET-003、TPL-006、TPL-008 | 类型化Profile/字符框/二维码参数、Schema 1 JSON及资源键引用校验 | Agent静态检查、两个配方测试及主程序门禁均通过；旧模板入口保持基线 |
 
 ## 未解决事项
 
@@ -335,7 +352,7 @@
 
 ## 结论
 
-- 当前切片：Stage 1 Profile配方数据合同；代码、Agent静态检查、两个配方测试和主程序门禁均已通过，可创建独立提交。
+- 当前切片：Stage 1旧模板Profile到新RecipeProfile的无损映射；代码、Agent静态检查、映射测试和主工程门禁均已通过，可创建独立提交。
 - 当前阶段：Stage 1进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线81 / 迁移中0 / 已验证7 / 已延期2 / 已确认删除0。
-- 下一允许动作：创建Profile配方数据合同提交，再追踪并开始旧模板数据映射接入的最小切片。
+- 下一允许动作：创建旧Profile映射提交，再追踪配方资源清单组装的最小切片。

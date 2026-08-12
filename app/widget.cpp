@@ -8,6 +8,7 @@
 
 #include "widget.h"
 #include "ui_widget.h"
+#include "recipes/template_profile_mapper.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
@@ -6132,7 +6133,10 @@ void Widget::showManualCharacterTemplateCropDialog()
     if (AppSettingsManager::loadTemplatePrivateSettings(templateDirPath,
                                                         &refreshedSettings,
                                                         &refreshedSettingsError)) {
-        m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].settings = refreshedSettings;
+        WordTemplateProfile &profile =
+                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+        profile.settings = refreshedSettings;
+        refreshWordTemplateRecipeProfile(&profile);
     } else {
         showParameterCritical("严重警告",
                               QString("字符模板图片已生成，但字符框配置重新读取失败：\n%1")
@@ -7001,6 +7005,7 @@ bool Widget::loadWordTemplateProfileFromDir(const QString &dirPath,
     loadedProfile.barcodePoly = calib.barcode_poly;
     loadedProfile.datePoly = calib.date_poly;
     loadedProfile.settings = privateSettings;
+    refreshWordTemplateRecipeProfile(&loadedProfile);
 
     const QStringList baseNames = parseWordTemplateBaseNames(privateSettings.targetText);
     loadedProfile.targetCount = baseNames.size();
@@ -7054,6 +7059,21 @@ bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
         showParameterInfo("提示", "粗糙度阈值设置成功");
     }
     return true;
+}
+
+void Widget::refreshWordTemplateRecipeProfile(
+    WordTemplateProfile *profile) const
+{
+    if (!profile) {
+        return;
+    }
+
+    const QMap<QString, QString> assetKeys =
+            profile->recipeProfile.assetKeys;
+    profile->recipeProfile =
+            recipeProfileFromTemplatePrivateSettings(profile->name,
+                                                     profile->settings,
+                                                     assetKeys);
 }
 
 void Widget::applyTissueRecipeParametersToThreads(
@@ -7949,6 +7969,7 @@ void Widget::on_textsure_btn_clicked()
         }
 
         profile.settings = updatedSettings;
+        refreshWordTemplateRecipeProfile(&profile);
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
@@ -8087,6 +8108,7 @@ void Widget::on_batchTextsure_btn_clicked()
         }
 
         profile.settings = updatedSettings;
+        refreshWordTemplateRecipeProfile(&profile);
         profile.targetCount = baseNamesToFind.size();
         profile.digitTemplates = tempTemplates;
         profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
@@ -8180,6 +8202,7 @@ void Widget::on_batchImageThresholdButton_clicked()
         }
 
         profile.settings = updatedSettings;
+        refreshWordTemplateRecipeProfile(&profile);
         if (i == currentProfileIndex) {
             currentProfileUpdated = true;
         }
@@ -8421,6 +8444,7 @@ void Widget::on_pushButton_3_clicked()
         }
 
         profile.settings = updatedSettings;
+        refreshWordTemplateRecipeProfile(&profile);
         emit ssim(thresholdValue);
         refreshTemplateImageThresholdDirty();
         showParameterInfo("提示",

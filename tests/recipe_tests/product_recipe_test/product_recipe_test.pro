@@ -12,13 +12,17 @@ PROJECT_ROOT = $$clean_path($$PWD/../../..)
 
 SOURCES += \
     ../product_recipe_test.cpp \
-    $$PROJECT_ROOT/app/recipes/product_recipe.cpp
+    $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
+    $$PROJECT_ROOT/app/recipes/template_profile_mapper.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/recipes/product_recipe.h
+    $$PROJECT_ROOT/app/recipes/product_recipe.h \
+    $$PROJECT_ROOT/app/recipes/template_profile_mapper.h
 
 INCLUDEPATH += \
-    $$PROJECT_ROOT/app/recipes
+    $$PROJECT_ROOT/app \
+    $$PROJECT_ROOT/app/recipes \
+    $$PROJECT_ROOT/third_party/opencv/include
 
 CONFIG(debug, debug|release) {
     QMAKE_CXXFLAGS_DEBUG += /MTd

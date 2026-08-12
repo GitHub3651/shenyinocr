@@ -522,6 +522,7 @@ private:
         std::vector<cv::Point2f> barcodePoly;
         std::vector<cv::Point2f> datePoly;
         TemplatePrivateSettings settings;
+        RecipeProfile recipeProfile;
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
         std::vector<int> digitTemplateTargetIndexes;
@@ -556,6 +557,8 @@ private:
                                         WordTemplateProfile *profile,
                                         QString *errorMessage);
     void refreshWordTemplateProfileDigitCache(
+        WordTemplateProfile *profile) const;
+    void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
     void setupWordTemplateEditorCombo();
     void setupDetectModeChangeTracking();
