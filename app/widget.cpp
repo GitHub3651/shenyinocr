@@ -6137,6 +6137,7 @@ void Widget::showManualCharacterTemplateCropDialog()
                 m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
         profile.settings = refreshedSettings;
         refreshWordTemplateRecipeProfile(&profile);
+        refreshWordTemplateRecipeAssets();
     } else {
         showParameterCritical("严重警告",
                               QString("字符模板图片已生成，但字符框配置重新读取失败：\n%1")
@@ -6542,6 +6543,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         }
 
         m_wordTemplateProfiles.swap(loadedProfiles);
+        refreshWordTemplateRecipeAssets();
         if (validPaths != paths) {
             m_templateDirPathsByMode.insert(modeId, validPaths);
             saveSettings(false);
@@ -7074,6 +7076,21 @@ void Widget::refreshWordTemplateRecipeProfile(
             recipeProfileFromTemplatePrivateSettings(profile->name,
                                                      profile->settings,
                                                      assetKeys);
+}
+
+void Widget::refreshWordTemplateRecipeAssets()
+{
+    for (int profileIndex = 0;
+         profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
+         ++profileIndex) {
+        WordTemplateProfile &profile =
+                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+        profile.recipeAssetManifest =
+                buildTemplateProfileAssetManifest(profile.dirPath,
+                                                  profileIndex);
+        profile.recipeProfile.assetKeys =
+                profile.recipeAssetManifest.profileAssetKeys;
+    }
 }
 
 void Widget::applyTissueRecipeParametersToThreads(
@@ -8884,6 +8901,7 @@ void Widget::on_pushButton_5_clicked()
         }
         m_wordTemplateProfiles.clear();
         m_wordTemplateProfiles.push_back(savedProfile);
+        refreshWordTemplateRecipeAssets();
         m_currentWordTemplateEditIndex = 0;
         refreshWordTemplateEditorCombo();
         storeCurrentTemplatePathsForMode(currentDetectModeId());
@@ -9162,6 +9180,7 @@ void Widget::on_pushButton_4_clicked()
             }
 
             m_wordTemplateProfiles.swap(loadedProfiles);
+            refreshWordTemplateRecipeAssets();
             currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
             m_currentTemplateNameVisible = false;
             updateCurrentTemplateName();

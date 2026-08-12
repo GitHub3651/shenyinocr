@@ -13,10 +13,12 @@ PROJECT_ROOT = $$clean_path($$PWD/../../..)
 SOURCES += \
     ../product_recipe_test.cpp \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
+    $$PROJECT_ROOT/app/recipes/template_profile_assets.cpp \
     $$PROJECT_ROOT/app/recipes/template_profile_mapper.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
+    $$PROJECT_ROOT/app/recipes/template_profile_assets.h \
     $$PROJECT_ROOT/app/recipes/template_profile_mapper.h
 
 INCLUDEPATH += \

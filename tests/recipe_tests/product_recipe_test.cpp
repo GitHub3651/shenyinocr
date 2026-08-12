@@ -2,9 +2,13 @@
 
 #include "appsettingsmanager.h"
 #include "product_recipe.h"
+#include "template_profile_assets.h"
 #include "template_profile_mapper.h"
 
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonObject>
+#include <QTemporaryDir>
 #include <QUuid>
 
 #include <type_traits>
@@ -22,6 +26,7 @@ private slots:
     void invalidFieldsAndEscapingAssetAreRejected();
     void runtimeSnapshotIsIndependentFromEditableRecipe();
     void templatePrivateSettingsMappingRetainsProfileFields();
+    void templateProfileAssetManifestPreservesVariantsAndNamespaces();
 };
 
 namespace {
@@ -253,6 +258,70 @@ void ProductRecipeTest::templatePrivateSettingsMappingRetainsProfileFields()
              source.barcodeOptions.maxDecodeTimeMs);
     QCOMPARE(restored.barcodeOptions.enableFallback,
              source.barcodeOptions.enableFallback);
+}
+
+void ProductRecipeTest::templateProfileAssetManifestPreservesVariantsAndNamespaces()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    auto writeAsset = [&temporaryDirectory](const QString &fileName) {
+        QFile file(temporaryDirectory.filePath(fileName));
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            return false;
+        }
+        return file.write("asset") == 5;
+    };
+    QVERIFY(writeAsset(QStringLiteral("tracking_template.bmp")));
+    QVERIFY(writeAsset(QStringLiteral("calibrate_config.yaml")));
+    QVERIFY(writeAsset(QStringLiteral("template_raw.png")));
+    QVERIFY(writeAsset(QStringLiteral("template_ring.bmp")));
+    QVERIFY(writeAsset(QStringLiteral("A.png")));
+    QVERIFY(writeAsset(QStringLiteral("A(1).png")));
+    QVERIFY(writeAsset(QStringLiteral("A_2.JPG")));
+    QVERIFY(writeAsset(QStringLiteral("app_settings.appset")));
+
+    const TemplateProfileAssetManifest first =
+            buildTemplateProfileAssetManifest(temporaryDirectory.path(), 2);
+    QCOMPARE(first.recipeAssets.size(), 6);
+    QCOMPARE(first.assetSourcePaths.size(), first.recipeAssets.size());
+    QCOMPARE(first.profileAssetKeys.size(), first.recipeAssets.size());
+    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("trackingTemplate")),
+             QStringLiteral("profile2.trackingTemplate"));
+    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("calibration")),
+             QStringLiteral("profile2.calibration"));
+    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("rawImage")),
+             QStringLiteral("profile2.rawImage"));
+
+    const QStringList characterFileNames = {
+        QStringLiteral("A.png"),
+        QStringLiteral("A(1).png"),
+        QStringLiteral("A_2.JPG")
+    };
+    for (const QString &fileName : characterFileNames) {
+        const QString role = QStringLiteral("character/") + fileName;
+        const QString assetKey = first.profileAssetKeys.value(role);
+        QVERIFY(!assetKey.isEmpty());
+        QCOMPARE(first.recipeAssets.value(assetKey),
+                 QStringLiteral("assets/profiles/2/character_templates/")
+                 + fileName);
+        QCOMPARE(first.assetSourcePaths.value(assetKey),
+                 QFileInfo(temporaryDirectory.filePath(fileName))
+                 .absoluteFilePath());
+    }
+    QVERIFY(!first.assetSourcePaths.values().contains(
+                QFileInfo(temporaryDirectory.filePath(
+                              QStringLiteral("template_ring.bmp")))
+                .absoluteFilePath()));
+
+    const TemplateProfileAssetManifest second =
+            buildTemplateProfileAssetManifest(temporaryDirectory.path(), 3);
+    for (auto it = first.recipeAssets.constBegin();
+         it != first.recipeAssets.constEnd();
+         ++it) {
+        QVERIFY(!second.recipeAssets.contains(it.key()));
+        QVERIFY(!second.recipeAssets.values().contains(it.value()));
+    }
 }
 
 QTEST_APPLESS_MAIN(ProductRecipeTest)

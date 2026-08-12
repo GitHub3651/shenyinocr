@@ -71,6 +71,7 @@
 #include <Detector.h>
 #include "TrackingTypes.h"
 #include "appsettingsmanager.h"
+#include "recipes/template_profile_assets.h"
 #include "BarcodeDecoderApi.h"
 #include "BarcodeTypes.h"
 
@@ -523,6 +524,7 @@ private:
         std::vector<cv::Point2f> datePoly;
         TemplatePrivateSettings settings;
         RecipeProfile recipeProfile;
+        TemplateProfileAssetManifest recipeAssetManifest;
         int targetCount = 0;
         std::vector<cv::Mat> digitTemplates;
         std::vector<int> digitTemplateTargetIndexes;
@@ -560,6 +562,7 @@ private:
         WordTemplateProfile *profile) const;
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
+    void refreshWordTemplateRecipeAssets();
     void setupWordTemplateEditorCombo();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
