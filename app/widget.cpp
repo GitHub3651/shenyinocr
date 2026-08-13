@@ -12,6 +12,7 @@
 #include "recipes/template_character_asset_workspace.h"
 #include "recipes/template_profile_load_plan.h"
 #include "recipes/template_profile_mapper.h"
+#include "recipes/template_recipe_publisher.h"
 #include "ui/dialogs/recipe_selection_dialog.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
@@ -35,6 +36,7 @@
 #include <QListView>
 #include <QPainter>
 #include <QLineEdit>
+#include <QInputDialog>
 #include <QMetaType>
 #include <QStandardItemModel>
 #include <QHeaderView>
@@ -3983,6 +3985,10 @@ void Widget::updateOperationUiState()
         m_wordTemplateEditComboBox->setEnabled(
                     normalSettingsEnabled);
     }
+    if (m_publishTemplateGroupButton) {
+        m_publishTemplateGroupButton->setEnabled(
+                    normalSettingsEnabled);
+    }
     if (m_publishedRecipeButton) {
         m_publishedRecipeButton->setEnabled(
                     normalSettingsEnabled);
@@ -6595,6 +6601,19 @@ void Widget::setupWordTemplateEditorCombo()
                     "color: #a8abb2;"
                     "}");
 
+        m_publishTemplateGroupButton = new QPushButton(
+                    QStringLiteral("\u53D1\u5E03\u6A21\u677F\u7EC4"),
+                    m_wordTemplateEditWidget);
+        m_publishTemplateGroupButton->setObjectName(
+                    QStringLiteral("publishTemplateGroupButton"));
+        m_publishTemplateGroupButton->setFixedHeight(50);
+        m_publishTemplateGroupButton->setToolTip(
+                    QStringLiteral(
+                        "\u628A\u5F53\u524D\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
+                        "\u52A0\u8F7D\u7684\u591A\u4E2AProfile\uFF0C\u6309\u5F53\u524D\u987A\u5E8F"
+                        "\u53D1\u5E03\u4E3A\u4E00\u4E2A\u4EA7\u54C1\u914D\u65B9\u3002"));
+        m_publishTemplateGroupButton->setStyleSheet(commonPushButtonStyle);
+
         m_publishedRecipeButton = new QPushButton(
                     QStringLiteral("\u5DF2\u53D1\u5E03\u914D\u65B9"),
                     m_wordTemplateEditWidget);
@@ -6610,6 +6629,7 @@ void Widget::setupWordTemplateEditorCombo()
 
         editorLayout->addWidget(m_wordTemplateEditLabel);
         editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
+        editorLayout->addWidget(m_publishTemplateGroupButton);
         editorLayout->addWidget(m_publishedRecipeButton);
         if (targetLayout) {
             targetLayout->addWidget(m_wordTemplateEditWidget, 0, 0, 1, 3);
@@ -6621,6 +6641,10 @@ void Widget::setupWordTemplateEditorCombo()
                 [this](int index) {
                     applyWordTemplateEditorSelection(index);
                 });
+        connect(m_publishTemplateGroupButton,
+                &QPushButton::clicked,
+                this,
+                &Widget::publishCurrentWordTemplateGroup);
         connect(m_publishedRecipeButton,
                 &QPushButton::clicked,
                 this,
@@ -6960,6 +6984,21 @@ void Widget::refreshWordTemplateEditorCombo()
         m_manualCharacterCropButton->setVisible(isWordMode);
     }
 
+    bool allProfilesUseLegacyDirectories = hasWordProfiles;
+    for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+        if (!profile.resolvedAssetPathsByRole.isEmpty()) {
+            allProfilesUseLegacyDirectories = false;
+            break;
+        }
+    }
+    if (m_publishTemplateGroupButton) {
+        m_publishTemplateGroupButton->setVisible(
+                    isWordMode
+                    && m_wordTemplateProfiles.size() > 1
+                    && allProfilesUseLegacyDirectories
+                    && !m_wordTemplateRecipeEditSession.isActive());
+    }
+
     if (!m_wordTemplateEditComboBox || !m_wordTemplateEditWidget) {
         return;
     }
@@ -7076,6 +7115,190 @@ void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
              << "threshold:" << profile.settings.imageThreshold;
 
     displayWordTemplateRawImage(profile);
+}
+
+void Widget::publishCurrentWordTemplateGroup()
+{
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_templateCaptureState != TemplateCaptureState::Idle) {
+        showParameterWarning(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u8BF7\u5148\u505C\u6B62\u8BC6\u522B\u6216\u9000\u51FA"
+                        "\u6A21\u677F\u5236\u4F5C\uFF0C\u518D\u53D1\u5E03"
+                        "\u5F53\u524D\u6A21\u677F\u7EC4\u3002"));
+        return;
+    }
+
+    DetectionMode detectionMode;
+    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
+            || (detectionMode != DetectionMode::Word
+                && detectionMode != DetectionMode::BarcodeWord)) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u591AProfile\u914D\u65B9\u53EA\u7528\u4E8E"
+                        "\u5B57\u5E93\u5339\u914D\u548C\u4E8C\u7EF4\u7801+"
+                        "\u4E09\u671F\u6A21\u5F0F\u3002"));
+        return;
+    }
+    if (m_wordTemplateProfiles.size() < 2) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u8BF7\u5148\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
+                        "\u81F3\u5C11\u52A0\u8F7D\u4E24\u4E2A\u6709\u6548\u6A21\u677F\u3002"));
+        return;
+    }
+    if (m_wordTemplateRecipeEditSession.isActive()) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u5F53\u524D\u5DF2\u7ECF\u662F\u5DF2\u53D1\u5E03\u914D\u65B9\uFF0C"
+                        "\u65E0\u9700\u91CD\u590D\u53D1\u5E03\u6A21\u677F\u7EC4\u3002"));
+        return;
+    }
+    if (m_templateTargetTextDirty || m_templateImageThresholdDirty) {
+        showParameterWarning(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u5F53\u524DProfile\u8FD8\u6709\u672A\u786E\u8BA4\u7684"
+                        "\u76EE\u6807\u5B57\u7B26\u6216\u56FE\u50CF\u9608\u503C\u3002\n"
+                        "\u8BF7\u5148\u70B9\u51FB\u5BF9\u5E94\u7684\u786E\u8BA4/\u8BBE\u7F6E"
+                        "\u6309\u94AE\uFF0C\u518D\u53D1\u5E03\u6A21\u677F\u7EC4\u3002"));
+        return;
+    }
+
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.reserve(static_cast<int>(m_wordTemplateProfiles.size()));
+    for (int profileIndex = 0;
+         profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
+         ++profileIndex) {
+        const WordTemplateProfile &profile =
+                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+        if (!profile.resolvedAssetPathsByRole.isEmpty()) {
+            showParameterCritical(
+                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral(
+                            "Profile [%1] \u4E0D\u662F\u65E7\u6A21\u677F\u76EE\u5F55\uFF0C"
+                            "\u5F53\u524D\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\u3002")
+                        .arg(profile.name));
+            return;
+        }
+
+        const QDir sourceDirectory(profile.dirPath);
+        if (!sourceDirectory.exists()) {
+            showParameterCritical(
+                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral(
+                            "Profile [%1] \u7684\u65E7\u6A21\u677F\u76EE\u5F55\u5DF2\u4E0D\u5B58\u5728\uFF1A\n%2\n\n"
+                            "\u4EA7\u54C1\u914D\u65B9\u672A\u53D1\u5E03\uFF0C\u5F53\u524D\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\u3002")
+                        .arg(profile.name, profile.dirPath));
+            return;
+        }
+
+        TemplateRecipeProfileSource profileSource;
+        profileSource.assetManifest = buildTemplateProfileAssetManifest(
+                    sourceDirectory.absolutePath(), profileIndex);
+        const QString profileName = profile.name.trimmed().isEmpty()
+                ? sourceDirectory.dirName()
+                : profile.name.trimmed();
+        profileSource.profile = recipeProfileFromTemplatePrivateSettings(
+                    profileName,
+                    profile.settings,
+                    profileSource.assetManifest.profileAssetKeys);
+        profileSources.append(profileSource);
+    }
+
+    const WordTemplateProfile &firstProfile = m_wordTemplateProfiles.front();
+    QString firstProfileName = firstProfile.name.trimmed();
+    if (firstProfileName.isEmpty()) {
+        firstProfileName = QDir(firstProfile.dirPath).dirName();
+    }
+    const QString defaultDisplayName = QStringLiteral("%1\u7B49%2\u4E2A\u6A21\u677F")
+            .arg(firstProfileName)
+            .arg(static_cast<int>(m_wordTemplateProfiles.size()));
+    bool accepted = false;
+    const QString displayName = QInputDialog::getText(
+                this,
+                QStringLiteral("\u53D1\u5E03\u591AProfile\u4EA7\u54C1\u914D\u65B9"),
+                QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u540D\u79F0\uFF1A"),
+                QLineEdit::Normal,
+                defaultDisplayName,
+                &accepted).trimmed();
+    if (!accepted) {
+        return;
+    }
+    if (displayName.isEmpty()) {
+        showParameterWarning(
+                    QStringLiteral("\u53C2\u6570\u9519\u8BEF"),
+                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A\u3002"));
+        return;
+    }
+
+    const ProductRecipe recipeHeader = createProductRecipe(displayName,
+                                                            detectionMode);
+    const RecipeStore store(
+                QDir(AppSettingsManager::globalDataDirPath())
+                .filePath(QStringLiteral("recipes")));
+    RecipeSelection publishedSelection;
+    QString publishError;
+    if (!publishTemplateRecipe(store,
+                               recipeHeader,
+                               profileSources,
+                               &publishedSelection,
+                               &publishError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral(
+                        "\u591AProfile\u4EA7\u54C1\u914D\u65B9\u53D1\u5E03\u5931\u8D25\uFF0C"
+                        "\u5F53\u524D\u65E7\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                    .arg(publishError));
+        return;
+    }
+
+    QStringList pendingMessages;
+    QString activationError;
+    if (!activatePublishedWordRecipe(
+                publishedSelection.recipe->recipeId,
+                currentDetectModeId(),
+                false,
+                &pendingMessages,
+                &activationError)) {
+        qWarning() << "[RECIPE_PUBLISH] published word template group;"
+                   << "activation failed:"
+                   << publishedSelection.recipe->recipeId
+                   << activationError;
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral(
+                        "\u591AProfile\u4EA7\u54C1\u914D\u65B9\u5DF2\u53D1\u5E03\uFF0C"
+                        "\u4F46\u5F53\u524D\u7F13\u5B58\u88C5\u914D\u5931\u8D25\u3002\n"
+                        "\u5F53\u524D\u65E7\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\uFF0C"
+                        "\u8BF7\u7A0D\u540E\u901A\u8FC7\u201C\u5DF2\u53D1\u5E03\u914D\u65B9\u201D"
+                        "\u91CD\u65B0\u9009\u62E9\uFF1A\n%1")
+                    .arg(activationError));
+        return;
+    }
+    saveSettings(false);
+
+    qDebug() << "[RECIPE_PUBLISH] published word template group:"
+             << publishedSelection.recipe->recipeId
+             << publishedSelection.recipeDirectoryPath
+             << "profiles:" << publishedSelection.profiles.size();
+    QString message = QStringLiteral(
+                "\u5DF2\u628A %1 \u4E2AProfile\u53D1\u5E03\u4E3A\u4E00\u4E2A\u4EA7\u54C1\u914D\u65B9\u201C%2\u201D\u3002")
+            .arg(publishedSelection.profiles.size())
+            .arg(displayName);
+    if (!pendingMessages.isEmpty()) {
+        message += QStringLiteral(
+                    "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26\u5F85\u786E\u8BA4\uFF1A\n%1")
+                .arg(pendingMessages.join(QLatin1Char('\n')));
+        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
+    } else {
+        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
+    }
 }
 
 void Widget::selectPublishedWordRecipe()

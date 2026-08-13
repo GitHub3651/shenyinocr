@@ -436,23 +436,21 @@
 
 ## 用户Qt Creator门禁
 
-### A. 当前批量图像阈值重新发布切片：主程序构建与实际链路
+### A. 当前多Profile配方制作/发布闭环：主程序构建与实际链路
 
-1. Qt Creator打开 `app/AutoOCRproject.pro`。
-2. 选择Qt 5.14.2、MSVC 2017 64-bit Kit和Release配置。
-3. 本切片只修改已有Widget源码，直接Rebuild并Run；如Qt Creator提示工程状态变化，可先Run qmake。
-4. 确认Release部署脚本完成、授权有效、主窗正常打开。
-5. 切换到“字库匹配”或“二维码+三期”，新建一个目标字符为`1`的单Profile模板并完整裁切；确认日志出现`[RECIPE_PUBLISH] published word recipe:`，记下UUID和当前图像阈值。
-6. 不要先选择其他模板，把图像合格阈值改为一个不同的有效整数（建议`66`），点击“批量设置阈值”。
-7. 确认提示仍以“已将当前图像合格阈值保存到所有已选择的产品模板。”开头，并追加“产品配方已使用原配方编号重新发布”；日志只新增一条`[RECIPE_PUBLISH] republished word recipe:`，UUID与第5步完全相同，且没有“重新发布失败”。
-8. 确认当前目标字符仍为`1`、阈值显示为`66`；再选择一个现成旧模板，确认Profile、目标文本、阈值和原图显示正常。
-9. 反馈完整构建、启动和两条发布日志；失败时提供首个错误及相关上下文。
+1. Qt Creator打开 `app/AutoOCRproject.pro`，使用Qt 5.14.2、MSVC 2017 64-bit、Release执行Rebuild并Run；如工程状态提示需要，可先Run qmake。
+2. 切换到“字库匹配”或“二维码+三期”，通过旧“选择模板”一次勾选至少两个有效旧模板；确认Profile下拉框包含全部模板，逐项切换时原图、目标字符和阈值正确。
+3. 确认出现“发布模板组”，点击后输入一个新产品配方名称；确认日志出现`[RECIPE_PUBLISH] published word template group:`和`[RECIPE_SELECT] selected word recipe:`，两条为同一UUID且`profiles`数量正确，无发布/装配失败。
+4. 发布后逐项切换Profile，确认顺序、原图、目标字符和阈值仍与发布前一致；“已发布配方”列表可再次选择该新配方。
+5. 修改一次批量阈值并设置；确认只出现一次`[RECIPE_PUBLISH] republished word recipe:`，UUID仍为第3步UUID，所有Profile目标字符保持。
+6. 切换到其他模式再切回并重启主程序；确认出现`[RECIPE_RESTORE]`、全部Profile恢复，再启动/停止识别一次。
+7. 最后重新使用旧“选择模板”，确认旧多目录入口仍正常；失败时提供首个错误、相关日志和界面截图。
 
 ### B. Stage 1配方存储回归
 
 1. Qt Creator另开 `tests/tests.pro`。
-2. 本切片未修改测试源码或工程清单；直接构建并运行`recipe_store_test`。
-3. 确认汇总仍为`24 passed, 0 failed`。
+2. 执行Run qmake，构建并运行`recipe_store_test`。
+3. 确认新增多Profile发布顺序/资产测试及原回归汇总为`26 passed, 0 failed`。
 
 ### C. 本切片不要求重复运行的目标
 
@@ -667,6 +665,11 @@
 - [x] 当前切片复用原字符裁切对话框，但已发布配方只在`TemplateCharacterAssetWorkspace`临时工作区生成文件；recipes编辑会话负责原子替换当前Profile的资产命名空间并用同UUID事务发布，其他Profile及旧目录入口保持。
 - [x] 已发布配方字符资产编辑切片Agent静态检查通过：13个白名单文件（含2个新增recipes源文件），workspace/assembler替换/session替换/Widget接入/测试声明定义均各唯一1处，主工程及测试工程清单各包含新源和头1次；23项业务测试对应Qt Test预期汇总25项，90个功能ID唯一，状态77/4/7/2，检测/设备/runtime改动0处且`git diff --check`通过。未执行构建、链接、测试或主程序，等待用户Qt Creator门禁。
 - [x] 已发布配方字符资产编辑Qt Creator门禁：2026-08-13用户确认`recipe_store_test`预期25项、主工程Run qmake/Rebuild/Run、`566`字符裁切、原UUID重新发布、重选/重启持久化及旧目录裁切入口均无问题。
+- [x] 已发布配方字符资产编辑切片已创建独立提交`9aad739`。
+- [x] 开始多Profile配方制作/发布闭环切片时工作区干净，HEAD为`9aad739`；影响`TPL-006、TPL-009、TPL-010、TPL-012、TPL-014、TPL-016`。
+- [x] 当前切片把旧“选择模板”加载的有序多目录Profile组一次发布为一个多Profile产品配方，成功后复用已验证的选择/装配/编辑会话入口；失败保持原旧模板组和设置记忆。
+- [x] 多Profile配方制作/发布闭环Agent静态检查通过：5个白名单文件；发布命令声明/定义/连接及专项测试声明/定义各1处；24项业务测试对应Qt Test预期汇总26项；90个功能ID唯一，状态75/6/7/2；`.pro/.pri`、检测、设备和runtime改动0处，`git diff --check`通过。Agent未执行构建、链接、测试或主程序，等待用户Qt Creator门禁。
+- [x] 多Profile配方制作/发布闭环Qt Creator门禁：2026-08-13用户确认`recipe_store_test` 26项、主工程构建运行、Profile顺序/参数、模板组发布、批量同UUID、模式/重启恢复、启停及旧选择入口全部无问题。
 
 ## 本地提交记录
 
@@ -717,7 +720,7 @@
 
 ## 结论
 
-- 当前切片：Stage 1已发布配方字符模板资产编辑；实现、Agent静态检查、`recipe_store_test` 25项和主程序字符裁切/重选门禁均已通过，等待创建独立本地提交。
+- 当前切片：Stage 1多Profile配方制作/发布闭环；实现、静态检查、`recipe_store_test` 26项和主程序实际多Profile门禁均已通过，等待创建独立本地提交。
 - 当前阶段：Stage 1进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线81 / 迁移中0 / 已验证7 / 已延期2 / 已确认删除0。
-- 下一允许动作：创建已发布配方字符资产编辑独立本地提交，然后进入多Profile配方制作/发布闭环。
+- 下一允许动作：创建多Profile配方制作/发布闭环独立本地提交，再审计Stage 1剩余配方/模板边界并进入下一最小切片。

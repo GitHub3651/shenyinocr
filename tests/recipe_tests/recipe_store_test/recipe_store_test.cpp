@@ -35,6 +35,7 @@ private slots:
     void selectedRecipeAssemblyCanBeSavedBackFromInternalAssets();
     void selectedRecipeAssemblyFailurePreservesPreviousOutput();
     void publishingCommitsASelectableRecipe();
+    void publishingLegacyTemplateGroupPreservesProfileOrderAndAssets();
     void publishingFailurePreservesPreviousRecipeAndOutput();
     void republishingSameHeaderKeepsIdentityAndReplacesAssets();
     void draftSessionRejectsChangedSourceAndKeepsIdentity();
@@ -1222,6 +1223,107 @@ void RecipeStoreTest::publishingCommitsASelectableRecipe()
                        .assetPathsByRole.value(
                            QStringLiteral("trackingTemplate"))),
              QByteArray("tracking"));
+}
+
+void RecipeStoreTest::publishingLegacyTemplateGroupPreservesProfileOrderAndAssets()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    QVector<TemplateRecipeProfileSource> profileSources;
+    const QStringList profileNames = {
+        QStringLiteral("front"),
+        QStringLiteral("back")
+    };
+    const QStringList targetTexts = {
+        QStringLiteral("AB"),
+        QStringLiteral("CD")
+    };
+    for (int profileIndex = 0;
+         profileIndex < profileNames.size();
+         ++profileIndex) {
+        const QString sourceDirectory = QDir(temporaryDirectory.path()).filePath(
+                    QStringLiteral("legacy-%1").arg(profileIndex));
+        QVERIFY(QDir().mkpath(sourceDirectory));
+        QVERIFY(writeBytes(QDir(sourceDirectory).filePath(
+                               QStringLiteral("tracking_template.bmp")),
+                           QByteArray("tracking-")
+                           + QByteArray::number(profileIndex)));
+        QVERIFY(writeBytes(QDir(sourceDirectory).filePath(
+                               QStringLiteral("calibrate_config.yaml")),
+                           QByteArray("calibration-")
+                           + QByteArray::number(profileIndex)));
+        QVERIFY(writeBytes(QDir(sourceDirectory).filePath(
+                               QStringLiteral("template_raw.png")),
+                           QByteArray("raw-")
+                           + QByteArray::number(profileIndex)));
+        const QString firstCharacterFile = profileIndex == 0
+                ? QStringLiteral("A.jpg")
+                : QStringLiteral("C.jpg");
+        QVERIFY(writeBytes(QDir(sourceDirectory).filePath(firstCharacterFile),
+                           QByteArray("character-")
+                           + QByteArray::number(profileIndex)));
+
+        TemplateRecipeProfileSource source;
+        source.profile.name = profileNames.at(profileIndex);
+        source.profile.targetText = targetTexts.at(profileIndex);
+        source.profile.imageThreshold = 70.0 + profileIndex;
+        source.profile.trackingBox = QRectF(10.0 + profileIndex,
+                                            20.0,
+                                            30.0,
+                                            40.0);
+        source.profile.hasValidBoxes = true;
+        source.assetManifest = buildTemplateProfileAssetManifest(
+                    sourceDirectory,
+                    profileIndex);
+        profileSources.append(source);
+    }
+
+    const ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("two-profile-product"),
+                DetectionMode::Word);
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    RecipeSelection selection;
+    QString errorMessage;
+    QVERIFY2(publishTemplateRecipe(store,
+                                   recipeHeader,
+                                   profileSources,
+                                   &selection,
+                                   &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(selection.recipe);
+    QCOMPARE(selection.recipe->recipeId, recipeHeader.recipeId);
+    QCOMPARE(selection.profiles.size(), 2);
+    QCOMPARE(selection.profiles.at(0).profile.name,
+             QStringLiteral("front"));
+    QCOMPARE(selection.profiles.at(1).profile.name,
+             QStringLiteral("back"));
+    QCOMPARE(selection.profiles.at(0).profile.targetText,
+             QStringLiteral("AB"));
+    QCOMPARE(selection.profiles.at(1).profile.targetText,
+             QStringLiteral("CD"));
+    QCOMPARE(selection.profiles.at(0).profile.imageThreshold, 70.0);
+    QCOMPARE(selection.profiles.at(1).profile.imageThreshold, 71.0);
+    QCOMPARE(readBytes(selection.profiles.at(0).assetPathsByRole.value(
+                           QStringLiteral("trackingTemplate"))),
+             QByteArray("tracking-0"));
+    QCOMPARE(readBytes(selection.profiles.at(1).assetPathsByRole.value(
+                           QStringLiteral("trackingTemplate"))),
+             QByteArray("tracking-1"));
+    QCOMPARE(readBytes(selection.profiles.at(0).assetPathsByRole.value(
+                           QStringLiteral("character/A.jpg"))),
+             QByteArray("character-0"));
+    QCOMPARE(readBytes(selection.profiles.at(1).assetPathsByRole.value(
+                           QStringLiteral("character/C.jpg"))),
+             QByteArray("character-1"));
+
+    RecipeCatalog catalog;
+    QVERIFY2(store.listRecipes(&catalog, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(catalog.recipes.size(), 1);
+    QCOMPARE(catalog.recipes.first().recipeId, recipeHeader.recipeId);
+    QCOMPARE(catalog.recipes.first().profileCount, 2);
 }
 
 void RecipeStoreTest::publishingFailurePreservesPreviousRecipeAndOutput()

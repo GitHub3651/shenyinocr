@@ -358,6 +358,7 @@ private:
     QWidget *m_wordTemplateEditWidget = nullptr;
     QLabel *m_wordTemplateEditLabel = nullptr;
     QComboBox *m_wordTemplateEditComboBox = nullptr;
+    QPushButton *m_publishTemplateGroupButton = nullptr;
     QFrame *m_templateGuideFrame = nullptr;
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
@@ -607,6 +608,7 @@ private:
         const QVector<int> &profileIndexes,
         QString *errorMessage);
     void setupWordTemplateEditorCombo();
+    void publishCurrentWordTemplateGroup();
     void selectPublishedWordRecipe();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
