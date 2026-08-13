@@ -63,6 +63,7 @@ SOURCES += \
     recipes/template_recipe_publisher.cpp \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
+    devices/barcode/barcode_decoder_adapter.cpp \
     detection/common/profile_pose_selector.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/barcode_word/barcode_word_detection_pipeline.cpp \
@@ -113,6 +114,7 @@ HEADERS += \
     recipes/template_recipe_publisher.h \
     recipes/template_profile_mapper.h \
     ui/dialogs/recipe_selection_dialog.h \
+    devices/barcode/barcode_decoder_adapter.h \
     detection/common/profile_pose_selector.h \
     detection/ocr/ocr_detection_pipeline.h \
     detection/barcode_word/barcode_word_detection_pipeline.h \

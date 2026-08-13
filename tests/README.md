@@ -7,8 +7,8 @@
 1. 在Qt Creator中打开 `tests/tests.pro`。
 2. 选择与主程序一致的Qt 5.14.2、MSVC 2017 64-bit Kit，并使用Release配置。
 3. 首次打开或工程清单变化后执行 **Run qmake**。
-4. Build `product_recipe_test`、`recipe_store_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`、`stamp_detection_pipeline_test`、`word_detection_pipeline_test`、`barcode_word_detection_pipeline_test`和`profile_pose_selector_test`。
-5. 分别运行八个测试目标；`product_recipe_test`包含8个业务测试，`recipe_store_test`包含25个业务测试，其余目标各包含4个业务测试。
+4. Build `product_recipe_test`、`recipe_store_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`、`stamp_detection_pipeline_test`、`word_detection_pipeline_test`、`barcode_word_detection_pipeline_test`、`profile_pose_selector_test`和`barcode_decoder_adapter_test`。
+5. 分别运行九个测试目标；`product_recipe_test`包含8个业务测试，`recipe_store_test`包含26个业务测试，`barcode_decoder_adapter_test`包含6个业务测试，其余目标各包含4个业务测试。
 
 `recipe_tests`包含两个独立目标。`product_recipe_test`验证五种模式ID、Schema 1 Profile参数JSON往返、
 旧`TemplatePrivateSettings`与新`RecipeProfile`字段无损映射、无效定位/阈值/字符框/二维码参数、
@@ -25,8 +25,10 @@ Profile资源/字符变体枚举、钢印`stampRing`资产角色、多Profile资
 Profile选择目标验证无效候选跳过、严格最高分选择、同分保留先出现Profile，以及二维码相对多边形随命中位姿旋转平移。
 这些测试不会加载Paddle模型，也不会调用相机、PLC、存图或主界面。
 
+`runtime_tests`验证运行与设备边界而不加载真实生产设备。当前`barcode_decoder_adapter_test`通过注入假C ABI函数，验证DLL接口就绪、成功结果/格式/角点映射、坏ROI在调用前拒绝、ABI参数错误保持终止、禁用fallback只调用一次，以及缓存的首选预处理策略优先执行。它不加载真实`BarcodeDecoder.dll`，也不读取生产二维码图片。
+
 测试目标链接完成后会把当前Kit的`Qt5Core.dll`、`Qt5Test.dll`
-（Debug为带`d`后缀版本）复制到EXE目录；需要OpenCV的五个检测目标还会复制主程序
+（Debug为带`d`后缀版本）复制到EXE目录；需要OpenCV的五个检测目标和二维码设备适配器测试还会复制主程序
 Release发布包使用的x64 `opencv_world341.dll`，
 并读取PE头确认每个DLL与目标EXE架构一致，再逐个校验源文件和目标文件的SHA-256。
 这样即使Qt Creator把SUBDIRS工程配置为

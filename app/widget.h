@@ -17,6 +17,7 @@
 #include "opencv2/imgproc.hpp"
 #include <chrono>
 #include <iomanip>
+#include <memory>
 #include <vector>
 #include <QMetaType>
 #include <QTranslator>
@@ -73,8 +74,7 @@
 #include "appsettingsmanager.h"
 #include "recipes/template_profile_assets.h"
 #include "recipes/template_recipe_workflow.h"
-#include "BarcodeDecoderApi.h"
-#include "BarcodeTypes.h"
+#include "devices/barcode/barcode_decoder_adapter.h"
 
 using namespace cv;
 using namespace PaddleOCR;
@@ -564,10 +564,7 @@ private:
     std::vector<WordTemplateProfile> m_runningWordTemplateProfiles; ///< 字库家族本次识别专用的只读Profile快照
     bool m_wordTemplateRunActive = false; ///< 正式检测是否已安装字库家族运行快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
-    HMODULE m_barcodeDecoderModule = nullptr;
-    BarcodeDecoderGetVersionFunction m_barcodeGetVersion = nullptr;
-    BarcodeDecoderDecodeLuma8Function m_barcodeDecodeLuma8 = nullptr;
-    QString m_barcodeDecoderError;
+    std::unique_ptr<IBarcodeDecoder> m_barcodeDecoder;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
     QString m_validatedBarcodeText;
@@ -666,19 +663,6 @@ private:
                                const QString &barcodeState,
                                const QString &reason,
                                double postTrackingElapsedMs);
-    bool ensureBarcodeDecoderLoaded();
-    BarcodeReadResult decodeBarcodeRoi(
-        const cv::Mat &grayRoi,
-        const BarcodeDecodeOptions &options,
-        int preferredStrategyId = -1,
-        unsigned int preferredOptionFlags =
-            BARCODE_DECODER_OPTION_NONE,
-        int *successfulStrategyId = nullptr,
-        unsigned int *successfulOptionFlags = nullptr);
-    BarcodeReadResult decodeBarcodeRoiOnce(
-        const cv::Mat &grayRoi,
-        unsigned int formatMask,
-        unsigned int optionFlags) const;
     BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
     bool validateBarcodeTemplateRect(
         const QRect &uiBarcodeRect,
