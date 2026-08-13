@@ -228,6 +228,9 @@ protected:
 private:
     cv::Mat m_loadedTrackingTemplate;
     void showParameterInfo(const QString &title, const QString &message);
+    void showParameterInfoWithRedWarning(const QString &title,
+                                         const QString &message,
+                                         const QString &warningMessage);
     void showParameterInfoAsError(const QString &title, const QString &message);
     void showParameterWarning(const QString &title, const QString &message);
     void showParameterCritical(const QString &title, const QString &message);
@@ -353,6 +356,7 @@ private:
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
     QPushButton *m_manualCharacterCropButton = nullptr;
+    QPushButton *m_publishedRecipeButton = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QMap<QString, QStringList> m_templateDirPathsByMode;
@@ -596,6 +600,7 @@ private:
         const QVector<int> &profileIndexes,
         QString *errorMessage);
     void setupWordTemplateEditorCombo();
+    void selectPublishedWordRecipe();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
     void refreshWordTemplateEditorCombo();

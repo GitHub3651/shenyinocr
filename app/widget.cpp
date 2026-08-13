@@ -11,6 +11,7 @@
 #include "recipes/recipe_selection.h"
 #include "recipes/template_profile_load_plan.h"
 #include "recipes/template_profile_mapper.h"
+#include "ui/dialogs/recipe_selection_dialog.h"
 #include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
@@ -3981,6 +3982,10 @@ void Widget::updateOperationUiState()
         m_wordTemplateEditComboBox->setEnabled(
                     normalSettingsEnabled);
     }
+    if (m_publishedRecipeButton) {
+        m_publishedRecipeButton->setEnabled(
+                    normalSettingsEnabled);
+    }
     if (ui->dateEdit) {
         ui->dateEdit->setEnabled(
                     normalSettingsEnabled);
@@ -4489,6 +4494,35 @@ void Widget::showscreen()
 void Widget::showParameterInfo(const QString &title, const QString &message)
 {
     QMessageBox::information(this, title, message);
+}
+
+void Widget::showParameterInfoWithRedWarning(const QString &title,
+                                             const QString &message,
+                                             const QString &warningMessage)
+{
+    QString infoHtml = message.toHtmlEscaped();
+    infoHtml.replace("\r\n", "\n");
+    infoHtml.replace('\r', '\n');
+    infoHtml.replace("\n", "<br>");
+
+    QString warningHtml = warningMessage.toHtmlEscaped();
+    warningHtml.replace("\r\n", "\n");
+    warningHtml.replace('\r', '\n');
+    warningHtml.replace("\n", "<br>");
+
+    QMessageBox messageBox(QMessageBox::Warning,
+                           title,
+                           QString(),
+                           QMessageBox::Ok,
+                           this);
+    messageBox.setTextFormat(Qt::RichText);
+    messageBox.setText(
+                QString("<div>%1</div>"
+                        "<div style=\"margin-top:12px;color:#c00000;"
+                        "font-weight:700;\">%2</div>")
+                .arg(infoHtml)
+                .arg(warningHtml));
+    messageBox.exec();
 }
 
 void Widget::showParameterInfoAsError(const QString &title, const QString &message)
@@ -6073,13 +6107,24 @@ void Widget::showManualCharacterTemplateCropDialog()
         return;
     }
 
-    QString templateDirPath;
     const int profileIndex = currentWordTemplateProfileIndex();
     if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
         showParameterInfoAsError("提示", "请先选择当前编辑的产品模板。");
         return;
     }
-    templateDirPath = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].dirPath;
+    const WordTemplateProfile &selectedProfile =
+            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+    if (!selectedProfile.resolvedAssetPathsByRole.isEmpty()) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u5DF2\u53D1\u5E03\u914D\u65B9\u7684\u5B57\u7B26\u6A21\u677F"
+                        "\u589E\u5220\u5C1A\u672A\u63A5\u5165\u672C\u5165\u53E3\uFF1B"
+                        "\u5F53\u524D\u914D\u65B9\u8D44\u6E90\u4E0D\u4F1A\u88AB\u4FEE\u6539\u3002"));
+        return;
+    }
+
+    const QString templateDirPath = selectedProfile.dirPath;
 
     if (templateDirPath.trimmed().isEmpty() || !QDir(templateDirPath).exists()) {
         showParameterInfoAsError("提示", "请先选择产品模板文件夹。");
@@ -6193,26 +6238,27 @@ void Widget::showManualCharacterTemplateCropDialog()
 
 void Widget::setupWordTemplateEditorCombo()
 {
+    const QString commonPushButtonStyle =
+            "QPushButton {"
+            "background-color: transparent;"
+            "border: 1px solid #ebeef5;"
+            "border-radius: 4px;"
+            "color: #333333;"
+            "padding: 5px 10px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #f2f6fc;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #ebeef5;"
+            "}"
+            "QPushButton:disabled {"
+            "background-color: #f2f3f5;"
+            "color: #a8abb2;"
+            "border-color: #dcdfe6;"
+            "}";
+
     if (ui) {
-        const QString commonPushButtonStyle =
-                "QPushButton {"
-                "background-color: transparent;"
-                "border: 1px solid #ebeef5;"
-                "border-radius: 4px;"
-                "color: #333333;"
-                "padding: 5px 10px;"
-                "}"
-                "QPushButton:hover {"
-                "background-color: #f2f6fc;"
-                "}"
-                "QPushButton:pressed {"
-                "background-color: #ebeef5;"
-                "}"
-                "QPushButton:disabled {"
-                "background-color: #f2f3f5;"
-                "color: #a8abb2;"
-                "border-color: #dcdfe6;"
-                "}";
 
         if (ui->textsure_btn) ui->textsure_btn->setStyleSheet(commonPushButtonStyle);
         if (ui->batchTextsure_btn) ui->batchTextsure_btn->setStyleSheet(commonPushButtonStyle);
@@ -6370,8 +6416,22 @@ void Widget::setupWordTemplateEditorCombo()
                     "color: #a8abb2;"
                     "}");
 
+        m_publishedRecipeButton = new QPushButton(
+                    QStringLiteral("\u5DF2\u53D1\u5E03\u914D\u65B9"),
+                    m_wordTemplateEditWidget);
+        m_publishedRecipeButton->setObjectName(
+                    QStringLiteral("publishedRecipeButton"));
+        m_publishedRecipeButton->setFixedHeight(50);
+        m_publishedRecipeButton->setToolTip(
+                    QStringLiteral(
+                        "\u4ECE\u8F6F\u4EF6\u914D\u65B9\u5E93\u4E2D\u9009\u62E9"
+                        "\u5F53\u524D\u6A21\u5F0F\u5DF2\u7ECF\u53D1\u5E03\u7684"
+                        "\u4EA7\u54C1\u914D\u65B9\u3002"));
+        m_publishedRecipeButton->setStyleSheet(commonPushButtonStyle);
+
         editorLayout->addWidget(m_wordTemplateEditLabel);
         editorLayout->addWidget(m_wordTemplateEditComboBox, 1);
+        editorLayout->addWidget(m_publishedRecipeButton);
         if (targetLayout) {
             targetLayout->addWidget(m_wordTemplateEditWidget, 0, 0, 1, 3);
         }
@@ -6382,6 +6442,10 @@ void Widget::setupWordTemplateEditorCombo()
                 [this](int index) {
                     applyWordTemplateEditorSelection(index);
                 });
+        connect(m_publishedRecipeButton,
+                &QPushButton::clicked,
+                this,
+                &Widget::selectPublishedWordRecipe);
 
         m_wordTemplateEditComboBox->hide();
         m_wordTemplateEditWidget->hide();
@@ -6498,6 +6562,15 @@ void Widget::storeCurrentTemplatePathsForMode(const QString &modeId)
     if (modeId.trimmed().isEmpty()) {
         return;
     }
+    if (isWordFamilyMode(modeId)) {
+        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+            if (!profile.resolvedAssetPathsByRole.isEmpty()) {
+                // UUID配方的模式记忆在后续切片接入；此处保留原旧目录记忆，
+                // 避免把配方根目录误当作旧Profile目录写入全局设置。
+                return;
+            }
+        }
+    }
     m_templateDirPathsByMode.insert(modeId, currentTemplatePathsForMode(modeId));
 }
 
@@ -6520,9 +6593,25 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         QStringList validPaths;
         QStringList skippedMessages;
         QStringList userMessages;
+        bool removedRecipeStorePath = false;
+        const QString recipesRootPath = QDir::cleanPath(
+                    QDir(AppSettingsManager::globalDataDirPath())
+                    .filePath(QStringLiteral("recipes")));
 
         for (const QString &path : paths) {
             QDir templateDir(path);
+            const QString parentPath = QDir::cleanPath(
+                        QFileInfo(templateDir.absolutePath())
+                        .dir()
+                        .absolutePath());
+            if (QString::compare(parentPath,
+                                 recipesRootPath,
+                                 Qt::CaseInsensitive) == 0) {
+                removedRecipeStorePath = true;
+                qDebug() << "[TEMPLATE_RESTORE] removed recipe-store path from legacy memory:"
+                         << templateDir.absolutePath();
+                continue;
+            }
             if (!templateDir.exists()) {
                 skippedMessages.append(QString("%1：产品模板文件夹不存在").arg(path));
                 userMessages.append(
@@ -6550,9 +6639,11 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         if (loadedProfiles.empty()) {
             qDebug() << "[TEMPLATE_RESTORE] word templates restore failed:" << skippedMessages;
             clearWordMultiTemplateState();
-            if (!userMessages.isEmpty()) {
+            if (removedRecipeStorePath || !userMessages.isEmpty()) {
                 m_templateDirPathsByMode.insert(modeId, QStringList());
                 saveSettings(false);
+            }
+            if (!userMessages.isEmpty()) {
                 showParameterWarning("提示", userMessages.join("\n"));
             }
             return;
@@ -6562,7 +6653,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         m_wordTemplateRecipeEditSession.reset();
         m_wordTemplateProfiles.swap(loadedProfiles);
         refreshWordTemplateRecipeAssets();
-        if (validPaths != paths) {
+        if (removedRecipeStorePath || validPaths != paths) {
             m_templateDirPathsByMode.insert(modeId, validPaths);
             saveSettings(false);
             if (!userMessages.isEmpty()) {
@@ -6673,6 +6764,9 @@ void Widget::refreshWordTemplateEditorCombo()
         m_wordTemplateEditLabel->setText("当前编辑模板:");
     }
     m_wordTemplateEditComboBox->setVisible(isWordMode);
+    if (m_publishedRecipeButton) {
+        m_publishedRecipeButton->setVisible(isWordMode);
+    }
 
     if (!isWordMode) {
         m_currentWordTemplateEditIndex = -1;
@@ -6756,6 +6850,147 @@ void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
              << "threshold:" << profile.settings.imageThreshold;
 
     displayWordTemplateRawImage(profile);
+}
+
+void Widget::selectPublishedWordRecipe()
+{
+    if (m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || m_templateCaptureState != TemplateCaptureState::Idle) {
+        showParameterWarning(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u8BF7\u5148\u505C\u6B62\u8BC6\u522B\u6216\u9000\u51FA"
+                        "\u6A21\u677F\u5236\u4F5C\uFF0C\u518D\u9009\u62E9"
+                        "\u5DF2\u53D1\u5E03\u914D\u65B9\u3002"));
+        return;
+    }
+
+    DetectionMode detectionMode;
+    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
+            || (detectionMode != DetectionMode::Word
+                && detectionMode != DetectionMode::BarcodeWord)) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u5DF2\u53D1\u5E03\u5B57\u5E93\u914D\u65B9\u53EA\u7528\u4E8E"
+                        "\u5B57\u5E93\u5339\u914D\u548C\u4E8C\u7EF4\u7801+"
+                        "\u4E09\u671F\u6A21\u5F0F\u3002"));
+        return;
+    }
+
+    const RecipeStore store(
+                QDir(AppSettingsManager::globalDataDirPath())
+                .filePath(QStringLiteral("recipes")));
+    RecipeCatalog catalog;
+    QString catalogError;
+    if (!store.listRecipes(&catalog, &catalogError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral(
+                        "\u4EA7\u54C1\u914D\u65B9\u5217\u8868\u8BFB\u53D6\u5931\u8D25\uFF1A\n%1")
+                    .arg(catalogError));
+        return;
+    }
+
+    QVector<RecipeCatalogEntry> matchingRecipes;
+    for (const RecipeCatalogEntry &entry : catalog.recipes) {
+        if (entry.detectionMode == detectionMode) {
+            matchingRecipes.append(entry);
+        }
+    }
+    if (matchingRecipes.isEmpty()) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral(
+                        "\u5F53\u524D\u8BC6\u522B\u6A21\u5F0F\u8FD8\u6CA1\u6709"
+                        "\u53EF\u52A0\u8F7D\u7684\u5DF2\u53D1\u5E03\u914D\u65B9\u3002"));
+        return;
+    }
+
+    RecipeSelectionDialog dialog(matchingRecipes, this);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    RecipeSelection selection;
+    QString selectionError;
+    if (!loadRecipeSelection(store,
+                             dialog.selectedRecipeId(),
+                             detectionMode,
+                             &selection,
+                             &selectionError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral(
+                        "\u4EA7\u54C1\u914D\u65B9\u52A0\u8F7D\u5931\u8D25\uFF0C"
+                        "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                    .arg(selectionError));
+        return;
+    }
+
+    std::vector<WordTemplateProfile> loadedProfiles;
+    QStringList pendingMessages;
+    QString cacheError;
+    if (!loadWordTemplateProfilesFromRecipeSelection(
+                selection,
+                &loadedProfiles,
+                &pendingMessages,
+                &cacheError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral(
+                        "\u4EA7\u54C1\u914D\u65B9\u8D44\u6E90\u65E0\u6CD5\u88C5\u914D\uFF0C"
+                        "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                    .arg(cacheError));
+        return;
+    }
+
+    TemplateRecipeEditSession candidateEditSession;
+    QString editSessionError;
+    if (!candidateEditSession.begin(selection, &editSessionError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral(
+                        "\u4EA7\u54C1\u914D\u65B9\u7F16\u8F91\u4F1A\u8BDD\u65E0\u6CD5\u5EFA\u7ACB\uFF0C"
+                        "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                    .arg(editSessionError));
+        return;
+    }
+
+    resetTemplateCaptureState();
+    clearBarcodeTemplateValidation();
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+    }
+    hideTemplateGuide();
+    m_wordTemplateRecipeDraftSession.reset();
+    m_wordTemplateProfiles.swap(loadedProfiles);
+    m_wordTemplateRecipeEditSession = candidateEditSession;
+    currentTemplateDirPath = selection.recipeDirectoryPath;
+    m_currentTemplateNameVisible = false;
+    refreshWordTemplateEditorCombo();
+    clearTemplatePrivateSettingDirty();
+
+    qDebug() << "[RECIPE_SELECT] selected word recipe:"
+             << selection.recipe->recipeId
+             << selection.recipe->displayName
+             << "profiles:" << m_wordTemplateProfiles.size();
+
+    QString message = QStringLiteral(
+                "\u5DF2\u52A0\u8F7D\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\uFF0C"
+                "\u5171 %2 \u4E2AProfile\u3002")
+            .arg(selection.recipe->displayName)
+            .arg(static_cast<int>(m_wordTemplateProfiles.size()));
+    if (!pendingMessages.isEmpty()) {
+        message += QStringLiteral(
+                    "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26"
+                    "\u5F85\u786E\u8BA4\uFF1A\n%1")
+                .arg(pendingMessages.join(QLatin1Char('\n')));
+        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
+    } else {
+        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
+    }
 }
 
 int Widget::currentWordTemplateProfileIndex() const
@@ -8539,20 +8774,28 @@ void Widget::on_textsure_btn_clicked()
                 ? QDir(profile.dirPath).dirName()
                 : profile.name;
         QString recipePublishMessage;
+        QString recipePublishWarning;
         if (m_wordTemplateRecipeEditSession.isActive()) {
             QString publishError;
             if (publishWordTemplateRecipeEdit(profileIndex, &publishError)) {
                 recipePublishMessage = "\n产品配方已使用原配方编号重新发布。";
             } else {
-                recipePublishMessage =
-                        QString("\n\n目标字符已保存到当前模板，但产品配方重新发布失败：\n%1")
+                recipePublishWarning =
+                        QString("目标字符已保存到当前模板，但产品配方重新发布失败：\n%1")
                         .arg(publishError);
             }
         }
-        showParameterInfo("提示",
-                          QString("已更新产品模板 %1 的目标字符。\n其他产品模板未修改。%2")
-                          .arg(profileName)
-                          .arg(recipePublishMessage));
+        const QString message =
+                QString("已更新产品模板 %1 的目标字符。\n其他产品模板未修改。%2")
+                .arg(profileName)
+                .arg(recipePublishMessage);
+        if (recipePublishWarning.isEmpty()) {
+            showParameterInfo("提示", message);
+        } else {
+            showParameterInfoWithRedWarning("提示",
+                                            message,
+                                            recipePublishWarning);
+        }
         return;
     }
 
@@ -8716,6 +8959,7 @@ void Widget::on_batchTextsure_btn_clicked()
     refreshTemplateTargetTextDirty();
 
     QString recipePublishMessage;
+    QString recipePublishWarning;
     if (m_wordTemplateRecipeEditSession.isActive()) {
         QVector<int> profileIndexes;
         for (int profileIndex = 0;
@@ -8729,16 +8973,22 @@ void Widget::on_batchTextsure_btn_clicked()
             recipePublishMessage =
                     "\n产品配方已使用原配方编号重新发布。";
         } else {
-            recipePublishMessage =
-                    QString("\n\n目标字符已批量保存到当前模板，但产品配方重新发布失败：\n%1")
+            recipePublishWarning =
+                    QString("目标字符已批量保存到当前模板，但产品配方重新发布失败：\n%1")
                     .arg(publishError);
         }
     }
 
-    showParameterInfo(
-                "提示",
-                QString("已将当前目标字符保存到所有已选择的产品模板。%1")
-                .arg(recipePublishMessage));
+    const QString message =
+            QString("已将当前目标字符保存到所有已选择的产品模板。%1")
+            .arg(recipePublishMessage);
+    if (recipePublishWarning.isEmpty()) {
+        showParameterInfo("提示", message);
+    } else {
+        showParameterInfoWithRedWarning("提示",
+                                        message,
+                                        recipePublishWarning);
+    }
 }
 
 void Widget::on_batchImageThresholdButton_clicked()
@@ -8833,6 +9083,7 @@ void Widget::on_batchImageThresholdButton_clicked()
     }
 
     QString recipePublishMessage;
+    QString recipePublishWarning;
     if (m_wordTemplateRecipeEditSession.isActive()) {
         QVector<int> profileIndexes;
         for (int profileIndex = 0;
@@ -8846,16 +9097,22 @@ void Widget::on_batchImageThresholdButton_clicked()
             recipePublishMessage =
                     "\n产品配方已使用原配方编号重新发布。";
         } else {
-            recipePublishMessage =
-                    QString("\n\n图像阈值已批量保存到当前模板，但产品配方重新发布失败：\n%1")
+            recipePublishWarning =
+                    QString("图像阈值已批量保存到当前模板，但产品配方重新发布失败：\n%1")
                     .arg(publishError);
         }
     }
 
-    showParameterInfo(
-                "提示",
-                QString("已将当前图像合格阈值保存到所有已选择的产品模板。%1")
-                .arg(recipePublishMessage));
+    const QString message =
+            QString("已将当前图像合格阈值保存到所有已选择的产品模板。%1")
+            .arg(recipePublishMessage);
+    if (recipePublishWarning.isEmpty()) {
+        showParameterInfo("提示", message);
+    } else {
+        showParameterInfoWithRedWarning("提示",
+                                        message,
+                                        recipePublishWarning);
+    }
 }
 
 
@@ -9069,23 +9326,31 @@ void Widget::on_pushButton_3_clicked()
         refreshTemplateImageThresholdDirty();
 
         QString recipePublishMessage;
+        QString recipePublishWarning;
         if (m_wordTemplateRecipeEditSession.isActive()) {
             QString publishError;
             if (publishWordTemplateRecipeEdit(profileIndex, &publishError)) {
                 recipePublishMessage =
                         "\n产品配方已使用原配方编号重新发布。";
             } else {
-                recipePublishMessage =
-                        QString("\n\n图像阈值已保存到当前模板，但产品配方重新发布失败：\n%1")
+                recipePublishWarning =
+                        QString("图像阈值已保存到当前模板，但产品配方重新发布失败：\n%1")
                         .arg(publishError);
             }
         }
 
-        showParameterInfo("提示",
-                          QString("模板 [%1] 图像阈值设置成功：%2%3")
-                          .arg(profile.name)
-                          .arg(thresholdText)
-                          .arg(recipePublishMessage));
+        const QString message =
+                QString("模板 [%1] 图像阈值设置成功：%2%3")
+                .arg(profile.name)
+                .arg(thresholdText)
+                .arg(recipePublishMessage);
+        if (recipePublishWarning.isEmpty()) {
+            showParameterInfo("提示", message);
+        } else {
+            showParameterInfoWithRedWarning("提示",
+                                            message,
+                                            recipePublishWarning);
+        }
         return;
     }
 

@@ -271,6 +271,30 @@ void RecipeStoreTest::validationAndCommitFailuresPreservePreviousRecipe()
                        .filePath(QStringLiteral("assets/data.bin"))),
              QByteArray("valid"));
 
+    const RecipeStore failingBackupStore(
+                recipesRoot,
+                RecipeStore::AssetValidator(),
+                [](const QString &, const QString &) {
+        return false;
+    });
+    recipe.displayName = QStringLiteral("backup-failure-recipe");
+    QVERIFY(!failingBackupStore.saveRecipe(recipe,
+                                           sources,
+                                           &errorMessage));
+    QVERIFY(errorMessage.contains(
+                QStringLiteral(
+                    "\u8BF7\u5173\u95ED\u6B63\u5728\u6D4F\u89C8\u8BE5\u914D\u65B9"
+                    "\u76EE\u5F55\u6216\u5176\u5B50\u76EE\u5F55\u7684\u6587\u4EF6"
+                    "\u8D44\u6E90\u7BA1\u7406\u5668\u7A97\u53E3")));
+    QVERIFY2(initialStore.loadRecipe(recipe.recipeId,
+                                     &loaded,
+                                     &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(loaded.displayName, QStringLiteral("valid-recipe"));
+    QCOMPARE(readBytes(QDir(initialStore.recipeDirectoryPath(recipe.recipeId))
+                       .filePath(QStringLiteral("assets/data.bin"))),
+             QByteArray("valid"));
+
     int renameCallCount = 0;
     const RecipeStore failingCommitStore(
                 recipesRoot,

@@ -371,7 +371,12 @@ bool RecipeStore::saveRecipe(
         QString cleanupError;
         removeDirectoryIfExists(tempPath, &cleanupError);
         setError(errorMessage,
-                 QStringLiteral("Unable to back up existing recipe directory: %1")
+                 QStringLiteral(
+                     "Unable to back up existing recipe directory: %1.\n"
+                     "\u8BF7\u5173\u95ED\u6B63\u5728\u6D4F\u89C8\u8BE5\u914D\u65B9"
+                     "\u76EE\u5F55\u6216\u5176\u5B50\u76EE\u5F55\u7684\u6587\u4EF6"
+                     "\u8D44\u6E90\u7BA1\u7406\u5668\u7A97\u53E3\u53CA\u5176\u4ED6"
+                     "\u5360\u7528\u7A0B\u5E8F\uFF0C\u7136\u540E\u91CD\u8BD5\u3002")
                  .arg(targetPath));
         return false;
     }
