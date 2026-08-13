@@ -21,6 +21,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/template_recipe_assembler.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_draft_session.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_edit_session.cpp \
+    $$PROJECT_ROOT/app/recipes/template_recipe_workflow.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_publisher.cpp
 
 HEADERS += \
@@ -33,6 +34,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/recipes/template_recipe_assembler.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_draft_session.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_edit_session.h \
+    $$PROJECT_ROOT/app/recipes/template_recipe_workflow.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_publisher.h
 
 INCLUDEPATH += \

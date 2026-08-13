@@ -8,6 +8,7 @@
 #include "template_recipe_draft_session.h"
 #include "template_recipe_edit_session.h"
 #include "template_recipe_publisher.h"
+#include "template_recipe_workflow.h"
 
 #include <QDir>
 #include <QFile>
@@ -43,7 +44,8 @@ private slots:
     void editSessionRepublishesProfileChangesWithSameIdentity();
     void editSessionRejectsInvalidChangesAndPreservesState();
     void editSessionUpdatesProfilesAtomically();
-    void editSessionReplacesOneProfileAssetsAtomically();
+    void workflowReplacesOneProfileAssetsAtomically();
+    void workflowPublishesAndPreservesStateAcrossFailures();
 };
 
 namespace {
@@ -2093,7 +2095,7 @@ void RecipeStoreTest::editSessionUpdatesProfilesAtomically()
     QCOMPARE(publishedSelection.profiles.at(1).profile.imageThreshold, 82.0);
 }
 
-void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
+void RecipeStoreTest::workflowReplacesOneProfileAssetsAtomically()
 {
     QTemporaryDir temporaryDirectory;
     QVERIFY(temporaryDirectory.isValid());
@@ -2189,6 +2191,9 @@ void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
     QVERIFY2(session.begin(selection, &errorMessage),
              qPrintable(errorMessage));
     const ProductRecipe beforeInvalidReplacement = session.recipe();
+    RecipeSelection publishedSelection = selection;
+    TemplateRecipeWorkflowFailureStage failureStage =
+            TemplateRecipeWorkflowFailureStage::None;
     TemplateProfileAssetManifest incompleteManifest;
     incompleteManifest.profileAssetKeys.insert(
                 QStringLiteral("trackingTemplate"),
@@ -2198,11 +2203,17 @@ void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
                 QStringLiteral("assets/profiles/0/tracking.bmp"));
     incompleteManifest.assetSourcePaths.insert(
                 QStringLiteral("replacementTracking"), firstTracking);
-    QVERIFY(!session.replaceProfileAssets(
+    QVERIFY(!TemplateRecipeWorkflow::republishProfileAssets(
+                &session,
+                store,
                 0,
                 session.recipe().profiles.first(),
                 incompleteManifest,
+                &publishedSelection,
+                &failureStage,
                 &errorMessage));
+    QVERIFY(failureStage
+            == TemplateRecipeWorkflowFailureStage::Validation);
     QVERIFY(errorMessage.contains(QStringLiteral("required assets")));
     QVERIFY(productRecipeToJson(session.recipe())
             == productRecipeToJson(beforeInvalidReplacement));
@@ -2227,11 +2238,47 @@ void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
 
     RecipeProfile updatedFirstProfile = session.recipe().profiles.first();
     updatedFirstProfile.imageThreshold = 83;
-    QVERIFY2(session.replaceProfileAssets(0,
-                                          updatedFirstProfile,
-                                          replacementManifest,
-                                          &errorMessage),
+    const RecipeStore rejectingStore(
+                QDir(temporaryDirectory.path()).filePath(
+                    QStringLiteral("recipes")),
+                [](const ProductRecipe &,
+                   const QString &,
+                   const QString &,
+                   QString *assetError) {
+        if (assetError) {
+            *assetError = QStringLiteral("forced asset workflow failure");
+        }
+        return false;
+    });
+    QVERIFY(!TemplateRecipeWorkflow::republishProfileAssets(
+                &session,
+                rejectingStore,
+                0,
+                updatedFirstProfile,
+                replacementManifest,
+                &publishedSelection,
+                &failureStage,
+                &errorMessage));
+    QVERIFY(failureStage == TemplateRecipeWorkflowFailureStage::Publish);
+    QVERIFY(errorMessage.contains(QStringLiteral("forced asset workflow failure")));
+    QVERIFY(productRecipeToJson(session.recipe())
+            == productRecipeToJson(beforeInvalidReplacement));
+    QCOMPARE(readBytes(publishedSelection.profiles.at(0)
+                       .assetPathsByRole.value(
+                           QStringLiteral("character/A.png"))),
+             QByteArray("first-old"));
+
+    QVERIFY2(TemplateRecipeWorkflow::republishProfileAssets(
+                 &session,
+                 store,
+                 0,
+                 updatedFirstProfile,
+                 replacementManifest,
+                 &publishedSelection,
+                 &failureStage,
+                 &errorMessage),
              qPrintable(errorMessage));
+    QVERIFY(failureStage == TemplateRecipeWorkflowFailureStage::None);
     QCOMPARE(session.recipe().recipeId, stableRecipeId);
     QCOMPARE(session.recipe().profiles.at(0).imageThreshold, 83.0);
     QCOMPARE(session.recipe().profiles.at(1).targetText,
@@ -2239,11 +2286,6 @@ void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
     QVERIFY(session.recipe().profiles.at(1).assetKeys
             == selection.recipe->profiles.at(1).assetKeys);
 
-    RecipeSelection publishedSelection;
-    QVERIFY2(session.publish(store,
-                             &publishedSelection,
-                             &errorMessage),
-             qPrintable(errorMessage));
     QCOMPARE(publishedSelection.recipe->recipeId, stableRecipeId);
     QCOMPARE(readBytes(publishedSelection.profiles.at(0)
                        .assetPathsByRole.value(
@@ -2255,6 +2297,166 @@ void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
              QByteArray("second-character"));
     QVERIFY(!publishedSelection.recipe->assets.contains(
                 QStringLiteral("firstCharacter")));
+}
+
+void RecipeStoreTest::workflowPublishesAndPreservesStateAcrossFailures()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const QString sourceDirectory = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("source"));
+    QVERIFY(QDir().mkpath(sourceDirectory));
+    const QString trackingSource = QDir(sourceDirectory).filePath(
+                QStringLiteral("tracking.bmp"));
+    const QString calibrationSource = QDir(sourceDirectory).filePath(
+                QStringLiteral("calibration.yaml"));
+    QVERIFY(writeBytes(trackingSource, QByteArray("tracking")));
+    QVERIFY(writeBytes(calibrationSource, QByteArray("calibration")));
+
+    ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("workflow"), DetectionMode::Word);
+    const QString stableRecipeId = recipeHeader.recipeId;
+    TemplateRecipeProfileSource profileSource;
+    profileSource.profile.name = QStringLiteral("profile");
+    profileSource.profile.targetText = QStringLiteral("A");
+    profileSource.profile.imageThreshold = 70;
+    profileSource.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    profileSource.profile.hasValidBoxes = true;
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("tracking"));
+    profileSource.assetManifest.profileAssetKeys.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("calibration"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("tracking"),
+                QStringLiteral("assets/tracking.bmp"));
+    profileSource.assetManifest.recipeAssets.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("assets/calibration.yaml"));
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("tracking"), trackingSource);
+    profileSource.assetManifest.assetSourcePaths.insert(
+                QStringLiteral("calibration"), calibrationSource);
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.append(profileSource);
+
+    TemplateRecipeDraftSession draftSession;
+    TemplateRecipeEditSession editSession;
+    QString errorMessage;
+    QVERIFY2(draftSession.begin(recipeHeader,
+                                sourceDirectory,
+                                &errorMessage),
+             qPrintable(errorMessage));
+
+    const QString recipesRoot = QDir(temporaryDirectory.path()).filePath(
+                QStringLiteral("recipes"));
+    const RecipeStore store(recipesRoot);
+    const RecipeStore rejectingStore(
+                recipesRoot,
+                [](const ProductRecipe &,
+                   const QString &,
+                   const QString &,
+                   QString *assetError) {
+        if (assetError) {
+            *assetError = QStringLiteral("forced workflow failure");
+        }
+        return false;
+    });
+    RecipeSelection publishedSelection;
+    TemplateRecipeWorkflowFailureStage failureStage =
+            TemplateRecipeWorkflowFailureStage::None;
+    QVERIFY(!TemplateRecipeWorkflow::publishDraftAndBeginEdit(
+                &draftSession,
+                &editSession,
+                rejectingStore,
+                sourceDirectory,
+                profileSources,
+                &publishedSelection,
+                &failureStage,
+                &errorMessage));
+    QVERIFY(failureStage == TemplateRecipeWorkflowFailureStage::Publish);
+    QVERIFY(errorMessage.contains(QStringLiteral("forced workflow failure")));
+    QVERIFY(draftSession.isActive());
+    QCOMPARE(draftSession.recipeHeader().recipeId, stableRecipeId);
+    QVERIFY(!editSession.isActive());
+    QVERIFY(!publishedSelection.recipe);
+
+    QVERIFY2(TemplateRecipeWorkflow::publishDraftAndBeginEdit(
+                 &draftSession,
+                 &editSession,
+                 store,
+                 sourceDirectory,
+                 profileSources,
+                 &publishedSelection,
+                 &failureStage,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(failureStage == TemplateRecipeWorkflowFailureStage::None);
+    QVERIFY(editSession.isActive());
+    QCOMPARE(editSession.recipe().recipeId, stableRecipeId);
+
+    QVector<RecipeProfile> updatedProfiles = editSession.recipe().profiles;
+    updatedProfiles[0].targetText = QStringLiteral("B");
+    RecipeSelection unchangedSelection = publishedSelection;
+    QVERIFY(!TemplateRecipeWorkflow::republishProfiles(
+                &editSession,
+                rejectingStore,
+                updatedProfiles,
+                &unchangedSelection,
+                &failureStage,
+                &errorMessage));
+    QVERIFY(failureStage == TemplateRecipeWorkflowFailureStage::Publish);
+    QVERIFY(errorMessage.contains(QStringLiteral("forced workflow failure")));
+    QCOMPARE(editSession.recipe().profiles.first().targetText,
+             QStringLiteral("A"));
+    QCOMPARE(unchangedSelection.profiles.first().profile.targetText,
+             QStringLiteral("A"));
+    RecipeSelection persistedSelection;
+    QVERIFY2(loadRecipeSelection(store,
+                                 stableRecipeId,
+                                 DetectionMode::Word,
+                                 &persistedSelection,
+                                 &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(persistedSelection.profiles.first().profile.targetText,
+             QStringLiteral("A"));
+
+    QVERIFY2(TemplateRecipeWorkflow::republishProfiles(
+                 &editSession,
+                 store,
+                 updatedProfiles,
+                 &publishedSelection,
+                 &failureStage,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(publishedSelection.recipe->recipeId, stableRecipeId);
+    QCOMPARE(editSession.recipe().profiles.first().targetText,
+             QStringLiteral("B"));
+
+    QVector<RecipeProfile> invalidProfiles = editSession.recipe().profiles;
+    invalidProfiles[0].assetKeys.remove(QStringLiteral("calibration"));
+    QVERIFY(!TemplateRecipeWorkflow::republishProfiles(
+                &editSession,
+                store,
+                invalidProfiles,
+                &unchangedSelection,
+                &failureStage,
+                &errorMessage));
+    QVERIFY(failureStage == TemplateRecipeWorkflowFailureStage::Validation);
+    QCOMPARE(editSession.recipe().profiles.first().targetText,
+             QStringLiteral("B"));
+
+    RecipeProfile validatedProfile = editSession.recipe().profiles.first();
+    validatedProfile.imageThreshold = 81;
+    QVERIFY2(TemplateRecipeWorkflow::validateProfileUpdate(
+                 editSession,
+                 0,
+                 validatedProfile,
+                 &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(editSession.recipe().profiles.first().imageThreshold, 70.0);
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

@@ -59,6 +59,7 @@ SOURCES += \
     recipes/template_recipe_assembler.cpp \
     recipes/template_recipe_draft_session.cpp \
     recipes/template_recipe_edit_session.cpp \
+    recipes/template_recipe_workflow.cpp \
     recipes/template_recipe_publisher.cpp \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
@@ -108,6 +109,7 @@ HEADERS += \
     recipes/template_recipe_assembler.h \
     recipes/template_recipe_draft_session.h \
     recipes/template_recipe_edit_session.h \
+    recipes/template_recipe_workflow.h \
     recipes/template_recipe_publisher.h \
     recipes/template_profile_mapper.h \
     ui/dialogs/recipe_selection_dialog.h \

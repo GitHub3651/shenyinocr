@@ -72,8 +72,7 @@
 #include "TrackingTypes.h"
 #include "appsettingsmanager.h"
 #include "recipes/template_profile_assets.h"
-#include "recipes/template_recipe_draft_session.h"
-#include "recipes/template_recipe_edit_session.h"
+#include "recipes/template_recipe_workflow.h"
 #include "BarcodeDecoderApi.h"
 #include "BarcodeTypes.h"
 

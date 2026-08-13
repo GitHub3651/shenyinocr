@@ -6551,31 +6551,32 @@ void Widget::showStampCharacterTemplateCropDialog()
                 updatedManifest.profileAssetKeys);
     TemplateRecipeEditSession candidateSession =
             m_singleTemplateRecipeEditSession;
-    if (!candidateSession.replaceProfileAssets(
-                0,
-                updatedProfile,
-                updatedManifest,
-                &settingsError)) {
-        showParameterInfoWithRedWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u94A2\u5370\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
-                    .arg(settingsError));
-        return;
-    }
-
     const RecipeStore store(
                 QDir(AppSettingsManager::globalDataDirPath())
                 .filePath(QStringLiteral("recipes")));
     RecipeSelection publishedSelection;
-    if (!candidateSession.publish(store,
-                                  &publishedSelection,
-                                  &settingsError)) {
+    TemplateRecipeWorkflowFailureStage failureStage =
+            TemplateRecipeWorkflowFailureStage::None;
+    if (!TemplateRecipeWorkflow::republishProfileAssets(
+                &candidateSession,
+                store,
+                0,
+                updatedProfile,
+                updatedManifest,
+                &publishedSelection,
+                &failureStage,
+                &settingsError)) {
+        const QString failureDetail =
+                failureStage
+                == TemplateRecipeWorkflowFailureStage::Validation
+                ? QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
+                  .arg(settingsError)
+                : QStringLiteral("\u94A2\u5370\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
+                  .arg(settingsError);
         showParameterInfoWithRedWarning(
                     QStringLiteral("\u63D0\u793A"),
                     QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u94A2\u5370\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    QStringLiteral("\u94A2\u5370\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
-                    .arg(settingsError));
+                    failureDetail);
         return;
     }
 
@@ -6722,31 +6723,33 @@ void Widget::showPublishedRecipeCharacterTemplateCropDialog(
         }
     }
 
-    TemplateRecipeEditSession candidateSession =
-            m_wordTemplateRecipeEditSession;
-    if (!candidateSession.replaceProfileAssets(profileIndex,
-                                               updatedProfile,
-                                               updatedManifest,
-                                               &workspaceError)) {
-        showParameterInfoWithRedWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
-                    .arg(workspaceError));
-        return;
-    }
-
     const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
                             .filePath(QStringLiteral("recipes")));
+    TemplateRecipeEditSession candidateSession =
+            m_wordTemplateRecipeEditSession;
     RecipeSelection publishedSelection;
-    if (!candidateSession.publish(store,
-                                  &publishedSelection,
-                                  &workspaceError)) {
+    TemplateRecipeWorkflowFailureStage failureStage =
+            TemplateRecipeWorkflowFailureStage::None;
+    if (!TemplateRecipeWorkflow::republishProfileAssets(
+                &candidateSession,
+                store,
+                profileIndex,
+                updatedProfile,
+                updatedManifest,
+                &publishedSelection,
+                &failureStage,
+                &workspaceError)) {
+        const QString failureDetail =
+                failureStage
+                == TemplateRecipeWorkflowFailureStage::Validation
+                ? QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
+                  .arg(workspaceError)
+                : QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
+                  .arg(workspaceError);
         showParameterInfoWithRedWarning(
                     QStringLiteral("\u63D0\u793A"),
                     QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
-                    .arg(workspaceError));
+                    failureDetail);
         return;
     }
 
@@ -8447,28 +8450,27 @@ bool Widget::republishSingleTemplateRecipeSettings(
         return false;
     }
 
-    TemplateRecipeEditSession candidateSession =
-            m_singleTemplateRecipeEditSession;
     const RecipeProfile &currentProfile =
-            candidateSession.recipe().profiles.first();
+            m_singleTemplateRecipeEditSession.recipe().profiles.first();
     const RecipeProfile updatedProfile =
             recipeProfileFromTemplatePrivateSettings(
                 currentProfile.name,
                 settings,
                 currentProfile.assetKeys);
-    if (!candidateSession.updateProfile(0,
-                                        updatedProfile,
-                                        errorMessage)) {
-        return false;
-    }
+    QVector<RecipeProfile> updatedProfiles;
+    updatedProfiles.append(updatedProfile);
 
     const RecipeStore store(
                 QDir(AppSettingsManager::globalDataDirPath())
                 .filePath(QStringLiteral("recipes")));
     RecipeSelection publishedSelection;
-    if (!candidateSession.publish(store,
-                                  &publishedSelection,
-                                  errorMessage)) {
+    if (!TemplateRecipeWorkflow::republishProfiles(
+                &m_singleTemplateRecipeEditSession,
+                store,
+                updatedProfiles,
+                &publishedSelection,
+                nullptr,
+                errorMessage)) {
         return false;
     }
     if (publishedSelection.profiles.size() != 1) {
@@ -8479,7 +8481,6 @@ bool Widget::republishSingleTemplateRecipeSettings(
         return false;
     }
 
-    m_singleTemplateRecipeEditSession = candidateSession;
     m_singleTemplateResolvedAssetPathsByRole =
             publishedSelection.profiles.first().assetPathsByRole;
     m_publishedRecipeIdsByMode.insert(
@@ -9239,11 +9240,11 @@ bool Widget::saveWordTemplatePrivateSettings(
                 profile.name,
                 settings,
                 profile.recipeProfile.assetKeys);
-    TemplateRecipeEditSession validationSession =
-            m_wordTemplateRecipeEditSession;
-    return validationSession.updateProfile(profileIndex,
-                                           candidateProfile,
-                                           errorMessage);
+    return TemplateRecipeWorkflow::validateProfileUpdate(
+                m_wordTemplateRecipeEditSession,
+                profileIndex,
+                candidateProfile,
+                errorMessage);
 }
 
 void Widget::refreshWordTemplateRecipeAssets()
@@ -9314,21 +9315,22 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
     const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
                             .filePath("recipes"));
     RecipeSelection publishedSelection;
-    if (!m_wordTemplateRecipeDraftSession.publish(store,
-                                                  profile.dirPath,
-                                                  profileSources,
-                                                  &publishedSelection,
-                                                  errorMessage)) {
-        return false;
-    }
-
-    QString editSessionError;
-    if (!m_wordTemplateRecipeEditSession.begin(publishedSelection,
-                                               &editSessionError)) {
-        if (errorMessage) {
+    TemplateRecipeWorkflowFailureStage failureStage =
+            TemplateRecipeWorkflowFailureStage::None;
+    if (!TemplateRecipeWorkflow::publishDraftAndBeginEdit(
+                &m_wordTemplateRecipeDraftSession,
+                &m_wordTemplateRecipeEditSession,
+                store,
+                profile.dirPath,
+                profileSources,
+                &publishedSelection,
+                &failureStage,
+                errorMessage)) {
+        if (failureStage == TemplateRecipeWorkflowFailureStage::EditSession
+                && errorMessage) {
             *errorMessage = QString(
                         "产品配方已经发布，但无法建立后续编辑会话：%1")
-                    .arg(editSessionError);
+                    .arg(*errorMessage);
         }
         return false;
     }
@@ -9380,18 +9382,16 @@ bool Widget::publishWordTemplateRecipeEdits(
                 .recipeProfile;
     }
 
-    if (!m_wordTemplateRecipeEditSession.updateProfiles(
-                updatedProfiles,
-                errorMessage)) {
-        return false;
-    }
-
     const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
                             .filePath("recipes"));
     RecipeSelection publishedSelection;
-    if (!m_wordTemplateRecipeEditSession.publish(store,
-                                                 &publishedSelection,
-                                                 errorMessage)) {
+    if (!TemplateRecipeWorkflow::republishProfiles(
+                &m_wordTemplateRecipeEditSession,
+                store,
+                updatedProfiles,
+                &publishedSelection,
+                nullptr,
+                errorMessage)) {
         return false;
     }
 
