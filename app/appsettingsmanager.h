@@ -46,6 +46,7 @@ struct GlobalSettings
     double tissueRoughnessThreshold =
             TissueRecipeParameters().roughnessThreshold;
     QMap<QString, QStringList> templateDirPathsByMode;
+    QMap<QString, QString> publishedRecipeIdsByMode;
     QByteArray rightPanelSplitterState;
 };
 
@@ -98,6 +99,7 @@ extern const char RejectPosition[];
 extern const char TissueRoughnessThreshold[];
 extern const char RightPanelSplitterState[];
 QString templatePathsKey(const QString &modeId);
+QString publishedRecipeIdKey(const QString &modeId);
 }
 
 namespace Template {

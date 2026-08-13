@@ -333,6 +333,11 @@ private:
     QStringList currentTemplatePathsForMode(const QString &modeId) const;
     void storeCurrentTemplatePathsForMode(const QString &modeId);
     void restoreTemplatesForMode(const QString &modeId, bool showMessage);
+    bool activatePublishedWordRecipe(const QString &recipeId,
+                                     const QString &modeId,
+                                     bool showErrorMessage,
+                                     QStringList *pendingMessages,
+                                     QString *errorMessage);
     void connectTemplatePreviewSignals(MyThread *thread);
     bool startTemplatePreview();
     bool freezeTemplatePreview();
@@ -360,6 +365,7 @@ private:
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     QMap<QString, QStringList> m_templateDirPathsByMode;
+    QMap<QString, QString> m_publishedRecipeIdsByMode;
     QMap<QString, GlobalSettingBinding> m_globalSettingBindings;
     QList<HardwareActionBinding> m_hardwareActionBindings;
     GlobalSettings m_appliedGlobalSettings;

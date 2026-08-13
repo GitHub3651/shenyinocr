@@ -46,6 +46,11 @@ QString templatePathsKey(const QString &modeId)
 {
     return QString("TemplatePaths/%1").arg(modeId);
 }
+
+QString publishedRecipeIdKey(const QString &modeId)
+{
+    return QString("PublishedRecipeIds/%1").arg(modeId);
+}
 }
 
 namespace Template {
@@ -177,6 +182,21 @@ bool normalizeGlobalSettingValues(GlobalSettings *settings)
     }
     if (settings->plcIp != normalizedPlcIp) {
         settings->plcIp = normalizedPlcIp;
+        changed = true;
+    }
+
+    QMap<QString, QString> normalizedPublishedRecipeIds;
+    for (const QString &modeId : SupportedDetectModeIds) {
+        const QString recipeId =
+                settings->publishedRecipeIdsByMode.value(modeId).trimmed();
+        if (!recipeId.isEmpty()) {
+            normalizedPublishedRecipeIds.insert(modeId, recipeId);
+        }
+    }
+    if (settings->publishedRecipeIdsByMode
+            != normalizedPublishedRecipeIds) {
+        settings->publishedRecipeIdsByMode =
+                normalizedPublishedRecipeIds;
         changed = true;
     }
 
@@ -407,10 +427,18 @@ bool AppSettingsManager::loadGlobalSettings(GlobalSettings *settings, QString *e
     settings->rightPanelSplitterState =
             ini.value(SettingsKeys::Global::RightPanelSplitterState).toByteArray();
     settings->templateDirPathsByMode.clear();
+    settings->publishedRecipeIdsByMode.clear();
     for (const QString &modeId : SupportedDetectModeIds) {
         settings->templateDirPathsByMode.insert(
                     modeId,
                     ini.value(SettingsKeys::Global::templatePathsKey(modeId)).toStringList());
+        const QString recipeId =
+                ini.value(SettingsKeys::Global::publishedRecipeIdKey(modeId))
+                .toString()
+                .trimmed();
+        if (!recipeId.isEmpty()) {
+            settings->publishedRecipeIdsByMode.insert(modeId, recipeId);
+        }
     }
     if (ini.status() != QSettings::NoError) {
         setError(errorMessage, unicodeText(L"\u516c\u5171\u914d\u7f6e\u8bfb\u53d6\u5931\u8d25\uff1a%1").arg(path));
@@ -484,6 +512,8 @@ bool AppSettingsManager::saveGlobalSettings(const GlobalSettings &settings, QStr
         for (const QString &modeId : SupportedDetectModeIds) {
             ini.setValue(SettingsKeys::Global::templatePathsKey(modeId),
                          settings.templateDirPathsByMode.value(modeId));
+            ini.setValue(SettingsKeys::Global::publishedRecipeIdKey(modeId),
+                         settings.publishedRecipeIdsByMode.value(modeId));
         }
         ini.sync();
         if (ini.status() != QSettings::NoError) {

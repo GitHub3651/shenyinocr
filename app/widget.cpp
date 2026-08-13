@@ -5092,6 +5092,7 @@ void Widget::restoreDefaultGlobalSettings()
     editableDefaults.triggerEnabled = defaultSettings.triggerEnabled;
     editableDefaults.tissueRoughnessThreshold = defaultSettings.tissueRoughnessThreshold;
     editableDefaults.templateDirPathsByMode.clear();
+    editableDefaults.publishedRecipeIdsByMode.clear();
 
     // 相机参数只有在相机已打开、控件可设置时才恢复。
     if (cameraOpen) {
@@ -5784,9 +5785,10 @@ void Widget::updateAppliedGlobalSettingFromUi(const QString &key)
     } else if (key == "template.base_dir") {
         m_appliedGlobalSettings.templateBaseDirPath = templateBaseDirPath;
     } else if (key == "template.history_paths") {
+        storeCurrentTemplatePathsForMode(currentDetectModeId());
         m_appliedGlobalSettings.templateDirPathsByMode = m_templateDirPathsByMode;
-        m_appliedGlobalSettings.templateDirPathsByMode.insert(currentDetectModeId(),
-                                                              currentTemplatePathsForMode(currentDetectModeId()));
+        m_appliedGlobalSettings.publishedRecipeIdsByMode =
+                m_publishedRecipeIdsByMode;
     } else if (key == "camera.exposure") {
         m_appliedGlobalSettings.cameraExposure = ui->spinBox->value();
     } else if (key == "camera.gain") {
@@ -6562,20 +6564,67 @@ void Widget::storeCurrentTemplatePathsForMode(const QString &modeId)
     if (modeId.trimmed().isEmpty()) {
         return;
     }
-    if (isWordFamilyMode(modeId)) {
-        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
-            if (!profile.resolvedAssetPathsByRole.isEmpty()) {
-                // UUID配方的模式记忆在后续切片接入；此处保留原旧目录记忆，
-                // 避免把配方根目录误当作旧Profile目录写入全局设置。
-                return;
-            }
+    if (isWordFamilyMode(modeId)
+            && m_wordTemplateRecipeEditSession.isActive()) {
+        const QString recipeId =
+                m_wordTemplateRecipeEditSession.recipe().recipeId.trimmed();
+        if (!recipeId.isEmpty()) {
+            m_publishedRecipeIdsByMode.insert(modeId, recipeId);
+            return;
         }
     }
+    m_publishedRecipeIdsByMode.remove(modeId);
     m_templateDirPathsByMode.insert(modeId, currentTemplatePathsForMode(modeId));
 }
 
 void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
 {
+    const QString rememberedRecipeId =
+            m_publishedRecipeIdsByMode.value(modeId).trimmed();
+    if (isWordFamilyMode(modeId) && !rememberedRecipeId.isEmpty()) {
+        QStringList pendingMessages;
+        QString restoreError;
+        if (activatePublishedWordRecipe(rememberedRecipeId,
+                                        modeId,
+                                        false,
+                                        &pendingMessages,
+                                        &restoreError)) {
+            qDebug() << "[RECIPE_RESTORE] restored published recipe:"
+                     << modeId
+                     << rememberedRecipeId
+                     << "profiles:"
+                     << m_wordTemplateProfiles.size();
+            if (showMessage && !pendingMessages.isEmpty()) {
+                showParameterWarning(
+                            QStringLiteral("\u63D0\u793A"),
+                            pendingMessages.join(QLatin1Char('\n')));
+            }
+            return;
+        }
+
+        qWarning() << "[RECIPE_RESTORE] remembered recipe is unavailable;"
+                   << "falling back to legacy template paths:"
+                   << modeId
+                   << rememberedRecipeId
+                   << restoreError;
+        m_publishedRecipeIdsByMode.remove(modeId);
+        m_appliedGlobalSettings.publishedRecipeIdsByMode.remove(modeId);
+        QString settingsError;
+        if (!AppSettingsManager::saveGlobalSettings(m_appliedGlobalSettings,
+                                                    &settingsError)) {
+            qWarning() << "[RECIPE_RESTORE] failed to remove unavailable recipe memory:"
+                       << settingsError;
+        }
+        if (showMessage) {
+            showParameterWarning(
+                        QStringLiteral("\u63D0\u793A"),
+                        QStringLiteral(
+                            "\u4E0A\u6B21\u5DF2\u53D1\u5E03\u914D\u65B9\u65E0\u6CD5\u6062\u590D\uFF0C"
+                            "\u5DF2\u56DE\u9000\u5230\u539F\u6A21\u677F\u8DEF\u5F84\uFF1A\n%1")
+                        .arg(restoreError));
+        }
+    }
+
     const QStringList paths = m_templateDirPathsByMode.value(modeId);
     if (paths.isEmpty()) {
         return;
@@ -6913,49 +6962,116 @@ void Widget::selectPublishedWordRecipe()
         return;
     }
 
+    QStringList pendingMessages;
+    QString activationError;
+    if (!activatePublishedWordRecipe(dialog.selectedRecipeId(),
+                                     currentDetectModeId(),
+                                     true,
+                                     &pendingMessages,
+                                     &activationError)) {
+        return;
+    }
+    saveSettings(false);
+
+    QString message = QStringLiteral(
+                "\u5DF2\u52A0\u8F7D\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\uFF0C"
+                "\u5171 %2 \u4E2AProfile\u3002")
+            .arg(m_wordTemplateRecipeEditSession.recipe().displayName)
+            .arg(static_cast<int>(m_wordTemplateProfiles.size()));
+    if (!pendingMessages.isEmpty()) {
+        message += QStringLiteral(
+                    "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26"
+                    "\u5F85\u786E\u8BA4\uFF1A\n%1")
+                .arg(pendingMessages.join(QLatin1Char('\n')));
+        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
+    } else {
+        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
+    }
+}
+
+bool Widget::activatePublishedWordRecipe(const QString &recipeId,
+                                         const QString &modeId,
+                                         bool showErrorMessage,
+                                         QStringList *pendingMessages,
+                                         QString *errorMessage)
+{
+    if (pendingMessages) {
+        pendingMessages->clear();
+    }
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+
+    DetectionMode detectionMode;
+    if (!detectionModeFromId(modeId, &detectionMode)
+            || (detectionMode != DetectionMode::Word
+                && detectionMode != DetectionMode::BarcodeWord)) {
+        const QString message = QStringLiteral(
+                    "\u5DF2\u53D1\u5E03\u5B57\u5E93\u914D\u65B9\u53EA\u7528\u4E8E"
+                    "\u5B57\u5E93\u5339\u914D\u548C\u4E8C\u7EF4\u7801+"
+                    "\u4E09\u671F\u6A21\u5F0F\u3002");
+        if (errorMessage) *errorMessage = message;
+        if (showErrorMessage) {
+            showParameterInfoAsError(QStringLiteral("\u63D0\u793A"), message);
+        }
+        return false;
+    }
+
+    const RecipeStore store(
+                QDir(AppSettingsManager::globalDataDirPath())
+                .filePath(QStringLiteral("recipes")));
     RecipeSelection selection;
     QString selectionError;
     if (!loadRecipeSelection(store,
-                             dialog.selectedRecipeId(),
+                             recipeId,
                              detectionMode,
                              &selection,
                              &selectionError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u52A0\u8F7D\u5931\u8D25\uFF0C"
-                        "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                    .arg(selectionError));
-        return;
+        if (errorMessage) *errorMessage = selectionError;
+        if (showErrorMessage) {
+            showParameterCritical(
+                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral(
+                            "\u4EA7\u54C1\u914D\u65B9\u52A0\u8F7D\u5931\u8D25\uFF0C"
+                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                        .arg(selectionError));
+        }
+        return false;
     }
 
     std::vector<WordTemplateProfile> loadedProfiles;
-    QStringList pendingMessages;
+    QStringList loadedPendingMessages;
     QString cacheError;
     if (!loadWordTemplateProfilesFromRecipeSelection(
                 selection,
                 &loadedProfiles,
-                &pendingMessages,
+                &loadedPendingMessages,
                 &cacheError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u8D44\u6E90\u65E0\u6CD5\u88C5\u914D\uFF0C"
-                        "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                    .arg(cacheError));
-        return;
+        if (errorMessage) *errorMessage = cacheError;
+        if (showErrorMessage) {
+            showParameterCritical(
+                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral(
+                            "\u4EA7\u54C1\u914D\u65B9\u8D44\u6E90\u65E0\u6CD5\u88C5\u914D\uFF0C"
+                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                        .arg(cacheError));
+        }
+        return false;
     }
 
     TemplateRecipeEditSession candidateEditSession;
     QString editSessionError;
     if (!candidateEditSession.begin(selection, &editSessionError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u7F16\u8F91\u4F1A\u8BDD\u65E0\u6CD5\u5EFA\u7ACB\uFF0C"
-                        "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                    .arg(editSessionError));
-        return;
+        if (errorMessage) *errorMessage = editSessionError;
+        if (showErrorMessage) {
+            showParameterCritical(
+                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral(
+                            "\u4EA7\u54C1\u914D\u65B9\u7F16\u8F91\u4F1A\u8BDD\u65E0\u6CD5\u5EFA\u7ACB\uFF0C"
+                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                        .arg(editSessionError));
+        }
+        return false;
     }
 
     resetTemplateCaptureState();
@@ -6969,28 +7085,19 @@ void Widget::selectPublishedWordRecipe()
     m_wordTemplateRecipeEditSession = candidateEditSession;
     currentTemplateDirPath = selection.recipeDirectoryPath;
     m_currentTemplateNameVisible = false;
+    m_publishedRecipeIdsByMode.insert(modeId,
+                                      selection.recipe->recipeId);
     refreshWordTemplateEditorCombo();
     clearTemplatePrivateSettingDirty();
+    if (pendingMessages) {
+        *pendingMessages = loadedPendingMessages;
+    }
 
     qDebug() << "[RECIPE_SELECT] selected word recipe:"
              << selection.recipe->recipeId
              << selection.recipe->displayName
              << "profiles:" << m_wordTemplateProfiles.size();
-
-    QString message = QStringLiteral(
-                "\u5DF2\u52A0\u8F7D\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\uFF0C"
-                "\u5171 %2 \u4E2AProfile\u3002")
-            .arg(selection.recipe->displayName)
-            .arg(static_cast<int>(m_wordTemplateProfiles.size()));
-    if (!pendingMessages.isEmpty()) {
-        message += QStringLiteral(
-                    "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26"
-                    "\u5F85\u786E\u8BA4\uFF1A\n%1")
-                .arg(pendingMessages.join(QLatin1Char('\n')));
-        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
-    } else {
-        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
-    }
+    return true;
 }
 
 int Widget::currentWordTemplateProfileIndex() const
@@ -7805,6 +7912,12 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
         }
         return false;
     }
+
+    m_publishedRecipeIdsByMode.insert(currentDetectModeId(),
+                                      publishedSelection.recipe->recipeId);
+    m_appliedGlobalSettings.publishedRecipeIdsByMode =
+            m_publishedRecipeIdsByMode;
+    saveSettings(false);
 
     qDebug() << "[RECIPE_PUBLISH] published word recipe:"
              << publishedSelection.recipe->recipeId
@@ -10376,8 +10489,7 @@ GlobalSettings Widget::collectGlobalSettingsFromUi() const
     settings.rejectPosition = ui->lineEdit_12->text().toInt();
     settings.tissueRoughnessThreshold = ui->lineEdit_tissueRoughnessThreshold->text().toDouble();
     settings.templateDirPathsByMode = m_templateDirPathsByMode;
-    settings.templateDirPathsByMode.insert(settings.detectModeId,
-                                           currentTemplatePathsForMode(settings.detectModeId));
+    settings.publishedRecipeIdsByMode = m_publishedRecipeIdsByMode;
     if (ui->rightPanelSplitter) {
         settings.rightPanelSplitterState =
                 ui->rightPanelSplitter->saveState();
@@ -10410,6 +10522,7 @@ void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
     m_applyingGlobalSettings = true;
     m_updatingGlobalSettingsUi = true;
     m_templateDirPathsByMode = settings.templateDirPathsByMode;
+    m_publishedRecipeIdsByMode = settings.publishedRecipeIdsByMode;
 
     ui->comboBox_4->setCurrentIndex(indexOf(detectModeIds, settings.detectModeId, 1));
     ui->comboBox->setCurrentIndex(indexOf(imageSaveModeIds, settings.imageSaveModeId, 0));

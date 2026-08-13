@@ -7,9 +7,11 @@
 #include "template_recipe_assembler.h"
 
 #include <QDir>
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonObject>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QUuid>
 
@@ -27,6 +29,7 @@ private slots:
     void jsonRoundTripRetainsModeParametersAndAssets();
     void invalidFieldsAndEscapingAssetAreRejected();
     void runtimeSnapshotIsIndependentFromEditableRecipe();
+    void globalSettingsRetainPublishedRecipeIdsPerMode();
     void templatePrivateSettingsMappingRetainsProfileFields();
     void templateProfileAssetManifestPreservesVariantsAndNamespaces();
     void templateRecipeAssemblyMergesProfilesAndRejectsInvalidManifests();
@@ -44,6 +47,44 @@ RecipeProfile validProfile(const QString &name)
     profile.hasValidBoxes = true;
     return profile;
 }
+
+class ScopedSettingsTestLocation
+{
+public:
+    ScopedSettingsTestLocation()
+        : m_originalOrganizationName(QCoreApplication::organizationName()),
+          m_originalApplicationName(QCoreApplication::applicationName()),
+          m_testApplicationName(QStringLiteral("product_recipe_settings_")
+                                + QUuid::createUuid().toString(QUuid::WithoutBraces))
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        QCoreApplication::setOrganizationName(QStringLiteral("OCRGangYinTests"));
+        QCoreApplication::setApplicationName(m_testApplicationName);
+        m_dataDirectoryPath = AppSettingsManager::globalDataDirPath();
+    }
+
+    ~ScopedSettingsTestLocation()
+    {
+        if (QFileInfo(m_dataDirectoryPath).fileName() == m_testApplicationName) {
+            QDir(m_dataDirectoryPath).removeRecursively();
+        }
+        QCoreApplication::setOrganizationName(m_originalOrganizationName);
+        QCoreApplication::setApplicationName(m_originalApplicationName);
+        QStandardPaths::setTestModeEnabled(false);
+    }
+
+    bool isIsolated() const
+    {
+        return QFileInfo(m_dataDirectoryPath).fileName()
+                == m_testApplicationName;
+    }
+
+private:
+    QString m_originalOrganizationName;
+    QString m_originalApplicationName;
+    QString m_testApplicationName;
+    QString m_dataDirectoryPath;
+};
 
 } // namespace
 
@@ -190,6 +231,49 @@ void ProductRecipeTest::runtimeSnapshotIsIndependentFromEditableRecipe()
 
     QCOMPARE(snapshot->displayName, QStringLiteral("\u7eb8\u5dfeA"));
     QCOMPARE(snapshot->tissueParameters.roughnessThreshold, 6.0);
+}
+
+void ProductRecipeTest::globalSettingsRetainPublishedRecipeIdsPerMode()
+{
+    ScopedSettingsTestLocation testLocation;
+    QVERIFY(testLocation.isIsolated());
+
+    GlobalSettings settings = AppSettingsManager::defaultGlobalSettings();
+    const QString wordRecipeId =
+            QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString barcodeRecipeId =
+            QUuid::createUuid().toString(QUuid::WithoutBraces);
+    settings.publishedRecipeIdsByMode.insert(
+                QStringLiteral("word_detection"),
+                QStringLiteral("  ") + wordRecipeId + QStringLiteral("  "));
+    settings.publishedRecipeIdsByMode.insert(
+                QStringLiteral("barcode_word_detection"),
+                barcodeRecipeId);
+    settings.publishedRecipeIdsByMode.insert(
+                QStringLiteral("unsupported_mode"),
+                QUuid::createUuid().toString(QUuid::WithoutBraces));
+    settings.templateDirPathsByMode.insert(
+                QStringLiteral("word_detection"),
+                QStringList() << QStringLiteral("D:/legacy/word-profile"));
+
+    QString errorMessage;
+    QVERIFY2(AppSettingsManager::saveGlobalSettings(settings, &errorMessage),
+             qPrintable(errorMessage));
+
+    GlobalSettings loaded;
+    QVERIFY2(AppSettingsManager::loadGlobalSettings(&loaded, &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(loaded.publishedRecipeIdsByMode.value(
+                 QStringLiteral("word_detection")),
+             wordRecipeId);
+    QCOMPARE(loaded.publishedRecipeIdsByMode.value(
+                 QStringLiteral("barcode_word_detection")),
+             barcodeRecipeId);
+    QVERIFY(!loaded.publishedRecipeIdsByMode.contains(
+                QStringLiteral("unsupported_mode")));
+    QCOMPARE(loaded.templateDirPathsByMode.value(
+                 QStringLiteral("word_detection")),
+             QStringList() << QStringLiteral("D:/legacy/word-profile"));
 }
 
 void ProductRecipeTest::templatePrivateSettingsMappingRetainsProfileFields()
