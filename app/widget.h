@@ -46,7 +46,6 @@
 #include "mythread.h"
 #include "CameraThread.h"
 #include "TissueRollDetector.h"
-#include "snap7.h"
 #include <QImage>
 #include "imagelabel.h"
 #include "Zhuizong.h"
@@ -73,6 +72,7 @@
 #include "recipes/template_recipe_workflow.h"
 #include "devices/barcode/barcode_decoder_adapter.h"
 #include "devices/ocr/ocr_engine.h"
+#include "devices/plc/plc_device.h"
 
 using namespace cv;
 
@@ -445,10 +445,7 @@ private:
     int colorchannel=0;                 ///< 颜色通道
 
     // ========== PLC相关 ==========
-    TS7Client* client;                  ///< PLC客户端
-    char *Address;                      ///< PLC地址
-    int Rack = 0;                       ///< 机架号
-    int Slot = 1;                       ///< 槽号
+    std::unique_ptr<IPlcDevice> m_plcDevice; ///< PLC设备边界
     int PLCmode;                        ///< PLC模式
     std::queue<std::pair<int, int>> removalQueue; ///< 移除队列
 

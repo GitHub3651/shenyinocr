@@ -14,7 +14,6 @@
 #include "recipes/template_profile_mapper.h"
 #include "recipes/template_recipe_publisher.h"
 #include "ui/dialogs/recipe_selection_dialog.h"
-#include "snap7.h"
 #include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
@@ -23,6 +22,7 @@
 #include "detection/stamp/stamp_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
 #include "devices/ocr/paddle_ocr_engine.h"
+#include "devices/plc/snap7_plc_device.h"
 
 
 // Qt核心组件
@@ -100,6 +100,7 @@
 // 标准库
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <windows.h>
 #include <algorithm>
@@ -978,8 +979,8 @@ Widget::Widget(QWidget *parent)
     // 初始化追踪对象（使用智能指针）
     unique_ptr<Zhuizong> zhuizong = make_unique<Zhuizong>();
 
-    // 初始化PLC客户端
-    client = new TS7Client;
+    // Snap7客户端生命周期和原生常量由设备适配器独占。
+    m_plcDevice.reset(new Snap7PlcDevice);
 
     // 初始化窗口组件
     initWidget();
@@ -1047,13 +1048,12 @@ Widget::Widget(QWidget *parent)
         // 1. 先把从界面获取的文本存为一个 QString 变量
         QString targetIp = ui->lineEdit->text();
 
-        QByteArray ad = targetIp.toUtf8();
-        Address = ad.data();
-
-        int tmp = client->ConnectTo(Address,
-                                    ui->lineEdit_2->text().toInt(),
-                                    ui->lineEdit_3->text().toInt());
-        if (tmp == 0) {
+        const QByteArray address = targetIp.toUtf8();
+        const PlcOperationResult result = m_plcDevice->connectTo(
+                    address.constData(),
+                    ui->lineEdit_2->text().toInt(),
+                    ui->lineEdit_3->text().toInt());
+        if (result.isSuccess()) {
             updateAppliedGlobalSettingsFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
             refreshGlobalSettingsDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
             saveSettings(false);
@@ -1132,12 +1132,11 @@ Widget::~Widget()
         qDebug() << "WARNING: camera not released because worker thread is still running";
     }
 
-    if (client) {
-        if (client->Connected()) {
-            client->Disconnect();
+    if (m_plcDevice) {
+        if (m_plcDevice->isConnected()) {
+            m_plcDevice->disconnect();
         }
-        delete client;
-        client = nullptr;
+        m_plcDevice.reset();
     }
 
     delete templatematch;
@@ -1270,18 +1269,19 @@ string Widget::qstr2str(const QString qstr)
  */
 void Widget::rightremove()
 {
-    if (!client->Connected())
+    if (!m_plcDevice || !m_plcDevice->isConnected())
     {
         return;
     }
 
-    uint8_t value = 0;
-    byte remove_data[1] = {0};
+    std::uint8_t value = 0;
+    unsigned char remove_data[1] = {0};
     remove_data[0] = (unsigned char)(0xFF & value);
 
     // 写入DB1.1033位置，1个字节
-    int tmp2 = client->WriteArea(S7AreaDB, 1, 1033, 1, S7WLByte, remove_data);
-    if (tmp2 != 0)
+    const PlcOperationResult result = m_plcDevice->writeDbArea(
+                1, 1033, 1, PlcDataWidth::Byte, remove_data);
+    if (!result.isSuccess())
     {
         QMessageBox::warning(this, "error", "设置失败");
     }
@@ -1294,18 +1294,19 @@ void Widget::rightremove()
  */
 void Widget::wrongremove()
 {
-    if (!client->Connected())
+    if (!m_plcDevice || !m_plcDevice->isConnected())
     {
         return;
     }
 
-    uint8_t value = 49;
-    byte remove_data[1] = {0};
+    std::uint8_t value = 49;
+    unsigned char remove_data[1] = {0};
     remove_data[0] = (unsigned char)(0xFF & value);
 
     // 写入DB1.1033位置，1个字节
-    int tmp2 = client->WriteArea(S7AreaDB, 1, 1033, 1, S7WLByte, remove_data);
-    if (tmp2 != 0)
+    const PlcOperationResult result = m_plcDevice->writeDbArea(
+                1, 1033, 1, PlcDataWidth::Byte, remove_data);
+    if (!result.isSuccess())
     {
         QMessageBox::warning(this, "error", "设置失败");
     }
@@ -4466,7 +4467,8 @@ void Widget::restoreDefaultGlobalSettings()
     const GlobalSettings defaultSettings = AppSettingsManager::defaultGlobalSettings();
     GlobalSettings editableDefaults = m_appliedGlobalSettings;
     const bool cameraOpen = (m_pcMyCamera != nullptr && m_bOpenDevice);
-    const bool plcConnected = (client != nullptr && client->Connected());
+    const bool plcConnected =
+            (m_plcDevice && m_plcDevice->isConnected());
 
     // 始终可以修改的软件参数。
     editableDefaults.detectModeId = defaultSettings.detectModeId;
@@ -4692,7 +4694,8 @@ void Widget::setHardwareControlEnabled(QWidget *widget,
 void Widget::updateHardwareParameterUiEnabled()
 {
     const bool cameraOpen = (m_pcMyCamera != nullptr && m_bOpenDevice);
-    const bool plcConnected = (client != nullptr && client->Connected());
+    const bool plcConnected =
+            (m_plcDevice && m_plcDevice->isConnected());
     const QString cameraDisabledReason = "请先打开相机后再设置该参数。";
     const QString plcRunDisabledReason = "请先连接 PLC 后再设置该参数。";
     const QString plcConnectDisabledReason = "PLC 已连接。如需修改连接参数，请先断开 PLC。";
@@ -9090,7 +9093,7 @@ bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMess
 {
     PLCmode = ui->comboBox_3->currentIndex();
 
-    if (!client || !client->Connected()) {
+    if (!m_plcDevice || !m_plcDevice->isConnected()) {
         const QString message = "PLC未连接！";
         if (showSuccessMessage) {
             if (errors) errors->append(message);
@@ -9107,12 +9110,14 @@ bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMess
         return false;
     }
 
-    const uint8_t value = static_cast<uint8_t>(PLCmode == 0 ? 0 : 1);
-    byte mode_data[1] = {0};
+    const std::uint8_t value =
+            static_cast<std::uint8_t>(PLCmode == 0 ? 0 : 1);
+    unsigned char mode_data[1] = {0};
     mode_data[0] = static_cast<unsigned char>(0xFF & value);
 
-    const int ret = client->WriteArea(S7AreaDB, 1, 1032, 1, S7WLByte, mode_data);
-    if (ret != 0) {
+    const PlcOperationResult result = m_plcDevice->writeDbArea(
+                1, 1032, 1, PlcDataWidth::Byte, mode_data);
+    if (!result.isSuccess()) {
         const QString message = PLCmode == 0 ? "设置连续模式失败" : "设置间歇模式失败";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
@@ -9130,7 +9135,7 @@ bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMess
 
 bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (!client || !client->Connected()) {
+    if (!m_plcDevice || !m_plcDevice->isConnected()) {
         const QString message = "PLC未连接！";
         if (showSuccessMessage) {
             if (errors) errors->append(message);
@@ -9142,52 +9147,56 @@ bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMess
 
     wrongindex = ui->lineEdit_12->text().toInt();
 
-    uint16_t rejectTime = ui->lineEdit_8->text().toUInt();
-    byte rejectTimeData[2] = {0};
+    std::uint16_t rejectTime = ui->lineEdit_8->text().toUInt();
+    unsigned char rejectTimeData[2] = {0};
     rejectTimeData[1] = static_cast<unsigned char>(0xFF & rejectTime);
     rejectTimeData[0] = static_cast<unsigned char>((0xFF00 & rejectTime) >> 8);
-    int ret = client->WriteArea(S7AreaDB, 1, 980, 2, S7WLWord, rejectTimeData);
-    if (ret != 0) {
+    PlcOperationResult result = m_plcDevice->writeDbArea(
+                1, 980, 2, PlcDataWidth::Word, rejectTimeData);
+    if (!result.isSuccess()) {
         const QString message = "设置剔除时间失败";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
         return false;
     }
 
-    uint32_t rejectDistance = ui->lineEdit_7->text().toUInt();
-    byte rejectDistanceData[4] = {0};
+    std::uint32_t rejectDistance = ui->lineEdit_7->text().toUInt();
+    unsigned char rejectDistanceData[4] = {0};
     rejectDistanceData[3] = static_cast<unsigned char>(0xFF & rejectDistance);
     rejectDistanceData[2] = static_cast<unsigned char>((0xFF00 & rejectDistance) >> 8);
     rejectDistanceData[1] = static_cast<unsigned char>((0xFF0000 & rejectDistance) >> 16);
     rejectDistanceData[0] = static_cast<unsigned char>((0xFF000000 & rejectDistance) >> 24);
-    ret = client->WriteArea(S7AreaDB, 1, 920, 4, S7WLDWord, rejectDistanceData);
-    if (ret != 0) {
+    result = m_plcDevice->writeDbArea(
+                1, 920, 4, PlcDataWidth::DWord, rejectDistanceData);
+    if (!result.isSuccess()) {
         const QString message = "设置剔除距离失败";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
         return false;
     }
 
-    uint16_t photoTime = ui->lineEdit_20->text().toUInt();
-    byte photoTimeData[2] = {0};
+    std::uint16_t photoTime = ui->lineEdit_20->text().toUInt();
+    unsigned char photoTimeData[2] = {0};
     photoTimeData[1] = static_cast<unsigned char>(0xFF & photoTime);
     photoTimeData[0] = static_cast<unsigned char>((0xFF00 & photoTime) >> 8);
-    ret = client->WriteArea(S7AreaDB, 1, 982, 2, S7WLWord, photoTimeData);
-    if (ret != 0) {
+    result = m_plcDevice->writeDbArea(
+                1, 982, 2, PlcDataWidth::Word, photoTimeData);
+    if (!result.isSuccess()) {
         const QString message = "设置拍照时间失败";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
         return false;
     }
 
-    uint32_t photoDistance = ui->lineEdit_6->text().toUInt();
-    byte photoDistanceData[4] = {0};
+    std::uint32_t photoDistance = ui->lineEdit_6->text().toUInt();
+    unsigned char photoDistanceData[4] = {0};
     photoDistanceData[3] = static_cast<unsigned char>(0xFF & photoDistance);
     photoDistanceData[2] = static_cast<unsigned char>((0xFF00 & photoDistance) >> 8);
     photoDistanceData[1] = static_cast<unsigned char>((0xFF0000 & photoDistance) >> 16);
     photoDistanceData[0] = static_cast<unsigned char>((0xFF000000 & photoDistance) >> 24);
-    ret = client->WriteArea(S7AreaDB, 1, 924, 4, S7WLDWord, photoDistanceData);
-    if (ret != 0) {
+    result = m_plcDevice->writeDbArea(
+                1, 924, 4, PlcDataWidth::DWord, photoDistanceData);
+    if (!result.isSuccess()) {
         const QString message = "设置拍照距离失败";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
@@ -9247,14 +9256,14 @@ QString Widget::setdatetime()
  */
 void Widget::on_ConnectpushButton_clicked()
 {
-    QByteArray ad(ui->lineEdit->text().toUtf8());
-    Address = ad.data();
+    const QByteArray address = ui->lineEdit->text().toUtf8();
 
     const int rack = ui->lineEdit_2->text().toInt();
     const int slot = ui->lineEdit_3->text().toInt();
-    int tmp = client->ConnectTo(Address, rack, slot);
+    const PlcOperationResult result =
+            m_plcDevice->connectTo(address.constData(), rack, slot);
 
-    if (tmp == 0)
+    if (result.isSuccess())
     {
         updateAppliedGlobalSettingsFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
         refreshGlobalSettingsDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
@@ -9274,9 +9283,9 @@ void Widget::on_ConnectpushButton_clicked()
  */
 void Widget::on_DisconnectpushButton_clicked()
 {
-    int tmp = client->Disconnect();
+    const PlcOperationResult result = m_plcDevice->disconnect();
 
-    if (tmp == 0)
+    if (result.isSuccess())
     {
         updateHardwareParameterUiEnabled();
         QMessageBox::information(this, "success", "PLC断开成功");
@@ -9294,13 +9303,13 @@ void Widget::on_DisconnectpushButton_clicked()
 // */
 //void Widget::on_WriteVDpushButton_2_clicked()
 //{
-//    if (!client->Connected())
+//    if (!m_plcDevice->isConnected())
 //    {
 //        return;
 //    }
 
-//    uint32_t value2 = ui->lineEdit_7->text().toUInt();
-//    byte delay_data[4] = {0};
+//    std::uint32_t value2 = ui->lineEdit_7->text().toUInt();
+//    unsigned char delay_data[4] = {0};
 
 //    // 大小端转换
 //    delay_data[3] = (unsigned char)(0xFF & value2);
@@ -9309,8 +9318,9 @@ void Widget::on_DisconnectpushButton_clicked()
 //    delay_data[0] = (unsigned char)((0xFF000000 & value2) >> 24);
 
 //    // 写入DB1.920
-//    int tmp2 = client->WriteArea(S7AreaDB, 1, 920, 4, S7WLDWord, delay_data);
-//    if (tmp2 != 0)
+//    const PlcOperationResult result = m_plcDevice->writeDbArea(
+//                1, 920, 4, PlcDataWidth::DWord, delay_data);
+//    if (!result.isSuccess())
 //    {
 //        QMessageBox::warning(this, "error", "设置失败");
 //    }
@@ -9326,21 +9336,22 @@ void Widget::on_DisconnectpushButton_clicked()
 // */
 //void Widget::on_WriteVDpushButton_3_clicked()
 //{
-//    if (!client->Connected())
+//    if (!m_plcDevice->isConnected())
 //    {
 //        return;
 //    }
 
-//    uint16_t value4 = ui->lineEdit_8->text().toUInt();
-//    byte delay_time[2] = {0};
+//    std::uint16_t value4 = ui->lineEdit_8->text().toUInt();
+//    unsigned char delay_time[2] = {0};
 
 //    // 大小端转换
 //    delay_time[1] = (unsigned char)(0xFF & value4);
 //    delay_time[0] = (unsigned char)((0xFF00 & value4) >> 8);
 
 //    // 写入DB1.980
-//    int tmp4 = client->WriteArea(S7AreaDB, 1, 980, 2, S7WLWord, delay_time);
-//    if (tmp4 != 0)
+//    const PlcOperationResult result = m_plcDevice->writeDbArea(
+//                1, 980, 2, PlcDataWidth::Word, delay_time);
+//    if (!result.isSuccess())
 //    {
 //        QMessageBox::warning(this, "error", "设置失败");
 //    }
@@ -10207,8 +10218,8 @@ void Widget::closeEvent(QCloseEvent *event)
         m_bOpenDevice = false;
     }
 
-    if (client && client->Connected()) {
-        client->Disconnect();
+    if (m_plcDevice && m_plcDevice->isConnected()) {
+        m_plcDevice->disconnect();
     }
 
     try {
@@ -11764,7 +11775,8 @@ void Widget::on_plcbtn_clicked()
         restoreUnappliedSettingsFromApplied();
     }
 
-    if (ui->checkBox->isChecked() && (!client || !client->Connected())) {
+    if (ui->checkBox->isChecked()
+            && (!m_plcDevice || !m_plcDevice->isConnected())) {
         showParameterWarning("提示", "已启用 PLC 触发，但 PLC 未连接，请先连接 PLC。");
         return;
     }
@@ -12228,14 +12240,13 @@ void Widget::on_HandwareDetect_clicked()
     }
 
     //连接PLC
-    QByteArray ad(ui->lineEdit->text().toUtf8());
-    Address = ad.data();
+    const QByteArray address = ui->lineEdit->text().toUtf8();
+    const PlcOperationResult result = m_plcDevice->connectTo(
+                address.constData(),
+                ui->lineEdit_2->text().toInt(),
+                ui->lineEdit_3->text().toInt());
 
-    int tmp = client->ConnectTo(Address,
-                                ui->lineEdit_2->text().toInt(),
-                                ui->lineEdit_3->text().toInt());
-
-    if (tmp != 0)
+    if (!result.isSuccess())
     {
         QMessageBox::critical(this, "error", "PLC连接失败");
     }
@@ -12663,14 +12674,14 @@ void Widget::on_pushButton_tissueRoughnessThreshold_clicked()
 void Widget::on_WriteVDpushButton_clicked()
 {
 
-    if (!client->Connected())
+    if (!m_plcDevice || !m_plcDevice->isConnected())
     {
         showParameterWarning("警告", "PLC未连接！");
         return;
     }
 
-    uint32_t value = ui->lineEdit_6->text().toUInt();
-    byte v_data[4] = {0};
+    std::uint32_t value = ui->lineEdit_6->text().toUInt();
+    unsigned char v_data[4] = {0};
 
     // 大小端转换
     v_data[3] = (unsigned char)(0xFF & value);
@@ -12679,9 +12690,10 @@ void Widget::on_WriteVDpushButton_clicked()
     v_data[0] = (unsigned char)((0xFF000000 & value) >> 24);
 
     // 写入DB1.924
-    int tmp = client->WriteArea(S7AreaDB, 1, 924, 4, S7WLDWord, v_data);
+    const PlcOperationResult result = m_plcDevice->writeDbArea(
+                1, 924, 4, PlcDataWidth::DWord, v_data);
 // 判断写入结果
-    if (tmp != 0)
+    if (!result.isSuccess())
     {
         // 写入失败
         showParameterWarning("error", "设置拍照距离失败");

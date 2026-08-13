@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 2 设备接口与运行协调（按用户风险接受条件进入）
-- 当前切片：Paddle OCR设备接口、适配器与深度OCR模板入口回归修复（用户门禁通过，等待正式提交）
-- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码DLL与解码策略已提交为`ef3af6d`；Paddle设备边界和深度OCR模板绘图入口已经通过用户Qt Creator测试与主程序门禁，当前准备创建独立回退点。
+- 当前切片：Snap7 PLC设备窄接口与适配器（用户Qt Creator门禁通过，等待独立提交）
+- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码设备边界已提交为`ef3af6d`，Paddle OCR设备边界及深度OCR模板入口修复已提交为`c78ebb8`；PLC适配器测试与主程序门禁已由用户确认，不改PLC地址、写值、顺序、提示或100ms复位时序，真实PLC读回证据继续按已接受风险延期。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -436,23 +436,21 @@
 
 ## 用户Qt Creator门禁
 
-### A. 当前字库家族统一只读运行Profile快照：主程序构建与实际链路
+### A. 当前PLC设备适配：运行测试
 
-1. Qt Creator打开 `app/AutoOCRproject.pro`，使用Qt 5.14.2、MSVC 2017 64-bit、Release执行Rebuild并Run；本切片未改工程清单，通常无需Run qmake。
-2. 切换到“字库匹配”，选择一个含至少两个Profile的已发布配方，启动识别；确认日志出现`[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:`，数量和模式正确，检测/自动Profile选择正常。
-3. 停止后逐项切换Profile，确认目标字符和阈值仍保持；再次启动/停止一次，确认快照日志再次出现且没有崩溃、空Profile或参数丢失。
-4. 切换到“二维码+三期”，选择已发布配方并启动/停止两次；确认同一通用快照日志出现，读码优先、Profile选择和停止后参数显示正常。
-5. 最后选择一次旧多目录模板并启动/停止，确认兼容入口仍使用运行快照；失败时提供首个错误、相关日志和界面截图。
+1. Qt Creator打开`tests/tests.pro`，因新增子工程先执行Run qmake。
+2. 构建并运行`plc_device_adapter_test`，预期Qt Test汇总`9 passed, 0 failed`。该目标使用假Snap7函数，不连接真实PLC。
 
-### B. Stage 1配方存储回归
+### B. 当前PLC设备适配：主程序
 
-1. Qt Creator另开 `tests/tests.pro`。
-2. 本切片未修改配方测试、检测测试或任何测试工程清单，不要求重复运行。
-3. 上一门禁的`recipe_store_test` 26项结果继续作为配方存储回归证据。
+1. Qt Creator打开`app/AutoOCRproject.pro`，因新增源文件先Run qmake，再用Qt 5.14.2、MSVC 2017 64-bit、Release执行Rebuild并Run。
+2. 有PLC时：确认启动1秒自动连接、手动断开/重连、连续/间歇模式设置、PLC工艺参数设置和拍照距离单项设置的成功/失败提示与之前一致。
+3. 没有PLC时：确认自动连接失败后主窗仍可用；点“打开相机”时PLC失败仍不阻止继续打开相机；勾选PLC触发后未连接时仍拒绝启动检测。
+4. 若有可观察PLC，分别产生一次OK和一次NG，确认DB1.DBB1033仍为OK写0，NG写49后约100ms写0；延迟剔除位置不变。没有可观察PLC时，只反馈上述可执行项，不冒充硬件时序证据。
 
 ### C. 本切片不要求重复运行的目标
 
-`product_recipe_test`和所有`detection_tests`源码/子工程均未修改，不作为本切片必选门禁。
+`product_recipe_test`、`recipe_store_test`、所有`detection_tests`及`barcode_decoder_adapter_test`的源码和工程均未修改，不作为本切片必选门禁。
 
 ### D. 已延期：五模式原入口固定样本
 
@@ -718,6 +716,13 @@
 - [x] 深度OCR模板入口根因：`freezeTemplatePreview`只对硬编码模式索引0和字库家族开启`ImageLabel`模板绘图，`showTemplateGuideForCurrentMode/handleTemplateGuideEvent`也只接受0/1/4，遗漏深度OCR索引2，导致界面提示完成框选但鼠标事件按非模板路径处理。
 - [x] 深度OCR模板入口修复：统一按`isSingleTemplateRecipeMode(modeId) || isWordFamilyMode(modeId)`决定绘图资格，深度OCR恢复“定位矩形→喷码多边形→右键闭合→保存”的既有通用流程，并显示“深度模型模板制作”逐步引导；纸巾仍不启用模板绘图，Paddle、ROI换算、模板落盘和检测判定未改。影响`TPL-002、TPL-003、TPL-005、DET-004`，等待主程序实际制作、保存、启停和退出门禁。
 - [x] Paddle OCR与深度OCR模板入口Qt Creator集中门禁：2026-08-13用户确认`ocr_detection_pipeline_test`汇总`6 passed, 0 failed`；主工程修复重复头文件后正常构建启动；深度OCR模板实际完成定位/日期框选并产生`[RECIPE_SELECT]`与`[RECIPE_PUBLISH]`，随后检测成功启动、Paddle逐帧调用并正常停止。当前实际样本`Final String`为空，只记录为本次样本结果，不冒充准确率或固定样本对照证据；用户确认其余日志均无功能问题。
+- [x] Paddle OCR设备适配与深度OCR模板入口修复已创建独立提交`c78ebb8`，提交后工作区干净。
+- [x] 开始Stage 2 Snap7 PLC设备适配切片；影响`SYS-008、SET-005、CAM-001、RUN-001、PLC-001..006`十项，由原状态进入迁移中。`PLC-007`延迟剔除队列本身不修改，继续调用同一NG输出入口。
+- [x] 旧调用链审计：生产态`TS7Client`调用全部位于Widget，包含启动1秒延迟连接、打开相机附带连接、手动连接/断开、界面使能查询、启动预检、四项工艺参数、拍照距离单项下发、OK写0和NG写49→100ms→0；检测Pipeline、采集线程和延迟剔除队列没有直接Snap7调用。
+- [x] 新增`IPlcDevice`、结构化`PlcOperationResult`与`Snap7PlcDevice`；仅适配器包含`snap7.h`、`TS7Client`、`S7AreaDB`和`S7WL*`，Widget只保留设备接口所有权并沿用原返回码0/非0分支、原提示和原调用顺序。
+- [x] 新增`runtime_tests/plc_device_adapter_test`，用可注入假Snap7函数覆盖连接端点与返回码、断开、连接状态、DB区Byte/Word/DWord映射和缺失后端安全失败七项业务行为；Qt Test预期汇总`9 passed, 0 failed`，不连接真实PLC。
+- [x] PLC设备适配Agent静态检查通过：Widget中`TS7Client/S7AreaDB/S7WL*/client->`引用0处；适配器独占原生类型和常量；主工程新源/头清单各唯一；运行测试子目标已登记；活跃DB写入调用8处，连接3处，断开3处；工艺参数仍按980 Word→920 DWord→982 Word→924 DWord顺序，0、49和100ms字面量各保留唯一1处；90个功能ID状态为68/10/10/2；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序，等待用户Qt Creator门禁。
+- [x] PLC设备适配Qt Creator集中门禁：2026-08-13用户确认`plc_device_adapter_test`预期`9 passed, 0 failed`及主工程Run qmake/Rebuild/Run和可执行PLC失败/启动保护入口均无问题；本次未提供真实PLC读回或49→100ms→0现场记录，因此相关功能恢复`已基线`而不冒充现场验证。
 
 ## 本地提交记录
 
@@ -763,6 +768,8 @@
 | `ccb6b5a` | Stage 1四模板模式配方合同 | SET-003、TPL-006、TPL-007、TPL-008 | 统一模板模式判定和必需资产角色，钢印显式要求`stampRing`，草稿/发布/重发/选择共享合同 | `recipe_store_test` 27项和`product_recipe_test` 10项由用户确认通过 |
 | `17987fc` | Stage 1钢印与OCR产品配方闭环 | SET-001、SET-003、UI-001、TPL-006..008、TPL-011、TPL-013、TPL-015、TPL-016、DET-002、DET-004、RUN-001 | 两种单模板模式接通发布、选择、同UUID参数/字符资产重发、模式恢复；钢印保留字符裁切和重叠检测双能力 | 用户确认主工程、两配方测试、钢印字符模板实际保存/同UUID重发、两模式启停及旧入口均正常 |
 | `89934ee` | Stage 1统一模板配方事务工作流 | SET-003、TPL-006、TPL-011..015 | 草稿发布、参数重发和字符资产重发统一为候选校验、正式发布、成功后提交会话的单一事务边界 | 用户确认配方测试、主工程及字库/二维码/钢印可执行路径正常；深度OCR无旧模板项未单独执行 |
+| `ef3af6d` | Stage 2二维码解码设备适配 | TPL-004、DET-006、RUN-001、TOOL-002 | DLL生命周期、C ABI调用和7路通用解码策略迁入`devices/barcode/`，Widget改用`IBarcodeDecoder` | 用户确认适配器8项、二维码Pipeline 6项、真实DLL/框选读码、启停和跨模式恢复均正常 |
+| `c78ebb8` | Stage 2 Paddle OCR设备适配 | SYS-006、DET-004、TPL-002、TPL-003、TPL-005 | Paddle配置、模型对象和原生调用收口到`devices/ocr/`，Pipeline依赖`IOcrEngine`，并恢复深度OCR模板绘图入口 | 用户确认OCR测试6项、主工程模型初始化、模板制作/发布、逐帧OCR调用和启停均正常 |
 
 ## 未解决事项
 
@@ -774,7 +781,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2 Paddle OCR设备接口与深度OCR模板入口修复已通过用户门禁，等待创建独立提交。
+- 当前切片：Stage 2 Snap7 PLC设备窄接口与适配器已通过Agent静态检查和用户Qt Creator门禁，等待创建独立本地提交。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线78 / 迁移中0 / 已验证10 / 已延期2 / 已确认删除0。
-- 下一允许动作：创建Paddle OCR设备适配独立提交，然后开始下一个Stage 2窄边界切片。
+- 下一允许动作：创建PLC设备适配独立本地提交，然后进入Stage 2相机设备窄接口切片。
