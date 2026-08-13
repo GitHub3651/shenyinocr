@@ -390,6 +390,35 @@ bool detectionModeFromId(const QString &modeId, DetectionMode *mode)
     return true;
 }
 
+bool isTemplateRecipeMode(DetectionMode mode)
+{
+    switch (mode) {
+    case DetectionMode::Stamp:
+    case DetectionMode::Word:
+    case DetectionMode::Ocr:
+    case DetectionMode::BarcodeWord:
+        return true;
+    case DetectionMode::Tissue:
+        return false;
+    }
+    return false;
+}
+
+QStringList requiredTemplateProfileAssetRoles(DetectionMode mode)
+{
+    if (!isTemplateRecipeMode(mode)) {
+        return QStringList();
+    }
+
+    QStringList roles;
+    roles << QStringLiteral("trackingTemplate")
+          << QStringLiteral("calibration");
+    if (mode == DetectionMode::Stamp) {
+        roles << QStringLiteral("stampRing");
+    }
+    return roles;
+}
+
 ProductRecipe createProductRecipe(const QString &displayName,
                                   DetectionMode detectionMode)
 {

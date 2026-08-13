@@ -45,12 +45,6 @@ bool isCanonicalRecipeId(const QString &recipeId)
                 recipeId.trimmed(), Qt::CaseInsensitive) == 0;
 }
 
-bool isWordFamily(DetectionMode mode)
-{
-    return mode == DetectionMode::Word
-            || mode == DetectionMode::BarcodeWord;
-}
-
 } // namespace
 
 void TemplateRecipeDraftSession::reset()
@@ -78,9 +72,9 @@ bool TemplateRecipeDraftSession::begin(
                  QStringLiteral("Template recipe draft displayName is empty."));
         return false;
     }
-    if (!isWordFamily(recipeHeader.detectionMode)) {
+    if (!isTemplateRecipeMode(recipeHeader.detectionMode)) {
         setError(errorMessage,
-                 QStringLiteral("Template recipe draft only supports the word family."));
+                 QStringLiteral("Template recipe draft only supports template-based modes."));
         return false;
     }
 

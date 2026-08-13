@@ -370,7 +370,7 @@ void ProductRecipeTest::templateProfileAssetManifestPreservesVariantsAndNamespac
 
     const TemplateProfileAssetManifest first =
             buildTemplateProfileAssetManifest(temporaryDirectory.path(), 2);
-    QCOMPARE(first.recipeAssets.size(), 6);
+    QCOMPARE(first.recipeAssets.size(), 7);
     QCOMPARE(first.assetSourcePaths.size(), first.recipeAssets.size());
     QCOMPARE(first.profileAssetKeys.size(), first.recipeAssets.size());
     QCOMPARE(first.profileAssetKeys.value(QStringLiteral("trackingTemplate")),
@@ -379,6 +379,15 @@ void ProductRecipeTest::templateProfileAssetManifestPreservesVariantsAndNamespac
              QStringLiteral("profile2.calibration"));
     QCOMPARE(first.profileAssetKeys.value(QStringLiteral("rawImage")),
              QStringLiteral("profile2.rawImage"));
+    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("stampRing")),
+             QStringLiteral("profile2.stampRing"));
+    QCOMPARE(first.recipeAssets.value(QStringLiteral("profile2.stampRing")),
+             QStringLiteral("assets/profiles/2/template_ring.bmp"));
+    QCOMPARE(first.assetSourcePaths.value(
+                 QStringLiteral("profile2.stampRing")),
+             QFileInfo(temporaryDirectory.filePath(
+                           QStringLiteral("template_ring.bmp")))
+             .absoluteFilePath());
 
     const QStringList characterFileNames = {
         QStringLiteral("A.png"),
@@ -396,11 +405,6 @@ void ProductRecipeTest::templateProfileAssetManifestPreservesVariantsAndNamespac
                  QFileInfo(temporaryDirectory.filePath(fileName))
                  .absoluteFilePath());
     }
-    QVERIFY(!first.assetSourcePaths.values().contains(
-                QFileInfo(temporaryDirectory.filePath(
-                              QStringLiteral("template_ring.bmp")))
-                .absoluteFilePath()));
-
     const TemplateProfileAssetManifest second =
             buildTemplateProfileAssetManifest(temporaryDirectory.path(), 3);
     for (auto it = first.recipeAssets.constBegin();

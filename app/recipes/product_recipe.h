@@ -7,6 +7,7 @@
 #include <QRectF>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <memory>
@@ -69,6 +70,8 @@ typedef std::shared_ptr<const ProductRecipe> ProductRecipeSnapshot;
 
 QString detectionModeId(DetectionMode mode);
 bool detectionModeFromId(const QString &modeId, DetectionMode *mode);
+bool isTemplateRecipeMode(DetectionMode mode);
+QStringList requiredTemplateProfileAssetRoles(DetectionMode mode);
 
 ProductRecipe createProductRecipe(const QString &displayName,
                                   DetectionMode detectionMode);

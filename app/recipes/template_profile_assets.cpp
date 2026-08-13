@@ -59,6 +59,11 @@ TemplateProfileAssetManifest buildTemplateProfileAssetManifest(
              QStringLiteral("rawImage"),
              directory.filePath(QStringLiteral("template_raw.png")),
              targetPathPrefix + QStringLiteral("/template_raw.png"));
+    addAsset(&manifest,
+             assetKeyPrefix + QStringLiteral(".stampRing"),
+             QStringLiteral("stampRing"),
+             directory.filePath(QStringLiteral("template_ring.bmp")),
+             targetPathPrefix + QStringLiteral("/template_ring.bmp"));
 
     static const QStringList imageFilters = {
         QStringLiteral("*.png"),

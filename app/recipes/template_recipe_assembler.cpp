@@ -14,6 +14,7 @@ void setError(QString *errorMessage, const QString &message)
 }
 
 bool validateManifest(const TemplateProfileAssetManifest &manifest,
+                      DetectionMode detectionMode,
                       QString *errorMessage)
 {
     if (manifest.recipeAssets.size() != manifest.assetSourcePaths.size()
@@ -23,13 +24,15 @@ bool validateManifest(const TemplateProfileAssetManifest &manifest,
                  QStringLiteral("Profile asset manifest maps do not match."));
         return false;
     }
-    if (!manifest.profileAssetKeys.contains(
-                QStringLiteral("trackingTemplate"))
-            || !manifest.profileAssetKeys.contains(
-                QStringLiteral("calibration"))) {
-        setError(errorMessage,
-                 QStringLiteral("Profile asset manifest is missing required assets."));
-        return false;
+    const QStringList requiredRoles =
+            requiredTemplateProfileAssetRoles(detectionMode);
+    for (const QString &requiredRole : requiredRoles) {
+        if (!manifest.profileAssetKeys.contains(requiredRole)) {
+            setError(errorMessage,
+                     QStringLiteral("Profile asset manifest is missing required assets: %1.")
+                     .arg(requiredRole));
+            return false;
+        }
     }
 
     QSet<QString> referencedAssetKeys;
@@ -65,12 +68,6 @@ bool validateManifest(const TemplateProfileAssetManifest &manifest,
         }
     }
     return true;
-}
-
-bool isWordFamily(DetectionMode mode)
-{
-    return mode == DetectionMode::Word
-            || mode == DetectionMode::BarcodeWord;
 }
 
 bool resolveSelectedAssetSource(const RecipeSelection &selection,
@@ -136,9 +133,9 @@ bool assembleTemplateProductRecipe(
                  QStringLiteral("Template recipe assembly output is null."));
         return false;
     }
-    if (!isWordFamily(recipeHeader.detectionMode)) {
+    if (!isTemplateRecipeMode(recipeHeader.detectionMode)) {
         setError(errorMessage,
-                 QStringLiteral("Template recipe assembly only supports the word family."));
+                 QStringLiteral("Template recipe assembly only supports template-based modes."));
         return false;
     }
     if (profileSources.isEmpty()) {
@@ -156,7 +153,9 @@ bool assembleTemplateProductRecipe(
     QSet<QString> normalizedTargetPaths;
     for (const TemplateRecipeProfileSource &source : profileSources) {
         const TemplateProfileAssetManifest &manifest = source.assetManifest;
-        if (!validateManifest(manifest, errorMessage)) {
+        if (!validateManifest(manifest,
+                              recipeHeader.detectionMode,
+                              errorMessage)) {
             return false;
         }
 
@@ -217,9 +216,9 @@ bool assembleSelectedTemplateRecipe(
                  QStringLiteral("Selected template recipe snapshot is null."));
         return false;
     }
-    if (!isWordFamily(selection.recipe->detectionMode)) {
+    if (!isTemplateRecipeMode(selection.recipe->detectionMode)) {
         setError(errorMessage,
-                 QStringLiteral("Selected template recipe assembly only supports the word family."));
+                 QStringLiteral("Selected template recipe assembly only supports template-based modes."));
         return false;
     }
     if (selection.recipeDirectoryPath.trimmed().isEmpty()) {
@@ -253,6 +252,20 @@ bool assembleSelectedTemplateRecipe(
                      QStringLiteral("Selected recipe profile mapping does not match the snapshot: %1")
                      .arg(profileName));
             return false;
+        }
+
+        const QStringList requiredRoles =
+                requiredTemplateProfileAssetRoles(
+                    candidate.recipe.detectionMode);
+        for (const QString &requiredRole : requiredRoles) {
+            if (!recipeProfile.assetKeys.contains(requiredRole)
+                    || !resolvedProfile.assetPathsByRole.contains(
+                        requiredRole)) {
+                setError(errorMessage,
+                         QStringLiteral("Selected recipe profile %1 is missing required asset role %2.")
+                         .arg(profileName, requiredRole));
+                return false;
+            }
         }
 
         for (auto it = recipeProfile.assetKeys.constBegin();

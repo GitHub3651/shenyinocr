@@ -53,14 +53,15 @@ bool resolveProfileAssets(const ProductRecipe &recipe,
                                           assetInfo.absoluteFilePath());
     }
 
-    if (!candidate.assetPathsByRole.contains(
-                QStringLiteral("trackingTemplate"))
-            || !candidate.assetPathsByRole.contains(
-                QStringLiteral("calibration"))) {
-        setError(errorMessage,
-                 QStringLiteral("Selected recipe profile is missing required runtime assets: %1")
-                 .arg(profile.name));
-        return false;
+    const QStringList requiredRoles =
+            requiredTemplateProfileAssetRoles(recipe.detectionMode);
+    for (const QString &requiredRole : requiredRoles) {
+        if (!candidate.assetPathsByRole.contains(requiredRole)) {
+            setError(errorMessage,
+                     QStringLiteral("Selected recipe profile %1 is missing required runtime assets: %2.")
+                     .arg(profile.name, requiredRole));
+            return false;
+        }
     }
 
     *resolvedProfile = candidate;

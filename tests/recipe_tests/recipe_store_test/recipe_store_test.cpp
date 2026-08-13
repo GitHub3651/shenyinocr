@@ -38,6 +38,7 @@ private slots:
     void publishingLegacyTemplateGroupPreservesProfileOrderAndAssets();
     void publishingFailurePreservesPreviousRecipeAndOutput();
     void republishingSameHeaderKeepsIdentityAndReplacesAssets();
+    void singleTemplateModesPublishRepublishAndValidateRequiredAssets();
     void draftSessionRejectsChangedSourceAndKeepsIdentity();
     void editSessionRepublishesProfileChangesWithSameIdentity();
     void editSessionRejectsInvalidChangesAndPreservesState();
@@ -1480,6 +1481,198 @@ void RecipeStoreTest::republishingSameHeaderKeepsIdentityAndReplacesAssets()
     QCOMPARE(catalog.recipes.first().recipeId, stableRecipeId);
 }
 
+void RecipeStoreTest::singleTemplateModesPublishRepublishAndValidateRequiredAssets()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    const QVector<DetectionMode> modes = {
+        DetectionMode::Stamp,
+        DetectionMode::Ocr
+    };
+    RecipeSelection lastPublishedSelection;
+    QString errorMessage;
+
+    for (const DetectionMode mode : modes) {
+        const bool isStamp = mode == DetectionMode::Stamp;
+        const QString modeName = isStamp
+                ? QStringLiteral("stamp")
+                : QStringLiteral("ocr");
+        const QString sourceDirectory = QDir(temporaryDirectory.path())
+                .filePath(modeName);
+        QVERIFY(QDir().mkpath(sourceDirectory));
+
+        const QString trackingPath = QDir(sourceDirectory).filePath(
+                    QStringLiteral("tracking_template.bmp"));
+        const QString calibrationPath = QDir(sourceDirectory).filePath(
+                    QStringLiteral("calibrate_config.yaml"));
+        const QString stampRingPath = QDir(sourceDirectory).filePath(
+                    QStringLiteral("template_ring.bmp"));
+        QVERIFY(writeBytes(trackingPath,
+                           modeName.toUtf8() + QByteArray("-tracking-v1")));
+        QVERIFY(writeBytes(calibrationPath,
+                           modeName.toUtf8() + QByteArray("-calibration")));
+        if (isStamp) {
+            QVERIFY(writeBytes(stampRingPath, QByteArray("stamp-ring")));
+        }
+
+        ProductRecipe recipeHeader = createProductRecipe(
+                    modeName + QStringLiteral("-product"), mode);
+        const QString stableRecipeId = recipeHeader.recipeId;
+        TemplateRecipeDraftSession draftSession;
+        QVERIFY2(draftSession.begin(recipeHeader,
+                                    sourceDirectory,
+                                    &errorMessage),
+                 qPrintable(errorMessage));
+
+        TemplateRecipeProfileSource profileSource;
+        profileSource.profile.name = modeName + QStringLiteral("-profile");
+        profileSource.profile.targetText = QStringLiteral("V1");
+        profileSource.profile.imageThreshold = 71.0;
+        profileSource.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+        profileSource.profile.hasValidBoxes = true;
+        profileSource.assetManifest = buildTemplateProfileAssetManifest(
+                    sourceDirectory, 0);
+        QVector<TemplateRecipeProfileSource> profileSources;
+        profileSources.append(profileSource);
+
+        RecipeSelection selection;
+        QVERIFY2(draftSession.publish(store,
+                                      sourceDirectory,
+                                      profileSources,
+                                      &selection,
+                                      &errorMessage),
+                 qPrintable(errorMessage));
+        QVERIFY(selection.recipe);
+        QCOMPARE(selection.recipe->recipeId, stableRecipeId);
+        QCOMPARE(detectionModeId(selection.recipe->detectionMode),
+                 detectionModeId(mode));
+        QCOMPARE(selection.profiles.size(), 1);
+        QCOMPARE(selection.profiles.first().profile.targetText,
+                 QStringLiteral("V1"));
+        QCOMPARE(readBytes(selection.profiles.first().assetPathsByRole.value(
+                               QStringLiteral("trackingTemplate"))),
+                 modeName.toUtf8() + QByteArray("-tracking-v1"));
+        QCOMPARE(selection.profiles.first().assetPathsByRole.contains(
+                     QStringLiteral("stampRing")),
+                 isStamp);
+        QCOMPARE(requiredTemplateProfileAssetRoles(mode).contains(
+                     QStringLiteral("stampRing")),
+                 isStamp);
+
+        QVERIFY(writeBytes(trackingPath,
+                           modeName.toUtf8() + QByteArray("-tracking-v2")));
+        profileSource.profile.targetText = QStringLiteral("V2");
+        profileSource.assetManifest = buildTemplateProfileAssetManifest(
+                    sourceDirectory, 0);
+        profileSources[0] = profileSource;
+        QVERIFY2(draftSession.publish(store,
+                                      sourceDirectory,
+                                      profileSources,
+                                      &selection,
+                                      &errorMessage),
+                 qPrintable(errorMessage));
+        QCOMPARE(selection.recipe->recipeId, stableRecipeId);
+        QCOMPARE(selection.profiles.first().profile.targetText,
+                 QStringLiteral("V2"));
+        QCOMPARE(readBytes(selection.profiles.first().assetPathsByRole.value(
+                               QStringLiteral("trackingTemplate"))),
+                 modeName.toUtf8() + QByteArray("-tracking-v2"));
+
+        TemplateRecipeEditSession editSession;
+        QVERIFY2(editSession.begin(selection, &errorMessage),
+                 qPrintable(errorMessage));
+        RecipeProfile editedProfile = editSession.recipe().profiles.first();
+        editedProfile.imageThreshold = isStamp ? 73.0 : 74.0;
+        QVERIFY2(editSession.updateProfile(0,
+                                           editedProfile,
+                                           &errorMessage),
+                 qPrintable(errorMessage));
+        QVERIFY2(editSession.publish(store,
+                                     &selection,
+                                     &errorMessage),
+                 qPrintable(errorMessage));
+        QCOMPARE(selection.recipe->recipeId, stableRecipeId);
+        QCOMPARE(selection.profiles.first().profile.imageThreshold,
+                 editedProfile.imageThreshold);
+
+        if (isStamp) {
+            QVERIFY(QFile::remove(stampRingPath));
+            profileSource.profile.targetText = QStringLiteral("BROKEN");
+            profileSource.assetManifest = buildTemplateProfileAssetManifest(
+                        sourceDirectory, 0);
+            profileSources[0] = profileSource;
+            QVERIFY(!draftSession.publish(store,
+                                          sourceDirectory,
+                                          profileSources,
+                                          &selection,
+                                          &errorMessage));
+            QVERIFY(errorMessage.contains(QStringLiteral("stampRing")));
+            QCOMPARE(selection.recipe->recipeId, stableRecipeId);
+            QCOMPARE(selection.profiles.first().profile.targetText,
+                     QStringLiteral("V2"));
+
+            ProductRecipe preservedRecipe;
+            QVERIFY2(store.loadRecipe(stableRecipeId,
+                                      &preservedRecipe,
+                                      &errorMessage),
+                     qPrintable(errorMessage));
+            QCOMPARE(preservedRecipe.profiles.first().targetText,
+                     QStringLiteral("V2"));
+        }
+
+        lastPublishedSelection = selection;
+    }
+
+    const QString missingRingTracking = QDir(temporaryDirectory.path())
+            .filePath(QStringLiteral("missing-ring-tracking.bmp"));
+    const QString missingRingCalibration = QDir(temporaryDirectory.path())
+            .filePath(QStringLiteral("missing-ring-calibration.yaml"));
+    QVERIFY(writeBytes(missingRingTracking, QByteArray("tracking")));
+    QVERIFY(writeBytes(missingRingCalibration, QByteArray("calibration")));
+
+    ProductRecipe incompleteStamp = createProductRecipe(
+                QStringLiteral("incomplete-stamp"), DetectionMode::Stamp);
+    incompleteStamp.assets.insert(
+                QStringLiteral("tracking"),
+                QStringLiteral("assets/tracking.bmp"));
+    incompleteStamp.assets.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("assets/calibration.yaml"));
+    RecipeProfile incompleteProfile;
+    incompleteProfile.name = QStringLiteral("stamp-profile");
+    incompleteProfile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+    incompleteProfile.hasValidBoxes = true;
+    incompleteProfile.assetKeys.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("tracking"));
+    incompleteProfile.assetKeys.insert(
+                QStringLiteral("calibration"),
+                QStringLiteral("calibration"));
+    incompleteStamp.profiles.append(incompleteProfile);
+    QMap<QString, QString> incompleteSources;
+    incompleteSources.insert(QStringLiteral("tracking"), missingRingTracking);
+    incompleteSources.insert(QStringLiteral("calibration"),
+                             missingRingCalibration);
+    QVERIFY2(store.saveRecipe(incompleteStamp,
+                              incompleteSources,
+                              &errorMessage),
+             qPrintable(errorMessage));
+
+    const QString preservedSelectionId =
+            lastPublishedSelection.recipe->recipeId;
+    QVERIFY(!loadRecipeSelection(store,
+                                 incompleteStamp.recipeId,
+                                 DetectionMode::Stamp,
+                                 &lastPublishedSelection,
+                                 &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("stampRing")));
+    QCOMPARE(lastPublishedSelection.recipe->recipeId,
+             preservedSelectionId);
+}
+
 void RecipeStoreTest::draftSessionRejectsChangedSourceAndKeepsIdentity()
 {
     QTemporaryDir temporaryDirectory;
@@ -1515,7 +1708,7 @@ void RecipeStoreTest::draftSessionRejectsChangedSourceAndKeepsIdentity()
     QVERIFY(!session.begin(invalidHeader,
                            otherDirectory,
                            &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("word family")));
+    QVERIFY(errorMessage.contains(QStringLiteral("template-based modes")));
     QVERIFY(session.isActive());
     QCOMPARE(session.recipeHeader().recipeId, stableRecipeId);
     QCOMPARE(QFileInfo(session.sourceDirectoryPath()).canonicalFilePath(),
