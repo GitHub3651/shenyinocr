@@ -64,6 +64,7 @@ SOURCES += \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
+    devices/ocr/paddle_ocr_engine.cpp \
     detection/common/profile_pose_selector.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/barcode_word/barcode_word_detection_pipeline.cpp \
@@ -115,6 +116,8 @@ HEADERS += \
     recipes/template_profile_mapper.h \
     ui/dialogs/recipe_selection_dialog.h \
     devices/barcode/barcode_decoder_adapter.h \
+    devices/ocr/ocr_engine.h \
+    devices/ocr/paddle_ocr_engine.h \
     detection/common/profile_pose_selector.h \
     detection/ocr/ocr_detection_pipeline.h \
     detection/barcode_word/barcode_word_detection_pipeline.h \

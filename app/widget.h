@@ -47,9 +47,6 @@
 #include "CameraThread.h"
 #include "TissueRollDetector.h"
 #include "snap7.h"
-#include "PaddleOCR/include/config.h"
-#include <PaddleOCR/include/ocr_det.h>
-#include <PaddleOCR/include/ocr_rec.h>
 #include <QImage>
 #include "imagelabel.h"
 #include "Zhuizong.h"
@@ -75,9 +72,9 @@
 #include "recipes/template_profile_assets.h"
 #include "recipes/template_recipe_workflow.h"
 #include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/ocr/ocr_engine.h"
 
 using namespace cv;
-using namespace PaddleOCR;
 
 namespace Ui {
 class Widget;
@@ -115,12 +112,6 @@ public:
     {
         return QString::fromUtf8(str.data());
     }
-
-    // ========== OCR相关对象 ==========
-    OCRConfig *config = nullptr;        ///< OCR配置
-    DBDetector *det = nullptr;          ///< 文本检测器
-    Classifier *cls = nullptr;          ///< 文本分类器
-    CRNNRecognizer *rec = nullptr;      ///< 文本识别器
 
     // ========== 相机相关 ==========
     int nRet = -1;                      ///< 返回值
@@ -564,6 +555,7 @@ private:
     std::vector<WordTemplateProfile> m_runningWordTemplateProfiles; ///< 字库家族本次识别专用的只读Profile快照
     bool m_wordTemplateRunActive = false; ///< 正式检测是否已安装字库家族运行快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
+    std::unique_ptr<IOcrEngine> m_ocrEngine;
     std::unique_ptr<IBarcodeDecoder> m_barcodeDecoder;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;

@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 2 设备接口与运行协调（按用户风险接受条件进入）
-- 当前切片：二维码解码设备接口与适配器（用户门禁通过，等待提交）
-- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。Stage 1已建立配方事务边界、五种检测Pipeline和模板发布/选择/编辑链；固定现场样本及硬件证据仍按用户明确决定延期，不冒充最终产品验收。统一模板配方工作流已提交为`89934ee`，当前开始把二维码DLL与解码策略从Widget整体迁入`devices/barcode/`。
+- 当前切片：Paddle OCR设备接口、适配器与深度OCR模板入口回归修复（用户门禁通过，等待正式提交）
+- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码DLL与解码策略已提交为`ef3af6d`；Paddle设备边界和深度OCR模板绘图入口已经通过用户Qt Creator测试与主程序门禁，当前准备创建独立回退点。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -706,6 +706,18 @@
 - [x] 二维码设备适配首次Qt Creator构建未通过：MSVC2017按代码页936解析新适配器的无BOM UTF-8中文窄字符串，在原80行报`C4819/C2001`并连锁报`C2143`；源码括号结构正常，不是解码算法错误。
 - [x] 编译错误修复：两条既有中文DLL错误提示改用仅含ASCII源码字符的`QString::fromWCharArray(L"\\u....")`构造，显示文字和占位符保持不变，避免依赖MSVC源文件代码页；等待用户重新构建。
 - [x] 二维码设备适配Qt Creator集中门禁：2026-08-13用户确认`barcode_decoder_adapter_test`预期8项、`barcode_word_detection_pipeline_test`预期6项、主工程Run qmake/Rebuild/Run、旧或已发布配方、实际框选即时读码、DLL版本日志、二维码与日期启停以及跨模式模板/参数恢复全部无问题；`TPL-004、RUN-001、TOOL-002`恢复已基线，`DET-006`恢复已验证。
+- [x] 二维码解码设备接口与适配器已创建独立提交`ef3af6d`，提交后工作区干净。
+- [x] 开始Stage 2 Paddle OCR设备适配切片；影响`SYS-006、DET-004`，两项进入迁移中。旧调用链由Widget直接包含Paddle配置/模型头、构造并持有四个具体对象，检测回调内固定先`DBDetector::Run`再`CRNNRecognizer::Run`，分类器按`use_angle_cls`可空；ROI、清洗、目标比较和全部结果副作用在Pipeline/Widget其余代码中。
+- [x] 新增`IOcrEngine/PaddleOcrEngine`，适配器保持配置路径解析、所有构造参数、可选分类器、原生调用顺序与输出行顺序；Paddle具体头和对象已从Widget清零，适配器以明确所有权在窗口销毁时释放模型。
+- [x] `OcrDetectionPipeline`改为直接依赖`IOcrEngine`，Widget只提交裁切图与目标文字；现有四项业务测试改用内存`FakeOcrEngine`，继续锁定字节清洗、行顺序、非空精确匹配和空/不同文字NG，Qt Test预期仍为`6 passed, 0 failed`。
+- [x] Paddle OCR设备适配切片初次Agent静态检查通过：13个白名单文件（含3个新增`devices/ocr`文件）；Widget具体Paddle类型/构造/调用引用0处，适配器检测与识别调用各唯一1处、可选分类器门禁与传入各唯一1处，Pipeline接口声明/调用和Widget注入均唯一；主工程新增源1/头2，OCR测试Fake与接口头已登记；recipes、barcode、相机、PLC、runtime及采集线程改动0处。Agent未执行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] Paddle OCR Pipeline Qt Creator测试门禁：2026-08-13用户确认`ocr_detection_pipeline_test`汇总`6 passed, 0 failed`；该测试使用Fake设备，不编译具体Paddle适配器，因此不能替代主工程构建门禁。
+- [x] Paddle OCR适配器首次主工程构建未通过：`paddle_ocr_engine.cpp`直接包含无include guard的`ocr_cls.h`，随后`ocr_rec.h`再次包含同一头文件，MSVC报`C2011 PaddleOCR::Classifier类型重定义`并连锁报`C2280/C2027`。
+- [x] 编译错误修复：删除适配器对`ocr_cls.h`的重复直接包含，继续由`ocr_rec.h`唯一引入完整`Classifier`定义；不修改Paddle第三方源码、模型对象、构造参数、可选分类器或检测/识别调用顺序，等待用户重新构建主工程。
+- [x] Paddle OCR适配器主工程构建启动复验：2026-08-13用户提供运行中深度模型界面，证明重复包含修复后主工程已能构建并启动；直接启动时既有产品模板预检正确拒绝缺少tracking/date资源，但实际制作新模板时发现冻结画面没有启用绘图。
+- [x] 深度OCR模板入口根因：`freezeTemplatePreview`只对硬编码模式索引0和字库家族开启`ImageLabel`模板绘图，`showTemplateGuideForCurrentMode/handleTemplateGuideEvent`也只接受0/1/4，遗漏深度OCR索引2，导致界面提示完成框选但鼠标事件按非模板路径处理。
+- [x] 深度OCR模板入口修复：统一按`isSingleTemplateRecipeMode(modeId) || isWordFamilyMode(modeId)`决定绘图资格，深度OCR恢复“定位矩形→喷码多边形→右键闭合→保存”的既有通用流程，并显示“深度模型模板制作”逐步引导；纸巾仍不启用模板绘图，Paddle、ROI换算、模板落盘和检测判定未改。影响`TPL-002、TPL-003、TPL-005、DET-004`，等待主程序实际制作、保存、启停和退出门禁。
+- [x] Paddle OCR与深度OCR模板入口Qt Creator集中门禁：2026-08-13用户确认`ocr_detection_pipeline_test`汇总`6 passed, 0 failed`；主工程修复重复头文件后正常构建启动；深度OCR模板实际完成定位/日期框选并产生`[RECIPE_SELECT]`与`[RECIPE_PUBLISH]`，随后检测成功启动、Paddle逐帧调用并正常停止。当前实际样本`Final String`为空，只记录为本次样本结果，不冒充准确率或固定样本对照证据；用户确认其余日志均无功能问题。
 
 ## 本地提交记录
 
@@ -762,7 +774,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2二维码解码设备接口与适配器用户门禁通过，等待独立提交。
+- 当前切片：Stage 2 Paddle OCR设备接口与深度OCR模板入口修复已通过用户门禁，等待创建独立提交。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线82 / 迁移中0 / 已验证6 / 已延期2 / 已确认删除0。
-- 下一允许动作：创建二维码设备适配独立提交，随后开始Paddle OCR设备接口与适配器切片。
+- 功能状态计数：待盘点0 / 已基线78 / 迁移中0 / 已验证10 / 已延期2 / 已确认删除0。
+- 下一允许动作：创建Paddle OCR设备适配独立提交，然后开始下一个Stage 2窄边界切片。

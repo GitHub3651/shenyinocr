@@ -1,9 +1,10 @@
 #ifndef DETECTION_OCR_OCR_DETECTION_PIPELINE_H
 #define DETECTION_OCR_OCR_DETECTION_PIPELINE_H
 
+#include "devices/ocr/ocr_engine.h"
+
 #include <opencv2/core.hpp>
 
-#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,13 +17,10 @@ struct OcrDetectionResult
 class OcrDetectionPipeline
 {
 public:
-    typedef std::function<std::vector<std::string>(cv::Mat &image)>
-            RecognizeFunction;
-
     OcrDetectionResult detect(
             cv::Mat &croppedImage,
             const std::string &targetText,
-            const RecognizeFunction &recognize) const;
+            IOcrEngine &ocrEngine) const;
 };
 
 #endif // DETECTION_OCR_OCR_DETECTION_PIPELINE_H

@@ -34,14 +34,15 @@ std::string cleanRecognitionText(const std::string &text)
 OcrDetectionResult OcrDetectionPipeline::detect(
         cv::Mat &croppedImage,
         const std::string &targetText,
-        const RecognizeFunction &recognize) const
+        IOcrEngine &ocrEngine) const
 {
     OcrDetectionResult result;
-    if (croppedImage.empty() || !recognize) {
+    if (croppedImage.empty()) {
         return result;
     }
 
-    const std::vector<std::string> rawText = recognize(croppedImage);
+    const std::vector<std::string> rawText =
+            ocrEngine.recognize(croppedImage);
     for (const std::string &line : rawText) {
         const std::string cleaned = cleanRecognitionText(line);
         if (cleaned.empty()) {

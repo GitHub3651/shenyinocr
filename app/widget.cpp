@@ -22,6 +22,7 @@
 #include "detection/ocr/ocr_detection_pipeline.h"
 #include "detection/stamp/stamp_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
+#include "devices/ocr/paddle_ocr_engine.h"
 
 
 // Qt核心组件
@@ -984,37 +985,10 @@ Widget::Widget(QWidget *parent)
     initWidget();
     qDebug() << "1. initWidget执行完毕 ";
 
-    // 加载OCR配置文件
+    // OCR配置、模型和原生调用顺序由设备适配器独占。
     const QString configPath = QDir(QCoreApplication::applicationDirPath())
                                    .filePath(QStringLiteral("config1.txt"));
-    config = new OCRConfig(configPath.toStdString());
-    config->PrintConfigInfo();
-    qDebug() << "2. config.txt 读取完毕";
-
-    // 初始化检测器（DBNet模型）
-    det = new DBDetector(config->det_model_dir, config->use_gpu, config->gpu_id,
-                         config->gpu_mem, config->cpu_math_library_num_threads,
-                         config->use_mkldnn, config->max_side_len, config->det_db_thresh,
-                         config->det_db_box_thresh, config->det_db_unclip_ratio,
-                         config->visualize, config->use_tensorrt, config->use_fp16);
-    qDebug() << "3. DBDetector 模型加载完毕";
-
-    // 初始化分类器（角度分类）
-    if (config->use_angle_cls == true)
-    {
-        cls = new Classifier(config->cls_model_dir, config->use_gpu, config->gpu_id,
-                             config->gpu_mem, config->cpu_math_library_num_threads,
-                             config->use_mkldnn, config->cls_thresh,
-                             config->use_tensorrt, config->use_fp16);
-        qDebug() << "4. Classifier 角度分类模型加载完毕";
-    }
-
-    // 初始化识别器（CRNN模型）
-    rec = new CRNNRecognizer(config->rec_model_dir, config->use_gpu, config->gpu_id,
-                             config->gpu_mem, config->cpu_math_library_num_threads,
-                             config->use_mkldnn, config->char_list_file,
-                             config->use_tensorrt, config->use_fp16);
-    qDebug() << "5. CRNNRecognizer 模型加载完毕";
+    m_ocrEngine.reset(new PaddleOcrEngine(configPath));
 
     // 初始化统计变量
     hasValidBoxes = false;
@@ -2014,15 +1988,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
             ocrPipeline.detect(
                 croppedImage,
                 target_string,
-                [this](cv::Mat &ocrImage) {
-        std::vector<std::vector<std::vector<int>>> boxes;
-        det->Run(ocrImage, boxes);
-
-        // 保留原生 Run 调用，不改Paddle识别参数和返回顺序。
-        std::vector<std::string> rawText;
-        rec->Run(boxes, ocrImage, cls, rawText);
-        return rawText;
-    });
+                *m_ocrEngine);
 
     allResults = ocrResult.recognizedText;
 
@@ -3743,12 +3709,13 @@ bool Widget::freezeTemplatePreview()
     *myImage = m_lastTemplatePreviewFrame.clone();
     slot_displayAndDetect(myImage);
 
+    const QString modeId = currentDetectModeId();
     const bool needsTemplateDrawing =
-            ui->comboBox_4->currentIndex() == 0
-            || isWordFamilyMode(currentDetectModeId());
+            isSingleTemplateRecipeMode(modeId)
+            || isWordFamilyMode(modeId);
     clearBarcodeTemplateValidation();
     imageLabel->setBarcodeRegionRequired(
-                currentDetectModeId() == BarcodeWordDetectionMode);
+                modeId == BarcodeWordDetectionMode);
     imageLabel->setTemplateDrawingEnabled(
                 needsTemplateDrawing);
     if (needsTemplateDrawing) {
@@ -4166,16 +4133,20 @@ void Widget::updateImageDisplayStatusText(const QString &body)
 void Widget::showTemplateGuideForCurrentMode()
 {
     const int modeIndex = ui->comboBox_4->currentIndex();
+    const QString modeId = detectModeIdForIndex(modeIndex);
 
-    if (modeIndex == 0) {
-        updateTemplateGuideText("模板匹配模板制作",
-                                "请按住鼠标左键拖动，框选定位区域。");
+    if (isSingleTemplateRecipeMode(modeId)) {
+        updateTemplateGuideText(
+                    modeId == QStringLiteral("ocr_detection")
+                        ? "深度模型模板制作"
+                        : "模板匹配模板制作",
+                    "请按住鼠标左键拖动，框选定位区域。");
         return;
     }
 
-    if (modeIndex == 1 || modeIndex == 4) {
+    if (isWordFamilyMode(modeId)) {
         const bool barcodeWordMode =
-                detectModeIdForIndex(modeIndex) == BarcodeWordDetectionMode;
+                modeId == BarcodeWordDetectionMode;
         updateTemplateGuideText(
                     barcodeWordMode
                         ? "二维码+三期模板制作"
@@ -4196,7 +4167,9 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     }
 
     const int modeIndex = ui->comboBox_4->currentIndex();
-    if (modeIndex != 0 && modeIndex != 1 && modeIndex != 4) {
+    const QString modeId = detectModeIdForIndex(modeIndex);
+    if (!isSingleTemplateRecipeMode(modeId)
+            && !isWordFamilyMode(modeId)) {
         if (m_templateGuideFrame && m_templateGuideFrame->isVisible()) {
             hideTemplateGuide();
         }
@@ -4204,14 +4177,16 @@ void Widget::handleTemplateGuideEvent(const QString &eventName, int pointCount)
     }
 
     const bool barcodeWordMode =
-            detectModeIdForIndex(modeIndex) == BarcodeWordDetectionMode;
+            modeId == BarcodeWordDetectionMode;
     const bool guideVisible =
             m_templateGuideFrame && m_templateGuideFrame->isVisible();
     const QString title = barcodeWordMode
             ? "二维码+三期模板制作"
-            : (modeIndex == 1
+            : (modeId == QStringLiteral("word_detection")
                ? "字库匹配模板制作"
-               : "模板匹配模板制作");
+               : (modeId == QStringLiteral("ocr_detection")
+                  ? "深度模型模板制作"
+                  : "模板匹配模板制作"));
     const QString trackingRegionName = "定位区域";
 
     if (barcodeWordMode
