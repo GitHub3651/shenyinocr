@@ -24,6 +24,7 @@
 #include "devices/camera/hikvision_camera_device.h"
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
+#include "runtime/image_save_service.h"
 
 
 // Qt核心组件
@@ -53,6 +54,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QDateTime>
+#include <QUuid>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QTranslator>
@@ -118,6 +120,38 @@ namespace {
 double elapsedMilliseconds(const QElapsedTimer &timer)
 {
     return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+}
+
+QString normalizedImageFormat(QString format)
+{
+    format = format.trimmed();
+    if (format.startsWith(QStringLiteral("."))) {
+        format.remove(0, 1);
+    }
+    return format.isEmpty() ? QStringLiteral("png") : format.toLower();
+}
+
+QString imageSaveFilePath(
+    const QString &directoryPath,
+    const QString &baseName,
+    const QString &format)
+{
+    return QDir(directoryPath).filePath(baseName + QStringLiteral(".") + format);
+}
+
+ImageSaveItem makeImageSaveItem(
+    const QImage &image,
+    const std::shared_ptr<const FrameData> &frame,
+    const QString &directoryPath,
+    const QString &baseName,
+    const QString &format)
+{
+    ImageSaveItem item;
+    item.image = image;
+    item.frame = frame;
+    item.filePath = imageSaveFilePath(directoryPath, baseName, format);
+    item.format = format.toUpper().toLatin1();
+    return item;
 }
 
 void setLabelTextIfChanged(QLabel *label, const QString &text)
@@ -872,6 +906,19 @@ Widget::Widget(QWidget *parent)
 {
     m_barcodeDecoder.reset(new BarcodeDecoderAdapter);
     ui->setupUi(this);
+    m_imageSaveService.reset(new ImageSaveService(
+                                 32,
+                                 ImageSaveService::WriteFunction(),
+                                 2));
+    connect(m_imageSaveService.get(),
+            &ImageSaveService::taskFailed,
+            this,
+            [this](quint64 totalFailed, const QString &latestError) {
+        m_imageSaveFailedCount = totalFailed;
+        m_latestImageSaveError = latestError;
+        scheduleImageSaveWarning();
+    },
+    Qt::QueuedConnection);
 
     initStyle();
 
@@ -1157,6 +1204,11 @@ Widget::~Widget()
         cv::destroyAllWindows();
     } catch (...) {}
 
+    if (m_imageSaveService) {
+        m_imageSaveService->shutdown();
+        m_imageSaveService.reset();
+    }
+
     delete ui;
     ui = nullptr;
 
@@ -1321,221 +1373,141 @@ void Widget::wrongremove()
     }
 }
 
-/**
- * @brief 保存当前显示的图像（无裁剪）
- * @param format 图像格式
- * @param savePath 保存路径
- * @details 保存完整的检测图像到指定目录，用于OK/NG样本收集
- */
-//异步保存相机图像 减少耗时
-void Widget::saveImage2Async(QString format, QString savePath)
+// 每次正式启动生成新的运行身份；序号只在形成正式检测完成对象时递增。
+void Widget::beginDetectionSession()
 {
-    // 捕获当前相机状态和相关参数，避免异步过程中相机状态变化
-    if (!m_cameraDevice || !m_bOpenDevice)
-    {
-        qDebug() << "保存失败，相机对象无效或未打开";
+    m_detectionRunId = QUuid::createUuid()
+            .toString(QUuid::WithoutBraces)
+            .toLower();
+    m_detectionProductSequence = 0;
+    qDebug() << "[DETECTION_SESSION] started" << m_detectionRunId;
+}
+
+DetectionCompletion Widget::makeDetectionCompletion(
+    const cv::Mat &image,
+    AlgorithmVerdict verdict,
+    const QString &recognizedText,
+    const QString &diagnostic,
+    double elapsedMs)
+{
+    if (m_detectionRunId.trimmed().isEmpty()) {
+        beginDetectionSession();
+    }
+
+    ProductKey productKey;
+    productKey.runId = m_detectionRunId;
+    productKey.sequence = ++m_detectionProductSequence;
+
+    DetectionCompletion completion;
+    completion.frame = makeFrameData(
+                productKey,
+                productKey.sequence,
+                0,
+                QDateTime::currentDateTimeUtc(),
+                image);
+    completion.result.modeId = currentDetectModeId();
+    completion.result.verdict = verdict;
+    completion.result.status = DetectionStatus::Completed;
+    completion.result.recognizedText = recognizedText;
+    completion.result.diagnostic = diagnostic;
+    completion.result.elapsedMs = elapsedMs;
+
+    const auto appendPolygon = [&completion](
+        const QString &role,
+        const std::vector<cv::Point> &points,
+        double score) {
+        if (points.empty()) {
+            return;
+        }
+        DetectionOverlayPolygon polygon;
+        polygon.role = role;
+        polygon.points = points;
+        polygon.score = score;
+        completion.result.overlay.polygons.push_back(polygon);
+    };
+    appendPolygon(QStringLiteral("tracking"), g_lastPose.trackingPoly, g_lastPose.score);
+    appendPolygon(QStringLiteral("barcode"), g_lastPose.barcodePoly, 0.0);
+    appendPolygon(QStringLiteral("date"), g_lastPose.datePoly, 0.0);
+    for (const CVDrawResult &drawResult : g_lastDrawResults) {
+        appendPolygon(QStringLiteral("character"), drawResult.poly, drawResult.score);
+    }
+    appendPolygon(QStringLiteral("stamp"), g_lastStampPoly, 0.0);
+    if (g_hasLastTissueRoll) {
+        const cv::Rect &box = g_lastTissueRoll.outerBbox;
+        const std::vector<cv::Point> tissueBox = {
+            cv::Point(box.x, box.y),
+            cv::Point(box.x + box.width, box.y),
+            cv::Point(box.x + box.width, box.y + box.height),
+            cv::Point(box.x, box.y + box.height)
+        };
+        appendPolygon(
+                    QStringLiteral("tissue_roll"),
+                    tissueBox,
+                    g_lastTissueRoll.roughnessScore);
+    }
+
+    return completion;
+}
+
+void Widget::scheduleImageSaveWarning()
+{
+    if (m_imageSaveWarningScheduled) {
         return;
     }
-
-    // 确保格式正确
-    if (format.startsWith("."))
-    {
-        format = format.mid(1);
-    }
-
-    if (format.isEmpty())
-    {
-        format = "png";
-    }
-
-    // 确保目录存在
-    QDir dir;
-    if (!dir.mkpath(savePath))
-    {
-        qDebug() << "目录创建失败！路径：" << savePath;
-        return;
-    }
-
-    // 确保路径以斜杠结尾
-    if (!savePath.endsWith("/") && !savePath.endsWith("\\"))
-    {
-        savePath += "/";
-    }
-
-    // 生成文件名
-    QString curDate = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss-zzz");
-    QString saveName = savePath + curDate + "." + format;
-    const std::shared_ptr<ICameraDevice> cameraDevice = m_cameraDevice;
-
-    // 使用QtConcurrent在后台线程执行图像获取和保存操作
-    QtConcurrent::run([cameraDevice, saveName, format]() {
-        try {
-            // 方法1：使用ReadBuffer代替GetImageBuffer
-            cv::Mat capturedImage;
-            const CameraOperationResult result =
-                    cameraDevice->readBuffer(capturedImage);
-
-            // 如果ReadBuffer失败，尝试使用GetImage（基于回调的方法）
-            if (!result.isSuccess() || capturedImage.empty()) {
-                qDebug() << "ReadBuffer失败，尝试使用GetImage...";
-                capturedImage = cameraDevice->latestImage();
-            }
-
-            // 检查图像是否有效
-            if (capturedImage.empty()) {
-                qDebug() << "获取图像失败：空图像";
-                return;
-            }
-
-            // 在后台线程中进行图像转换和保存
-            QImage qImage;
-            if (capturedImage.channels() == 3) {
-                cv::Mat rgbImage;
-                cv::cvtColor(capturedImage, rgbImage, cv::COLOR_BGR2RGB);
-                qImage = QImage(rgbImage.data, rgbImage.cols, rgbImage.rows,
-                                static_cast<int>(rgbImage.step), QImage::Format_RGB888).copy();
-            }
-            else if (capturedImage.channels() == 1) {
-                qImage = QImage(capturedImage.data, capturedImage.cols, capturedImage.rows,
-                                static_cast<int>(capturedImage.step), QImage::Format_Grayscale8).copy();
-            }
-            else {
-                qDebug() << "不支持的图像通道数：" << capturedImage.channels();
-                return;
-            }
-
-            // 保存图像
-            if (!qImage.save(saveName, format.toUpper().toStdString().c_str())) {
-                qDebug() << "保存图像失败！";
-            }
-            else {
-                qDebug() << "异步保存图像成功：" << saveName;
-            }
+    m_imageSaveWarningScheduled = true;
+    QTimer::singleShot(250, this, [this]() {
+        m_imageSaveWarningScheduled = false;
+        QString warningText = QString::fromWCharArray(
+                    L"\u5b58\u56fe\u5931\u8d25\uff1a\u7d2f\u8ba1 %1 \u4e2a\u4efb\u52a1\u3002"
+                    L"\u8bf7\u68c0\u67e5\u5b58\u56fe\u76ee\u5f55\u3001\u6743\u9650\u548c\u78c1\u76d8\u7a7a\u95f4\u3002")
+                .arg(m_imageSaveFailedCount);
+        if (!m_latestImageSaveError.trimmed().isEmpty()) {
+            warningText += QString::fromWCharArray(
+                        L"\n\u6700\u8fd1\u9519\u8bef\uff1a%1")
+                    .arg(m_latestImageSaveError);
         }
-        catch(const std::exception& e) {
-            qDebug() << "异步保存过程中发生异常:" << e.what();
-        }
-        catch(...) {
-            qDebug() << "异步保存过程中发生未知异常";
+        qWarning().noquote() << "[IMAGE_SAVE]" << warningText;
+        if (ui && ui->statusLabel) {
+            ui->statusLabel->setWordWrap(true);
+            ui->statusLabel->setText(warningText);
+            ui->statusLabel->setStyleSheet(
+                        QStringLiteral(
+                            "QLabel{color:#d90000;font-weight:900;}"));
         }
     });
 }
 
-
-
-////异步保存ui上的图像
-void Widget::saveImage2(QString format, QString savePath)
+// 异步保存本次检测使用的原帧，避免检测完成后再向相机另取一帧。
+void Widget::saveImage2Async(
+    QString format,
+    QString savePath,
+    const DetectionCompletion &completion)
 {
-    const QString fileBaseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
-    saveImage2(format, savePath, fileBaseName);
-}
-
-void Widget::saveImage2(QString format, QString savePath, const QString &fileBaseName)
-{
-    // 1. 主线程中先校验UI图像和参数（避免跨线程访问UI）
-    const QPixmap* curPixmap = ui->image_undetected->pixmap();
-    if (!curPixmap) {
-        QMessageBox::warning(this, "警告", "保存失败,未采集到图像！");
+    if (!completion.isValid()) {
+        qDebug() << "保存失败，检测完成对象没有有效原帧";
         return;
     }
 
-    // 复制UI图像到主线程局部变量（避免跨线程访问UI控件）
-    QPixmap pixmap = *curPixmap;
-    QImage img = pixmap.toImage();
-
-    // 处理文件格式
-    if (format.startsWith(".")) {
-        format = format.mid(1);
-    }
-    if (format.isEmpty()) {
-        format = "png"; // 默认格式
-    }
-
-    // 确保目录存在
-    QDir dir;
-    if (!dir.mkpath(savePath)) {
-        qDebug() << "目录创建失败！路径：" << savePath;
+    if (!m_imageSaveService) {
+        qDebug() << "保存失败，存图服务不可用";
         return;
     }
 
-    // 确保路径以斜杠结尾
-    if (!savePath.endsWith("/") && !savePath.endsWith("\\")) {
-        savePath += "/";
+    format = normalizedImageFormat(format);
+    ImageSaveTask task;
+    task.productKey = completion.frame->productKey;
+    task.items.push_back(makeImageSaveItem(
+                             QImage(),
+                             completion.frame,
+                             savePath,
+                             QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss-zzz"),
+                             format));
+    const ImageSaveSubmitResult submitResult =
+            m_imageSaveService->submit(task);
+    if (!submitResult.isAccepted()) {
+        qDebug() << "保存任务提交失败，状态："
+                 << static_cast<int>(submitResult.status);
     }
-
-    // 生成带时间戳的文件名（主线程生成，避免线程安全问题）
-    QString baseName = fileBaseName.trimmed();
-    if (baseName.isEmpty()) {
-        baseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
-    }
-    QString saveName = savePath + baseName + "." + format;
-
-    // 2. 使用QtConcurrent在后台线程执行保存操作（核心异步逻辑）
-    QtConcurrent::run([=]() { // 捕获复制后的局部变量，避免跨线程访问UI
-        try {
-            // 后台线程中执行保存（QImage是可重入的，支持跨线程操作）
-            if (img.save(saveName, format.toUpper().toStdString().c_str())) {
-                qDebug() << "UI图像异步保存成功：" << saveName;
-            } else {
-                qDebug() << "UI图像异步保存失败！路径：" << saveName;
-            }
-        } catch (const std::exception& e) {
-            qDebug() << "UI图像异步保存异常:" << e.what();
-        } catch (...) {
-            qDebug() << "UI图像异步保存发生未知异常";
-        }
-    });
-}
-
-void Widget::saveCvImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName)
-{
-    if (image.empty()) {
-        qDebug() << "图像保存失败，图像为空";
-        return;
-    }
-
-    QImage img = cvMatToQImage(image);
-    if (img.isNull()) {
-        qDebug() << "图像保存失败，图像格式不支持";
-        return;
-    }
-
-    if (format.startsWith(".")) {
-        format = format.mid(1);
-    }
-    if (format.isEmpty()) {
-        format = "png";
-    }
-
-    QDir dir;
-    if (!dir.mkpath(savePath)) {
-        qDebug() << "图像保存目录创建失败！路径：" << savePath;
-        return;
-    }
-
-    if (!savePath.endsWith("/") && !savePath.endsWith("\\")) {
-        savePath += "/";
-    }
-
-    QString baseName = fileBaseName.trimmed();
-    if (baseName.isEmpty()) {
-        baseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
-    }
-    QString saveName = savePath + baseName + "." + format;
-
-    QtConcurrent::run([=]() {
-        try {
-            if (img.save(saveName, format.toUpper().toStdString().c_str())) {
-                qDebug() << "图像异步保存成功：" << saveName;
-            } else {
-                qDebug() << "图像异步保存失败！路径：" << saveName;
-            }
-        } catch (const std::exception& e) {
-            qDebug() << "图像异步保存异常:" << e.what();
-        } catch (...) {
-            qDebug() << "图像异步保存发生未知异常";
-        }
-    });
 }
 
 bool Widget::shouldSaveRecognitionBoxImage() const
@@ -1558,42 +1530,97 @@ bool Widget::shouldSaveNoRecognitionBoxImage() const
     return index == 0 || index == 2;
 }
 
-void Widget::saveResultImages(QString format, const QString &resultDirName, const cv::Mat &image)
+void Widget::saveResultImages(
+    QString format,
+    const QString &resultDirName,
+    const DetectionCompletion &completion)
 {
+    if (!completion.isValid()) {
+        qDebug() << "检测图像保存失败，DetectionCompletion无有效原帧";
+        return;
+    }
     if (selectedDir.trimmed().isEmpty()) {
         qDebug() << "检测图像保存失败，图像保存路径为空";
         return;
     }
+    if (!m_imageSaveService) {
+        qDebug() << "检测图像保存失败，存图服务不可用";
+        return;
+    }
+
+    const cv::Mat &image = completion.frame->originalImage;
+    format = normalizedImageFormat(format);
 
     QString resultName = resultDirName.trimmed();
     if (resultName.isEmpty()) {
         resultName = "unknown";
     }
 
-    const QString fileBaseName = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
+    const QString fileBaseName =
+            QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss.zzz");
+    ImageSaveTask task;
+    task.productKey = completion.frame->productKey;
     if (shouldSaveRecognitionBoxImage()) {
-        const bool tissueMode = ui && ui->comboBox_4 && ui->comboBox_4->currentIndex() == 3;
+        QImage annotatedImage;
+        const bool tissueMode = ui
+                && ui->comboBox_4
+                && ui->comboBox_4->currentIndex() == 3;
         if (tissueMode && g_hasLastTissueRoll) {
-            cv::Mat annotatedImage = makeBgrCopy(image);
-            if (!annotatedImage.empty()) {
-                drawTissueRollOverlay(annotatedImage, g_lastTissueRoll);
-                saveCvImage(format, selectedDir + "/" + resultName + "/", annotatedImage, fileBaseName);
+            cv::Mat annotatedMat = makeBgrCopy(image);
+            if (!annotatedMat.empty()) {
+                drawTissueRollOverlay(annotatedMat, g_lastTissueRoll);
+                annotatedImage = cvMatToQImage(annotatedMat);
             } else {
                 qDebug() << "纸巾带框图生成失败，回退保存界面图像";
-                saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
             }
-        } else {
-            saveImage2(format, selectedDir + "/" + resultName + "/", fileBaseName);
+        }
+        if (annotatedImage.isNull()) {
+            const QPixmap *currentPixmap = ui->image_undetected->pixmap();
+            if (currentPixmap) {
+                annotatedImage = currentPixmap->toImage();
+            } else {
+                QMessageBox::warning(
+                            this,
+                            "警告",
+                            "保存失败,未采集到图像！");
+            }
+        }
+        if (!annotatedImage.isNull()) {
+            task.items.push_back(makeImageSaveItem(
+                                     annotatedImage,
+                                     std::shared_ptr<const FrameData>(),
+                                     selectedDir + "/" + resultName + "/",
+                                     fileBaseName,
+                                     format));
         }
     }
     if (shouldSaveNoRecognitionBoxImage()) {
-        saveCvImage(format, selectedDir + "/" + resultName + "_raw/", image, fileBaseName);
+        task.items.push_back(makeImageSaveItem(
+                                 QImage(),
+                                 completion.frame,
+                                 selectedDir + "/" + resultName + "_raw/",
+                                 fileBaseName,
+                                 format));
+    }
+
+    if (task.items.empty()) {
+        qDebug() << "检测图像保存任务为空";
+        return;
+    }
+    const ImageSaveSubmitResult submitResult =
+            m_imageSaveService->submit(task);
+    if (!submitResult.isAccepted()) {
+        qDebug() << "检测图像保存任务提交失败，状态："
+                 << static_cast<int>(submitResult.status);
     }
 }
 
-void Widget::saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image)
+void Widget::saveWordResultImages(
+    QString format,
+    const QString &resultDirName,
+    const DetectionCompletion &completion)
 {
-    saveResultImages(format, resultDirName, image);
+    saveResultImages(format, resultDirName, completion);
 }
 
 /**
@@ -1901,10 +1928,26 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     // PLC 判定及存图逻辑
     if (j % x == 0)
     {
+        const double completionElapsedMs = static_cast<double>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start)
+                    .count());
+        const QString recognizedText = QString::fromStdString(allResults);
+        const QString diagnostic = allResults.empty()
+                ? QStringLiteral("OCR清洗后文本为空")
+                : (ocrResult.isOk
+                   ? QStringLiteral("OCR文本与目标完全一致")
+                   : QStringLiteral("OCR文本与目标不一致"));
+        const DetectionCompletion completion = makeDetectionCompletion(
+                    *image,
+                    ocrResult.isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
+                    recognizedText,
+                    diagnostic,
+                    completionElapsedMs);
         if (allResults.empty())
         {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3))
-                saveImage2Async("jpg", selectedDir + "/ng/");
+                saveImage2Async("jpg", selectedDir + "/ng/", completion);
 
             ngImages++;
             totalImages++;
@@ -1918,7 +1961,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
             {
                 totalImages++;
                 if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3))
-                    saveImage2Async("jpg", selectedDir + "/ok/");
+                    saveImage2Async("jpg", selectedDir + "/ok/", completion);
 
                 ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
                 rightremove();
@@ -1926,7 +1969,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
             else
             {
                 if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3))
-                    saveImage2Async("jpg", selectedDir + "/ng/");
+                    saveImage2Async("jpg", selectedDir + "/ng/", completion);
 
                 ngImages++;
                 totalImages++;
@@ -2038,9 +2081,29 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
 
     // ===================== 4. 综合判定与 PLC 剔除输出 =====================
     if (j % x == 0) {
+        QString diagnostic;
+        if (!charIsOk && overlapIsOk) {
+            diagnostic = QStringLiteral("喷码不合格");
+        } else if (charIsOk && !overlapIsOk) {
+            diagnostic = QStringLiteral("钢印重叠");
+        } else if (!stampResult.isOk) {
+            diagnostic = QStringLiteral("喷码与钢印均不合格");
+        } else {
+            diagnostic = QStringLiteral("喷码与钢印均合格");
+        }
+        const double completionElapsedMs = static_cast<double>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start)
+                    .count());
+        const DetectionCompletion completion = makeDetectionCompletion(
+                    *image,
+                    stampResult.isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
+                    QString(),
+                    diagnostic,
+                    completionElapsedMs);
         if (!stampResult.isOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
-                saveResultImages("png", "ng", *image);
+                saveResultImages("png", "ng", completion);
             }
             ngImages++;
             totalImages++;
@@ -2054,7 +2117,7 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
         } else {
             totalImages++;
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
-                saveResultImages("png", "ok", *image);
+                saveResultImages("png", "ok", completion);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
             rightremove();
@@ -2246,9 +2309,19 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     slot_displayAndDetect(image);
 
     if (j % x == 0) {
+        const double completionElapsedMs = static_cast<double>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start)
+                    .count());
+        const DetectionCompletion completion = makeDetectionCompletion(
+                    *image,
+                    wordResult.isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
+                    detectedUnits.join(QStringLiteral("")),
+                    reason,
+                    completionElapsedMs);
         if (!wordResult.isOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
-                saveWordResultImages("png", "ng", *image);
+                saveWordResultImages("png", "ng", completion);
             }
             ngImages++;
             totalImages++;
@@ -2258,7 +2331,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         } else {
             totalImages++;
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
-                saveWordResultImages("png", "ok", *image);
+                saveWordResultImages("png", "ok", completion);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
             rightremove();
@@ -2779,12 +2852,20 @@ void Widget::finalizeWordTrackingNg(
     // 普通字库模式不需要展示识别内容；避免上一帧失败文案残留到后续OK结果。
     setLabelTextIfChanged(ui->resultlabel_7, QString());
 
+    const DetectionCompletion completion = makeDetectionCompletion(
+                *image,
+                AlgorithmVerdict::Ng,
+                QString(),
+                reason,
+                pose.trackingElapsedMs
+                + elapsedMilliseconds(finalizationTimer));
+
     if (ui->comboBox->currentIndex() == 1
             || ui->comboBox->currentIndex() == 3) {
         saveWordResultImages(
                     "png",
                     "ng",
-                    *image);
+                    completion);
     }
 
     ngImages++;
@@ -2882,9 +2963,17 @@ void Widget::finalizeBarcodeWordNg(
                 resultLines.join("\n"));
 
     if (j % x == 0) {
+        const DetectionCompletion completion = makeDetectionCompletion(
+                    *image,
+                    AlgorithmVerdict::Ng,
+                    barcode.text,
+                    reason,
+                    pose.trackingElapsedMs
+                    + postTrackingElapsedMs
+                    + elapsedMilliseconds(finalizationTimer));
         if (ui->comboBox->currentIndex() == 1
                 || ui->comboBox->currentIndex() == 3) {
-            saveWordResultImages("png", "ng", *image);
+            saveWordResultImages("png", "ng", completion);
         }
 
         ngImages++;
@@ -3020,9 +3109,20 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
     }
 
     if (j % x == 0) {
+        const DetectionCompletion completion = makeDetectionCompletion(
+                    *image,
+                    isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
+                    tissueRecognitionText,
+                    QString::fromStdString(tissueResult.message),
+                    tissueResult.processingTimeMs > 0
+                    ? static_cast<double>(tissueResult.processingTimeMs)
+                    : static_cast<double>(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::high_resolution_clock::now() - start)
+                        .count()));
         if (!isOk) {
             if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
-                saveResultImages("png", "ng", *image);
+                saveResultImages("png", "ng", completion);
             }
             ngImages++;
             totalImages++;
@@ -3035,7 +3135,7 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
         } else {
             totalImages++;
             if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
-                saveResultImages("png", "ok", *image);
+                saveResultImages("png", "ok", completion);
             }
             rightremove();
         }
@@ -11942,6 +12042,7 @@ void Widget::on_plcbtn_clicked()
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
         m_resultBoundDisplayActive = isWordMode;
+        beginDetectionSession();
         cameraThread->start();
         if (!cameraThread->wait(100)) {
             if (isWordProfileMode) {
@@ -12037,6 +12138,7 @@ void Widget::on_plcbtn_clicked()
                          << "mode:" << currentDetectModeId();
             }
             m_resultBoundDisplayActive = isWordMode;
+            beginDetectionSession();
             myThread->start();
             m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;

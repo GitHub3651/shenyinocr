@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 2 设备接口与运行协调（按用户风险接受条件进入）
-- 当前切片：单相机设备窄接口与海康适配器（用户Qt Creator集中门禁通过，等待提交）
-- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码、Paddle OCR和Snap7 PLC设备边界已分别提交为`ef3af6d`、`c78ebb8`和`9542aaa`；当前已把Widget、软触发线程和硬触发线程对`CMvCamera/MvCameraControl`的直接依赖收口到`devices/camera/`，保留首台相机选择、原回调、触发值、参数值、帧节流和停止等待时序，用户已确认相机适配测试及主程序集中门禁均无问题。
+- 当前切片：五模式`DetectionCompletion`临时结果帧交接与OCR同帧存图（实现中）
+- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码、Paddle OCR、Snap7 PLC和海康单相机设备边界已分别提交为`ef3af6d`、`c78ebb8`、`9542aaa`和`e6dc0d2`；当前开始建立五模式统一的短生命周期检测完成对象，使判定结果和本次检测只读原帧一起交接，并修复深度OCR存图另取相机新帧的计划内差异。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -347,7 +347,7 @@
 2. 模板图像阈值私有默认和构造初始化为70，但`.ui`静态文本是80；以构造后和模板配置的实际值作为运行基线。
 3. 当前到达正式收尾的无定位、读码失败、无纸卷等失败通常进入总数和NG，影响合格率并可能产生PLC动作；Stage 1至3不提前改变。
 4. OCR原图存储会异步向相机另取一帧，不保证与检测帧相同；Stage 2计划用`DetectionCompletion`修正。
-5. 当前存图采用逐结果`QtConcurrent::run`，无容量限制；Stage 2计划改为容量8的有界队列。
+5. 基线存图采用逐结果`QtConcurrent::run`，无容量限制；Stage 2现按用户确认改为容量32、双写入线程、满时等待且不因容量漏图的有界队列。
 6. 多相机窗口目前只有“返回单相机”接线；其余可见按钮没有接入`MultiCameraController`。升级计划明确本轮保持原状。
 7. “打开相机”会先尝试连接PLC；PLC失败后仍继续打开首台枚举相机。这是当前设备时序，Stage 1至3不得顺带改变。
 
@@ -730,6 +730,18 @@
 - [x] 相机设备适配Agent静态检查通过：三个生产调用方中`CMvCamera/MV_CC_DEVICE_INFO_LIST/MVCC_FLOATVALUE/MV_OK/MVS头`引用0处；原生SDK引用只存在于`hikvision_camera_device_native.cpp`和保留的旧`cmvcamera.*`实现；主工程登记新源2/头2，运行测试子目标登记唯一；适配器接口20项均有实现；Fake测试覆盖8项业务行为，Qt Test预期汇总`10 passed, 0 failed`；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
 - [x] 相机Fake测试首次Qt Creator编译反馈：MSVC在`missingBackendFailsSafely`中把`HikvisionCameraDevice device(HikvisionCameraFunctions());`按C++最令人困惑的解析识别为函数声明，后续成员调用报`C2228`；已改为先声明空函数表再显式构造测试对象，不修改生产适配器或相机行为，等待用户复编。
 - [x] 单相机设备适配Qt Creator集中门禁：2026-08-13用户确认`camera_device_adapter_test`及主工程均无问题；开关相机、曝光/增益、模板实时预览/冻结/退出、软触发启停重开、可用现场路径、OCR原图保存及退出均按本次集中清单回归通过。固定样本、硬触发时序和性能量化证据继续按既定延期项管理，不冒充最终验收。
+- [x] 单相机设备接口与海康适配器已创建独立提交`e6dc0d2`，提交后工作区干净。
+- [x] 开始Stage 2检测完成结果帧与有界存图切片；影响`DET-002..006、RUN-001、SAVE-001..005`十一项，由原状态进入迁移中。检测算法、判定边界、统计增量、PLC写入/延迟剔除、UI结果文案和相机触发时序不修改。
+- [x] 旧结果/存图调用链审计：五种模式均在Widget完成最终UI、统计、PLC和存图；钢印/字库/二维码/纸巾保存当前检测参数`cv::Mat`，唯独深度OCR的`saveImage2Async`在结果后从相机`readBuffer/latestImage`另取一帧；三处`QtConcurrent::run`按文件无界提交，标注图和原图会形成两个独立后台任务。
+- [x] 在现有`TrackingTypes.h`增加`ProductKey、FrameData、AlgorithmVerdict、DetectionStatus、DetectionResult、DetectionCompletion`，每次正式启动生成运行UUID，每个正式结果递增序号并深拷贝本次检测原帧；五模式所有OK/NG正式结果路径均建立短生命周期完成对象，Widget不再为OCR存图读取相机。
+- [x] `runtime/image_save_service.*`初版采用单工作线程、写入中与待写合计容量8个产品任务，同一产品的标注/原图属于一个任务；当时队列满拒绝当前第9个新任务并累计告警，随后因主程序门禁发现实际漏存而按用户决定被下述满时等待策略替代。
+- [x] `runtime_tests/detection_completion_test`初版覆盖产品键、独立只读帧、结果/Overlay合同、短期共享、任务校验/FIFO、容量8拒新、失败累计和停止拒收共11项业务行为；随后容量测试按用户确认改为满时等待且不丢任务，Qt Test预期汇总仍为`13 passed, 0 failed`。测试部署脚本仅为该目标新增可选QtGui运行库参数，不改变既有测试目标。
+- [x] DetectionCompletion与有界存图Agent静态检查通过：90个功能ID唯一且状态为72/11/5/2；Widget内`QtConcurrent/QFuture`、相机`readBuffer/latestImage`和旧分文件保存函数引用均为0；五模式7条正式结果路径均建立完成对象；存图服务容量判断唯一、两个产品任务提交入口、主工程源/头和运行测试目标均唯一登记；11项业务测试对应Qt Test预期13项；PowerShell部署脚本语法0错误；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] 有界存图首次主程序门禁反馈：运行状态实际报告队列满后累计跳过24个新存图任务、写入失败0个，说明检测产出暂时快于PNG落盘而非磁盘写入失败；新中文警告受MSVC2017源代码页影响显示乱码。已将Widget警告及存图服务错误详情统一改为Unicode宽字符转义，并明确提示“检测和判定仍在继续”；容量8、FIFO、拒绝最新任务及检测/判定/PLC行为均未修改，等待重新构建显示复验。
+- [x] 用户确认存图属于必要生产结果，工人需要查看每个被检测且命中保存策略的图片；正常条件下不允许因队列满漏图，并接受存图积压时降低检测速度。策略据此收敛为容量32、两个后台写入线程、满时提交者持有当前图片等待空位；移除容量满丢弃状态、计数和UI警告，只保留真实目录/权限/磁盘写入失败的红色累计报警。不引入临时文件、断电恢复或持久任务数据库，极少数实际磁盘故障允许失败并明确报警。
+- [x] 存图测试合同同步改为Fake慢盘填满小容量队列后验证下一任务确实等待、腾位后全部任务写入；单工作线程测试继续锁定产品任务及任务内文件顺序，生产实例明确使用两个工作线程。业务测试数量仍为11项，Qt Test预期汇总仍为`13 passed, 0 failed`。
+- [x] 满时等待策略Agent静态复验通过：90个功能ID唯一且状态72/11/5/2；生产实例容量32、工作线程2均唯一配置；服务中`QueueFull/taskDropped/droppedTaskCount`引用0处，空间条件等待和任务完成唤醒各唯一1处；Widget中`QtConcurrent/QFuture`及相机取帧API调用均为0；主工程源/头和运行测试目标均唯一登记；11项业务测试对应Qt Test预期13项；PowerShell部署脚本语法0错误；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] DetectionCompletion与无丢弃存图Qt Creator集中门禁：2026-08-13用户确认更新后的`detection_completion_test`及主工程均无问题；容量满策略已从实际漏存的拒新方案改为等待空位，中文失败提示正常，当前检测与应存图片未再出现队列容量导致的缺失。
 
 ## 本地提交记录
 
@@ -778,6 +790,8 @@
 | `ef3af6d` | Stage 2二维码解码设备适配 | TPL-004、DET-006、RUN-001、TOOL-002 | DLL生命周期、C ABI调用和7路通用解码策略迁入`devices/barcode/`，Widget改用`IBarcodeDecoder` | 用户确认适配器8项、二维码Pipeline 6项、真实DLL/框选读码、启停和跨模式恢复均正常 |
 | `c78ebb8` | Stage 2 Paddle OCR设备适配 | SYS-006、DET-004、TPL-002、TPL-003、TPL-005 | Paddle配置、模型对象和原生调用收口到`devices/ocr/`，Pipeline依赖`IOcrEngine`，并恢复深度OCR模板绘图入口 | 用户确认OCR测试6项、主工程模型初始化、模板制作/发布、逐帧OCR调用和启停均正常 |
 | `9542aaa` | Stage 2 Snap7 PLC设备适配 | SYS-008、SET-005、CAM-001、RUN-001、PLC-001..006 | `TS7Client`、DB区和数据宽度常量收口到`devices/plc/`，Widget改用`IPlcDevice` | 用户确认适配器9项及主工程可执行门禁无问题；真实PLC读回和脉冲证据仍延期 |
+| `e6dc0d2` | Stage 2海康单相机设备适配 | SYS-009、SET-005..007、TPL-001..002、CAM-001..005、RUN-001..003、SAVE-004 | 海康SDK枚举、首台打开、参数、回调、帧读取与停止唤醒收口到`devices/camera/`，Widget和两采集线程改用共享`ICameraDevice` | 用户确认适配器测试及主工程开关相机、参数、预览、启停、存图和退出均无问题；现场量化证据仍延期 |
+| `9a798ce` | Stage 2检测结果帧与无丢弃存图 | DET-002..006、RUN-001、SAVE-001..005 | `DetectionCompletion`统一携带本次检测只读原帧；五模式存图统一为容量32、双写线程、满时等待的产品任务队列 | 用户确认更新后的运行测试及主工程无问题；正常条件下不再因队列容量漏图，实际磁盘失败仍报警 |
 
 ## 未解决事项
 
@@ -789,7 +803,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2单相机设备窄接口与海康适配器已完成，用户Qt Creator集中门禁通过，等待创建独立本地提交。
+- 当前切片：Stage 2五模式`DetectionCompletion`结果帧交接与容量32、双工作线程、满时等待的有界存图队列已通过全部门禁并提交为`9a798ce`。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线78 / 迁移中0 / 已验证10 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交相机设备适配独立回退点，随后进入Stage 2检测完成结果交接与运行协调拆分。
+- 功能状态计数：待盘点0 / 已基线72 / 迁移中0 / 已验证16 / 已延期2 / 已确认删除0。
+- 下一允许动作：进入简化`ResultHandler/RuntimeController`拆分。

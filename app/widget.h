@@ -56,8 +56,6 @@
 #include <algorithm>
 #include <cctype>
 #include <regex>
-#include <QtConcurrent/QtConcurrent>
-#include <QFuture>
 #include <utility> // for std::pair
 #include <queue>
 #include <templatematch.h>
@@ -83,6 +81,7 @@ class QComboBox;
 class QFrame;
 class QDialog;
 class QPushButton;
+class ImageSaveService;
 struct RecipeSelection;
 
 /**
@@ -116,14 +115,17 @@ public:
 
     // ========== 公共方法 ==========
     void initWidget();                  ///< 初始化界面
-    void saveImage2(QString format, QString savePath);
-    void saveImage2(QString format, QString savePath, const QString &fileBaseName);
-    void saveCvImage(QString format, QString savePath, const cv::Mat &image, const QString &fileBaseName);
     bool shouldSaveRecognitionBoxImage() const;
     bool shouldSaveNoRecognitionBoxImage() const;
-    void saveResultImages(QString format, const QString &resultDirName, const cv::Mat &image);
-    void saveWordResultImages(QString format, const QString &resultDirName, const cv::Mat &image);
-    void saveImage2Async(QString format, QString savePath);   ///< 保存图像2
+    void saveResultImages(QString format,
+                          const QString &resultDirName,
+                          const DetectionCompletion &completion);
+    void saveWordResultImages(QString format,
+                              const QString &resultDirName,
+                              const DetectionCompletion &completion);
+    void saveImage2Async(QString format,
+                         QString savePath,
+                         const DetectionCompletion &completion); ///< 保存检测使用的原帧
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
     void display(const Mat* image);     ///< 显示图像
     bool saveSettingsToDir(const QString &dirPath);
@@ -394,6 +396,12 @@ private:
             OperationState::CameraClosed;
     bool m_resultBoundDisplayActive = false;
     bool m_applicationExitInProgress = false;
+    QString m_detectionRunId;
+    quint64 m_detectionProductSequence = 0;
+    std::unique_ptr<ImageSaveService> m_imageSaveService;
+    quint64 m_imageSaveFailedCount = 0;
+    QString m_latestImageSaveError;
+    bool m_imageSaveWarningScheduled = false;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器
@@ -665,6 +673,14 @@ private:
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
+    void beginDetectionSession();
+    DetectionCompletion makeDetectionCompletion(
+        const cv::Mat &image,
+        AlgorithmVerdict verdict,
+        const QString &recognizedText,
+        const QString &diagnostic,
+        double elapsedMs);
+    void scheduleImageSaveWarning();
     void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
     QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生
     QString templateBaseDirPath;          // 产品模板父目录

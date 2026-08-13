@@ -68,6 +68,7 @@ SOURCES += \
     devices/camera/hikvision_camera_device_native.cpp \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
+    runtime/image_save_service.cpp \
     detection/common/profile_pose_selector.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/barcode_word/barcode_word_detection_pipeline.cpp \
@@ -125,6 +126,7 @@ HEADERS += \
     devices/ocr/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
     devices/plc/snap7_plc_device.h \
+    runtime/image_save_service.h \
     detection/common/profile_pose_selector.h \
     detection/ocr/ocr_detection_pipeline.h \
     detection/barcode_word/barcode_word_detection_pipeline.h \

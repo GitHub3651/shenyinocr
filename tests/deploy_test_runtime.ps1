@@ -11,6 +11,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$QtTestDll,
 
+    [Parameter(Mandatory = $false)]
+    [string]$QtGuiDll = '',
+
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
     [string]$TargetExecutable,
@@ -113,6 +116,9 @@ $destinationPath = [System.IO.Path]::GetFullPath($Destination)
 New-Item -ItemType Directory -Force -Path $destinationPath | Out-Null
 $targetMachine = Get-PeMachine -ImagePath $TargetExecutable
 $runtimeDlls = @($QtCoreDll, $QtTestDll)
+if (-not [string]::IsNullOrWhiteSpace($QtGuiDll)) {
+    $runtimeDlls += $QtGuiDll
+}
 if (-not [string]::IsNullOrWhiteSpace($SourceDll)) {
     $runtimeDlls += $SourceDll
 }

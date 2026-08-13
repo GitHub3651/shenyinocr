@@ -1,10 +1,90 @@
 #pragma once
 
 #include <QMetaType>
+#include <QDateTime>
 #include <QString>
 #include <opencv2/opencv.hpp>
 #include <cmath>
+#include <memory>
 #include <vector>
+
+struct ProductKey {
+    QString runId;
+    quint64 sequence = 0;
+
+    bool isValid() const
+    {
+        return !runId.trimmed().isEmpty() && sequence > 0;
+    }
+};
+
+struct FrameData {
+    ProductKey productKey;
+    quint64 frameNumber = 0;
+    int cameraIndex = 0;
+    QDateTime timestampUtc;
+    cv::Mat originalImage;
+};
+
+enum class AlgorithmVerdict {
+    NotEvaluated,
+    Ok,
+    Ng
+};
+
+enum class DetectionStatus {
+    Completed,
+    SystemFault,
+    Cancelled
+};
+
+struct DetectionOverlayPolygon {
+    QString role;
+    std::vector<cv::Point> points;
+    double score = 0.0;
+};
+
+struct DetectionOverlay {
+    std::vector<DetectionOverlayPolygon> polygons;
+};
+
+struct DetectionResult {
+    QString modeId;
+    AlgorithmVerdict verdict = AlgorithmVerdict::NotEvaluated;
+    DetectionStatus status = DetectionStatus::SystemFault;
+    QString recognizedText;
+    QString diagnostic;
+    DetectionOverlay overlay;
+    double elapsedMs = 0.0;
+};
+
+struct DetectionCompletion {
+    std::shared_ptr<const FrameData> frame;
+    DetectionResult result;
+
+    bool isValid() const
+    {
+        return frame
+                && frame->productKey.isValid()
+                && !frame->originalImage.empty();
+    }
+};
+
+inline std::shared_ptr<const FrameData> makeFrameData(
+    const ProductKey &productKey,
+    quint64 frameNumber,
+    int cameraIndex,
+    const QDateTime &timestampUtc,
+    const cv::Mat &originalImage)
+{
+    std::shared_ptr<FrameData> frame(new FrameData);
+    frame->productKey = productKey;
+    frame->frameNumber = frameNumber;
+    frame->cameraIndex = cameraIndex;
+    frame->timestampUtc = timestampUtc;
+    frame->originalImage = originalImage.clone();
+    return frame;
+}
 
 struct DetectionPose {
     bool valid = false;
