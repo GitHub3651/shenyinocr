@@ -313,3 +313,75 @@ bool assembleSelectedTemplateRecipe(
     *assembly = candidate;
     return true;
 }
+
+bool replaceTemplateRecipeProfileAssets(
+        TemplateRecipeAssembly *assembly,
+        int profileIndex,
+        const RecipeProfile &profile,
+        const TemplateProfileAssetManifest &assetManifest,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!assembly) {
+        setError(errorMessage,
+                 QStringLiteral("Template recipe asset replacement assembly is null."));
+        return false;
+    }
+    if (profileIndex < 0
+            || profileIndex >= assembly->recipe.profiles.size()) {
+        setError(errorMessage,
+                 QStringLiteral("Template recipe asset replacement profile index is invalid."));
+        return false;
+    }
+    if (profile.name != assembly->recipe.profiles.at(profileIndex).name) {
+        setError(errorMessage,
+                 QStringLiteral("Template recipe asset replacement cannot change profile identity."));
+        return false;
+    }
+
+    QVector<TemplateRecipeProfileSource> profileSources;
+    profileSources.reserve(assembly->recipe.profiles.size());
+    for (int currentIndex = 0;
+         currentIndex < assembly->recipe.profiles.size();
+         ++currentIndex) {
+        TemplateRecipeProfileSource source;
+        source.profile = currentIndex == profileIndex
+                ? profile
+                : assembly->recipe.profiles.at(currentIndex);
+        if (currentIndex == profileIndex) {
+            source.assetManifest = assetManifest;
+        } else {
+            source.assetManifest.profileAssetKeys =
+                    source.profile.assetKeys;
+            for (auto it = source.profile.assetKeys.constBegin();
+                 it != source.profile.assetKeys.constEnd();
+                 ++it) {
+                const QString assetKey = it.value();
+                if (assembly->recipe.assets.contains(assetKey)) {
+                    source.assetManifest.recipeAssets.insert(
+                                assetKey,
+                                assembly->recipe.assets.value(assetKey));
+                }
+                if (assembly->assetSourcePaths.contains(assetKey)) {
+                    source.assetManifest.assetSourcePaths.insert(
+                                assetKey,
+                                assembly->assetSourcePaths.value(assetKey));
+                }
+            }
+        }
+        profileSources.append(source);
+    }
+
+    TemplateRecipeAssembly candidate;
+    if (!assembleTemplateProductRecipe(assembly->recipe,
+                                       profileSources,
+                                       &candidate,
+                                       errorMessage)) {
+        return false;
+    }
+
+    *assembly = candidate;
+    return true;
+}

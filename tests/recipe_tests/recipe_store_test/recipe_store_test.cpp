@@ -2,6 +2,7 @@
 
 #include "recipe_selection.h"
 #include "recipe_store.h"
+#include "template_character_asset_workspace.h"
 #include "template_profile_load_plan.h"
 #include "template_recipe_assembler.h"
 #include "template_recipe_draft_session.h"
@@ -40,6 +41,7 @@ private slots:
     void editSessionRepublishesProfileChangesWithSameIdentity();
     void editSessionRejectsInvalidChangesAndPreservesState();
     void editSessionUpdatesProfilesAtomically();
+    void editSessionReplacesOneProfileAssetsAtomically();
 };
 
 namespace {
@@ -1794,6 +1796,170 @@ void RecipeStoreTest::editSessionUpdatesProfilesAtomically()
     QCOMPARE(publishedSelection.profiles.at(1).profile.targetText,
              QStringLiteral("D"));
     QCOMPARE(publishedSelection.profiles.at(1).profile.imageThreshold, 82.0);
+}
+
+void RecipeStoreTest::editSessionReplacesOneProfileAssetsAtomically()
+{
+    QTemporaryDir temporaryDirectory;
+    QVERIFY(temporaryDirectory.isValid());
+
+    auto createAsset = [&temporaryDirectory](const QString &fileName,
+                                             const QByteArray &contents) {
+        const QString path = QDir(temporaryDirectory.path()).filePath(fileName);
+        return writeBytes(path, contents) ? path : QString();
+    };
+    const QString firstTracking = createAsset(
+                QStringLiteral("first-tracking.bmp"), QByteArray("first-tracking"));
+    const QString firstCalibration = createAsset(
+                QStringLiteral("first-calibration.yaml"), QByteArray("first-calibration"));
+    const QString firstOldCharacter = createAsset(
+                QStringLiteral("first-old.png"), QByteArray("first-old"));
+    const QString secondTracking = createAsset(
+                QStringLiteral("second-tracking.bmp"), QByteArray("second-tracking"));
+    const QString secondCalibration = createAsset(
+                QStringLiteral("second-calibration.yaml"), QByteArray("second-calibration"));
+    const QString secondCharacter = createAsset(
+                QStringLiteral("second.png"), QByteArray("second-character"));
+    const QString firstNewCharacter = createAsset(
+                QStringLiteral("first-new.png"), QByteArray("first-new"));
+    const QString firstRawImage = createAsset(
+                QStringLiteral("first-raw.png"), QByteArray("first-raw"));
+    QVERIFY(!firstNewCharacter.isEmpty());
+
+    ProductRecipe recipeHeader = createProductRecipe(
+                QStringLiteral("asset-editable"), DetectionMode::Word);
+    const QString stableRecipeId = recipeHeader.recipeId;
+    QVector<TemplateRecipeProfileSource> sources;
+    for (int profileIndex = 0; profileIndex < 2; ++profileIndex) {
+        const bool isFirst = profileIndex == 0;
+        const QString prefix = isFirst
+                ? QStringLiteral("first")
+                : QStringLiteral("second");
+        TemplateRecipeProfileSource source;
+        source.profile.name = prefix;
+        source.profile.targetText = isFirst
+                ? QStringLiteral("A")
+                : QStringLiteral("B");
+        source.profile.trackingBox = QRectF(1.0, 2.0, 30.0, 40.0);
+        source.profile.hasValidBoxes = true;
+        const QString trackingKey = prefix + QStringLiteral("Tracking");
+        const QString calibrationKey = prefix + QStringLiteral("Calibration");
+        const QString characterKey = prefix + QStringLiteral("Character");
+        source.assetManifest.profileAssetKeys.insert(
+                    QStringLiteral("trackingTemplate"), trackingKey);
+        source.assetManifest.profileAssetKeys.insert(
+                    QStringLiteral("calibration"), calibrationKey);
+        source.assetManifest.profileAssetKeys.insert(
+                    QStringLiteral("character/")
+                    + (isFirst ? QStringLiteral("A.png")
+                               : QStringLiteral("B.png")),
+                    characterKey);
+        source.assetManifest.recipeAssets.insert(
+                    trackingKey,
+                    QStringLiteral("assets/profiles/%1/tracking.bmp")
+                    .arg(profileIndex));
+        source.assetManifest.recipeAssets.insert(
+                    calibrationKey,
+                    QStringLiteral("assets/profiles/%1/calibration.yaml")
+                    .arg(profileIndex));
+        source.assetManifest.recipeAssets.insert(
+                    characterKey,
+                    QStringLiteral("assets/profiles/%1/character_templates/%2.png")
+                    .arg(profileIndex)
+                    .arg(isFirst ? QStringLiteral("A") : QStringLiteral("B")));
+        source.assetManifest.assetSourcePaths.insert(
+                    trackingKey,
+                    isFirst ? firstTracking : secondTracking);
+        source.assetManifest.assetSourcePaths.insert(
+                    calibrationKey,
+                    isFirst ? firstCalibration : secondCalibration);
+        source.assetManifest.assetSourcePaths.insert(
+                    characterKey,
+                    isFirst ? firstOldCharacter : secondCharacter);
+        sources.append(source);
+    }
+
+    const RecipeStore store(QDir(temporaryDirectory.path()).filePath(
+                                QStringLiteral("recipes")));
+    RecipeSelection selection;
+    QString errorMessage;
+    QVERIFY2(publishTemplateRecipe(store,
+                                   recipeHeader,
+                                   sources,
+                                   &selection,
+                                   &errorMessage),
+             qPrintable(errorMessage));
+
+    TemplateRecipeEditSession session;
+    QVERIFY2(session.begin(selection, &errorMessage),
+             qPrintable(errorMessage));
+    const ProductRecipe beforeInvalidReplacement = session.recipe();
+    TemplateProfileAssetManifest incompleteManifest;
+    incompleteManifest.profileAssetKeys.insert(
+                QStringLiteral("trackingTemplate"),
+                QStringLiteral("replacementTracking"));
+    incompleteManifest.recipeAssets.insert(
+                QStringLiteral("replacementTracking"),
+                QStringLiteral("assets/profiles/0/tracking.bmp"));
+    incompleteManifest.assetSourcePaths.insert(
+                QStringLiteral("replacementTracking"), firstTracking);
+    QVERIFY(!session.replaceProfileAssets(
+                0,
+                session.recipe().profiles.first(),
+                incompleteManifest,
+                &errorMessage));
+    QVERIFY(errorMessage.contains(QStringLiteral("required assets")));
+    QVERIFY(productRecipeToJson(session.recipe())
+            == productRecipeToJson(beforeInvalidReplacement));
+
+    QMap<QString, QString> replacementAssetPathsByRole;
+    replacementAssetPathsByRole.insert(
+                QStringLiteral("trackingTemplate"), firstTracking);
+    replacementAssetPathsByRole.insert(
+                QStringLiteral("calibration"), firstCalibration);
+    replacementAssetPathsByRole.insert(
+                QStringLiteral("rawImage"), firstRawImage);
+    replacementAssetPathsByRole.insert(
+                QStringLiteral("character/A.png"), firstNewCharacter);
+    TemplateCharacterAssetWorkspace replacementWorkspace;
+    QVERIFY2(replacementWorkspace.prepare(replacementAssetPathsByRole,
+                                            &errorMessage),
+             qPrintable(errorMessage));
+    QVERIFY(QFileInfo::exists(QDir(replacementWorkspace.directoryPath())
+                             .filePath(QStringLiteral("A.png"))));
+    const TemplateProfileAssetManifest replacementManifest =
+            replacementWorkspace.assetManifest(0);
+
+    RecipeProfile updatedFirstProfile = session.recipe().profiles.first();
+    updatedFirstProfile.imageThreshold = 83;
+    QVERIFY2(session.replaceProfileAssets(0,
+                                          updatedFirstProfile,
+                                          replacementManifest,
+                                          &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(session.recipe().recipeId, stableRecipeId);
+    QCOMPARE(session.recipe().profiles.at(0).imageThreshold, 83.0);
+    QCOMPARE(session.recipe().profiles.at(1).targetText,
+             QStringLiteral("B"));
+    QVERIFY(session.recipe().profiles.at(1).assetKeys
+            == selection.recipe->profiles.at(1).assetKeys);
+
+    RecipeSelection publishedSelection;
+    QVERIFY2(session.publish(store,
+                             &publishedSelection,
+                             &errorMessage),
+             qPrintable(errorMessage));
+    QCOMPARE(publishedSelection.recipe->recipeId, stableRecipeId);
+    QCOMPARE(readBytes(publishedSelection.profiles.at(0)
+                       .assetPathsByRole.value(
+                           QStringLiteral("character/A.png"))),
+             QByteArray("first-new"));
+    QCOMPARE(readBytes(publishedSelection.profiles.at(1)
+                       .assetPathsByRole.value(
+                           QStringLiteral("character/B.png"))),
+             QByteArray("second-character"));
+    QVERIFY(!publishedSelection.recipe->assets.contains(
+                QStringLiteral("firstCharacter")));
 }
 
 QTEST_APPLESS_MAIN(RecipeStoreTest)

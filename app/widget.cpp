@@ -9,6 +9,7 @@
 #include "widget.h"
 #include "ui_widget.h"
 #include "recipes/recipe_selection.h"
+#include "recipes/template_character_asset_workspace.h"
 #include "recipes/template_profile_load_plan.h"
 #include "recipes/template_profile_mapper.h"
 #include "ui/dialogs/recipe_selection_dialog.h"
@@ -6117,12 +6118,7 @@ void Widget::showManualCharacterTemplateCropDialog()
     const WordTemplateProfile &selectedProfile =
             m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
     if (!selectedProfile.resolvedAssetPathsByRole.isEmpty()) {
-        showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u5DF2\u53D1\u5E03\u914D\u65B9\u7684\u5B57\u7B26\u6A21\u677F"
-                        "\u589E\u5220\u5C1A\u672A\u63A5\u5165\u672C\u5165\u53E3\uFF1B"
-                        "\u5F53\u524D\u914D\u65B9\u8D44\u6E90\u4E0D\u4F1A\u88AB\u4FEE\u6539\u3002"));
+        showPublishedRecipeCharacterTemplateCropDialog(profileIndex);
         return;
     }
 
@@ -6236,6 +6232,187 @@ void Widget::showManualCharacterTemplateCropDialog()
                       .arg(dialog.savedCount())
                       .arg(reloadMessage)
                       .arg(recipePublishMessage));
+}
+
+void Widget::showPublishedRecipeCharacterTemplateCropDialog(
+        int profileIndex)
+{
+    if (profileIndex < 0
+            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())
+            || !m_wordTemplateRecipeEditSession.isActive()) {
+        showParameterInfoAsError(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("\u5F53\u524D\u5DF2\u53D1\u5E03\u914D\u65B9\u6CA1\u6709\u6709\u6548\u7684\u7F16\u8F91\u4F1A\u8BDD\u3002"));
+        return;
+    }
+
+    const WordTemplateProfile profile =
+            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
+    const QString rawImagePath = wordTemplateProfileAssetPath(
+                profile,
+                QStringLiteral("rawImage"),
+                QStringLiteral("template_raw.png"));
+    QImage rawImage(rawImagePath);
+    if (rawImage.isNull()) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("\u5F53\u524D\u4EA7\u54C1\u914D\u65B9\u7F3A\u5C11\u53EF\u8BFB\u7684\u539F\u56FE\uFF0C\u65E0\u6CD5\u5207\u5272\u5B57\u7B26\u6A21\u677F\u3002"));
+        return;
+    }
+
+    const cv::Rect2d trackingBox = profile.settings.trackingBox;
+    if (trackingBox.width <= 0.0
+            || trackingBox.height <= 0.0
+            || profile.datePoly.empty()) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("\u5F53\u524D\u4EA7\u54C1\u914D\u65B9\u7F3A\u5C11\u6709\u6548\u5B9A\u4F4D\u533A\u57DF\u6216\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u3002"));
+        return;
+    }
+
+    QPolygonF datePolygon;
+    const QPointF trackingCenter(trackingBox.x + trackingBox.width / 2.0,
+                                 trackingBox.y + trackingBox.height / 2.0);
+    for (const cv::Point2f &point : profile.datePoly) {
+        datePolygon << QPointF(trackingCenter.x() + point.x,
+                               trackingCenter.y() + point.y);
+    }
+    const QRect cropRect = datePolygon.boundingRect().toAlignedRect()
+            .intersected(QRect(0, 0, rawImage.width(), rawImage.height()));
+    if (cropRect.width() <= 0 || cropRect.height() <= 0) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u8D85\u51FA\u4EA7\u54C1\u914D\u65B9\u539F\u56FE\u8303\u56F4\u3002"));
+        return;
+    }
+
+    QString workspaceError;
+    TemplateCharacterAssetWorkspace workspace;
+    if (!workspace.prepare(profile.resolvedAssetPathsByRole,
+                           &workspaceError)) {
+        showParameterCritical(QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                              QStringLiteral("\u65E0\u6CD5\u51C6\u5907\u5B57\u7B26\u6A21\u677F\u4E34\u65F6\u7F16\u8F91\u533A\uFF1A\n%1")
+                              .arg(workspaceError));
+        return;
+    }
+
+    if (!AppSettingsManager::saveTemplatePrivateSettings(
+                workspace.directoryPath(),
+                profile.settings,
+                &workspaceError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("\u65E0\u6CD5\u51C6\u5907\u5B57\u7B26\u6846\u7F16\u8F91\u6570\u636E\uFF1A\n%1")
+                    .arg(workspaceError));
+        return;
+    }
+
+    CharacterTemplateCropDialog dialog(rawImage.copy(cropRect),
+                                       workspace.directoryPath(),
+                                       this);
+    if (dialog.exec() != QDialog::Accepted || dialog.savedCount() <= 0) {
+        return;
+    }
+
+    TemplatePrivateSettings updatedSettings;
+    if (!AppSettingsManager::loadTemplatePrivateSettings(
+                workspace.directoryPath(),
+                &updatedSettings,
+                &workspaceError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("\u5B57\u7B26\u56FE\u7247\u5DF2\u5728\u4E34\u65F6\u533A\u751F\u6210\uFF0C\u4F46\u5B57\u7B26\u6846\u6570\u636E\u65E0\u6CD5\u8BFB\u53D6\uFF1A\n%1")
+                    .arg(workspaceError));
+        return;
+    }
+
+    const TemplateProfileAssetManifest updatedManifest =
+            workspace.assetManifest(profileIndex);
+    const RecipeProfile updatedProfile =
+            recipeProfileFromTemplatePrivateSettings(
+                profile.name,
+                updatedSettings,
+                updatedManifest.profileAssetKeys);
+
+    const QStringList targetUnits = parseTemplateTargetUnits(
+                updatedSettings.targetText);
+    if (!updatedSettings.targetText.trimmed().isEmpty()) {
+        std::vector<cv::Mat> templates;
+        std::vector<int> templateTargetIndexes;
+        if (!loadWordDigitTemplatesFromDir(workspace.directoryPath(),
+                                           targetUnits,
+                                           &templates,
+                                           &templateTargetIndexes,
+                                           &workspaceError,
+                                           true)) {
+            showParameterInfoWithRedWarning(
+                        QStringLiteral("\u63D0\u793A"),
+                        QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
+                        QStringLiteral("\u5F53\u524D\u76EE\u6807\u5B57\u7B26\u5BF9\u5E94\u56FE\u7247\u4E0D\u5B8C\u6574\uFF1A\n%1")
+                        .arg(workspaceError));
+            return;
+        }
+    }
+
+    TemplateRecipeEditSession candidateSession =
+            m_wordTemplateRecipeEditSession;
+    if (!candidateSession.replaceProfileAssets(profileIndex,
+                                               updatedProfile,
+                                               updatedManifest,
+                                               &workspaceError)) {
+        showParameterInfoWithRedWarning(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
+                    QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
+                    .arg(workspaceError));
+        return;
+    }
+
+    const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
+                            .filePath(QStringLiteral("recipes")));
+    RecipeSelection publishedSelection;
+    if (!candidateSession.publish(store,
+                                  &publishedSelection,
+                                  &workspaceError)) {
+        showParameterInfoWithRedWarning(
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
+                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
+                    .arg(workspaceError));
+        return;
+    }
+
+    QStringList pendingMessages;
+    if (!activatePublishedWordRecipe(
+                publishedSelection.recipe->recipeId,
+                currentDetectModeId(),
+                false,
+                &pendingMessages,
+                &workspaceError)) {
+        showParameterCritical(
+                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u5DF2\u91CD\u65B0\u53D1\u5E03\uFF0C\u4F46\u5F53\u524D\u7F13\u5B58\u5237\u65B0\u5931\u8D25\uFF1B\u8BF7\u91CD\u65B0\u9009\u62E9\u8BE5\u914D\u65B9\uFF1A\n%1")
+                    .arg(workspaceError));
+        return;
+    }
+    setCurrentWordTemplateEditIndex(profileIndex);
+    saveSettings(false);
+
+    qDebug() << "[RECIPE_PUBLISH] republished word recipe assets:"
+             << publishedSelection.recipe->recipeId
+             << publishedSelection.recipeDirectoryPath
+             << "profile:" << profileIndex
+             << "characters:" << dialog.savedCount();
+    QString message = QStringLiteral("\u5DF2\u4E3AProfile [%1] \u4FDD\u5B58 %2 \u5F20\u5B57\u7B26\u6A21\u677F\u56FE\u7247\uFF0C\u5E76\u4F7F\u7528\u539F\u914D\u65B9\u7F16\u53F7\u91CD\u65B0\u53D1\u5E03\u3002")
+            .arg(profile.name)
+            .arg(dialog.savedCount());
+    if (!pendingMessages.isEmpty()) {
+        message += QStringLiteral("\n\n\u76EE\u6807\u5B57\u7B26\u5F85\u786E\u8BA4\uFF1A\n%1")
+                .arg(pendingMessages.join(QLatin1Char('\n')));
+        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
+    } else {
+        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
+    }
 }
 
 void Widget::setupWordTemplateEditorCombo()

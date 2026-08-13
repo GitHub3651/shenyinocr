@@ -126,6 +126,34 @@ bool TemplateRecipeEditSession::updateProfiles(
     return true;
 }
 
+bool TemplateRecipeEditSession::replaceProfileAssets(
+        int profileIndex,
+        const RecipeProfile &profile,
+        const TemplateProfileAssetManifest &assetManifest,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!m_isActive) {
+        setError(errorMessage,
+                 QStringLiteral("Template recipe edit session is not active."));
+        return false;
+    }
+
+    TemplateRecipeAssembly candidate = m_assembly;
+    if (!replaceTemplateRecipeProfileAssets(&candidate,
+                                            profileIndex,
+                                            profile,
+                                            assetManifest,
+                                            errorMessage)) {
+        return false;
+    }
+
+    m_assembly = candidate;
+    return true;
+}
+
 bool TemplateRecipeEditSession::publish(
         const RecipeStore &store,
         RecipeSelection *publishedSelection,

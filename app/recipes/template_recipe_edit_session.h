@@ -21,6 +21,12 @@ public:
     bool updateProfiles(const QVector<RecipeProfile> &profiles,
                         QString *errorMessage = nullptr);
 
+    bool replaceProfileAssets(
+            int profileIndex,
+            const RecipeProfile &profile,
+            const TemplateProfileAssetManifest &assetManifest,
+            QString *errorMessage = nullptr);
+
     bool publish(const RecipeStore &store,
                  RecipeSelection *publishedSelection,
                  QString *errorMessage = nullptr);

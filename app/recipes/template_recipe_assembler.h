@@ -32,4 +32,11 @@ bool assembleSelectedTemplateRecipe(
         TemplateRecipeAssembly *assembly,
         QString *errorMessage = nullptr);
 
+bool replaceTemplateRecipeProfileAssets(
+        TemplateRecipeAssembly *assembly,
+        int profileIndex,
+        const RecipeProfile &profile,
+        const TemplateProfileAssetManifest &assetManifest,
+        QString *errorMessage = nullptr);
+
 #endif // TEMPLATE_RECIPE_ASSEMBLER_H

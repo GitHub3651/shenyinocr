@@ -325,6 +325,7 @@ private:
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
     void setupManualCharacterCropUi();
     void showManualCharacterTemplateCropDialog();
+    void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
     void restoreDefaultGlobalSettings();
