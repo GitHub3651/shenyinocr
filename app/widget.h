@@ -554,7 +554,8 @@ private:
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession; ///< 本次新建字库配方的编辑发布会话
     TemplateRecipeEditSession m_wordTemplateRecipeEditSession; ///< 当前已发布字库配方的参数编辑会话
-    std::vector<WordTemplateProfile> m_runningBarcodeWordProfiles; ///< 二维码+三期启动时的只读Profile快照
+    std::vector<WordTemplateProfile> m_runningWordTemplateProfiles; ///< 字库家族本次识别专用的只读Profile快照
+    bool m_wordTemplateRunActive = false; ///< 正式检测是否已安装字库家族运行快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
     HMODULE m_barcodeDecoderModule = nullptr;
     BarcodeDecoderGetVersionFunction m_barcodeGetVersion = nullptr;
@@ -593,6 +594,8 @@ private:
         QString *errorMessage);
     void refreshWordTemplateProfileDigitCache(
         WordTemplateProfile *profile) const;
+    std::vector<WordTemplateProfile> createWordTemplateRunSnapshot() const;
+    void clearWordTemplateRunSnapshot();
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
     bool saveWordTemplatePrivateSettings(

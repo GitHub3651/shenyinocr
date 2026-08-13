@@ -1872,8 +1872,9 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
         }
 
         const std::vector<WordTemplateProfile> &detectionProfiles =
-                (mode == 4 && !m_runningBarcodeWordProfiles.empty())
-                ? m_runningBarcodeWordProfiles
+                (m_wordTemplateRunActive
+                 && !m_runningWordTemplateProfiles.empty())
+                ? m_runningWordTemplateProfiles
                 : m_wordTemplateProfiles;
         if (pose.wordTemplateProfileIndex >= 0) {
             const int profileIndex = pose.wordTemplateProfileIndex;
@@ -4128,6 +4129,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
         if (m_operationState
                 == OperationState::Detecting) {
             isCollecting = false;
+            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
@@ -8145,6 +8147,34 @@ void Widget::refreshWordTemplateProfileDigitCache(
                 profile->digitTemplates);
 }
 
+std::vector<Widget::WordTemplateProfile>
+Widget::createWordTemplateRunSnapshot() const
+{
+    std::vector<WordTemplateProfile> snapshot;
+    snapshot.reserve(m_wordTemplateProfiles.size());
+    for (const WordTemplateProfile &sourceProfile : m_wordTemplateProfiles) {
+        WordTemplateProfile runtimeProfile = sourceProfile;
+        runtimeProfile.trackingTemplate =
+                sourceProfile.trackingTemplate.clone();
+        runtimeProfile.digitTemplates.clear();
+        runtimeProfile.digitTemplates.reserve(
+                    sourceProfile.digitTemplates.size());
+        for (const cv::Mat &digitTemplate : sourceProfile.digitTemplates) {
+            runtimeProfile.digitTemplates.push_back(
+                        digitTemplate.clone());
+        }
+        refreshWordTemplateProfileDigitCache(&runtimeProfile);
+        snapshot.push_back(std::move(runtimeProfile));
+    }
+    return snapshot;
+}
+
+void Widget::clearWordTemplateRunSnapshot()
+{
+    m_wordTemplateRunActive = false;
+    m_runningWordTemplateProfiles.clear();
+}
+
 bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
 {
     bool ok = false;
@@ -9194,8 +9224,8 @@ void Widget::on_cancel_clicked()
     g_lastStampPoly.clear();
     g_lastStampIsOverlap = false;
     g_lastDetectTime = 0;
+    clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
-    m_runningBarcodeWordProfiles.clear();
 
     first = false;
     x = 1;
@@ -9726,6 +9756,7 @@ void Widget::closeEvent(QCloseEvent *event)
 
     m_applicationExitInProgress = true;
     m_operationState = OperationState::Stopping;
+    clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
     isCollecting = false;
     if (m_templateCaptureAttentionTimer) {
@@ -11411,28 +11442,11 @@ void Widget::on_plcbtn_clicked()
     }
 
     std::vector<WordTrackingProfile> wordTrackingProfilesForRun;
-    std::vector<WordTemplateProfile> barcodeWordProfilesForRun;
+    std::vector<WordTemplateProfile> wordTemplateProfilesForRun;
     if (isWordProfileMode) {
-        if (isBarcodeWordMode) {
-            barcodeWordProfilesForRun.reserve(m_wordTemplateProfiles.size());
-            for (const WordTemplateProfile &sourceProfile : m_wordTemplateProfiles) {
-                WordTemplateProfile runtimeProfile = sourceProfile;
-                runtimeProfile.trackingTemplate = sourceProfile.trackingTemplate.clone();
-                runtimeProfile.digitTemplates.clear();
-                runtimeProfile.digitTemplates.reserve(sourceProfile.digitTemplates.size());
-                for (const cv::Mat &digitTemplate : sourceProfile.digitTemplates) {
-                    runtimeProfile.digitTemplates.push_back(digitTemplate.clone());
-                }
-                refreshWordTemplateProfileDigitCache(
-                            &runtimeProfile);
-                barcodeWordProfilesForRun.push_back(std::move(runtimeProfile));
-            }
-        }
-
+        wordTemplateProfilesForRun = createWordTemplateRunSnapshot();
         const std::vector<WordTemplateProfile> &profilesForRun =
-                isBarcodeWordMode
-                ? barcodeWordProfilesForRun
-                : m_wordTemplateProfiles;
+                wordTemplateProfilesForRun;
         QStringList pendingProfiles;
         for (int i = 0; i < static_cast<int>(profilesForRun.size()); ++i) {
             const WordTemplateProfile &profile = profilesForRun[static_cast<size_t>(i)];
@@ -11467,13 +11481,7 @@ void Widget::on_plcbtn_clicked()
         }
     }
 
-    if (isBarcodeWordMode) {
-        m_runningBarcodeWordProfiles.swap(barcodeWordProfilesForRun);
-        qDebug() << "[BARCODE_WORD_PROFILE] Runtime profile snapshot ready:"
-                 << static_cast<int>(m_runningBarcodeWordProfiles.size());
-    } else {
-        m_runningBarcodeWordProfiles.clear();
-    }
+    clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
 
     if (imageLabel) {
@@ -11562,6 +11570,7 @@ void Widget::on_plcbtn_clicked()
                 return;
             }
             isCollecting = false;
+            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
@@ -11623,6 +11632,14 @@ void Widget::on_plcbtn_clicked()
         m_resultBoundDisplayActive = isWordMode;
         cameraThread->start();
         if (!cameraThread->wait(100)) {
+            if (isWordProfileMode) {
+                m_runningWordTemplateProfiles.swap(
+                            wordTemplateProfilesForRun);
+                m_wordTemplateRunActive = true;
+                qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
+                         << static_cast<int>(m_runningWordTemplateProfiles.size())
+                         << "mode:" << currentDetectModeId();
+            }
             m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
             m_operationState =
@@ -11631,6 +11648,7 @@ void Widget::on_plcbtn_clicked()
             updateOperationUiState();
         } else {
             m_resultBoundDisplayActive = false;
+            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             isCollecting = false;
             m_operationState = m_bOpenDevice
@@ -11698,6 +11716,14 @@ void Widget::on_plcbtn_clicked()
         myThread->getImagePtr(myImage);
 
         if (!myThread->isRunning()) {
+            if (isWordProfileMode) {
+                m_runningWordTemplateProfiles.swap(
+                            wordTemplateProfilesForRun);
+                m_wordTemplateRunActive = true;
+                qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
+                         << static_cast<int>(m_runningWordTemplateProfiles.size())
+                         << "mode:" << currentDetectModeId();
+            }
             m_resultBoundDisplayActive = isWordMode;
             myThread->start();
             m_barcodeWordRunActive = isBarcodeWordMode;
