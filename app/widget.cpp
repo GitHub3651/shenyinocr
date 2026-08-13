@@ -21,6 +21,7 @@
 #include "detection/ocr/ocr_detection_pipeline.h"
 #include "detection/stamp/stamp_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
+#include "devices/camera/hikvision_camera_device.h"
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
 
@@ -981,6 +982,8 @@ Widget::Widget(QWidget *parent)
 
     // Snap7客户端生命周期和原生常量由设备适配器独占。
     m_plcDevice.reset(new Snap7PlcDevice);
+    // 海康单相机SDK生命周期和原生类型由设备适配器独占。
+    m_cameraDevice = std::make_shared<HikvisionCameraDevice>();
 
     // 初始化窗口组件
     initWidget();
@@ -1123,12 +1126,13 @@ Widget::~Widget()
     }
 
     // 线程退出后再关闭相机，避免工作线程仍在访问相机对象。
-    if (m_pcMyCamera && myThreadStopped && cameraThreadStopped)
+    if (m_cameraDevice && m_bOpenDevice
+            && myThreadStopped && cameraThreadStopped)
     {
-        m_pcMyCamera->Close();
-        delete m_pcMyCamera;
-        m_pcMyCamera = nullptr;
-    } else if (m_pcMyCamera) {
+        m_cameraDevice->close();
+        m_bOpenDevice = false;
+        m_cameraDevice.reset();
+    } else if (m_cameraDevice && m_bOpenDevice) {
         qDebug() << "WARNING: camera not released because worker thread is still running";
     }
 
@@ -1327,7 +1331,7 @@ void Widget::wrongremove()
 void Widget::saveImage2Async(QString format, QString savePath)
 {
     // 捕获当前相机状态和相关参数，避免异步过程中相机状态变化
-    if (!m_pcMyCamera || !m_bOpenDevice)
+    if (!m_cameraDevice || !m_bOpenDevice)
     {
         qDebug() << "保存失败，相机对象无效或未打开";
         return;
@@ -1361,18 +1365,20 @@ void Widget::saveImage2Async(QString format, QString savePath)
     // 生成文件名
     QString curDate = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss-zzz");
     QString saveName = savePath + curDate + "." + format;
+    const std::shared_ptr<ICameraDevice> cameraDevice = m_cameraDevice;
 
     // 使用QtConcurrent在后台线程执行图像获取和保存操作
-    QtConcurrent::run([this, saveName, format]() {
+    QtConcurrent::run([cameraDevice, saveName, format]() {
         try {
             // 方法1：使用ReadBuffer代替GetImageBuffer
             cv::Mat capturedImage;
-            int result = m_pcMyCamera->ReadBuffer(capturedImage);
+            const CameraOperationResult result =
+                    cameraDevice->readBuffer(capturedImage);
 
             // 如果ReadBuffer失败，尝试使用GetImage（基于回调的方法）
-            if (result != 0 || capturedImage.empty()) {
+            if (!result.isSuccess() || capturedImage.empty()) {
                 qDebug() << "ReadBuffer失败，尝试使用GetImage...";
-                capturedImage = m_pcMyCamera->GetImage();
+                capturedImage = cameraDevice->latestImage();
             }
 
             // 检查图像是否有效
@@ -1414,117 +1420,6 @@ void Widget::saveImage2Async(QString format, QString savePath)
         }
     });
 }
-
-
-
-//// 在 Widget 或需要保存图像的地方调用
-//void Widget::saveImageByMVS(QString savePath, QString format)
-//{
-//    int nRet = MV_OK;
-
-//    // 相机状态校验
-//    if (!m_pcMyCamera || !m_bOpenDevice) {
-//        qDebug() << "保存失败：相机未打开";
-//        return;
-//    }
-
-//    // 1. 格式预处理（对齐第二个函数：仅去前缀、判空，保留原白名单校验增强兼容性）
-//    format = format.trimmed();
-//    if (format.startsWith(".")) {
-//        format = format.mid(1);
-//    }
-//    if (format.isEmpty()) {
-//        format = "png";
-//    }
-//    // 保留原白名单校验（避免无效格式，比第二个函数更严谨）
-//    QStringList validFormats = {"bmp", "jpeg", "png", "tiff"};
-//    if (!validFormats.contains(format.toLower())) {
-//        qDebug() << "unsupport format" << format << "，默认使用 png";
-//        format = "png";
-//    }
-
-//    // 2. 确保目录存在（对齐第二个函数：先处理目录，再补全路径）
-//    QDir dir;
-//    if (!dir.mkpath(savePath)) {
-//        qDebug() << "path create fail" << savePath;
-//        return;
-//    }
-
-//    // 3. 补全路径分隔符（对齐第二个函数：目录创建后补全）
-//    if (!savePath.endsWith("/") && !savePath.endsWith("\\")) {
-//        savePath += "/";
-//    }
-
-//    // 4. 生成完整路径（与第二个函数完全一致：时间戳格式、命名规则）
-//    QString curDate = QDateTime::currentDateTime().toString("yyyyMMdd-hhmmss-zzz");
-//    QString fullSavePath = savePath + curDate + "." + format;
-
-//    // 关键修正：先声明 saveParam，再用其成员做路径长度检查
-//    MV_SAVE_IMG_TO_FILE_PARAM saveParam;
-//    memset(&saveParam, 0, sizeof(MV_SAVE_IMG_TO_FILE_PARAM)); // 整体清零，避免枚举类型初始化错误
-
-//    // 路径长度检查（保留原严谨性，避免缓冲区溢出）
-//    if (fullSavePath.toLocal8Bit().length() >= sizeof(saveParam.pImagePath)) {
-//        qDebug() << "path too long" << fullSavePath;
-//        return;
-//    }
-
-//    // 定义帧信息结构体
-//    MV_FRAME_OUT stFrameOut;
-//    memset(&stFrameOut, 0, sizeof(MV_FRAME_OUT)); // 整体清零，包含嵌套子结构体
-
-//    // 获取图像
-//    nRet = m_pcMyCamera->GetImageBuffer(&stFrameOut, 1000);
-//    if (nRet != MV_OK) {
-//        qDebug() << "get image fail wrong info：" << nRet;
-//        return;
-//    }
-
-//    // 检查帧数据有效性
-//    if (!stFrameOut.pBufAddr) {
-//        qDebug() << "get image fail data is empty";
-//        m_pcMyCamera->FreeImageBuffer(&stFrameOut);
-//        return;
-//    }
-
-//    // 填充 saveParam 其他参数
-//    saveParam.enPixelType = static_cast<enum MvGvspPixelType>(stFrameOut.stFrameInfo.enPixelType);
-//    saveParam.pData = stFrameOut.pBufAddr;
-//    saveParam.nDataLen = stFrameOut.stFrameInfo.nFrameLen;
-//    saveParam.nWidth = stFrameOut.stFrameInfo.nWidth;
-//    saveParam.nHeight = stFrameOut.stFrameInfo.nHeight;
-
-//    // 映射保存格式
-//    QString lowerFormat = format.toLower();
-//    if (lowerFormat == "bmp") saveParam.enImageType = MV_Image_Bmp;
-//    else if (lowerFormat == "jpeg") saveParam.enImageType = MV_Image_Jpeg;
-//    else if (lowerFormat == "png") saveParam.enImageType = MV_Image_Png;
-//    else if (lowerFormat == "tiff") saveParam.enImageType = MV_Image_Tif;
-
-//    // 编码质量
-//    if (lowerFormat == "jpeg") saveParam.nQuality = 60;
-//    else if (lowerFormat == "png") saveParam.nQuality = 5;
-//    else saveParam.nQuality = 0;
-
-//    // 保存路径（与原逻辑一致，确保安全拷贝）
-//    const char* filePath = fullSavePath.toLocal8Bit().data();
-//    strncpy_s(saveParam.pImagePath, filePath, sizeof(saveParam.pImagePath) - 1);
-//    saveParam.pImagePath[sizeof(saveParam.pImagePath) - 1] = '\0';
-
-//    // 插值方法
-//    saveParam.iMethodValue = 1;
-
-//    // 保存图像
-//    nRet = m_pcMyCamera->SaveImageToFile(&saveParam);
-//    if (nRet == MV_OK) {
-//        qDebug() << "save success：" << fullSavePath;
-//    } else {
-//        qDebug() << "save fail wrong info：" << nRet;
-//    }
-
-//    // 释放缓冲区
-//    m_pcMyCamera->FreeImageBuffer(&stFrameOut);
-//}
 
 
 
@@ -3584,7 +3479,7 @@ void Widget::resetTemplateCaptureState()
 
 bool Widget::startTemplatePreview()
 {
-    if (!m_bOpenDevice || !m_pcMyCamera) {
+    if (!m_bOpenDevice || !m_cameraDevice) {
         QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return false;
     }
@@ -3623,10 +3518,12 @@ bool Widget::startTemplatePreview()
     }
 
     try {
-        if (m_pcMyCamera->SetEnumValue("TriggerMode", 1)
-                != MV_OK
-                || m_pcMyCamera->SetEnumValue("TriggerSource", 7)
-                != MV_OK) {
+        if (!m_cameraDevice->setEnumValue(
+                "TriggerMode",
+                1).isSuccess()
+                || !m_cameraDevice->setEnumValue(
+                "TriggerSource",
+                7).isSuccess()) {
             QMessageBox::warning(
                         this,
                         "警告",
@@ -3667,7 +3564,7 @@ bool Widget::startTemplatePreview()
     clearInspectionTransientDisplay();
     updateOperationUiState();
 
-    myThread->getCameraPtr(m_pcMyCamera);
+    myThread->setCameraDevice(m_cameraDevice);
     myThread->getImagePtr(myImage);
     myThread->receiveangle(angleValue);
     myThread->receivecolorchannel1(colorchannel);
@@ -3782,73 +3679,6 @@ void Widget::on_VideoShoot_clicked()
 
     startTemplatePreview();
 }
-/**
- * @brief 连续拍照按钮点击槽函数
- * @details 启动工作线程，进入连续采集识别模式
- */
-//void Widget::on_ReShoot_clicked()
-//{
-//    qDebug() << "=== on_ReShoot_clicked() called ===";
-
-//    if (!m_bOpenDevice) {
-//        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
-//        return;
-//    }
-
-//    int exposureValue = ui->spinBox->value();
-//    m_pcMyCamera->SetFloatValue("ExposureTime", exposureValue);
-//    if((ui->comboBox_4->currentIndex() == 0)||(ui->comboBox_4->currentIndex() == 1))
-//    {
-//        if (digitTemplates.empty()) {
-//            QMessageBox::warning(this, "警告", "模板图像为空！ 请确认目标字符");
-//            return;
-//        }
-//    }
-
-
-
-//    // ✅ 核心修复：确保线程已正确初始化
-//    ensureThreadsReady();
-
-//    // 如果 myThread 还是 null，重新创建
-//    if (!myThread) {
-//        reinitializeMyThread();
-//    }
-
-//    // 设置参数
-//    int number = ui->lineEdit_yuzhi->text().toDouble();
-//    emit ssim(number);
-
-//    int index = ui->comboBox_2->currentIndex();
-//    switch (index) {
-//    case 1: angleValue = 1; break;
-//    case 2: angleValue = 2; break;
-//    case 3: angleValue = 3; break;
-//    default: angleValue = 0;
-//    }
-//    emit rotate(angleValue);
-
-//    QString text = ui->lineEdit_4->text();
-//    emit sendDataTo(text);
-
-//    // 设置为软触发模式
-//    m_pcMyCamera->SetEnumValue("TriggerSource", 7);
-
-//    // 传递相机和图像指针给线程
-//    myThread->getCameraPtr(m_pcMyCamera);
-//    myThread->getImagePtr(myImage);
-
-//    // 启动线程
-//    if (!myThread->isRunning()) {
-//        myThread->start();
-//        ui->statusLabel->setText("软触发模式运行中...");
-//    }
-//    ui->plcbtn->setEnabled(false);  // 禁用按钮，防止重复点击
-//    ui->VideoShoot->setEnabled(false);
-//    ui->ReShoot->setEnabled(false);
-//    qDebug() << "=== on_ReShoot_clicked() completed ===";
-//}
-
 /**
  * @brief 曝光值变化槽函数
  * @param value 新的曝光值
@@ -4466,7 +4296,7 @@ void Widget::restoreDefaultGlobalSettings()
 
     const GlobalSettings defaultSettings = AppSettingsManager::defaultGlobalSettings();
     GlobalSettings editableDefaults = m_appliedGlobalSettings;
-    const bool cameraOpen = (m_pcMyCamera != nullptr && m_bOpenDevice);
+    const bool cameraOpen = (m_cameraDevice && m_bOpenDevice);
     const bool plcConnected =
             (m_plcDevice && m_plcDevice->isConnected());
 
@@ -4693,7 +4523,7 @@ void Widget::setHardwareControlEnabled(QWidget *widget,
 
 void Widget::updateHardwareParameterUiEnabled()
 {
-    const bool cameraOpen = (m_pcMyCamera != nullptr && m_bOpenDevice);
+    const bool cameraOpen = (m_cameraDevice && m_bOpenDevice);
     const bool plcConnected =
             (m_plcDevice && m_plcDevice->isConnected());
     const QString cameraDisabledReason = "请先打开相机后再设置该参数。";
@@ -8765,25 +8595,32 @@ bool Widget::queryCameraExposureRange(int *minimumValue,
                                       double *currentValue,
                                       QString *errorMessage)
 {
-    if (!m_pcMyCamera) {
+    if (!m_cameraDevice) {
         if (errorMessage) {
             *errorMessage = "相机未初始化，无法读取曝光范围";
         }
         return false;
     }
 
-    MVCC_FLOATVALUE exposureInfo = {0};
-    const int ret = m_pcMyCamera->GetFloatValue("ExposureTime", &exposureInfo);
-    if (ret != MV_OK) {
+    CameraFloatValue exposureInfo;
+    const CameraOperationResult result =
+            m_cameraDevice->getFloatValue(
+                "ExposureTime",
+                &exposureInfo);
+    if (!result.isSuccess()) {
         if (errorMessage) {
-            *errorMessage = QString("读取相机曝光范围失败，错误码：%1").arg(ret);
+            *errorMessage = QString("读取相机曝光范围失败，错误码：%1")
+                    .arg(result.nativeErrorCode);
         }
         return false;
     }
 
-    const double rawMinimum = static_cast<double>(exposureInfo.fMin);
-    const double rawMaximum = static_cast<double>(exposureInfo.fMax);
-    const double rawCurrent = static_cast<double>(exposureInfo.fCurValue);
+    const double rawMinimum =
+            static_cast<double>(exposureInfo.minimumValue);
+    const double rawMaximum =
+            static_cast<double>(exposureInfo.maximumValue);
+    const double rawCurrent =
+            static_cast<double>(exposureInfo.currentValue);
     if (!std::isfinite(rawMinimum)
             || !std::isfinite(rawMaximum)
             || !std::isfinite(rawCurrent)) {
@@ -8841,25 +8678,31 @@ bool Widget::applyCameraExposureValue(int exposureValue, QString *errorMessage)
         return false;
     }
 
-    int ret = m_pcMyCamera->SetFloatValue("ExposureTime",
-                                          static_cast<float>(exposureValue));
-    if (ret != MV_OK) {
+    CameraOperationResult result = m_cameraDevice->setFloatValue(
+                "ExposureTime",
+                static_cast<float>(exposureValue));
+    if (!result.isSuccess()) {
         if (errorMessage) {
-            *errorMessage = QString("相机曝光设置失败，错误码：%1").arg(ret);
+            *errorMessage = QString("相机曝光设置失败，错误码：%1")
+                    .arg(result.nativeErrorCode);
         }
         return false;
     }
 
-    MVCC_FLOATVALUE readBackInfo = {0};
-    ret = m_pcMyCamera->GetFloatValue("ExposureTime", &readBackInfo);
-    if (ret != MV_OK) {
+    CameraFloatValue readBackInfo;
+    result = m_cameraDevice->getFloatValue(
+                "ExposureTime",
+                &readBackInfo);
+    if (!result.isSuccess()) {
         if (errorMessage) {
-            *errorMessage = QString("相机曝光写入后回读失败，错误码：%1").arg(ret);
+            *errorMessage = QString("相机曝光写入后回读失败，错误码：%1")
+                    .arg(result.nativeErrorCode);
         }
         return false;
     }
 
-    const double actualValue = static_cast<double>(readBackInfo.fCurValue);
+    const double actualValue =
+            static_cast<double>(readBackInfo.currentValue);
     if (!std::isfinite(actualValue)
             || std::fabs(actualValue - static_cast<double>(exposureValue)) > 0.5) {
         if (errorMessage) {
@@ -8924,7 +8767,7 @@ bool Widget::applySavedCameraExposure(QString *adjustmentMessage,
 
 bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (m_pcMyCamera == nullptr || !m_bOpenDevice) {
+    if (!m_cameraDevice || !m_bOpenDevice) {
         const QString message = "未打开相机，无法设置曝光！";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("警告", message);
@@ -8951,17 +8794,20 @@ bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMess
 
 bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (m_pcMyCamera == nullptr || !m_bOpenDevice) {
+    if (!m_cameraDevice || !m_bOpenDevice) {
         const QString message = "相机未初始化或未打开，无法设置增益！";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
         return false;
     }
 
-    MVCC_FLOATVALUE stParam = {0};
-    int ret = m_pcMyCamera->GetFloatValue("Gain", &stParam);
-    if (ret != MV_OK) {
-        const QString message = QString("无法获取相机增益支持的范围！错误码：%1").arg(ret);
+    CameraFloatValue gainInfo;
+    CameraOperationResult result =
+            m_cameraDevice->getFloatValue("Gain", &gainInfo);
+    if (!result.isSuccess()) {
+        const QString message =
+                QString("无法获取相机增益支持的范围！错误码：%1")
+                .arg(result.nativeErrorCode);
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
         return false;
@@ -8970,26 +8816,29 @@ bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
     int gainIntValue = 0;
     if (!parseIntValue(ui->lineEdit_14->text(), &gainIntValue)) {
         const QString message = QString("请输入有效的整数增益！当前相机允许范围：%1 ~ %2")
-                .arg(stParam.fMin)
-                .arg(stParam.fMax);
+                .arg(gainInfo.minimumValue)
+                .arg(gainInfo.maximumValue);
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
         return false;
     }
 
     const float gainValue = static_cast<float>(gainIntValue);
-    if (gainValue < stParam.fMin || gainValue > stParam.fMax) {
+    if (gainValue < gainInfo.minimumValue
+            || gainValue > gainInfo.maximumValue) {
         const QString message = QString("输入的增益值超出限制！当前相机允许范围：%1 ~ %2")
-                .arg(stParam.fMin)
-                .arg(stParam.fMax);
+                .arg(gainInfo.minimumValue)
+                .arg(gainInfo.maximumValue);
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
         return false;
     }
 
-    ret = m_pcMyCamera->SetFloatValue("Gain", gainValue);
-    if (ret != MV_OK) {
-        const QString message = QString("相机增益设置失败！错误码：%1").arg(ret);
+    result = m_cameraDevice->setFloatValue("Gain", gainValue);
+    if (!result.isSuccess()) {
+        const QString message =
+                QString("相机增益设置失败！错误码：%1")
+                .arg(result.nativeErrorCode);
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
         return false;
@@ -9499,28 +9348,25 @@ void Widget::on_cancel_clicked()
     }
 
     // 🔥 Step 5: 如果cameraThread运行过，重启相机
-    if ((needRestartCamera || myThreadWasRunning) && m_pcMyCamera) {
+    if ((needRestartCamera || myThreadWasRunning)
+            && m_cameraDevice) {
         try {
-            m_pcMyCamera->Close();
-            delete m_pcMyCamera;
-            m_pcMyCamera = NULL;
+            m_cameraDevice->close();
             m_bOpenDevice = false;
 
             QThread::msleep(100);
 
-            m_pcMyCamera = new CMvCamera;
-            int nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[0]);
+            const CameraOperationResult openResult =
+                    m_cameraDevice->openDevice(0);
 
-            if (MV_OK == nRet) {
+            if (openResult.isSuccess()) {
                 m_bOpenDevice = true;
-                m_pcMyCamera->SetEnumValue("TriggerMode", 1);
-                m_pcMyCamera->SetEnumValue("TriggerSource", 7);
+                m_cameraDevice->setEnumValue("TriggerMode", 1);
+                m_cameraDevice->setEnumValue("TriggerSource", 7);
                 QString adjustmentMessage;
                 QString exposureError;
                 if (!applySavedCameraExposure(&adjustmentMessage, &exposureError)) {
-                    m_pcMyCamera->Close();
-                    delete m_pcMyCamera;
-                    m_pcMyCamera = nullptr;
+                    m_cameraDevice->close();
                     m_bOpenDevice = false;
                     {
                         QSignalBlocker blocker(ui->spinBox);
@@ -9533,17 +9379,14 @@ void Widget::on_cancel_clicked()
                                          QString("停止识别后恢复相机曝光失败：\n%1")
                                          .arg(exposureError));
                 } else {
-                    m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
-                    m_pcMyCamera->RegisterImageCallBack();
-                    m_pcMyCamera->StartGrabbing();
+                    m_cameraDevice->setFloatValue("TriggerDelay", 0);
+                    m_cameraDevice->registerImageCallback();
+                    m_cameraDevice->startGrabbing();
                     ui->statusLabel->setText("相机已打开");
                     if (!adjustmentMessage.isEmpty()) {
                         QMessageBox::information(this, "提示", adjustmentMessage);
                     }
                 }
-            } else {
-                delete m_pcMyCamera;
-                m_pcMyCamera = nullptr;
             }
         } catch (...) {}
     }
@@ -10190,8 +10033,8 @@ void Widget::closeEvent(QCloseEvent *event)
         disconnect(this, nullptr, cameraThread, nullptr);
         cameraThread->requestStop();
     }
-    if (m_pcMyCamera) {
-        m_pcMyCamera->requestStop();
+    if (m_cameraDevice) {
+        m_cameraDevice->requestStop();
     }
 
     // 正常情况下线程会在下一次停止检查时立即退出。
@@ -10206,15 +10049,14 @@ void Widget::closeEvent(QCloseEvent *event)
             || cameraThread->wait(500);
 
     // 只有工作线程已经停止时才主动释放相机，防止线程继续访问失效句柄。
-    if (m_pcMyCamera
+    if (m_cameraDevice
+            && m_bOpenDevice
             && myThreadStopped
             && cameraThreadStopped) {
         try {
-            m_pcMyCamera->Close();
+            m_cameraDevice->close();
         } catch (...) {
         }
-        delete m_pcMyCamera;
-        m_pcMyCamera = nullptr;
         m_bOpenDevice = false;
     }
 
@@ -11660,11 +11502,9 @@ void Widget::on_CloseCamera_clicked()
         return;
     }
 
-    if (m_pcMyCamera)
+    if (m_cameraDevice && m_bOpenDevice)
     {
-        m_pcMyCamera->Close();
-        delete m_pcMyCamera;
-        m_pcMyCamera = NULL;
+        m_cameraDevice->close();
         m_bOpenDevice = false;
     }
     // 清空文本并将文本置0
@@ -11990,12 +11830,12 @@ void Widget::on_plcbtn_clicked()
         totalImages = 0;
 
         // 重置相机状态
-        if (m_pcMyCamera) {
+        if (m_cameraDevice && m_bOpenDevice) {
             try {
-                m_pcMyCamera->StopGrabbing();
+                m_cameraDevice->stopGrabbing();
                 QThread::msleep(200);
-                m_pcMyCamera->SetEnumValue("TriggerMode", 1);
-                m_pcMyCamera->SetEnumValue("TriggerSource", 0); // 硬触发
+                m_cameraDevice->setEnumValue("TriggerMode", 1);
+                m_cameraDevice->setEnumValue("TriggerSource", 0); // 硬触发
                 QString exposureError;
                 if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
                                               &exposureError)) {
@@ -12005,12 +11845,12 @@ void Widget::on_plcbtn_clicked()
                                          .arg(exposureError));
                     return;
                 }
-                m_pcMyCamera->SetFloatValue("Gain", gainValue); // 恢复写入增益
-                m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
-                m_pcMyCamera->RegisterImageCallBack();
-                m_pcMyCamera->StartGrabbing();
+                m_cameraDevice->setFloatValue("Gain", gainValue); // 恢复写入增益
+                m_cameraDevice->setFloatValue("TriggerDelay", 0);
+                m_cameraDevice->registerImageCallback();
+                m_cameraDevice->startGrabbing();
 
-                m_pcMyCamera->SetEnumValue("LineDebouncerTime", 5000.0); // 硬触发
+                m_cameraDevice->setEnumValue("LineDebouncerTime", 5000U); // 硬触发
 
                 QThread::msleep(100);
             } catch (...) {
@@ -12029,7 +11869,7 @@ void Widget::on_plcbtn_clicked()
             delete cameraThread;
         }
 
-        cameraThread = new CameraThread(this, m_pcMyCamera);
+        cameraThread = new CameraThread(this, m_cameraDevice);
         CameraThread *startedCameraThread =
                 cameraThread;
         connect(cameraThread,
@@ -12173,7 +12013,7 @@ void Widget::on_plcbtn_clicked()
             return;
         }
 
-        m_pcMyCamera->SetEnumValue("TriggerSource", 7); // 软触发
+        m_cameraDevice->setEnumValue("TriggerSource", 7); // 软触发
         QString exposureError;
         if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
                                       &exposureError)) {
@@ -12183,8 +12023,8 @@ void Widget::on_plcbtn_clicked()
                                  .arg(exposureError));
             return;
         }
-        m_pcMyCamera->SetFloatValue("Gain", gainValue); // 软触发重新设置增益
-        myThread->getCameraPtr(m_pcMyCamera);
+        m_cameraDevice->setFloatValue("Gain", gainValue); // 软触发重新设置增益
+        myThread->setCameraDevice(m_cameraDevice);
         myThread->getImagePtr(myImage);
 
         if (!myThread->isRunning()) {
@@ -12230,10 +12070,11 @@ void Widget::on_HandwareDetect_clicked()
         return;
     }
 
-    // 查找设备
-    memset(&m_stDevList, 0, sizeof(MV_CC_DEVICE_INFO_LIST));
-    int nRet = CMvCamera::EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE, &m_stDevList);
-    if (MV_OK != nRet || m_stDevList.nDeviceNum == 0)
+    // 查找设备。SDK枚举类型由相机适配器内部持有。
+    int deviceCount = 0;
+    const CameraOperationResult enumerateResult =
+            m_cameraDevice->enumerateDevices(&deviceCount);
+    if (!enumerateResult.isSuccess() || deviceCount == 0)
     {
         QMessageBox::warning(this, "警告", "未找到相机设备！");
         return;
@@ -12258,37 +12099,25 @@ void Widget::on_HandwareDetect_clicked()
     }
     updateHardwareParameterUiEnabled();
 
-    // 打开设备
-    m_pcMyCamera = new CMvCamera;
-    if (m_pcMyCamera == nullptr)
-    {
-        return;
-    }
-
     // 假设只有一个相机，直接打开第一个设备
-    int nIndex = 0;
-    nRet = m_pcMyCamera->Open(m_stDevList.pDeviceInfo[nIndex]);
-    //    qDebug() << "Connect:" << nRet;
-    if (MV_OK != nRet)
+    const CameraOperationResult openResult =
+            m_cameraDevice->openDevice(0);
+    if (!openResult.isSuccess())
     {
-        delete m_pcMyCamera;
-        m_pcMyCamera = nullptr;
         QMessageBox::warning(this, "警告", "打开设备失败！");
         return;
     }
 
     m_bOpenDevice = true;
     // 设置为触发模式
-    m_pcMyCamera->SetEnumValue("TriggerMode", 1);
+    m_cameraDevice->setEnumValue("TriggerMode", 1);
     // 设置触发源为编码器触发
-    m_pcMyCamera->SetEnumValue("TriggerSource", 0);
+    m_cameraDevice->setEnumValue("TriggerSource", 0);
 
     QString exposureAdjustmentMessage;
     QString exposureError;
     if (!applySavedCameraExposure(&exposureAdjustmentMessage, &exposureError)) {
-        m_pcMyCamera->Close();
-        delete m_pcMyCamera;
-        m_pcMyCamera = nullptr;
+        m_cameraDevice->close();
         m_bOpenDevice = false;
         {
             QSignalBlocker blocker(ui->spinBox);
@@ -12306,13 +12135,13 @@ void Widget::on_HandwareDetect_clicked()
         return;
     }
 
-    m_pcMyCamera->SetFloatValue("TriggerDelay", 0);
+    m_cameraDevice->setFloatValue("TriggerDelay", 0);
     // 开启相机采集
-    m_pcMyCamera->RegisterImageCallBack();
-    m_pcMyCamera->StartGrabbing();
+    m_cameraDevice->registerImageCallback();
+    m_cameraDevice->startGrabbing();
     //        connect(cameraThread,&CameraThread::threaderror,this,&Widget::onthreaderrormessage);
 
-    myThread->getCameraPtr(m_pcMyCamera);
+    myThread->setCameraDevice(m_cameraDevice);
     myThread->getImagePtr(myImage);
 
     ui->statusLabel->setText("相机已打开");
@@ -12414,8 +12243,8 @@ void Widget::reinitializeMyThread()
     connectTemplatePreviewSignals(myThread);
 
     // 步骤7: 如果相机已打开，传递相机指针
-    if (m_pcMyCamera && m_bOpenDevice) {
-        myThread->getCameraPtr(m_pcMyCamera);
+    if (m_cameraDevice && m_bOpenDevice) {
+        myThread->setCameraDevice(m_cameraDevice);
         myThread->getImagePtr(myImage);
         qDebug() << "✓ Camera pointers passed to myThread";
     }
@@ -12463,14 +12292,14 @@ void Widget::reinitializeCameraThread()
     }
 
     // 步骤2: 检查相机是否可用
-    if (!m_pcMyCamera) {
+    if (!m_cameraDevice || !m_bOpenDevice) {
         qDebug() << "ERROR: Cannot reinitialize cameraThread - camera is null";
         return;
     }
 
     // 步骤3: 创建新线程
     qDebug() << "Creating new cameraThread...";
-    cameraThread = new CameraThread(this, m_pcMyCamera);
+    cameraThread = new CameraThread(this, m_cameraDevice);
 
     // 步骤4: 连接信号槽 - 旋转角度 图像颜色通道
     connect(this, &Widget::rotate, cameraThread, &CameraThread::receiveangle1);

@@ -6,7 +6,7 @@
 
 MyThread::MyThread(QObject *parent)
     : QThread{parent}, myImage(new QImage()), zhuizong(new Zhuizong),
-      cameraPtr(nullptr), imagePtr(nullptr), angle1(0), colorc1(0),
+      imagePtr(nullptr), angle1(0), colorc1(0),
       m_stopRequested(false), m_tracking(false)
 {
 
@@ -97,7 +97,11 @@ void MyThread::acknowledgeTemplatePreviewFrame(quint64 sessionId)
 
 void MyThread::receiveangle(int a) { angle1 = a; }
 void MyThread::receivecolorchannel1(int c) { colorc1 = c; }
-void MyThread::getCameraPtr(CMvCamera *camera) { cameraPtr = camera; }
+void MyThread::setCameraDevice(
+        const std::shared_ptr<ICameraDevice> &cameraDevice)
+{
+    m_cameraDevice = cameraDevice;
+}
 void MyThread::getImagePtr(cv::Mat *image) { imagePtr = image; }
 void MyThread::received(QString data) { receivedata = data; }
 
@@ -105,26 +109,26 @@ void MyThread::runTemplatePreview(quint64 sessionId)
 {
     int consecutiveFailures = 0;
 
-    while (cameraPtr
+    while (m_cameraDevice
            && !m_stopRequested.load()
            && m_templatePreviewMode.load()
            && m_templatePreviewSessionId.load() == sessionId) {
         try {
             // 丢弃进入预览前遗留的就绪标志，确保随后取得的是本次触发产生的新帧。
             cv::Mat discardedFrame;
-            cameraPtr->takeImageForMainIfReady(discardedFrame);
+            m_cameraDevice->takeImageForMainIfReady(discardedFrame);
             const uint64_t frameSequenceBefore =
-                    cameraPtr->m_frameseq.load();
+                    m_cameraDevice->frameSequence();
 
-            const int triggerResult =
-                    cameraPtr->CommandExecute("TriggerSoftware");
-            if (triggerResult != MV_OK) {
+            const CameraOperationResult triggerResult =
+                    m_cameraDevice->executeCommand("TriggerSoftware");
+            if (!triggerResult.isSuccess()) {
                 ++consecutiveFailures;
                 if (consecutiveFailures >= 3) {
                     emit signal_templatePreviewError(
                                 QStringLiteral(
                                     "连续3次执行相机软件触发失败，错误码：%1")
-                                .arg(triggerResult),
+                                .arg(triggerResult.nativeErrorCode),
                                 sessionId);
                     break;
                 }
@@ -139,8 +143,8 @@ void MyThread::runTemplatePreview(quint64 sessionId)
             while (!m_stopRequested.load()
                    && m_templatePreviewMode.load()
                    && m_templatePreviewSessionId.load() == sessionId) {
-                if (cameraPtr->m_frameseq.load() > frameSequenceBefore
-                        && cameraPtr->takeImageForMainIfReady(previewFrame)
+                if (m_cameraDevice->frameSequence() > frameSequenceBefore
+                        && m_cameraDevice->takeImageForMainIfReady(previewFrame)
                         && !previewFrame.empty()) {
                     receivedNewFrame = true;
                     break;
@@ -165,7 +169,7 @@ void MyThread::runTemplatePreview(quint64 sessionId)
                 ++consecutiveFailures;
                 if (consecutiveFailures >= 3) {
                     const uint64_t frameSequenceAfter =
-                            cameraPtr->m_frameseq.load();
+                            m_cameraDevice->frameSequence();
                     qWarning() << "[TEMPLATE_PREVIEW] frame timeout:"
                                << "sessionId=" << sessionId
                                << "frameSequenceBefore="
@@ -234,7 +238,7 @@ void MyThread::runTemplatePreview(quint64 sessionId)
 }
 
 void MyThread::run() {
-    if (!cameraPtr || !imagePtr) return;
+    if (!m_cameraDevice || !imagePtr) return;
     m_stopRequested.store(false);
 
     if (m_templatePreviewMode.load()) {
@@ -253,10 +257,10 @@ void MyThread::run() {
     bool needInitTracker = (usePresetBoxes && !presetDatePoly.empty() && m_trackingTemplate.empty());
     lastDetectionTime = std::chrono::steady_clock::now(); //
 
-    while (cameraPtr && !m_stopRequested.load()) {
+    while (m_cameraDevice && !m_stopRequested.load()) {
         try {
-            cameraPtr->CommandExecute("TriggerSoftware"); //
-            *imagePtr = cameraPtr->timesGetImage(); //
+            m_cameraDevice->executeCommand("TriggerSoftware"); //
+            *imagePtr = m_cameraDevice->waitForImage(); //
             if (imagePtr->empty()) { msleep(10); continue; }
 
             // 图像旋转与通道处理

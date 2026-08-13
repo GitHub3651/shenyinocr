@@ -39,10 +39,6 @@
 #include <QImage>
 #include <QThread>
 #include <QtWidgets/QMainWindow>
-#include "MvErrorDefine.h"
-#include "CameraParams.h"
-#include "MvCameraControl.h"
-#include "cmvcamera.h"
 #include "mythread.h"
 #include "CameraThread.h"
 #include "TissueRollDetector.h"
@@ -71,6 +67,7 @@
 #include "recipes/template_profile_assets.h"
 #include "recipes/template_recipe_workflow.h"
 #include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
 #include "devices/plc/plc_device.h"
 
@@ -420,10 +417,9 @@ private:
     // ========== 采集和设备相关 ==========
     bool isCollecting;                  ///< 是否正在采集
     bool m_bOpenDevice;                 ///< 设备是否打开
-    MV_CC_DEVICE_INFO_LIST m_stDevList; ///< 设备列表
 
     // ========== 相机和线程对象 ==========
-    CMvCamera *m_pcMyCamera = NULL;     ///< 相机对象指针
+    std::shared_ptr<ICameraDevice> m_cameraDevice; ///< 单相机设备边界
     MyThread *myThread = NULL;          ///< 软件触发线程
     CameraThread *cameraThread = NULL;         ///< 硬件触发线程
 

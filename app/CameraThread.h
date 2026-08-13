@@ -18,7 +18,7 @@
 #include <opencv2/core/mat.hpp>
 #include <opencv2/core/utility.hpp>
 #include <opencv2/highgui.hpp>
-#include "cmvcamera.h"
+#include "devices/camera/camera_device.h"
 #include "Zhuizong.h"
 #include "TrackingPoseMatcher.h"
 #include "TrackingTypes.h"
@@ -45,12 +45,9 @@ class CameraThread : public QThread
     Q_OBJECT
 
 public:
-    /**
-     * @brief 构造函数
-     * @param parent 父对象
-     * @param camera 相机对象指针
-     */
-    explicit CameraThread(QObject *parent = nullptr, CMvCamera *camera = nullptr);
+    explicit CameraThread(
+        QObject *parent = nullptr,
+        const std::shared_ptr<ICameraDevice> &cameraDevice = nullptr);
 
     /**
      * @brief 析构函数
@@ -173,7 +170,7 @@ signals:
 
 private:
     // ========== 相机相关 ==========
-    CMvCamera *m_pcMyCamera;  ///< 相机对象指针
+    std::shared_ptr<ICameraDevice> m_cameraDevice;
 
     // ========== 线程控制 ==========
     bool m_running;                          ///< 线程运行标志

@@ -3,8 +3,10 @@
 #include "detection/common/profile_pose_selector.h"
 #include <QDebug>
 
-CameraThread::CameraThread(QObject *parent, CMvCamera *camera) :
-    QThread(parent), m_pcMyCamera(camera), m_running(true), zhuizong(std::make_unique<Zhuizong>()), colorc(0)
+CameraThread::CameraThread(
+        QObject *parent,
+        const std::shared_ptr<ICameraDevice> &cameraDevice) :
+    QThread(parent), m_cameraDevice(cameraDevice), m_running(true), zhuizong(std::make_unique<Zhuizong>()), colorc(0)
 {
     presetTrackingBox = cv::Rect2d(0, 0, 0, 0);
     usePresetBoxes = false;
@@ -73,11 +75,14 @@ void CameraThread::setBarcodeWordHardTriggerMode(bool enabled) {
 }
 
 void CameraThread::run() {
+    if (!m_cameraDevice) {
+        return;
+    }
     m_running = true;
     m_stopRequested.store(false);
 
     std::unique_ptr<cv::Mat> image = std::make_unique<cv::Mat>();
-    m_pcMyCamera->setnonblocking(true); //
+    m_cameraDevice->setNonBlocking(true); //
 
     const TissueDetectionPipeline tissuePipeline(
                 m_tissueRecipeParameters);
@@ -89,15 +94,15 @@ void CameraThread::run() {
     bool needInitTracker = (usePresetBoxes && !presetDatePoly.empty() && m_trackingTemplate.empty());
 
     while (m_running && !m_stopRequested.load()) {
-        if (m_pcMyCamera) {
+        if (m_cameraDevice) {
             try {
                 if (m_barcodeWordHardTriggerMode) {
-                    if (!m_pcMyCamera->takeImageForMainIfReady(*image)) {
+                    if (!m_cameraDevice->takeImageForMainIfReady(*image)) {
                         msleep(2);
                         continue;
                     }
                 } else {
-                    *image = m_pcMyCamera->timesGetImage(); //
+                    *image = m_cameraDevice->waitForImage(); //
                 }
                 if (image->empty()) { msleep(10); continue; }
 
@@ -131,7 +136,7 @@ void CameraThread::run() {
                                                                          initialDatePoly,
                                                                          0.0f,
                                                                          1.0f));
-                            m_pcMyCamera->deferswitchtoblockingafternextframe(); //
+                            m_cameraDevice->deferSwitchToBlockingAfterNextFrame(); //
                         }
                     } else {
                         needInitTracker = false;
@@ -139,7 +144,7 @@ void CameraThread::run() {
                 }
 
                 if (bypassTracking) {
-                    if (m_pcMyCamera->isImageReadyForMain()) {
+                    if (m_cameraDevice->isImageReadyForMain()) {
                         cv::Mat detectionImage = image->clone();
                         auto detectStart = std::chrono::high_resolution_clock::now();
                         TissueRollResult result =
@@ -225,7 +230,7 @@ void CameraThread::run() {
                                      << "score:" << bestPose.score;
 
                             if (m_barcodeWordHardTriggerMode
-                                    || m_pcMyCamera->isImageReadyForMain()) {
+                                    || m_cameraDevice->isImageReadyForMain()) {
                                 emit signal_sendForDetection(image->clone(), bestPose);
                             }
                         } else if (m_barcodeWordHardTriggerMode) {
@@ -236,7 +241,7 @@ void CameraThread::run() {
                         DetectionPose pose = m_poseMatcher.match(*image, initialDatePoly);
                         emit signal_boxesSelected(pose);
                         if (pose.valid) {
-                            if (m_pcMyCamera->isImageReadyForMain()) {
+                            if (m_cameraDevice->isImageReadyForMain()) {
                                 emit signal_sendForDetection(image->clone(), pose);
                             }
                         } else if (initialTrackingBox.width > 0 && initialTrackingBox.height > 0) {
@@ -286,14 +291,19 @@ void CameraThread::forceStop() {
 void CameraThread::requestStop() {
     m_stopRequested.store(true);
     m_running = false;
-    if (m_pcMyCamera) {
-        try { m_pcMyCamera->requestStop(); } catch (...) {}
+    if (m_cameraDevice) {
+        try { m_cameraDevice->requestStop(); } catch (...) {}
     }
 }
 
 bool CameraThread::CheckRisingEdge() {
     bool previousState = false, currentState = false, inputStatus;
-    if (m_pcMyCamera->GetBoolValue("LineStatus", &inputStatus) != MV_OK) return false;
+    if (!m_cameraDevice
+            || !m_cameraDevice->getBoolValue(
+                "LineStatus",
+                &inputStatus).isSuccess()) {
+        return false;
+    }
     currentState = (inputStatus == true);
     bool risingEdgeDetected = (!previousState && currentState);
     previousState = currentState;

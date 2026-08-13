@@ -64,6 +64,8 @@ SOURCES += \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
+    devices/camera/hikvision_camera_device.cpp \
+    devices/camera/hikvision_camera_device_native.cpp \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
     detection/common/profile_pose_selector.cpp \
@@ -117,6 +119,8 @@ HEADERS += \
     recipes/template_profile_mapper.h \
     ui/dialogs/recipe_selection_dialog.h \
     devices/barcode/barcode_decoder_adapter.h \
+    devices/camera/camera_device.h \
+    devices/camera/hikvision_camera_device.h \
     devices/ocr/ocr_engine.h \
     devices/ocr/paddle_ocr_engine.h \
     devices/plc/plc_device.h \

@@ -6,9 +6,10 @@
 #include <QString>
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <opencv2/opencv.hpp>
 #include <opencv2/tracking.hpp>
-#include "cmvcamera.h"
+#include "devices/camera/camera_device.h"
 #include "Zhuizong.h"
 #include "TrackingPoseMatcher.h"
 #include "TrackingTypes.h"
@@ -57,11 +58,8 @@ public:
      */
     void stopTracking();
 
-    /**
-     * @brief 获取相机指针
-     * @param camera 相机对象指针
-     */
-    void getCameraPtr(CMvCamera *camera);
+    void setCameraDevice(
+        const std::shared_ptr<ICameraDevice> &cameraDevice);
 
     /**
      * @brief 获取图像指针
@@ -191,7 +189,7 @@ private:
     bool m_wordTemplateProfileMode = false;
 
     // 相机相关
-    CMvCamera *cameraPtr;               // 相机指针
+    std::shared_ptr<ICameraDevice> m_cameraDevice;
     cv::Mat *imagePtr;                  // 图像Mat指针
 
     // 配置参数

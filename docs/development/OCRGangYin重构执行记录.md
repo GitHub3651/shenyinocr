@@ -6,8 +6,8 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 2 设备接口与运行协调（按用户风险接受条件进入）
-- 当前切片：Snap7 PLC设备窄接口与适配器（用户Qt Creator门禁通过，等待独立提交）
-- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码设备边界已提交为`ef3af6d`，Paddle OCR设备边界及深度OCR模板入口修复已提交为`c78ebb8`；PLC适配器测试与主程序门禁已由用户确认，不改PLC地址、写值、顺序、提示或100ms复位时序，真实PLC读回证据继续按已接受风险延期。
+- 当前切片：单相机设备窄接口与海康适配器（用户Qt Creator集中门禁通过，等待提交）
+- 阶段结论：**Stage 1结构关口已通过，Stage 2进行中**。二维码、Paddle OCR和Snap7 PLC设备边界已分别提交为`ef3af6d`、`c78ebb8`和`9542aaa`；当前已把Widget、软触发线程和硬触发线程对`CMvCamera/MvCameraControl`的直接依赖收口到`devices/camera/`，保留首台相机选择、原回调、触发值、参数值、帧节流和停止等待时序，用户已确认相机适配测试及主程序集中门禁均无问题。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -723,6 +723,13 @@
 - [x] 新增`runtime_tests/plc_device_adapter_test`，用可注入假Snap7函数覆盖连接端点与返回码、断开、连接状态、DB区Byte/Word/DWord映射和缺失后端安全失败七项业务行为；Qt Test预期汇总`9 passed, 0 failed`，不连接真实PLC。
 - [x] PLC设备适配Agent静态检查通过：Widget中`TS7Client/S7AreaDB/S7WL*/client->`引用0处；适配器独占原生类型和常量；主工程新源/头清单各唯一；运行测试子目标已登记；活跃DB写入调用8处，连接3处，断开3处；工艺参数仍按980 Word→920 DWord→982 Word→924 DWord顺序，0、49和100ms字面量各保留唯一1处；90个功能ID状态为68/10/10/2；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序，等待用户Qt Creator门禁。
 - [x] PLC设备适配Qt Creator集中门禁：2026-08-13用户确认`plc_device_adapter_test`预期`9 passed, 0 failed`及主工程Run qmake/Rebuild/Run和可执行PLC失败/启动保护入口均无问题；本次未提供真实PLC读回或49→100ms→0现场记录，因此相关功能恢复`已基线`而不冒充现场验证。
+- [x] Snap7 PLC设备接口与适配器已创建独立提交`9542aaa`，提交后工作区干净。
+- [x] 开始Stage 2单相机设备适配切片；影响`SYS-009、SET-005..007、TPL-001..002、CAM-001..005、RUN-001..003、SAVE-004`十五项，由原状态进入迁移中。`CAM-006`图像旋转/通道、所有检测Pipeline、PLC时序和多相机源码均不修改。
+- [x] 旧调用链审计：Widget直接持有`MV_CC_DEVICE_INFO_LIST/CMvCamera*`并负责枚举、打开、关闭、曝光/增益、触发切换、回调注册和停止后重开；`MyThread`直接执行软件触发、读取帧序号/图像和模板预览；`CameraThread`直接管理非阻塞帧、硬触发帧就绪与停止唤醒；OCR原图保存还会直接另取相机帧。
+- [x] 已新增`ICameraDevice/HikvisionCameraDevice`和可注入Fake后端；适配器的原生文件独占`MV_CC_DEVICE_INFO_LIST/CMvCamera/MVCC_FLOATVALUE`，继续委托原`CMvCamera`的枚举、首台打开、回调、条件变量、帧序号、取图和停止唤醒实现。Widget、`MyThread`和`CameraThread`只持有共享相机接口，迟退线程不再面对已删除的裸相机指针；线程停止策略和等待上限不变。
+- [x] 相机设备适配Agent静态检查通过：三个生产调用方中`CMvCamera/MV_CC_DEVICE_INFO_LIST/MVCC_FLOATVALUE/MV_OK/MVS头`引用0处；原生SDK引用只存在于`hikvision_camera_device_native.cpp`和保留的旧`cmvcamera.*`实现；主工程登记新源2/头2，运行测试子目标登记唯一；适配器接口20项均有实现；Fake测试覆盖8项业务行为，Qt Test预期汇总`10 passed, 0 failed`；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] 相机Fake测试首次Qt Creator编译反馈：MSVC在`missingBackendFailsSafely`中把`HikvisionCameraDevice device(HikvisionCameraFunctions());`按C++最令人困惑的解析识别为函数声明，后续成员调用报`C2228`；已改为先声明空函数表再显式构造测试对象，不修改生产适配器或相机行为，等待用户复编。
+- [x] 单相机设备适配Qt Creator集中门禁：2026-08-13用户确认`camera_device_adapter_test`及主工程均无问题；开关相机、曝光/增益、模板实时预览/冻结/退出、软触发启停重开、可用现场路径、OCR原图保存及退出均按本次集中清单回归通过。固定样本、硬触发时序和性能量化证据继续按既定延期项管理，不冒充最终验收。
 
 ## 本地提交记录
 
@@ -770,6 +777,7 @@
 | `89934ee` | Stage 1统一模板配方事务工作流 | SET-003、TPL-006、TPL-011..015 | 草稿发布、参数重发和字符资产重发统一为候选校验、正式发布、成功后提交会话的单一事务边界 | 用户确认配方测试、主工程及字库/二维码/钢印可执行路径正常；深度OCR无旧模板项未单独执行 |
 | `ef3af6d` | Stage 2二维码解码设备适配 | TPL-004、DET-006、RUN-001、TOOL-002 | DLL生命周期、C ABI调用和7路通用解码策略迁入`devices/barcode/`，Widget改用`IBarcodeDecoder` | 用户确认适配器8项、二维码Pipeline 6项、真实DLL/框选读码、启停和跨模式恢复均正常 |
 | `c78ebb8` | Stage 2 Paddle OCR设备适配 | SYS-006、DET-004、TPL-002、TPL-003、TPL-005 | Paddle配置、模型对象和原生调用收口到`devices/ocr/`，Pipeline依赖`IOcrEngine`，并恢复深度OCR模板绘图入口 | 用户确认OCR测试6项、主工程模型初始化、模板制作/发布、逐帧OCR调用和启停均正常 |
+| `9542aaa` | Stage 2 Snap7 PLC设备适配 | SYS-008、SET-005、CAM-001、RUN-001、PLC-001..006 | `TS7Client`、DB区和数据宽度常量收口到`devices/plc/`，Widget改用`IPlcDevice` | 用户确认适配器9项及主工程可执行门禁无问题；真实PLC读回和脉冲证据仍延期 |
 
 ## 未解决事项
 
@@ -781,7 +789,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2 Snap7 PLC设备窄接口与适配器已通过Agent静态检查和用户Qt Creator门禁，等待创建独立本地提交。
+- 当前切片：Stage 2单相机设备窄接口与海康适配器已完成，用户Qt Creator集中门禁通过，等待创建独立本地提交。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线78 / 迁移中0 / 已验证10 / 已延期2 / 已确认删除0。
-- 下一允许动作：创建PLC设备适配独立本地提交，然后进入Stage 2相机设备窄接口切片。
+- 下一允许动作：提交相机设备适配独立回退点，随后进入Stage 2检测完成结果交接与运行协调拆分。
