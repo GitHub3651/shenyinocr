@@ -742,6 +742,11 @@
 - [x] 存图测试合同同步改为Fake慢盘填满小容量队列后验证下一任务确实等待、腾位后全部任务写入；单工作线程测试继续锁定产品任务及任务内文件顺序，生产实例明确使用两个工作线程。业务测试数量仍为11项，Qt Test预期汇总仍为`13 passed, 0 failed`。
 - [x] 满时等待策略Agent静态复验通过：90个功能ID唯一且状态72/11/5/2；生产实例容量32、工作线程2均唯一配置；服务中`QueueFull/taskDropped/droppedTaskCount`引用0处，空间条件等待和任务完成唤醒各唯一1处；Widget中`QtConcurrent/QFuture`及相机取帧API调用均为0；主工程源/头和运行测试目标均唯一登记；11项业务测试对应Qt Test预期13项；PowerShell部署脚本语法0错误；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
 - [x] DetectionCompletion与无丢弃存图Qt Creator集中门禁：2026-08-13用户确认更新后的`detection_completion_test`及主工程均无问题；容量满策略已从实际漏存的拒新方案改为等待空位，中文失败提示正常，当前检测与应存图片未再出现队列容量导致的缺失。
+- [x] 开始Stage 2运行会话身份切片；影响`RUN-001、DET-002..006`六项，由已验证进入迁移中。只把Widget中的运行UUID、产品递增序号、只读帧与DetectionResult组装迁入`runtime/DetectionSession`；当前Overlay采集、五模式算法、UI结果、统计、存图、PLC、延迟剔除和线程启停顺序均保持。
+- [x] 新增`runtime/detection_session.*`：每次正式启动生成UUID并清零产品序号，完成一件产品时原子形成同运行ID递增`ProductKey`、独立只读帧和`DetectionResult`副本；保留未显式启动时自动建立会话的旧防御行为。Widget删除运行ID和序号字段，只保留当前模式/Overlay采集薄桥并委托会话完成组装。
+- [x] `detection_completion_test`新增两项业务测试，覆盖新运行重置序号、同运行连续递增、未启动自动建会话、指定帧号/相机号/时间戳、原图独立所有权和结果/Overlay副本；业务测试由11项增至13项，Qt Test预期汇总由13项增至`15 passed, 0 failed`。
+- [x] DetectionSession切片Agent静态检查通过：90个功能ID唯一且状态72/6/10/2；Widget中旧`m_detectionRunId/m_detectionProductSequence/QUuid`引用0处，六条完成对象调用继续经唯一Widget薄桥进入唯一`DetectionSession::complete`；主工程和测试工程的新源/头各唯一登记；13项业务测试对应Qt Test预期15项；本切片未修改配方、Pipeline、设备、PLC、存图服务或采集线程；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] DetectionSession Qt Creator集中门禁：2026-08-13用户确认`detection_completion_test`预期`15 passed, 0 failed`及主工程启停、再次启动回归均无问题；每次运行会话身份、判定、计数、存图和PLC保持正常，`RUN-001、DET-002..006`恢复已验证。
 
 ## 本地提交记录
 
@@ -803,7 +808,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2五模式`DetectionCompletion`结果帧交接与容量32、双工作线程、满时等待的有界存图队列已通过全部门禁并提交为`fabc7b0`。
+- 当前切片：Stage 2运行会话身份与DetectionCompletion组装迁移已通过用户门禁，等待本地提交。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线72 / 迁移中0 / 已验证16 / 已延期2 / 已确认删除0。
-- 下一允许动作：进入简化`ResultHandler/RuntimeController`拆分。
+- 下一允许动作：提交DetectionSession切片，然后进入ResultHandler拆分。

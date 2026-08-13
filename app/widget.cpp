@@ -54,7 +54,6 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QDateTime>
-#include <QUuid>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QTranslator>
@@ -1376,11 +1375,8 @@ void Widget::wrongremove()
 // 每次正式启动生成新的运行身份；序号只在形成正式检测完成对象时递增。
 void Widget::beginDetectionSession()
 {
-    m_detectionRunId = QUuid::createUuid()
-            .toString(QUuid::WithoutBraces)
-            .toLower();
-    m_detectionProductSequence = 0;
-    qDebug() << "[DETECTION_SESSION] started" << m_detectionRunId;
+    qDebug() << "[DETECTION_SESSION] started"
+             << m_detectionSession.begin();
 }
 
 DetectionCompletion Widget::makeDetectionCompletion(
@@ -1390,29 +1386,15 @@ DetectionCompletion Widget::makeDetectionCompletion(
     const QString &diagnostic,
     double elapsedMs)
 {
-    if (m_detectionRunId.trimmed().isEmpty()) {
-        beginDetectionSession();
-    }
+    DetectionResult result;
+    result.modeId = currentDetectModeId();
+    result.verdict = verdict;
+    result.status = DetectionStatus::Completed;
+    result.recognizedText = recognizedText;
+    result.diagnostic = diagnostic;
+    result.elapsedMs = elapsedMs;
 
-    ProductKey productKey;
-    productKey.runId = m_detectionRunId;
-    productKey.sequence = ++m_detectionProductSequence;
-
-    DetectionCompletion completion;
-    completion.frame = makeFrameData(
-                productKey,
-                productKey.sequence,
-                0,
-                QDateTime::currentDateTimeUtc(),
-                image);
-    completion.result.modeId = currentDetectModeId();
-    completion.result.verdict = verdict;
-    completion.result.status = DetectionStatus::Completed;
-    completion.result.recognizedText = recognizedText;
-    completion.result.diagnostic = diagnostic;
-    completion.result.elapsedMs = elapsedMs;
-
-    const auto appendPolygon = [&completion](
+    const auto appendPolygon = [&result](
         const QString &role,
         const std::vector<cv::Point> &points,
         double score) {
@@ -1423,7 +1405,7 @@ DetectionCompletion Widget::makeDetectionCompletion(
         polygon.role = role;
         polygon.points = points;
         polygon.score = score;
-        completion.result.overlay.polygons.push_back(polygon);
+        result.overlay.polygons.push_back(polygon);
     };
     appendPolygon(QStringLiteral("tracking"), g_lastPose.trackingPoly, g_lastPose.score);
     appendPolygon(QStringLiteral("barcode"), g_lastPose.barcodePoly, 0.0);
@@ -1446,7 +1428,7 @@ DetectionCompletion Widget::makeDetectionCompletion(
                     g_lastTissueRoll.roughnessScore);
     }
 
-    return completion;
+    return m_detectionSession.complete(image, result);
 }
 
 void Widget::scheduleImageSaveWarning()

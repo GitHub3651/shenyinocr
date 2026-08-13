@@ -68,6 +68,7 @@
 #include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
 #include "devices/plc/plc_device.h"
+#include "runtime/detection_session.h"
 
 using namespace cv;
 
@@ -396,8 +397,7 @@ private:
             OperationState::CameraClosed;
     bool m_resultBoundDisplayActive = false;
     bool m_applicationExitInProgress = false;
-    QString m_detectionRunId;
-    quint64 m_detectionProductSequence = 0;
+    DetectionSession m_detectionSession;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;

@@ -1,6 +1,7 @@
 #include <QtTest>
 
 #include "TrackingTypes.h"
+#include "runtime/detection_session.h"
 #include "runtime/image_save_service.h"
 
 #include <chrono>
@@ -46,6 +47,8 @@ private slots:
     void resultCarriesVerdictStatusTextAndTimingWithoutImage();
     void overlayPreservesOrderedBusinessPolygons();
     void immutableFrameCanBeSharedForShortLivedConsumers();
+    void sessionBeginCreatesNewRunAndResetsProductSequence();
+    void sessionCompletionOwnsFrameAndCopiesDetectionResult();
     void saveTaskRequiresProductAndAllItems();
     void saveServicePreservesTaskAndItemOrder();
     void fullQueueWaitsForSpaceWithoutDroppingTask();
@@ -178,6 +181,82 @@ void DetectionCompletionTest::immutableFrameCanBeSharedForShortLivedConsumers()
     QCOMPARE(saveConsumer->originalImage.cols, 4);
     QCOMPARE(saveConsumer->originalImage.rows, 3);
     QCOMPARE(saveConsumer.use_count(), 2L);
+}
+
+void DetectionCompletionTest::sessionBeginCreatesNewRunAndResetsProductSequence()
+{
+    int runNumber = 0;
+    DetectionSession session([&runNumber]() {
+        return QStringLiteral("run-%1").arg(++runNumber);
+    });
+    QVERIFY(!session.isActive());
+
+    QCOMPARE(session.begin(), QStringLiteral("run-1"));
+    QCOMPARE(session.completedProductCount(), quint64(0));
+
+    DetectionResult result;
+    result.status = DetectionStatus::Completed;
+    const DetectionCompletion first = session.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(1)),
+                result);
+    const DetectionCompletion second = session.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(2)),
+                result);
+    QCOMPARE(first.frame->productKey.runId, QStringLiteral("run-1"));
+    QCOMPARE(first.frame->productKey.sequence, quint64(1));
+    QCOMPARE(second.frame->productKey.sequence, quint64(2));
+    QCOMPARE(session.completedProductCount(), quint64(2));
+
+    QCOMPARE(session.begin(), QStringLiteral("run-2"));
+    QCOMPARE(session.completedProductCount(), quint64(0));
+    const DetectionCompletion restarted = session.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(3)),
+                result);
+    QCOMPARE(restarted.frame->productKey.runId, QStringLiteral("run-2"));
+    QCOMPARE(restarted.frame->productKey.sequence, quint64(1));
+}
+
+void DetectionCompletionTest::sessionCompletionOwnsFrameAndCopiesDetectionResult()
+{
+    DetectionSession session([]() {
+        return QStringLiteral("fixed-run");
+    });
+    cv::Mat source(2, 3, CV_8UC1, cv::Scalar(17));
+    const QDateTime timestamp = QDateTime::fromMSecsSinceEpoch(
+                987654,
+                Qt::UTC);
+
+    DetectionResult result;
+    result.modeId = QStringLiteral("word");
+    result.verdict = AlgorithmVerdict::Ng;
+    result.status = DetectionStatus::Completed;
+    result.recognizedText = QStringLiteral("123");
+    result.diagnostic = QStringLiteral("count mismatch");
+    result.elapsedMs = 4.5;
+    DetectionOverlayPolygon polygon;
+    polygon.role = QStringLiteral("character");
+    polygon.points.push_back(cv::Point(2, 3));
+    result.overlay.polygons.push_back(polygon);
+
+    const DetectionCompletion completion = session.complete(
+                source,
+                result,
+                41,
+                2,
+                timestamp);
+    source.setTo(cv::Scalar(99));
+    result.recognizedText = QStringLiteral("changed");
+
+    QVERIFY(completion.isValid());
+    QCOMPARE(completion.frame->productKey.runId, QStringLiteral("fixed-run"));
+    QCOMPARE(completion.frame->productKey.sequence, quint64(1));
+    QCOMPARE(completion.frame->frameNumber, quint64(41));
+    QCOMPARE(completion.frame->cameraIndex, 2);
+    QCOMPARE(completion.frame->timestampUtc, timestamp);
+    QCOMPARE(completion.frame->originalImage.at<uchar>(0, 0), uchar(17));
+    QCOMPARE(completion.result.recognizedText, QStringLiteral("123"));
+    QCOMPARE(completion.result.overlay.polygons[0].role,
+             QStringLiteral("character"));
 }
 
 void DetectionCompletionTest::saveTaskRequiresProductAndAllItems()
