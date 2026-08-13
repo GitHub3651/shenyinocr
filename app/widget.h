@@ -56,8 +56,6 @@
 #include <algorithm>
 #include <cctype>
 #include <regex>
-#include <utility> // for std::pair
-#include <queue>
 #include <templatematch.h>
 #include <Detector.h>
 #include "TrackingTypes.h"
@@ -69,6 +67,7 @@
 #include "devices/ocr/ocr_engine.h"
 #include "devices/plc/plc_device.h"
 #include "runtime/detection_session.h"
+#include "runtime/result_handler.h"
 
 using namespace cv;
 
@@ -397,7 +396,9 @@ private:
             OperationState::CameraClosed;
     bool m_resultBoundDisplayActive = false;
     bool m_applicationExitInProgress = false;
+    bool m_detectionRoiWarningActive = false;
     DetectionSession m_detectionSession;
+    DetectionResultHandler m_resultHandler;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;
@@ -415,7 +416,6 @@ private:
     QString imagePath;                  ///< 图像路径
     QStringList imageFiles;             ///< 图像文件列表
     bool recognitionCompletedFlag;      ///< 识别完成标志
-    int ngImages;                       ///< NG图像数量
 
     // ========== 识别框坐标 ==========
     int old_m_x1=0, old_m_x2=0, old_m_y1=0, old_m_y2=0; ///< 旧识别框坐标
@@ -451,7 +451,6 @@ private:
     // ========== PLC相关 ==========
     std::unique_ptr<IPlcDevice> m_plcDevice; ///< PLC设备边界
     int PLCmode;                        ///< PLC模式
-    std::queue<std::pair<int, int>> removalQueue; ///< 移除队列
 
     // ========== 设置和UI ==========
     QMap<QString, bool> settings;       ///< 设置映射
@@ -517,8 +516,6 @@ private:
     int wrongindex;                     ///< 错误索引
 
     // ========== 统计相关 ==========
-    int totalImages;                    ///< 总图像数量
-    int currentImagesSnapshot;          ///< 当前图像快照
 
     // ========== 模板匹配相关 ==========
     vector<Mat> digitTemplates;         ///< 数字模板
@@ -680,6 +677,11 @@ private:
         const QString &recognizedText,
         const QString &diagnostic,
         double elapsedMs);
+    void processDueDelayedNgRequest();
+    void applyPlcResultRequest(DetectionPlcAction action);
+    void refreshResultStatistics();
+    void showDetectionRoiWarningOnce();
+    void clearDetectionRoiWarning();
     void scheduleImageSaveWarning();
     void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
     QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生

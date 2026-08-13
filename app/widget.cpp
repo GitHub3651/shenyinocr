@@ -18,6 +18,7 @@
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
+#include "detection/common/detection_roi_geometry.h"
 #include "detection/ocr/ocr_detection_pipeline.h"
 #include "detection/stamp/stamp_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
@@ -587,15 +588,6 @@ static QString formatPolygonPoints(const std::vector<cv::Point>& poly)
     return QString("[%1]").arg(points.join(","));
 }
 
-static cv::Rect expandAndClampRect(const cv::Rect& rect, int padding, const cv::Size& bounds)
-{
-    cv::Rect expanded(rect.x - padding,
-                      rect.y - padding,
-                      rect.width + padding * 2,
-                      rect.height + padding * 2);
-    return expanded & cv::Rect(0, 0, bounds.width, bounds.height);
-}
-
 static cv::Point getPolygonTopCenter(const std::vector<cv::Point>& poly)
 {
     if (poly.empty()) {
@@ -629,12 +621,18 @@ static OrientedDateRoi prepareOrientedDateRoi(const cv::Mat& src, const Detectio
     cv::invertAffineTransform(oriented.rotationMatrix, oriented.inverseRotationMatrix);
     cv::warpAffine(src, oriented.rotatedImage, oriented.rotationMatrix, src.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
 
-    oriented.rotatedDatePoly = transformPolygon(pose.datePoly, oriented.rotationMatrix);
+    oriented.rotatedDatePoly = transformPolygon(
+                pose.datePoly,
+                oriented.rotationMatrix);
     if (oriented.rotatedDatePoly.size() < 3) {
         return oriented;
     }
 
-    oriented.roi = expandAndClampRect(cv::boundingRect(oriented.rotatedDatePoly), padding, oriented.rotatedImage.size());
+    oriented.roi = DetectionRoiGeometry::polygonRoiWithClampedPadding(
+                oriented.rotatedDatePoly,
+                padding,
+                oriented.rotatedImage.size(),
+                &oriented.rotatedDatePoly);
     if (oriented.roi.width <= 0 || oriented.roi.height <= 0) {
         return oriented;
     }
@@ -683,7 +681,7 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
                 rotationMatrix,
                 inverseRotationMatrix);
 
-    const std::vector<cv::Point> rotatedBarcodePoly =
+    std::vector<cv::Point> rotatedBarcodePoly =
             transformPolygon(
                 pose.barcodePoly,
                 rotationMatrix);
@@ -691,8 +689,11 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
         return prepared;
     }
 
-    const cv::Rect barcodeBounds =
-            cv::boundingRect(rotatedBarcodePoly);
+    rotatedBarcodePoly =
+            DetectionRoiGeometry::clampPolygonToImage(
+                rotatedBarcodePoly,
+                src.size());
+    const cv::Rect barcodeBounds = cv::boundingRect(rotatedBarcodePoly);
     if (barcodeBounds.width <= 0 || barcodeBounds.height <= 0) {
         return prepared;
     }
@@ -708,7 +709,7 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
                     std::max(0, barcodePaddingPercent))
                 / 100.0);
     const cv::Rect barcodeRoi =
-            expandAndClampRect(
+            DetectionRoiGeometry::expandAndClampRect(
                 barcodeBounds,
                 barcodePaddingPixels,
                 src.size());
@@ -720,16 +721,15 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
     cv::Rect dateRoi;
     bool hasValidDateRoi = false;
     if (pose.datePoly.size() >= 3) {
-        rotatedDatePoly =
-                transformPolygon(
+        rotatedDatePoly = transformPolygon(
                     pose.datePoly,
                     rotationMatrix);
         if (rotatedDatePoly.size() >= 3) {
-            dateRoi =
-                    expandAndClampRect(
-                        cv::boundingRect(rotatedDatePoly),
+            dateRoi = DetectionRoiGeometry::polygonRoiWithClampedPadding(
+                        rotatedDatePoly,
                         std::max(0, datePadding),
-                        src.size());
+                        src.size(),
+                        &rotatedDatePoly);
             hasValidDateRoi =
                     dateRoi.width > 0
                     && dateRoi.height > 0;
@@ -1047,8 +1047,7 @@ Widget::Widget(QWidget *parent)
     savedDatePoly.clear();
     recognitionCompletedFlag = false;
     isCollecting = false;
-    totalImages = 0;
-    ngImages = 0;
+    m_resultHandler.resetStatistics();
     allResults = "";
     wrongindex = ui->lineEdit_12->text().toInt();
 
@@ -1429,6 +1428,77 @@ DetectionCompletion Widget::makeDetectionCompletion(
     }
 
     return m_detectionSession.complete(image, result);
+}
+
+void Widget::processDueDelayedNgRequest()
+{
+    if (!m_resultHandler.consumeDueDelayedNgRequest()) {
+        return;
+    }
+
+    qDebug() << "[RESULT_HANDLER] Triggering delayed NG PLC request,"
+             << "totalCount:" << m_resultHandler.totalCount();
+    wrongremove();
+}
+
+void Widget::applyPlcResultRequest(DetectionPlcAction action)
+{
+    if (action == DetectionPlcAction::RequestOk) {
+        rightremove();
+    } else if (action == DetectionPlcAction::RequestNg) {
+        wrongremove();
+    }
+}
+
+void Widget::refreshResultStatistics()
+{
+    const DetectionResultStatistics statistics = m_resultHandler.statistics();
+    ui->lineBoxIndex_6->setText(
+                QString::number(statistics.passRatePercent(), 'f', 1));
+    ui->ngnum->setText(QString::number(statistics.ngCount));
+    ui->imagenum->setText(QString::number(statistics.totalCount));
+}
+
+void Widget::showDetectionRoiWarningOnce()
+{
+    if (m_detectionRoiWarningActive) {
+        return;
+    }
+
+    m_detectionRoiWarningActive = true;
+    const QString warningText = QString::fromWCharArray(
+                L"\u8bc6\u522b\u533a\u57df\u8d85\u51fa\u539f\u56fe\u8303\u56f4\uff0c"
+                L"\u8bf7\u70b9\u51fb\u3010\u505c\u6b62\u8bc6\u522b\u3011\uff0c"
+                L"\u7136\u540e\u91cd\u65b0\u9009\u62e9\u6216\u5236\u4f5c\u6a21\u677f\u3002");
+    qWarning().noquote() << "[DETECTION_ROI]" << warningText;
+    if (ui && ui->statusLabel) {
+        ui->statusLabel->setWordWrap(true);
+        ui->statusLabel->setText(warningText);
+        ui->statusLabel->setStyleSheet(
+                    QStringLiteral(
+                        "QLabel{color:#d90000;font-weight:900;}"));
+    }
+}
+
+void Widget::clearDetectionRoiWarning()
+{
+    if (!m_detectionRoiWarningActive) {
+        return;
+    }
+
+    m_detectionRoiWarningActive = false;
+    if (ui && ui->statusLabel
+            && m_operationState == OperationState::Detecting) {
+        ui->statusLabel->setText(
+                    ui->checkBox->isChecked()
+                    ? QString::fromWCharArray(
+                        L"\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d")
+                    : QString::fromWCharArray(
+                        L"\u8f6f\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d"));
+        ui->statusLabel->setStyleSheet(
+                    QStringLiteral(
+                        "QLabel{color:#20b455;font-weight:bold;}"));
+    }
 }
 
 void Widget::scheduleImageSaveWarning()
@@ -1839,15 +1909,7 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
  */
 void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
 {
-    // 1. 检查延迟剔除队列
-    if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1)
-    {
-        qDebug() << "[PLC_LOG] Triggering delayed wrongremove, wrongindex:" << wrongindex;
-        wrongremove();
-        removalQueue.pop();
-    }
-
-    currentImagesSnapshot = totalImages;
+    processDueDelayedNgRequest();
     auto start = std::chrono::high_resolution_clock::now();
 
     if (!image || image->empty())
@@ -1886,7 +1948,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     // ================== 2. 执行 OCR 识别 (原生 Run API) ==================
     QString target_qstring = setdatetime();
     std::string target_string = target_qstring.toStdString();
-    ui->imagenum->setText(QString::number(totalImages));
+    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
 
     const OcrDetectionPipeline ocrPipeline;
     const OcrDetectionResult ocrResult =
@@ -1926,47 +1988,37 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
                     recognizedText,
                     diagnostic,
                     completionElapsedMs);
-        if (allResults.empty())
-        {
-            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3))
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        if (!ocrResult.isOk) {
+            if (DetectionResultHandler::imageSaveActionFor(
+                        completion.result.verdict,
+                        imageSaveModeIndex)
+                    == DetectionResultSaveAction::SaveNg) {
                 saveImage2Async("jpg", selectedDir + "/ng/", completion);
-
-            ngImages++;
-            totalImages++;
-            ui->resultlabel->setText(QString("<font size='10' color='red'>错误！</font>"));
-            if (wrongindex == 0) wrongremove();
-            else removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
-        }
-        else
-        {
-            if (ocrResult.isOk)
-            {
-                totalImages++;
-                if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3))
-                    saveImage2Async("jpg", selectedDir + "/ok/", completion);
-
-                ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
-                rightremove();
             }
-            else
-            {
-                if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3))
-                    saveImage2Async("jpg", selectedDir + "/ng/", completion);
-
-                ngImages++;
-                totalImages++;
-                ui->resultlabel->setText(QString("<font size='10' color='red'>错误！</font>"));
-                if (wrongindex == 0) wrongremove();
-                else removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
+            ui->resultlabel->setText(
+                        QString("<font size='10' color='red'>错误！</font>"));
+            applyPlcResultRequest(outcome.plcAction);
+        } else {
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
+                saveImage2Async("jpg", selectedDir + "/ok/", completion);
             }
+            ui->resultlabel->setText(
+                        QString("<font size='10' color='SpringGreen'>正确！</font>"));
+            applyPlcResultRequest(outcome.plcAction);
         }
     }
 
-    // 更新统计
-    double hegerate = (totalImages > 0) ? (1 - static_cast<double>(ngImages) / totalImages) * 100 : 0.0;
-    ui->lineBoxIndex_6->setText(QString::number(hegerate, 'f', 1));
-    ui->ngnum->setText(QString("%1").arg(ngImages));
-    ui->imagenum->setText(QString("%1").arg(totalImages));
+    refreshResultStatistics();
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -1986,13 +2038,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
 //原始图像版
 void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
 {
-    if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
-        qDebug() << "PLC延迟剔除触发，当前总数:" << totalImages;
-        wrongremove();
-        removalQueue.pop();
-    }
-
-    currentImagesSnapshot = totalImages;
+    processDueDelayedNgRequest();
     auto start = std::chrono::high_resolution_clock::now();
 
     if (!image || image->empty()) return;
@@ -2006,13 +2052,14 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
     
     OrientedDateRoi oriented = prepareOrientedDateRoi(*image, pose, 20);
     if (!oriented.valid) {
-        QMessageBox::warning(this, "警告", "识别区域超出原图范围！");
+        showDetectionRoiWarningOnce();
         return;
     }
+    clearDetectionRoiWarning();
 
     cv::Mat croppedImage = oriented.croppedImage.clone();
 
-    ui->imagenum->setText(QString::number(totalImages));
+    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
 
     QString targetString = ui->dateEdit->toPlainText();
     g_lastStampPoly.clear();
@@ -2083,33 +2130,39 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
                     QString(),
                     diagnostic,
                     completionElapsedMs);
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
         if (!stampResult.isOk) {
-            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
+            if (DetectionResultHandler::imageSaveActionFor(
+                        completion.result.verdict,
+                        imageSaveModeIndex)
+                    == DetectionResultSaveAction::SaveNg) {
                 saveResultImages("png", "ng", completion);
             }
-            ngImages++;
-            totalImages++;
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
 
             if (!charIsOk && overlapIsOk) ui->resultlabel->setText(QString("<font size='10' color='red'>错误(喷码不合格)</font>"));
             else if (charIsOk && !overlapIsOk) ui->resultlabel->setText(QString("<font size='10' color='red'>错误(钢印重叠)</font>"));
             else ui->resultlabel->setText(QString("<font size='10' color='red'>错误(喷码与钢印均不合格)</font>"));
 
-            if (wrongindex == 0) wrongremove();
-            else removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
+            applyPlcResultRequest(outcome.plcAction);
         } else {
-            totalImages++;
-            if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
                 saveResultImages("png", "ok", completion);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
-            rightremove();
+            applyPlcResultRequest(outcome.plcAction);
         }
     }
 
-    double hegerate = (totalImages > 0) ? (1 - static_cast<double>(ngImages) / totalImages) * 100 : 0;
-    ui->lineBoxIndex_6->setText(QString::number(hegerate, 'f', 1));
-    ui->ngnum->setText(QString::number(ngImages));
-    ui->imagenum->setText(QString::number(totalImages));
+    refreshResultStatistics();
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -2136,12 +2189,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
         setLabelTextIfChanged(ui->resultlabel_7, QString());
     }
 
-    if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
-        wrongremove();
-        removalQueue.pop();
-    }
-
-    currentImagesSnapshot = totalImages;
+    processDueDelayedNgRequest();
     auto start = std::chrono::high_resolution_clock::now();
 
     if (!image || image->empty()) {
@@ -2177,7 +2225,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
 
     cv::Mat croppedImage =
             oriented.croppedImage;
-    ui->imagenum->setText(QString::number(totalImages));
+    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
 
     int thresholdValue = 0;
     bool thresholdOk = parseIntValue(imageThresholdText, &thresholdValue);
@@ -2301,29 +2349,35 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
                     detectedUnits.join(QStringLiteral("")),
                     reason,
                     completionElapsedMs);
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
         if (!wordResult.isOk) {
-            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
+            if (DetectionResultHandler::imageSaveActionFor(
+                        completion.result.verdict,
+                        imageSaveModeIndex)
+                    == DetectionResultSaveAction::SaveNg) {
                 saveWordResultImages("png", "ng", completion);
             }
-            ngImages++;
-            totalImages++;
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
             ui->resultlabel->setText(QString("<font size='10' color='red'>错误！</font>"));
-            if (wrongindex == 0) wrongremove();
-            else removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
+            applyPlcResultRequest(outcome.plcAction);
         } else {
-            totalImages++;
-            if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
                 saveWordResultImages("png", "ok", completion);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
-            rightremove();
+            applyPlcResultRequest(outcome.plcAction);
         }
     }
 
-    double hegerate = (totalImages > 0) ? (1 - static_cast<double>(ngImages) / totalImages) * 100 : 0;
-    ui->lineBoxIndex_6->setText(QString::number(hegerate, 'f', 1));
-    ui->ngnum->setText(QString::number(ngImages));
-    ui->imagenum->setText(QString::number(totalImages));
+    refreshResultStatistics();
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -2486,8 +2540,8 @@ void Widget::runBarcodeWordDetection(
                        .arg(barcode.elapsedMs, 0, 'f', 3)
                        .arg(barcode.text);
 
-            const int totalBeforeDate = totalImages;
-            const int ngBeforeDate = ngImages;
+            const int totalBeforeDate = m_resultHandler.totalCount();
+            const int ngBeforeDate = m_resultHandler.ngCount();
             runWordTemplateDetection(
                         image,
                         pose,
@@ -2500,9 +2554,10 @@ void Widget::runBarcodeWordDetection(
                         &dateRoi);
 
             BarcodeWordDateDetectionResult dateResult;
-            dateResult.resultProduced = totalImages > totalBeforeDate;
+            dateResult.resultProduced =
+                    m_resultHandler.totalCount() > totalBeforeDate;
             dateResult.isOk = dateResult.resultProduced
-                    && ngImages == ngBeforeDate;
+                    && m_resultHandler.ngCount() == ngBeforeDate;
             return dateResult;
         };
     }
@@ -2806,14 +2861,7 @@ void Widget::finalizeWordTrackingNg(
     QElapsedTimer finalizationTimer;
     finalizationTimer.start();
 
-    if (!removalQueue.empty()
-            && totalImages
-               >= removalQueue.front().second - 1) {
-        wrongremove();
-        removalQueue.pop();
-    }
-
-    currentImagesSnapshot = totalImages;
+    processDueDelayedNgRequest();
     if (judge) {
         j = 1;
         x++;
@@ -2842,41 +2890,26 @@ void Widget::finalizeWordTrackingNg(
                 pose.trackingElapsedMs
                 + elapsedMilliseconds(finalizationTimer));
 
-    if (ui->comboBox->currentIndex() == 1
-            || ui->comboBox->currentIndex() == 3) {
+    const int imageSaveModeIndex = ui->comboBox->currentIndex();
+    if (DetectionResultHandler::imageSaveActionFor(
+                completion.result.verdict,
+                imageSaveModeIndex)
+            == DetectionResultSaveAction::SaveNg) {
         saveWordResultImages(
                     "png",
                     "ng",
                     completion);
     }
 
-    ngImages++;
-    totalImages++;
+    const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                completion,
+                imageSaveModeIndex,
+                wrongindex);
     ui->resultlabel->setText(
                 QString("<font size='10' color='red'>"
                         "错误！</font>"));
-
-    if (wrongindex == 0) {
-        wrongremove();
-    } else {
-        removalQueue.push(
-                    std::make_pair(
-                        totalImages,
-                        totalImages + wrongindex));
-    }
-
-    const double passRate =
-            totalImages > 0
-            ? (1.0
-               - static_cast<double>(ngImages)
-                 / totalImages) * 100.0
-            : 0.0;
-    ui->lineBoxIndex_6->setText(
-                QString::number(passRate, 'f', 1));
-    ui->ngnum->setText(
-                QString::number(ngImages));
-    ui->imagenum->setText(
-                QString::number(totalImages));
+    applyPlcResultRequest(outcome.plcAction);
+    refreshResultStatistics();
 
     const double totalElapsedMs =
             pose.trackingElapsedMs
@@ -2908,13 +2941,7 @@ void Widget::finalizeBarcodeWordNg(
     QElapsedTimer finalizationTimer;
     finalizationTimer.start();
 
-    if (!removalQueue.empty()
-            && totalImages >= removalQueue.front().second - 1) {
-        wrongremove();
-        removalQueue.pop();
-    }
-
-    currentImagesSnapshot = totalImages;
+    processDueDelayedNgRequest();
     if (judge) {
         j = 1;
         x++;
@@ -2953,32 +2980,24 @@ void Widget::finalizeBarcodeWordNg(
                     pose.trackingElapsedMs
                     + postTrackingElapsedMs
                     + elapsedMilliseconds(finalizationTimer));
-        if (ui->comboBox->currentIndex() == 1
-                || ui->comboBox->currentIndex() == 3) {
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        if (DetectionResultHandler::imageSaveActionFor(
+                    completion.result.verdict,
+                    imageSaveModeIndex)
+                == DetectionResultSaveAction::SaveNg) {
             saveWordResultImages("png", "ng", completion);
         }
 
-        ngImages++;
-        totalImages++;
+        const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                    completion,
+                    imageSaveModeIndex,
+                    wrongindex);
         ui->resultlabel->setText(
                     QString("<font size='10' color='red'>错误！</font>"));
-
-        if (wrongindex == 0) {
-            wrongremove();
-        } else {
-            removalQueue.push(
-                        std::make_pair(
-                            totalImages,
-                            totalImages + wrongindex));
-        }
+        applyPlcResultRequest(outcome.plcAction);
     }
 
-    const double passRate = totalImages > 0
-            ? (1.0 - static_cast<double>(ngImages) / totalImages) * 100.0
-            : 0.0;
-    ui->lineBoxIndex_6->setText(QString::number(passRate, 'f', 1));
-    ui->ngnum->setText(QString::number(ngImages));
-    ui->imagenum->setText(QString::number(totalImages));
+    refreshResultStatistics();
     const double finalizationElapsedMs =
             elapsedMilliseconds(finalizationTimer);
     const double totalElapsedMs =
@@ -3010,13 +3029,7 @@ void Widget::finalizeBarcodeWordNg(
  */
 void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResult)
 {
-    if (!removalQueue.empty() && totalImages >= removalQueue.front().second - 1) {
-        qDebug() << "[TISSUE_DETECT] Delayed wrongremove triggered, wrongindex:" << wrongindex;
-        wrongremove();
-        removalQueue.pop();
-    }
-
-    currentImagesSnapshot = totalImages;
+    processDueDelayedNgRequest();
     auto start = std::chrono::high_resolution_clock::now();
 
     if (!image || image->empty()) {
@@ -3100,35 +3113,35 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
                     ? static_cast<double>(tissueResult.processingTimeMs)
                     : static_cast<double>(
                         std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::high_resolution_clock::now() - start)
+                        std::chrono::high_resolution_clock::now() - start)
                         .count()));
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
         if (!isOk) {
-            if ((ui->comboBox->currentIndex() == 1) || (ui->comboBox->currentIndex() == 3)) {
+            if (DetectionResultHandler::imageSaveActionFor(
+                        completion.result.verdict,
+                        imageSaveModeIndex)
+                    == DetectionResultSaveAction::SaveNg) {
                 saveResultImages("png", "ng", completion);
             }
-            ngImages++;
-            totalImages++;
-
-            if (wrongindex == 0) {
-                wrongremove();
-            } else {
-                removalQueue.push(std::make_pair(totalImages, totalImages + wrongindex));
-            }
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
+            applyPlcResultRequest(outcome.plcAction);
         } else {
-            totalImages++;
-            if ((ui->comboBox->currentIndex() == 2) || (ui->comboBox->currentIndex() == 3)) {
+            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+                        completion,
+                        imageSaveModeIndex,
+                        wrongindex);
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
                 saveResultImages("png", "ok", completion);
             }
-            rightremove();
+            applyPlcResultRequest(outcome.plcAction);
         }
     }
 
-    const double hegerate = (totalImages > 0)
-        ? (1 - static_cast<double>(ngImages) / totalImages) * 100
-        : 0;
-    ui->lineBoxIndex_6->setText(QString::number(hegerate, 'f', 1));
-    ui->ngnum->setText(QString::number(ngImages));
-    ui->imagenum->setText(QString::number(totalImages));
+    refreshResultStatistics();
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -9339,6 +9352,7 @@ QImage Widget::cvMatToQImage(const cv::Mat &mat)
 void Widget::on_cancel_clicked()
 {
     qDebug() << "=== on_cancel_clicked() START ===";
+    m_detectionRoiWarningActive = false;
 
     const bool templateOperation =
             m_templateCaptureState
@@ -11104,10 +11118,9 @@ void Widget::on_pushButton_browseImageSavePath_clicked()
  */
 void Widget::on_cut_cancelButton_2_clicked()
 {
-    totalImages = 0;
-    ngImages = 0;
-    ui->ngnum->setText(QString("%1").arg(ngImages));
-    ui->imagenum->setText(QString("%1").arg(totalImages));
+    m_resultHandler.resetStatistics();
+    ui->ngnum->setText(QString::number(m_resultHandler.ngCount()));
+    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
 }
 
 /**
@@ -11115,8 +11128,8 @@ void Widget::on_cut_cancelButton_2_clicked()
  */
 void Widget::on_cut_cancelButton_3_clicked()
 {
-    ngImages = 0;
-    ui->ngnum->setText(QString("%1").arg(ngImages));
+    m_resultHandler.resetNgCount();
+    ui->ngnum->setText(QString::number(m_resultHandler.ngCount()));
 }
 
 /**
@@ -11600,14 +11613,14 @@ void Widget::on_CloseCamera_clicked()
     //    ui->ocrResult->clear();
     ui->resultlabel_7->clear();
     ui->speedLabel->clear();
-    ngImages = 0;
-    totalImages = 0;
+    m_resultHandler.resetStatistics();
     //    qDebug()<<"totaltime"<<totalTime<<"s";
     //    totalTime=0;
     // 标记相机关闭状态
     m_bOpenDevice = false;
     m_templateCaptureState =
             TemplateCaptureState::Idle;
+    m_detectionRoiWarningActive = false;
     m_lastTemplatePreviewFrame.release();
     m_operationState =
             OperationState::CameraClosed;
@@ -11882,6 +11895,7 @@ void Widget::on_plcbtn_clicked()
         imageLabel->setTemplateDrawingEnabled(false);
     }
     hideTemplateGuide();
+    m_detectionRoiWarningActive = false;
 
     // ==========================================================
     // 以下为原有启动线程逻辑，完全保留你所有的 PLC/相机 流程
@@ -11908,8 +11922,7 @@ void Widget::on_plcbtn_clicked()
         ui->ngnum->clear();
         ui->resultlabel_7->clear();
         ui->speedLabel->clear();
-        ngImages = 0;
-        totalImages = 0;
+        m_resultHandler.resetStatistics();
 
         // 重置相机状态
         if (m_cameraDevice && m_bOpenDevice) {
@@ -12256,11 +12269,7 @@ void Widget::on_eliminatebutton_clicked()
 //剔除队列复位 清空还未发出的剔除信号
 void Widget::on_pushButton_10_clicked()
 {
-    // 清空剔除队列
-    while (!removalQueue.empty())
-    {
-        removalQueue.pop();
-    }
+    m_resultHandler.clearPendingDelayedNgRequests();
     QMessageBox::information(this, "提示", "剔除队列已清空！");
 }
 

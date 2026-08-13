@@ -69,6 +69,7 @@ SOURCES += \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
     runtime/detection_session.cpp \
+    runtime/result_handler.cpp \
     runtime/image_save_service.cpp \
     detection/common/profile_pose_selector.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
@@ -128,7 +129,9 @@ HEADERS += \
     devices/plc/plc_device.h \
     devices/plc/snap7_plc_device.h \
     runtime/detection_session.h \
+    runtime/result_handler.h \
     runtime/image_save_service.h \
+    detection/common/detection_roi_geometry.h \
     detection/common/profile_pose_selector.h \
     detection/ocr/ocr_detection_pipeline.h \
     detection/barcode_word/barcode_word_detection_pipeline.h \

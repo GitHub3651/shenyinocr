@@ -747,6 +747,20 @@
 - [x] `detection_completion_test`新增两项业务测试，覆盖新运行重置序号、同运行连续递增、未启动自动建会话、指定帧号/相机号/时间戳、原图独立所有权和结果/Overlay副本；业务测试由11项增至13项，Qt Test预期汇总由13项增至`15 passed, 0 failed`。
 - [x] DetectionSession切片Agent静态检查通过：90个功能ID唯一且状态72/6/10/2；Widget中旧`m_detectionRunId/m_detectionProductSequence/QUuid`引用0处，六条完成对象调用继续经唯一Widget薄桥进入唯一`DetectionSession::complete`；主工程和测试工程的新源/头各唯一登记；13项业务测试对应Qt Test预期15项；本切片未修改配方、Pipeline、设备、PLC、存图服务或采集线程；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
 - [x] DetectionSession Qt Creator集中门禁：2026-08-13用户确认`detection_completion_test`预期`15 passed, 0 failed`及主工程启停、再次启动回归均无问题；每次运行会话身份、判定、计数、存图和PLC保持正常，`RUN-001、DET-002..006`恢复已验证。
+- [x] DetectionSession切片已提交为`45e7340`（`refactor(runtime): 提取检测运行会话`），提交后工作区干净。
+- [x] 开始Stage 2统一结果处理切片；影响`DET-002..008、PLC-005..007、RES-001..003、SAVE-001`十四项，由原状态进入迁移中。五种算法判定、识别文本/Overlay、存图路径与格式、PLC地址/值/100ms复位Timer及线程触发顺序均不修改。
+- [x] 新增`runtime/result_handler.*`：统一持有总数、NG数、合格率公式、四种存图选择矩阵和延迟NG目标计数队列；输入只接受`DetectionCompletion`，返回存图类别与OK/NG PLC请求。Widget删除`totalImages/ngImages/currentImagesSnapshot/removalQueue`，五模式及两条定位失败收尾统一委托运行层，再由薄桥调用原存图函数、`rightremove/wrongremove`和UI刷新。
+- [x] 保留现有非对称清零语义：总数清零同时清总数和NG但不立即重算合格率；NG清零只清NG且不立即重算合格率；剔除队列复位仍只清未发出的延迟NG请求。保存模式0/1/2/3继续分别是不保存/仅NG/仅OK/全部；算法或系统失败到达正式收尾时继续按NG处理。
+- [x] `detection_completion_test`新增六项ResultHandler业务测试，覆盖无效完成对象无副作用、OK/立即NG计数与PLC请求、延迟NG目标边界、四种存图矩阵及统计/队列分开复位；业务测试由13项增至19项，Qt Test预期汇总由15项增至`21 passed, 0 failed`。
+- [x] ResultHandler切片Agent静态检查通过：90个功能ID唯一且状态64/14/10/2；Widget旧`totalImages/ngImages/currentImagesSnapshot/removalQueue`引用0处；六条完成对象生产入口形成十个OK/NG记录分支，六个正式收尾入口统一检查延迟NG；直接`rightremove/wrongremove`调用仅剩运行层请求薄桥3处；主工程和运行测试的新源/头各唯一登记；19项业务测试对应Qt Test预期21项；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] ResultHandler首次Qt Creator编译门禁未通过：MSVC2017在`class ResultHandler`声明起点产生首个C2447，后续99项均为类型未形成导致的级联错误。为规避Qt/Windows SDK或旧头文件环境中的通用标识符与头文件保护宏冲突，实际类型改为项目专用`DetectionResultHandler`，保护宏改为`OCRGANGYIN_RUNTIME_RESULT_HANDLER_H`；统计、保存、PLC请求和延迟队列逻辑未修改，等待重新构建。
+- [x] ResultHandler第二次Qt Creator编译门禁仍在同一类声明起点产生C2447，证明仅改类名不足，首次“类名冲突”不能作为根因结论。现将新头文件收敛为全ASCII和`#pragma once`，并把所有公开数据类型、方法名及枚举项改为`Detection*`专用标识符，移除通用`None/Ok/Ng`和旧保护宏以排除MSVC2017实际包含环境中的编码/预处理干扰；旧标识符残留0、头文件非ASCII字节0，业务行为未改，等待重新构建。
+- [x] ResultHandler运行测试编译及执行门禁：2026-08-13用户确认MSVC2017 Release汇总`21 passed, 0 failed`、退出码0；全ASCII专用类型修复有效，ResultHandler离线行为门禁通过。
+- [x] 主程序集中门禁发现模板匹配ROI越界会在每个连续检测帧调用模态`QMessageBox::warning`，关闭一个后下一帧立即再弹，导致停止按钮无法正常操作；这是既有逐帧错误交互在连续采集下暴露，不是ResultHandler计数错误。现改为每次越界阶段仅写一次`[DETECTION_ROI]`并在`statusLabel`显示加粗红色操作提示，不再创建模态窗口；有效ROI时恢复运行状态，启动、停止和关相机时清理锁存。影响`UI-002、UI-005、RUN-002`，等待主程序复验。
+- [x] 用户进一步明确ROI业务规则：外扩20像素只是期望边距，靠近原图边缘不足20像素时必须以相机原图边界为准继续检测，不应视为错误。新增头文件`detection/common/detection_roi_geometry.h`，先把旋转后的多边形点限制到`0..width-1/height-1`，再外扩并与原图求交；模板匹配、字库及二维码日期ROI共用该规则。此前单次红色越界提示只保留给真正无有效面积的异常，不再用于正常碰边场景。
+- [x] `detection_completion_test`新增两项ROI几何业务测试，覆盖左上边缘外扩不足20像素时裁到0，以及多边形整体越过右边界时吸附到最邻近图像边缘并形成有效ROI；业务测试由19项增至21项，Qt Test预期汇总由`21 passed, 0 failed`增至`23 passed, 0 failed`。
+- [x] ROI边界策略Agent静态检查通过：90个功能ID唯一且状态61/17/10/2；公共几何头在主工程/运行测试各唯一登记，Widget旧局部外扩函数0处、公共边界函数4处调用；ROI越界模态窗口0处；21项业务测试对应Qt Test预期23项；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] ResultHandler与ROI边界Qt Creator集中门禁：2026-08-14用户确认`detection_completion_test`预期`23 passed, 0 failed`、主工程靠边ROI按原图边界裁剪、连续检测无模态弹窗且可正常停止；模板匹配和二维码模式OK/NG、总数/NG/合格率、四种存图选择、PLC请求、延迟位置2、剔除复位以及两个统计清零入口均无问题。本切片17个迁移中功能转为已验证。
 
 ## 本地提交记录
 
@@ -797,6 +811,7 @@
 | `9542aaa` | Stage 2 Snap7 PLC设备适配 | SYS-008、SET-005、CAM-001、RUN-001、PLC-001..006 | `TS7Client`、DB区和数据宽度常量收口到`devices/plc/`，Widget改用`IPlcDevice` | 用户确认适配器9项及主工程可执行门禁无问题；真实PLC读回和脉冲证据仍延期 |
 | `e6dc0d2` | Stage 2海康单相机设备适配 | SYS-009、SET-005..007、TPL-001..002、CAM-001..005、RUN-001..003、SAVE-004 | 海康SDK枚举、首台打开、参数、回调、帧读取与停止唤醒收口到`devices/camera/`，Widget和两采集线程改用共享`ICameraDevice` | 用户确认适配器测试及主工程开关相机、参数、预览、启停、存图和退出均无问题；现场量化证据仍延期 |
 | `fabc7b0` | Stage 2检测结果帧与无丢弃存图 | DET-002..006、RUN-001、SAVE-001..005 | `DetectionCompletion`统一携带本次检测只读原帧；五模式存图统一为容量32、双写线程、满时等待的产品任务队列 | 用户确认更新后的运行测试及主工程无问题；正常条件下不再因队列容量漏图，实际磁盘失败仍报警 |
+| `45e7340` | Stage 2检测运行会话 | RUN-001、DET-002..006 | 运行UUID、产品递增序号及完成对象组装迁入`DetectionSession`，Widget删除对应可变状态 | 用户确认运行测试及主工程多模式启停、再次启动、判定、计数、存图和PLC均无问题 |
 
 ## 未解决事项
 
@@ -808,7 +823,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2运行会话身份与DetectionCompletion组装迁移已通过用户门禁，等待本地提交。
+- 当前切片：Stage 2统一ResultHandler与ROI边界裁剪已通过Qt Creator集中门禁，准备创建独立提交。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线72 / 迁移中0 / 已验证16 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交DetectionSession切片，然后进入ResultHandler拆分。
+- 功能状态计数：待盘点0 / 已基线61 / 迁移中0 / 已验证27 / 已延期2 / 已确认删除0。
+- 下一允许动作：提交ResultHandler切片并继续拆分运行协调器。

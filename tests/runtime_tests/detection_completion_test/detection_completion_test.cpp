@@ -1,8 +1,10 @@
 #include <QtTest>
 
 #include "TrackingTypes.h"
+#include "detection/common/detection_roi_geometry.h"
 #include "runtime/detection_session.h"
 #include "runtime/image_save_service.h"
+#include "runtime/result_handler.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -34,6 +36,23 @@ ImageSaveTask testSaveTask(
     }
     return task;
 }
+
+DetectionCompletion testCompletion(
+    quint64 sequence,
+    AlgorithmVerdict verdict)
+{
+    DetectionCompletion completion;
+    completion.frame = makeFrameData(
+                testProductKey(sequence),
+                sequence,
+                0,
+                QDateTime::currentDateTimeUtc(),
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(1)));
+    completion.result.modeId = QStringLiteral("test");
+    completion.result.verdict = verdict;
+    completion.result.status = DetectionStatus::Completed;
+    return completion;
+}
 }
 
 class DetectionCompletionTest : public QObject
@@ -49,6 +68,14 @@ private slots:
     void immutableFrameCanBeSharedForShortLivedConsumers();
     void sessionBeginCreatesNewRunAndResetsProductSequence();
     void sessionCompletionOwnsFrameAndCopiesDetectionResult();
+    void resultHandlerRejectsInvalidCompletionWithoutSideEffects();
+    void resultHandlerRecordsOkAndRequestsOkOutput();
+    void resultHandlerRecordsImmediateNgAndRequestsNgOutput();
+    void resultHandlerDelaysNgUntilConfiguredProductOffset();
+    void resultHandlerPreservesFourImageSaveModes();
+    void resultHandlerResetsStatisticsAndPendingOutputsSeparately();
+    void roiPaddingIsClampedToImageBounds();
+    void outsidePolygonIsClampedToNearestImageEdge();
     void saveTaskRequiresProductAndAllItems();
     void saveServicePreservesTaskAndItemOrder();
     void fullQueueWaitsForSpaceWithoutDroppingTask();
@@ -257,6 +284,179 @@ void DetectionCompletionTest::sessionCompletionOwnsFrameAndCopiesDetectionResult
     QCOMPARE(completion.result.recognizedText, QStringLiteral("123"));
     QCOMPARE(completion.result.overlay.polygons[0].role,
              QStringLiteral("character"));
+}
+
+void DetectionCompletionTest::resultHandlerRejectsInvalidCompletionWithoutSideEffects()
+{
+    DetectionResultHandler handler;
+    const DetectionResultHandlingOutcome outcome = handler.record(
+                DetectionCompletion(),
+                3,
+                0);
+
+    QVERIFY(!outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveAction
+            == DetectionResultSaveAction::DoNotSave);
+    QVERIFY(outcome.plcAction == DetectionPlcAction::NoRequest);
+    QCOMPARE(handler.totalCount(), 0);
+    QCOMPARE(handler.ngCount(), 0);
+    QCOMPARE(handler.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::resultHandlerRecordsOkAndRequestsOkOutput()
+{
+    DetectionResultHandler handler;
+    const DetectionResultHandlingOutcome outcome = handler.record(
+                testCompletion(1, AlgorithmVerdict::Ok),
+                2,
+                7);
+
+    QVERIFY(outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveAction
+            == DetectionResultSaveAction::SaveOk);
+    QVERIFY(outcome.plcAction == DetectionPlcAction::RequestOk);
+    QCOMPARE(outcome.statistics.totalCount, 1);
+    QCOMPARE(outcome.statistics.ngCount, 0);
+    QCOMPARE(outcome.statistics.passRatePercent(), 100.0);
+    QCOMPARE(handler.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::resultHandlerRecordsImmediateNgAndRequestsNgOutput()
+{
+    DetectionResultHandler handler;
+    const DetectionResultHandlingOutcome outcome = handler.record(
+                testCompletion(1, AlgorithmVerdict::Ng),
+                1,
+                0);
+
+    QVERIFY(outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveAction
+            == DetectionResultSaveAction::SaveNg);
+    QVERIFY(outcome.plcAction == DetectionPlcAction::RequestNg);
+    QCOMPARE(outcome.statistics.totalCount, 1);
+    QCOMPARE(outcome.statistics.ngCount, 1);
+    QCOMPARE(outcome.statistics.passRatePercent(), 0.0);
+    QCOMPARE(handler.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::resultHandlerDelaysNgUntilConfiguredProductOffset()
+{
+    DetectionResultHandler handler;
+    const DetectionResultHandlingOutcome ngOutcome = handler.record(
+                testCompletion(1, AlgorithmVerdict::Ng),
+                0,
+                2);
+
+    QVERIFY(ngOutcome.plcAction == DetectionPlcAction::NoRequest);
+    QCOMPARE(handler.pendingDelayedNgCount(), 1);
+    QVERIFY(!handler.consumeDueDelayedNgRequest());
+
+    const DetectionResultHandlingOutcome okOutcome = handler.record(
+                testCompletion(2, AlgorithmVerdict::Ok),
+                0,
+                2);
+    QVERIFY(okOutcome.plcAction == DetectionPlcAction::RequestOk);
+    QVERIFY(handler.consumeDueDelayedNgRequest());
+    QVERIFY(!handler.consumeDueDelayedNgRequest());
+    QCOMPARE(handler.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::resultHandlerPreservesFourImageSaveModes()
+{
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ok, 0)
+            == DetectionResultSaveAction::DoNotSave);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ng, 0)
+            == DetectionResultSaveAction::DoNotSave);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ok, 1)
+            == DetectionResultSaveAction::DoNotSave);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ng, 1)
+            == DetectionResultSaveAction::SaveNg);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ok, 2)
+            == DetectionResultSaveAction::SaveOk);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ng, 2)
+            == DetectionResultSaveAction::DoNotSave);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::Ok, 3)
+            == DetectionResultSaveAction::SaveOk);
+    QVERIFY(DetectionResultHandler::imageSaveActionFor(
+                AlgorithmVerdict::NotEvaluated, 3)
+            == DetectionResultSaveAction::SaveNg);
+}
+
+void DetectionCompletionTest::resultHandlerResetsStatisticsAndPendingOutputsSeparately()
+{
+    DetectionResultHandler handler;
+    handler.record(testCompletion(1, AlgorithmVerdict::Ng), 0, 3);
+    handler.record(testCompletion(2, AlgorithmVerdict::Ok), 0, 0);
+
+    handler.resetNgCount();
+    QCOMPARE(handler.totalCount(), 2);
+    QCOMPARE(handler.ngCount(), 0);
+    QCOMPARE(handler.pendingDelayedNgCount(), 1);
+
+    handler.resetStatistics();
+    QCOMPARE(handler.totalCount(), 0);
+    QCOMPARE(handler.ngCount(), 0);
+    QCOMPARE(handler.pendingDelayedNgCount(), 1);
+
+    handler.clearPendingDelayedNgRequests();
+    QCOMPARE(handler.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()
+{
+    const std::vector<cv::Point> polygon = {
+        cv::Point(2, 3),
+        cv::Point(20, 3),
+        cv::Point(20, 12),
+        cv::Point(2, 12)
+    };
+    std::vector<cv::Point> clampedPolygon;
+    const cv::Rect roi =
+            DetectionRoiGeometry::polygonRoiWithClampedPadding(
+                polygon,
+                20,
+                cv::Size(100, 80),
+                &clampedPolygon);
+
+    QCOMPARE(roi.x, 0);
+    QCOMPARE(roi.y, 0);
+    QCOMPARE(roi.width, 41);
+    QCOMPARE(roi.height, 33);
+    QCOMPARE(static_cast<int>(clampedPolygon.size()), 4);
+}
+
+void DetectionCompletionTest::outsidePolygonIsClampedToNearestImageEdge()
+{
+    const std::vector<cv::Point> polygon = {
+        cv::Point(110, 20),
+        cv::Point(120, 20),
+        cv::Point(120, 30),
+        cv::Point(110, 30)
+    };
+    std::vector<cv::Point> clampedPolygon;
+    const cv::Rect roi =
+            DetectionRoiGeometry::polygonRoiWithClampedPadding(
+                polygon,
+                20,
+                cv::Size(100, 80),
+                &clampedPolygon);
+
+    QCOMPARE(roi.x, 79);
+    QCOMPARE(roi.y, 0);
+    QCOMPARE(roi.width, 21);
+    QCOMPARE(roi.height, 51);
+    QCOMPARE(static_cast<int>(clampedPolygon.size()), 4);
+    for (const cv::Point &point : clampedPolygon) {
+        QCOMPARE(point.x, 99);
+        QVERIFY(point.y >= 0 && point.y < 80);
+    }
 }
 
 void DetectionCompletionTest::saveTaskRequiresProductAndAllItems()
