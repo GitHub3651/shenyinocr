@@ -325,6 +325,7 @@ private:
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
     void setupManualCharacterCropUi();
     void showManualCharacterTemplateCropDialog();
+    void showStampCharacterTemplateCropDialog();
     void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
@@ -339,6 +340,10 @@ private:
                                      bool showErrorMessage,
                                      QStringList *pendingMessages,
                                      QString *errorMessage);
+    bool activatePublishedSingleTemplateRecipe(const QString &recipeId,
+                                               const QString &modeId,
+                                               bool showErrorMessage,
+                                               QString *errorMessage);
     void connectTemplatePreviewSignals(MyThread *thread);
     bool startTemplatePreview();
     bool freezeTemplatePreview();
@@ -554,6 +559,9 @@ private:
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession; ///< 本次新建字库配方的编辑发布会话
     TemplateRecipeEditSession m_wordTemplateRecipeEditSession; ///< 当前已发布字库配方的参数编辑会话
+    TemplateRecipeEditSession m_singleTemplateRecipeEditSession; ///< 当前已发布钢印/OCR单模板配方编辑会话
+    QMap<QString, QString> m_singleTemplateResolvedAssetPathsByRole; ///< 当前单模板配方的只读运行资产
+    QString m_currentTemplateDisplayName; ///< 已发布单模板使用配方显示名，避免显示内部Profile目录名
     std::vector<WordTemplateProfile> m_runningWordTemplateProfiles; ///< 字库家族本次识别专用的只读Profile快照
     bool m_wordTemplateRunActive = false; ///< 正式检测是否已安装字库家族运行快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
@@ -612,9 +620,20 @@ private:
         QString *errorMessage);
     void setupWordTemplateEditorCombo();
     void publishCurrentWordTemplateGroup();
-    void selectPublishedWordRecipe();
+    void publishCurrentSingleTemplateRecipe();
+    void selectPublishedRecipe();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
+    void clearSingleTemplateRecipeState();
+    bool loadSingleTemplateCharacterAssets(
+        const QMap<QString, QString> &assetPathsByRole,
+        const QStringList &targetUnits,
+        std::vector<cv::Mat> *templates,
+        std::vector<int> *templateTargetIndexes,
+        QString *errorMessage) const;
+    bool republishSingleTemplateRecipeSettings(
+        const TemplatePrivateSettings &settings,
+        QString *errorMessage);
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
     void setCurrentWordTemplateEditIndex(int profileIndex);

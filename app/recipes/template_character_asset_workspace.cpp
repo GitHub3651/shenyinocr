@@ -83,6 +83,16 @@ bool TemplateCharacterAssetWorkspace::prepare(
         return false;
     }
 
+    const QString stampRingPath =
+            assetPathsByRole.value(QStringLiteral("stampRing")).trimmed();
+    if (!stampRingPath.isEmpty()
+            && !copyAsset(workspacePath,
+                          stampRingPath,
+                          QStringLiteral("template_ring.bmp"),
+                          errorMessage)) {
+        return false;
+    }
+
     const QString characterRolePrefix = QStringLiteral("character/");
     for (auto it = assetPathsByRole.constBegin();
          it != assetPathsByRole.constEnd();
