@@ -128,10 +128,12 @@ public:
     bool shouldSaveNoRecognitionBoxImage() const;
     void saveResultImages(QString format,
                           const QString &resultDirName,
-                          const DetectionCompletion &completion);
+                          const DetectionCompletion &completion,
+                          const QImage &annotatedImage);
     void saveWordResultImages(QString format,
                               const QString &resultDirName,
-                              const DetectionCompletion &completion);
+                              const DetectionCompletion &completion,
+                              const QImage &annotatedImage);
     void saveImage2Async(QString format,
                          QString savePath,
                          const DetectionCompletion &completion); ///< 保存检测使用的原帧
@@ -382,25 +384,20 @@ private:
         const DetectionCompletion &completion,
         const BarcodeWordDetectionWorkOutput &output);
     void finalizeOcrResult(
-        cv::Mat *image,
         const DetectionPose &pose,
         const OcrDetectionResult &ocrResult,
         const DetectionCompletion &acceptedCompletion,
         double elapsedMs);
     void finalizeTissueResult(
-        cv::Mat *image,
         const TissueRollResult &tissueResult,
         const DetectionCompletion &acceptedCompletion);
     void finalizeSoftwareStampResult(
-        cv::Mat *image,
         const StampDetectionWorkOutput &output,
         const DetectionCompletion &acceptedCompletion);
     void finalizeSoftwareWordResult(
-        cv::Mat *image,
         const WordDetectionWorkOutput &output,
         const DetectionCompletion &acceptedCompletion);
     void finalizeSoftwareBarcodeWordResult(
-        cv::Mat *image,
         const BarcodeWordDetectionWorkOutput &output,
         const DetectionCompletion &acceptedCompletion);
 
@@ -462,7 +459,6 @@ private:
     std::atomic<bool> m_softwareDetectionQueueActive{false};
     std::atomic<int> m_softwareDetectionModeIndex{-1};
     DetectionResultPresenter m_detectionResultPresenter;
-    bool m_allowTissueDetectionFrameDisplay = false;
     TissueRecipeParameters m_tissueRecipeParameters;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;
@@ -538,7 +534,6 @@ private:
     bool first;                         ///< 第一次标志
 
     // ========== 检测框相关 ==========
-    int x = 1;                          ///< 识别框数量（简化版固定为1）
     vector<vector<QRect>> allDetectedRects; ///< 所有检测到的矩形
     std::vector<QRect> detectedRects;   ///< 检测到的矩形
     QRect dingweiRect;                  ///< 定位矩形
@@ -554,12 +549,10 @@ private:
     // ========== 识别结果相关 ==========
     String allResults;                  ///< 所有结果
     QVector<std::string> string1;       ///< 字符串向量
-    int j = 1;                          ///< 识别次数统计
     int k = 1;                          ///< 计数器
 
     // ========== 跟踪相关 ==========
     bool tracking;                      ///< 是否正在跟踪
-    bool judge = false;                 ///< 判断标志（注意：此变量在代码中有多种用途）
     Zhuizong *zhuizong;                 ///< 跟踪对象
     TemplateMatch* templatematch;       ///< 模板匹配对象
     cv::Rect trackWindow;               ///< 跟踪窗口
@@ -719,7 +712,14 @@ private:
     void finishInspectionStop();
     void processDueDelayedNgRequest();
     void applyPlcResultRequest(DetectionPlcAction action);
-    void refreshResultStatistics();
+    bool presentDetectionResult(
+        const DetectionCompletion &completion,
+        const QImage &image,
+        DetectionVerdictViewStyle verdictStyle,
+        const QString &recognitionText,
+        bool updatesTemplateName,
+        const QString &templateName,
+        const QString &elapsedText);
     void showDetectionRoiWarningOnce();
     void clearDetectionRoiWarning();
     void scheduleImageSaveWarning();

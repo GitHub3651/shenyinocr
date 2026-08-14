@@ -6,7 +6,7 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 3 新线程链和UI减负（按用户风险接受条件进入）
-- 当前切片：Stage 3结果图与Overlay Presenter（静态检查完成，等待Qt Creator门禁）
+- 当前切片：Stage 3完整结果呈现快照（静态检查完成，等待Qt Creator门禁）
 - 阶段结论：**Stage 2结构关口已通过，Stage 3进行中**。五种模式的软硬触发正式检测链均已通过门禁；外部Line触发、相机参数、算法、PLC时序和Stage 4异常策略边界保持不变。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
@@ -866,6 +866,17 @@
 - [x] `detection_completion_test`新增3项Presenter合同测试，覆盖五类Overlay颜色、四通道输入、Pose平移/失效清理及纸巾圆框/状态清理；业务测试由65项增至68项，Qt Test预期汇总由`67 passed, 0 failed`增至`70 passed, 0 failed`。
 - [x] 结果图与Overlay Presenter Agent静态检查通过：主工程和运行测试工程对新源/头各唯一登记；测试声明/定义各68项；旧绘制全局状态、旧Overlay安装/转换/纸巾绘制及兼容完成构造符号在`app/tests`中均为0处；90个功能ID唯一，状态50/7/31/2；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 结果图与Overlay Presenter集中Qt Creator门禁通过：2026-08-15用户确认`detection_completion_test`预期`70 passed, 0 failed`、主工程Run qmake/Rebuild/Run、五模式结果图/Overlay/文字/统计/耗时、窗口缩放、纸巾带框保存以及停止重启均无问题；`UI-003、SAVE-002`转为已验证，`UI-004、RUN-004`继续进入后续完整呈现快照拆分。
+- [x] 结果图与Overlay Presenter已提交为`b111649`（`refactor(ui): 抽离检测结果图呈现器`），提交后工作区干净。
+- [x] 开始Stage 3完整结果呈现快照切片；影响`UI-004、UI-005、RUN-004、RES-001..005、SAVE-002`。五模式现有最终收尾继续执行唯一结果记录、存图选择和PLC请求，但图片、Overlay、识别文字、模板名、OK/NG、统计和耗时改为组装同一`ProductKey`只读快照并由Presenter一次写入；使用组合存图的钢印、字库、二维码、纸巾四模式标注图统一从同产品原帧和Presenter Overlay生成，不再反向读取界面Pixmap。
+- [x] 新增`DetectionResultViewSnapshot/DetectionResultViewBindings`合同：快照携带`ProductKey`、原尺寸结果QImage、统一判定状态、识别内容、可选模板名、完整统计和耗时文字；Presenter由判定状态固定生成结果文字，并在一次UI线程调用中按固定顺序应用全部字段，图文不再分散到五个模式收尾中直接写控件。
+- [x] 钢印、字库、二维码、深度OCR、纸巾五个收尾均先完成协调器唯一记录，再从当前`DetectionCompletion`原帧和Overlay生成一张结果图并组装快照，最后执行原PLC请求。原`x/j/judge`分支在实际代码中`x`始终为1且`judge`无true写入，已按等价行为删除，每个有效完成仍且只收尾一次。
+- [x] 组合存图的四模式现直接把同一产品已呈现QImage交给`ImageSaveService`，删除从`image_undetected->pixmap()`反读缩放图的回退；标注图/原图组合、文件夹、格式、命名、任务顺序和满队列反压不变。深度OCR保持原有原帧存图入口。
+- [x] `detection_completion_test`新增2项Presenter快照合同测试，覆盖全字段固定顺序应用、`ProductKey`保留、非检测预览只更新图片、停止短期清理、清理后保留UI绑定以支持再次启动，以及总数/NG两个既有不对称清零范围；业务测试由68项增至70项，Qt Test预期汇总由`70 passed, 0 failed`增至`72 passed, 0 failed`。
+- [x] 完整结果呈现快照Agent静态检查通过：五个完成收尾各且仅有1处快照呈现；旧`refreshResultStatistics`、`m_allowTissueDetectionFrameDisplay`、`x/j/judge`及存图反读界面Pixmap均0处；测试声明/定义各70项，预期汇总72项；90个正式功能ID唯一，状态48/12/28/2；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 2026-08-15首次主程序门禁发现判定结果和检测耗时出现乱码，部分判定还把`font>`残片作为正文显示；结果图、Overlay、统计数值和算法判定本身正常。源码追踪确认本切片把旧窄字符串改成了含原始中文的`QStringLiteral`，在当前MSVC2017工程未统一启用`/utf-8`的条件下产生代码页误解码；同时`KeepCurrent`样式分支会让普通模式继承纸巾字号/颜色，属于本切片UI呈现回归。
+- [x] 判定结果已改为`Qt::PlainText`纯文本，删除全部HTML `<font>`拼接；根据用户明确要求，样式合同进一步从普通/纸巾四种状态收敛为统一`Correct/Error`两种状态，Presenter固定生成无感叹号的“正确/错误”，五模式共用同一字号、正确色和错误色。耗时、纸巾粗糙度及同类模板错误提示继续使用代码页无关Unicode转义；钢印细分失败原因仍保留在算法结果和日志中，算法、计时数值、线程、统计、存图和PLC行为均未修改。
+- [x] 现有Presenter全字段测试补充中文精确值和同一绑定从`Error`切换到`Correct`的统一样式验证；测试声明/定义仍各70项，Qt Test预期仍为`72 passed, 0 failed`。静态复查确认旧普通/纸巾四样式枚举、`KeepCurrent`、`<font>`、`</font>`和相关文件中含原始非ASCII的`QStringLiteral`均为0处，五模式快照调用仍为5处，无`.pro/.pri`变更，`git diff --check`通过；等待Qt Creator复验。
+- [x] 完整结果呈现快照集中门禁通过：2026-08-15用户确认`detection_completion_test`预期72项及主程序复验均无问题；五模式统一显示纯文本“正确/错误”，普通与纸巾共用相同字号和颜色，中文、耗时、图文绑定、统计、模板名、组合存图及模式切换均通过。`UI-004、UI-005、RUN-004、RES-001..005、SAVE-002`转为已验证；`RUN-001..003`继续留给后续Widget运行装配拆分。
 
 ## 本地提交记录
 
@@ -939,7 +950,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3结果图与Overlay Presenter已通过Qt Creator集中门禁，准备独立提交。
+- 当前切片：Stage 3完整结果呈现快照已通过Qt Creator集中门禁，待提交。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线50 / 迁移中5 / 已验证33 / 已延期2 / 已确认删除0。
-- 下一允许动作：用户执行`detection_completion_test`及主工程五模式结果图/标注存图集中门禁；通过后提交，并继续拆分Widget中的结果文字、统计和状态Presenter职责。
+- 功能状态计数：待盘点0 / 已基线48 / 迁移中3 / 已验证37 / 已延期2 / 已确认删除0。
+- 下一允许动作：提交完整结果呈现快照切片；随后开始拆分Widget剩余运行装配桥，影响`RUN-001..003`。

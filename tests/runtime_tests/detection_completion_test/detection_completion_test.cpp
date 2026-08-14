@@ -166,6 +166,8 @@ private slots:
     void resultPresenterRendersDetectionOverlays();
     void resultPresenterMovesDetailsWithPose();
     void resultPresenterRendersAndClearsTissueOverlay();
+    void resultPresenterAppliesWholeViewSnapshotInOrder();
+    void resultPresenterPreservesPartialRefreshRules();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void orientedDateRoiClampsPaddingAtImageEdge();
@@ -1823,6 +1825,193 @@ void DetectionCompletionTest::resultPresenterRendersAndClearsTissueOverlay()
     presenter.clear();
     QVERIFY(!presenter.state().hasTissueRoll);
     QVERIFY(presenter.state().detailPolygons.empty());
+}
+
+void DetectionCompletionTest::resultPresenterAppliesWholeViewSnapshotInOrder()
+{
+    QStringList applicationOrder;
+    QImage presentedImage;
+    DetectionVerdictViewStyle presentedStyle =
+            DetectionVerdictViewStyle::Error;
+    QString verdictText;
+    QString recognitionText;
+    QString templateName;
+    int totalCount = -1;
+    int ngCount = -1;
+    double passRate = -1.0;
+    QString elapsedText;
+
+    DetectionResultViewBindings bindings;
+    bindings.showImage = [&](const QImage &image) {
+        applicationOrder.append(QStringLiteral("image"));
+        presentedImage = image;
+    };
+    bindings.showVerdictStyle = [&](DetectionVerdictViewStyle style) {
+        applicationOrder.append(QStringLiteral("style"));
+        presentedStyle = style;
+    };
+    bindings.showVerdictText = [&](const QString &text) {
+        applicationOrder.append(QStringLiteral("verdict"));
+        verdictText = text;
+    };
+    bindings.showRecognitionText = [&](const QString &text) {
+        applicationOrder.append(QStringLiteral("recognition"));
+        recognitionText = text;
+    };
+    bindings.showTemplateName = [&](const QString &text) {
+        applicationOrder.append(QStringLiteral("template"));
+        templateName = text;
+    };
+    bindings.showTotalCount = [&](int count) {
+        applicationOrder.append(QStringLiteral("total"));
+        totalCount = count;
+    };
+    bindings.showNgCount = [&](int count) {
+        applicationOrder.append(QStringLiteral("ng"));
+        ngCount = count;
+    };
+    bindings.showPassRate = [&](double value) {
+        applicationOrder.append(QStringLiteral("rate"));
+        passRate = value;
+    };
+    bindings.showElapsedText = [&](const QString &text) {
+        applicationOrder.append(QStringLiteral("elapsed"));
+        elapsedText = text;
+    };
+
+    DetectionResultPresenter presenter;
+    QVERIFY(!presenter.hasViewBindings());
+    presenter.bindView(bindings);
+    QVERIFY(presenter.hasViewBindings());
+
+    DetectionResultViewSnapshot snapshot;
+    snapshot.productKey.runId = QStringLiteral("view-run");
+    snapshot.productKey.sequence = 9;
+    snapshot.image = QImage(4, 3, QImage::Format_RGB888);
+    snapshot.verdictStyle = DetectionVerdictViewStyle::Error;
+    snapshot.recognitionText =
+            QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a8.250");
+    snapshot.updatesTemplateName = true;
+    snapshot.templateName = QStringLiteral("profile-a");
+    snapshot.statistics.totalCount = 5;
+    snapshot.statistics.ngCount = 2;
+    snapshot.elapsedText = QStringLiteral(
+                "\u68c0\u6d4b\u8017\u65f6 12 \u6beb\u79d2");
+
+    QVERIFY(presenter.present(snapshot));
+    QStringList expectedOrder;
+    expectedOrder
+            << QStringLiteral("image")
+            << QStringLiteral("style")
+            << QStringLiteral("verdict")
+            << QStringLiteral("recognition")
+            << QStringLiteral("template")
+            << QStringLiteral("total")
+            << QStringLiteral("ng")
+            << QStringLiteral("rate")
+            << QStringLiteral("elapsed");
+    QCOMPARE(applicationOrder, expectedOrder);
+    QCOMPARE(presentedImage.size(), QSize(4, 3));
+    QVERIFY(presentedStyle == DetectionVerdictViewStyle::Error);
+    QCOMPARE(
+                verdictText,
+                QString::fromWCharArray(L"\u9519\u8bef"));
+    QCOMPARE(
+                recognitionText,
+                QString::fromWCharArray(L"\u7c97\u7cd9\u5ea6\uff1a8.250"));
+    QCOMPARE(templateName, QStringLiteral("profile-a"));
+    QCOMPARE(totalCount, 5);
+    QCOMPARE(ngCount, 2);
+    QCOMPARE(passRate, 60.0);
+    QCOMPARE(
+                elapsedText,
+                QString::fromWCharArray(
+                    L"\u68c0\u6d4b\u8017\u65f6 12 \u6beb\u79d2"));
+    QCOMPARE(
+                presenter.lastPresentedProductKey().runId,
+                QStringLiteral("view-run"));
+    QCOMPARE(presenter.lastPresentedProductKey().sequence, quint64(9));
+
+    applicationOrder.clear();
+    snapshot.productKey.sequence = 10;
+    snapshot.verdictStyle = DetectionVerdictViewStyle::Correct;
+    snapshot.recognitionText.clear();
+    snapshot.updatesTemplateName = false;
+    snapshot.elapsedText = QStringLiteral(
+                "\u68c0\u6d4b\u8017\u65f6 9 \u6beb\u79d2");
+    QVERIFY(presenter.present(snapshot));
+    QVERIFY(presentedStyle == DetectionVerdictViewStyle::Correct);
+    QCOMPARE(
+                verdictText,
+                QString::fromWCharArray(L"\u6b63\u786e"));
+    QCOMPARE(
+                elapsedText,
+                QString::fromWCharArray(
+                    L"\u68c0\u6d4b\u8017\u65f6 9 \u6beb\u79d2"));
+    QVERIFY(!applicationOrder.contains(QStringLiteral("template")));
+    QCOMPARE(presenter.lastPresentedProductKey().sequence, quint64(10));
+}
+
+void DetectionCompletionTest::resultPresenterPreservesPartialRefreshRules()
+{
+    int imageCount = 0;
+    int templateCount = 0;
+    int totalCount = -1;
+    int ngCount = -1;
+    int passRateCount = 0;
+    QString verdictText = QStringLiteral("unchanged");
+    QString recognitionText = QStringLiteral("unchanged");
+    QString elapsedText = QStringLiteral("unchanged");
+
+    DetectionResultViewBindings bindings;
+    bindings.showImage = [&](const QImage &) { ++imageCount; };
+    bindings.showVerdictStyle = [](DetectionVerdictViewStyle) {};
+    bindings.showVerdictText = [&](const QString &text) {
+        verdictText = text;
+    };
+    bindings.showRecognitionText = [&](const QString &text) {
+        recognitionText = text;
+    };
+    bindings.showTemplateName = [&](const QString &) { ++templateCount; };
+    bindings.showTotalCount = [&](int count) { totalCount = count; };
+    bindings.showNgCount = [&](int count) { ngCount = count; };
+    bindings.showPassRate = [&](double) { ++passRateCount; };
+    bindings.showElapsedText = [&](const QString &text) {
+        elapsedText = text;
+    };
+
+    DetectionResultPresenter presenter;
+    presenter.bindView(bindings);
+
+    DetectionResultViewSnapshot invalidSnapshot;
+    invalidSnapshot.image = QImage(2, 2, QImage::Format_RGB888);
+    QVERIFY(!presenter.present(invalidSnapshot));
+    QCOMPARE(imageCount, 0);
+
+    QVERIFY(!presenter.presentFrame(QImage()));
+    QVERIFY(presenter.presentFrame(QImage(2, 2, QImage::Format_RGB888)));
+    QCOMPARE(imageCount, 1);
+
+    presenter.clearTransientView();
+    QVERIFY(verdictText.isEmpty());
+    QVERIFY(recognitionText.isEmpty());
+    QVERIFY(elapsedText.isEmpty());
+
+    presenter.presentTotalAndNgCounts(7, 3);
+    QCOMPARE(totalCount, 7);
+    QCOMPARE(ngCount, 3);
+    QCOMPARE(passRateCount, 0);
+
+    presenter.presentNgCount(1);
+    QCOMPARE(totalCount, 7);
+    QCOMPARE(ngCount, 1);
+    QCOMPARE(templateCount, 0);
+
+    presenter.clear();
+    QVERIFY(presenter.hasViewBindings());
+    QVERIFY(!presenter.lastPresentedProductKey().isValid());
+    QVERIFY(presenter.presentFrame(QImage(3, 3, QImage::Format_RGB888)));
+    QCOMPARE(imageCount, 2);
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()

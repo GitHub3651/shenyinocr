@@ -154,9 +154,107 @@ void transformPolygonForPose(
 }
 }
 
+bool DetectionResultViewSnapshot::isValid() const
+{
+    return productKey.isValid() && !image.isNull();
+}
+
+bool DetectionResultViewBindings::isValid() const
+{
+    return showImage
+            && showVerdictStyle
+            && showVerdictText
+            && showRecognitionText
+            && showTemplateName
+            && showTotalCount
+            && showNgCount
+            && showPassRate
+            && showElapsedText;
+}
+
+void DetectionResultPresenter::bindView(
+    const DetectionResultViewBindings &bindings)
+{
+    m_viewBindings = bindings;
+}
+
+bool DetectionResultPresenter::hasViewBindings() const
+{
+    return m_viewBindings.isValid();
+}
+
 void DetectionResultPresenter::clear()
 {
     m_state = DetectionPresentationState();
+    m_lastPresentedProductKey = ProductKey();
+}
+
+void DetectionResultPresenter::clearTransientView()
+{
+    if (!hasViewBindings()) {
+        return;
+    }
+    m_viewBindings.showVerdictText(QString());
+    m_viewBindings.showRecognitionText(QString());
+    m_viewBindings.showElapsedText(QString());
+}
+
+bool DetectionResultPresenter::present(
+    const DetectionResultViewSnapshot &snapshot)
+{
+    if (!hasViewBindings() || !snapshot.isValid()) {
+        return false;
+    }
+
+    m_viewBindings.showImage(snapshot.image);
+    m_viewBindings.showVerdictStyle(snapshot.verdictStyle);
+    m_viewBindings.showVerdictText(
+                snapshot.verdictStyle == DetectionVerdictViewStyle::Correct
+                ? QStringLiteral("\u6b63\u786e")
+                : QStringLiteral("\u9519\u8bef"));
+    m_viewBindings.showRecognitionText(snapshot.recognitionText);
+    if (snapshot.updatesTemplateName) {
+        m_viewBindings.showTemplateName(snapshot.templateName);
+    }
+    m_viewBindings.showTotalCount(snapshot.statistics.totalCount);
+    m_viewBindings.showNgCount(snapshot.statistics.ngCount);
+    m_viewBindings.showPassRate(
+                snapshot.statistics.passRatePercent());
+    m_viewBindings.showElapsedText(snapshot.elapsedText);
+    m_lastPresentedProductKey = snapshot.productKey;
+    return true;
+}
+
+bool DetectionResultPresenter::presentFrame(const QImage &image)
+{
+    if (!hasViewBindings() || image.isNull()) {
+        return false;
+    }
+    m_viewBindings.showImage(image);
+    return true;
+}
+
+void DetectionResultPresenter::presentTotalAndNgCounts(
+    int totalCount,
+    int ngCount)
+{
+    if (!hasViewBindings()) {
+        return;
+    }
+    m_viewBindings.showTotalCount(totalCount);
+    m_viewBindings.showNgCount(ngCount);
+}
+
+void DetectionResultPresenter::presentNgCount(int ngCount)
+{
+    if (hasViewBindings()) {
+        m_viewBindings.showNgCount(ngCount);
+    }
+}
+
+const ProductKey &DetectionResultPresenter::lastPresentedProductKey() const
+{
+    return m_lastPresentedProductKey;
 }
 
 void DetectionResultPresenter::installDetectionResult(
