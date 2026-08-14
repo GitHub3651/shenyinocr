@@ -7,6 +7,8 @@
  */
 
 #include "widget.h"
+#include "runtime/inspection_run_configuration.h"
+#include "runtime/inspection_worker_configurator.h"
 #include "ui_widget.h"
 #include "recipes/recipe_selection.h"
 #include "recipes/template_character_asset_workspace.h"
@@ -8969,54 +8971,40 @@ bool Widget::applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuc
 
 bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    int thresholdValue = 0;
-    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)
-            || thresholdValue < 0
-            || thresholdValue > 100) {
+    InspectionRuntimeSettingsInput settingsInput;
+    settingsInput.imageThresholdText =
+            ui->lineEdit_yuzhi->text();
+    settingsInput.tissueThresholdText =
+            ui->lineEdit_tissueRoughnessThreshold->text();
+    settingsInput.rotationIndex =
+            ui->comboBox_2->currentIndex();
+    settingsInput.colorChannelIndex =
+            ui->comboBox_5->currentIndex();
+    const InspectionRuntimeSettingsResult settingsResult =
+            InspectionRunConfiguration::parseSettings(settingsInput);
+
+    if (settingsResult.issue
+            == InspectionRuntimeSettingsIssue::InvalidImageThreshold) {
         const QString message = "图像合格阈值必须是0到100之间的整数（单位：%）";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("参数错误", message);
         return false;
     }
 
-    bool tissueThresholdOk = false;
-    const double tissueThreshold = ui->lineEdit_tissueRoughnessThreshold->text().trimmed().toDouble(&tissueThresholdOk);
-    if (!tissueThresholdOk || tissueThreshold <= 0.0) {
+    if (settingsResult.issue
+            == InspectionRuntimeSettingsIssue::InvalidTissueThreshold) {
         const QString message = "纸巾检测粗糙度阈值必须是大于0的数字";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("参数错误", message);
         return false;
     }
 
-    switch (ui->comboBox_2->currentIndex()) {
-    case 1:
-        angleValue = 1;
-        break;
-    case 2:
-        angleValue = 2;
-        break;
-    case 3:
-        angleValue = 3;
-        break;
-    default:
-        angleValue = 0;
-        break;
-    }
-
-    switch (ui->comboBox_5->currentIndex()) {
-    case 1:
-        colorchannel = 1;
-        break;
-    case 2:
-        colorchannel = 2;
-        break;
-    case 3:
-        colorchannel = 3;
-        break;
-    default:
-        colorchannel = 0;
-        break;
-    }
+    const int thresholdValue =
+            settingsResult.settings.imageThreshold;
+    const double tissueThreshold =
+            settingsResult.settings.tissueThreshold;
+    angleValue = settingsResult.settings.rotationCode;
+    colorchannel = settingsResult.settings.colorChannelCode;
 
     applyTissueRecipeParametersToThreads(tissueThreshold);
     ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(tissueThreshold, 'f', 3));
@@ -11902,6 +11890,11 @@ void Widget::on_plcbtn_clicked()
         return;
     }
 
+    const InspectionRunPlan runPlan =
+            InspectionRunConfiguration::createPlan(
+                resourceInput.modeKind,
+                ui->checkBox->isChecked());
+
     std::vector<WordTrackingProfile> wordTrackingProfilesForRun;
     std::vector<WordTemplateProfile> wordTemplateProfilesForRun;
     if (isWordProfileMode) {
@@ -11940,7 +11933,8 @@ void Widget::on_plcbtn_clicked()
     // ==========================================================
     // 以下为原有启动线程逻辑，完全保留你所有的 PLC/相机 流程
     // ==========================================================
-    if (ui->checkBox->isChecked())
+    if (runPlan.acquisitionKind
+            == InspectionAcquisitionKind::HardwareTrigger)
     {
         // 外部触发/硬触发模式逻辑
         if (isCollecting) {
@@ -12029,19 +12023,13 @@ void Widget::on_plcbtn_clicked()
         },
         Qt::QueuedConnection);
 
-        cameraThread->setBypassTracking(isTissueMode);
-        cameraThread->setBarcodeWordHardTriggerMode(isBarcodeWordMode);
-        if (isTissueMode) {
-            cameraThread->clearPresetBoxes();
-            cameraThread->clearWordTemplateTrackingProfiles();
-        } else if (isWordProfileMode) {
-            cameraThread->clearPresetBoxes();
-            cameraThread->setWordTemplateTrackingProfiles(wordTrackingProfilesForRun);
-        } else {
-            // 🔥 核心修改：将双框坐标和静态模板喂给线程
-            cameraThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
-            cameraThread->setPreloadedTemplate(m_loadedTrackingTemplate);
-        }
+        InspectionWorkerConfigurator::configureHardwareWorker(
+                    cameraThread,
+                    runPlan,
+                    wordTrackingProfilesForRun,
+                    savedDatePoly,
+                    savedTrackingBox,
+                    m_loadedTrackingTemplate);
 
         // 连接所有功能信号
         connect(this, &Widget::rotate, cameraThread, &CameraThread::receiveangle1);
@@ -12122,18 +12110,13 @@ void Widget::on_plcbtn_clicked()
         ensureThreadsReady();
         if (!myThread) reinitializeMyThread();
 
-        myThread->setBypassTracking(isTissueMode);
-        if (isTissueMode) {
-            myThread->clearPresetBoxes();
-            myThread->clearWordTemplateTrackingProfiles();
-        } else if (isWordProfileMode) {
-            myThread->clearPresetBoxes();
-            myThread->setWordTemplateTrackingProfiles(wordTrackingProfilesForRun);
-        } else {
-            // 🔥 核心修改：将双框坐标和静态模板喂给线程
-            myThread->setPresetBoxes(savedDatePoly, savedTrackingBox);
-            myThread->setPreloadedTemplate(m_loadedTrackingTemplate);
-        }
+        InspectionWorkerConfigurator::configureSoftwareWorker(
+                    myThread,
+                    runPlan,
+                    wordTrackingProfilesForRun,
+                    savedDatePoly,
+                    savedTrackingBox,
+                    m_loadedTrackingTemplate);
 
         connect(myThread, &MyThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
 

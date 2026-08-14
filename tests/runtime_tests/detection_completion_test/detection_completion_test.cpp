@@ -4,6 +4,7 @@
 #include "detection/common/detection_roi_geometry.h"
 #include "runtime/detection_session.h"
 #include "runtime/image_save_service.h"
+#include "runtime/inspection_run_configuration.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/result_handler.h"
@@ -90,6 +91,13 @@ private slots:
     void wordStartRequiresProfilesAndCompleteCharacters();
     void barcodeStartAggregatesDecoderAndProfileErrors();
     void validWordAndBarcodeStartsAreAccepted();
+    void runPlanSelectsSoftwareSingleTemplate();
+    void runPlanSelectsHardwareBarcodeProfiles();
+    void runPlanSelectsWholeFrameAndWordTracking();
+    void runtimeSettingsRetainValidValues();
+    void runtimeSettingsUseLegacyDefaultsForUnknownIndexes();
+    void runtimeSettingsRejectInvalidImageThreshold();
+    void runtimeSettingsRejectInvalidTissueThreshold();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void saveTaskRequiresProductAndAllItems();
@@ -784,6 +792,117 @@ void DetectionCompletionTest::validWordAndBarcodeStartsAreAccepted()
     input.modeKind = InspectionStartModeKind::BarcodeWordProfiles;
     input.barcodeDecoderReady = true;
     QVERIFY(InspectionStartPreflight::evaluateResources(input).isAccepted());
+}
+
+void DetectionCompletionTest::runPlanSelectsSoftwareSingleTemplate()
+{
+    const InspectionRunPlan plan =
+            InspectionRunConfiguration::createPlan(
+                InspectionStartModeKind::SingleTemplate,
+                false);
+
+    QVERIFY(plan.acquisitionKind
+            == InspectionAcquisitionKind::SoftwareTrigger);
+    QVERIFY(plan.trackingKind
+            == InspectionTrackingKind::SingleTemplate);
+    QVERIFY(!plan.barcodeWordHardTriggerMode);
+}
+
+void DetectionCompletionTest::runPlanSelectsHardwareBarcodeProfiles()
+{
+    const InspectionRunPlan plan =
+            InspectionRunConfiguration::createPlan(
+                InspectionStartModeKind::BarcodeWordProfiles,
+                true);
+
+    QVERIFY(plan.acquisitionKind
+            == InspectionAcquisitionKind::HardwareTrigger);
+    QVERIFY(plan.trackingKind
+            == InspectionTrackingKind::WordProfiles);
+    QVERIFY(plan.barcodeWordHardTriggerMode);
+}
+
+void DetectionCompletionTest::runPlanSelectsWholeFrameAndWordTracking()
+{
+    InspectionRunPlan plan =
+            InspectionRunConfiguration::createPlan(
+                InspectionStartModeKind::Tissue,
+                false);
+    QVERIFY(plan.trackingKind == InspectionTrackingKind::WholeFrame);
+
+    plan = InspectionRunConfiguration::createPlan(
+                InspectionStartModeKind::WordProfiles,
+                true);
+    QVERIFY(plan.trackingKind == InspectionTrackingKind::WordProfiles);
+    QVERIFY(!plan.barcodeWordHardTriggerMode);
+}
+
+void DetectionCompletionTest::runtimeSettingsRetainValidValues()
+{
+    InspectionRuntimeSettingsInput input;
+    input.imageThresholdText = QStringLiteral(" 70 ");
+    input.tissueThresholdText = QStringLiteral(" 6.250 ");
+    input.rotationIndex = 2;
+    input.colorChannelIndex = 3;
+
+    const InspectionRuntimeSettingsResult result =
+            InspectionRunConfiguration::parseSettings(input);
+
+    QVERIFY(result.isAccepted());
+    QCOMPARE(result.settings.imageThreshold, 70);
+    QCOMPARE(result.settings.tissueThreshold, 6.25);
+    QCOMPARE(result.settings.rotationCode, 2);
+    QCOMPARE(result.settings.colorChannelCode, 3);
+}
+
+void DetectionCompletionTest::runtimeSettingsUseLegacyDefaultsForUnknownIndexes()
+{
+    InspectionRuntimeSettingsInput input;
+    input.imageThresholdText = QStringLiteral("0");
+    input.tissueThresholdText = QStringLiteral("1");
+    input.rotationIndex = 9;
+    input.colorChannelIndex = -1;
+
+    const InspectionRuntimeSettingsResult result =
+            InspectionRunConfiguration::parseSettings(input);
+
+    QVERIFY(result.isAccepted());
+    QCOMPARE(result.settings.rotationCode, 0);
+    QCOMPARE(result.settings.colorChannelCode, 0);
+}
+
+void DetectionCompletionTest::runtimeSettingsRejectInvalidImageThreshold()
+{
+    InspectionRuntimeSettingsInput input;
+    input.tissueThresholdText = QStringLiteral("6");
+
+    input.imageThresholdText = QStringLiteral("abc");
+    InspectionRuntimeSettingsResult result =
+            InspectionRunConfiguration::parseSettings(input);
+    QVERIFY(result.issue
+            == InspectionRuntimeSettingsIssue::InvalidImageThreshold);
+
+    input.imageThresholdText = QStringLiteral("101");
+    result = InspectionRunConfiguration::parseSettings(input);
+    QVERIFY(result.issue
+            == InspectionRuntimeSettingsIssue::InvalidImageThreshold);
+}
+
+void DetectionCompletionTest::runtimeSettingsRejectInvalidTissueThreshold()
+{
+    InspectionRuntimeSettingsInput input;
+    input.imageThresholdText = QStringLiteral("70");
+
+    input.tissueThresholdText = QStringLiteral("0");
+    InspectionRuntimeSettingsResult result =
+            InspectionRunConfiguration::parseSettings(input);
+    QVERIFY(result.issue
+            == InspectionRuntimeSettingsIssue::InvalidTissueThreshold);
+
+    input.tissueThresholdText = QStringLiteral("invalid");
+    result = InspectionRunConfiguration::parseSettings(input);
+    QVERIFY(result.issue
+            == InspectionRuntimeSettingsIssue::InvalidTissueThreshold);
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()

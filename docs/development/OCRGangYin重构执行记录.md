@@ -773,6 +773,13 @@
 - [x] `detection_completion_test`新增8项启动预检业务测试，覆盖空闲接受、访问拒绝优先级、脏参数先于PLC、纸巾免模板、单模板缺失项顺序、字库空/未完成Profile、二维码聚合错误及两类有效Profile；业务测试由27项增至35项，Qt Test预期汇总由`29 passed, 0 failed`增至`37 passed, 0 failed`。
 - [x] 启动预检切片Agent静态检查通过：新头/源和新增测试均为全ASCII源码，避免MSVC2017代码页936再次触发中文窄字符串错误；主工程与运行测试工程各唯一登记新模块；测试声明/定义各35项；Widget旧`barcodeStartErrors/productTemplateErrors`局部决策为0处，访问与资源门禁均唯一委托预检；实际相机/PLC应用、软硬触发线程分支、算法Pipeline、存图和结果协调器文件均未修改；90个受治理功能状态59/2/27/2；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
 - [x] 启动预检与参数门禁Qt Creator集中门禁：2026-08-14用户确认`detection_completion_test`预期`37 passed, 0 failed`、主工程Run qmake/Rebuild/Run、未开相机和模板制作保护、未应用参数取消/继续、模板匹配软触发及二维码硬触发启停均无问题；`RUN-001、SET-004`转为已验证。
+- [x] 启动预检与参数门禁切片已提交为`5026314`（`refactor(runtime): 统一启动预检与参数门禁`），提交后工作区干净。
+- [x] 开始Stage 2采集运行配置与线程装配切片；影响`RUN-001、CAM-003、CAM-004、CAM-006、SET-008、SET-009、SET-010`七项，由原状态进入迁移中。`MyThread/CameraThread`主循环、相机TriggerSource/LineDebouncer/TriggerDelay、Profile深拷贝、算法分发、PLC和结果链均不修改。
+- [x] 新增全ASCII `runtime/inspection_run_configuration.*`：一次生成Software/Hardware采集类型、WholeFrame/SingleTemplate/WordProfiles跟踪类型和二维码硬触发标志；把原0..100图像阈值、大于0纸巾阈值及旋转/通道0..3映射从Widget抽成纯配置解析，非法值仍由Widget显示原中文提示。
+- [x] 新增`runtime/inspection_worker_configurator.*`：软硬采集线程共享完全相同的整图、单模板和多Profile装配分支；硬线程额外接收原二维码模式标志。资源内容、调用先后和线程具体实现不变，Widget删除两套重复装配判断。
+- [x] `detection_completion_test`新增7项运行配置测试，覆盖软触发单模板、硬触发二维码、纸巾整图、普通字库Profile、合法运行参数、越界UI索引旧默认回退以及两种阈值失败；业务测试由35项增至42项，Qt Test预期汇总由`37 passed, 0 failed`增至`44 passed, 0 failed`。
+- [x] 采集运行配置与线程装配Agent静态检查通过：四个新文件及新增测试均为全ASCII源码；主工程对配置/装配源头各唯一登记，运行测试只登记纯配置源头；测试声明/定义各42项；Widget对`createPlan/parseSettings/configureSoftwareWorker/configureHardwareWorker`调用分别唯一，直接`setBypassTracking/setBarcodeWordHardTriggerMode/setPresetBoxes`调用均为0；原`MyThread/CameraThread`、相机/PLC设备、检测Pipeline、结果和存图文件改动0处；90个受治理功能状态54/7/27/2；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] 采集运行配置与线程装配Qt Creator集中门禁：2026-08-14用户确认`detection_completion_test`预期`44 passed, 0 failed`、主工程Run qmake/Rebuild/Run、模板匹配软触发、纸巾整图、二维码硬触发、代表旋转/通道以及判定/统计/存图/PLC均无问题；七个迁移中功能转为已验证。
 
 ## 本地提交记录
 
@@ -826,6 +833,7 @@
 | `45e7340` | Stage 2检测运行会话 | RUN-001、DET-002..006 | 运行UUID、产品递增序号及完成对象组装迁入`DetectionSession`，Widget删除对应可变状态 | 用户确认运行测试及主工程多模式启停、再次启动、判定、计数、存图和PLC均无问题 |
 | `6050116` | Stage 2统一结果处理与ROI边界 | UI-002、UI-005、DET-002..008、RUN-002、PLC-005..007、RES-001..003、SAVE-001 | 五模式统计、存图选择、PLC结果请求和延迟剔除收口到`DetectionResultHandler`；日期ROI期望外扩20像素并裁到原图边界 | 用户确认运行测试23项、靠边ROI连续检测/停止、OK/NG、统计、存图、PLC、延迟剔除和清零入口均正常 |
 | `328aca5` | Stage 2检测运行协调器 | DET-002..006、RUN-001..003、PLC-005..007、RES-001..003、SAVE-001 | 统一启停状态、运行会话、结果统计、存图决策和PLC请求，并拒绝重复/外来完成对象 | 用户确认运行测试29项、模板匹配软触发、二维码硬触发、启停/再次启动、判定/统计/存图均正常 |
+| `5026314` | Stage 2启动预检与参数门禁 | RUN-001、SET-004 | 统一启动拒绝优先级、未应用参数确认及四类模式资源完整性判定，Widget保留原提示和硬件执行 | 用户确认运行测试37项及主工程相机/模板保护、参数取消/继续、软硬触发启停均正常 |
 
 ## 未解决事项
 
@@ -837,7 +845,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2启动预检与参数门禁已通过Qt Creator集中门禁，准备创建独立提交。
+- 当前切片：Stage 2采集运行配置与线程装配已通过Qt Creator集中门禁，准备创建独立提交并执行阶段收口审计。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线59 / 迁移中0 / 已验证29 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交启动预检切片并进入Stage 2采集线程运行编排拆分。
+- 功能状态计数：待盘点0 / 已基线54 / 迁移中0 / 已验证34 / 已延期2 / 已确认删除0。
+- 下一允许动作：提交运行配置/线程装配切片，完成Stage 2结构门禁审计并进入Stage 3首个影子对照基础切片。
