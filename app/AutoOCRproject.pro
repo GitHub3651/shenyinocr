@@ -72,6 +72,8 @@ SOURCES += \
     runtime/inspection_start_preflight.cpp \
     runtime/inspection_worker_configurator.cpp \
     runtime/detection_shadow_comparator.cpp \
+    runtime/frame_queue.cpp \
+    runtime/detection_worker.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/detection_session.cpp \
     runtime/result_handler.cpp \
@@ -137,6 +139,8 @@ HEADERS += \
     runtime/inspection_start_preflight.h \
     runtime/inspection_worker_configurator.h \
     runtime/detection_shadow_comparator.h \
+    runtime/frame_queue.h \
+    runtime/detection_worker.h \
     runtime/inspection_runtime_controller.h \
     runtime/detection_session.h \
     runtime/result_handler.h \

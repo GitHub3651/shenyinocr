@@ -3,7 +3,9 @@
 #include "TrackingTypes.h"
 #include "detection/common/detection_roi_geometry.h"
 #include "runtime/detection_shadow_comparator.h"
+#include "runtime/detection_worker.h"
 #include "runtime/detection_session.h"
+#include "runtime/frame_queue.h"
 #include "runtime/image_save_service.h"
 #include "runtime/inspection_run_configuration.h"
 #include "runtime/inspection_start_preflight.h"
@@ -14,6 +16,7 @@
 #include <condition_variable>
 #include <future>
 #include <mutex>
+#include <thread>
 
 namespace {
 ProductKey testProductKey(quint64 sequence)
@@ -78,6 +81,21 @@ DetectionResult shadowSampleResult()
     result.overlay.polygons.push_back(polygon);
     return result;
 }
+
+std::shared_ptr<const FrameData> workerTestFrame(quint64 sequence)
+{
+    return makeFrameData(
+                testProductKey(sequence),
+                sequence,
+                0,
+                QDateTime::fromMSecsSinceEpoch(
+                    static_cast<qint64>(sequence)),
+                cv::Mat(
+                    2,
+                    2,
+                    CV_8UC1,
+                    cv::Scalar(static_cast<int>(sequence % 255))));
+}
 }
 
 class DetectionCompletionTest : public QObject
@@ -126,6 +144,14 @@ private slots:
     void shadowComparisonAppliesGeometryTolerance();
     void shadowComparisonReportsOrderedOverlayDifferences();
     void shadowComparisonCanIncludeDiagnostic();
+    void frameQueueRequiresValidFramesAndPositiveCapacity();
+    void frameQueuePreservesSubmissionOrder();
+    void frameQueueWaitsForSpaceWithoutDroppingFrame();
+    void frameQueueCancellationReleasesFramesAndSubmitter();
+    void detectionWorkerProcessesFramesSeriallyInOrder();
+    void detectionWorkerRejectsSubmissionOutsideRun();
+    void detectionWorkerCancellationSuppressesPendingResults();
+    void detectionWorkerCanRestartAfterWait();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void saveTaskRequiresProductAndAllItems();
@@ -1044,6 +1070,287 @@ void DetectionCompletionTest::shadowComparisonCanIncludeDiagnostic()
 
     QVERIFY(comparison.differences.contains(
                 QStringLiteral("result.diagnostic")));
+}
+
+void DetectionCompletionTest::frameQueueRequiresValidFramesAndPositiveCapacity()
+{
+    FrameQueue queue(0);
+    QCOMPARE(static_cast<int>(queue.capacity()), 1);
+    QVERIFY(!queue.submit(std::shared_ptr<const FrameData>()));
+
+    std::shared_ptr<FrameData> invalidFrame(new FrameData);
+    QVERIFY(!queue.submit(invalidFrame));
+
+    const std::shared_ptr<const FrameData> validFrame = workerTestFrame(1);
+    QVERIFY(queue.submit(validFrame));
+    QCOMPARE(static_cast<int>(queue.size()), 1);
+
+    std::shared_ptr<const FrameData> takenFrame;
+    QVERIFY(queue.waitAndTake(&takenFrame));
+    QCOMPARE(takenFrame->productKey.sequence, quint64(1));
+    QCOMPARE(static_cast<int>(queue.size()), 0);
+    queue.cancel();
+}
+
+void DetectionCompletionTest::frameQueuePreservesSubmissionOrder()
+{
+    FrameQueue queue(3);
+    QVERIFY(queue.submit(workerTestFrame(1)));
+    QVERIFY(queue.submit(workerTestFrame(2)));
+    QVERIFY(queue.submit(workerTestFrame(3)));
+
+    for (quint64 sequence = 1; sequence <= 3; ++sequence) {
+        std::shared_ptr<const FrameData> frame;
+        QVERIFY(queue.waitAndTake(&frame));
+        QCOMPARE(frame->productKey.sequence, sequence);
+    }
+    queue.cancel();
+}
+
+void DetectionCompletionTest::frameQueueWaitsForSpaceWithoutDroppingFrame()
+{
+    FrameQueue queue(1);
+    QVERIFY(queue.submit(workerTestFrame(1)));
+    const std::shared_ptr<const FrameData> secondFrame = workerTestFrame(2);
+
+    std::future<bool> blockedSubmit = std::async(
+                std::launch::async,
+                [&queue, secondFrame]() {
+        return queue.submit(secondFrame);
+    });
+    QVERIFY(blockedSubmit.wait_for(std::chrono::milliseconds(20))
+            == std::future_status::timeout);
+
+    std::shared_ptr<const FrameData> frame;
+    QVERIFY(queue.waitAndTake(&frame));
+    QCOMPARE(frame->productKey.sequence, quint64(1));
+    QVERIFY(blockedSubmit.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    QVERIFY(blockedSubmit.get());
+
+    QVERIFY(queue.waitAndTake(&frame));
+    QCOMPARE(frame->productKey.sequence, quint64(2));
+    queue.cancel();
+}
+
+void DetectionCompletionTest::frameQueueCancellationReleasesFramesAndSubmitter()
+{
+    FrameQueue queue(1);
+    std::shared_ptr<const FrameData> firstFrame = workerTestFrame(1);
+    std::weak_ptr<const FrameData> firstWeak = firstFrame;
+    QVERIFY(queue.submit(firstFrame));
+    firstFrame.reset();
+
+    const std::shared_ptr<const FrameData> secondFrame = workerTestFrame(2);
+    std::future<bool> blockedSubmit = std::async(
+                std::launch::async,
+                [&queue, secondFrame]() {
+        return queue.submit(secondFrame);
+    });
+    QVERIFY(blockedSubmit.wait_for(std::chrono::milliseconds(20))
+            == std::future_status::timeout);
+
+    QCOMPARE(static_cast<int>(queue.cancel()), 1);
+    QVERIFY(blockedSubmit.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    QVERIFY(!blockedSubmit.get());
+    QVERIFY(firstWeak.expired());
+    QVERIFY(queue.isCancelled());
+    QVERIFY(queue.reopen());
+    QVERIFY(!queue.isCancelled());
+    queue.cancel();
+}
+
+void DetectionCompletionTest::detectionWorkerProcessesFramesSeriallyInOrder()
+{
+    std::atomic<int> activeCount(0);
+    std::atomic<int> maximumActiveCount(0);
+    std::atomic<int> failureCount(0);
+    std::mutex resultMutex;
+    std::condition_variable resultAvailable;
+    std::vector<quint64> resultSequences;
+
+    DetectionWorker worker(
+                2,
+                [&activeCount, &maximumActiveCount](
+                    const std::shared_ptr<const FrameData> &frame) {
+        const int active = activeCount.fetch_add(1) + 1;
+        int maximum = maximumActiveCount.load();
+        while (active > maximum
+               && !maximumActiveCount.compare_exchange_weak(
+                   maximum,
+                   active)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        activeCount.fetch_sub(1);
+
+        DetectionResult result;
+        result.modeId = QStringLiteral("serial-test");
+        result.verdict = AlgorithmVerdict::Ok;
+        result.status = DetectionStatus::Completed;
+        result.recognizedText = QString::number(
+                    frame->productKey.sequence);
+        return result;
+    },
+    [&resultMutex, &resultAvailable, &resultSequences](
+        const DetectionCompletion &completion) {
+        std::lock_guard<std::mutex> lock(resultMutex);
+        resultSequences.push_back(
+                    completion.frame->productKey.sequence);
+        resultAvailable.notify_all();
+    },
+    [&failureCount](const QString &) {
+        failureCount.fetch_add(1);
+    });
+
+    QVERIFY(worker.start());
+    for (quint64 sequence = 1; sequence <= 4; ++sequence) {
+        QVERIFY(worker.submit(workerTestFrame(sequence)));
+    }
+
+    {
+        std::unique_lock<std::mutex> lock(resultMutex);
+        QVERIFY(resultAvailable.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&resultSequences]() {
+            return resultSequences.size() == 4;
+        }));
+    }
+    worker.requestStop();
+    worker.wait();
+
+    QCOMPARE(maximumActiveCount.load(), 1);
+    QCOMPARE(failureCount.load(), 0);
+    QCOMPARE(worker.processedFrameCount(), quint64(4));
+    QCOMPARE(worker.cancelledFrameCount(), quint64(0));
+    QCOMPARE(static_cast<int>(resultSequences.size()), 4);
+    for (quint64 sequence = 1; sequence <= 4; ++sequence) {
+        QCOMPARE(resultSequences[static_cast<std::size_t>(sequence - 1)],
+                 sequence);
+    }
+}
+
+void DetectionCompletionTest::detectionWorkerRejectsSubmissionOutsideRun()
+{
+    DetectionWorker worker(
+                1,
+                [](const std::shared_ptr<const FrameData> &) {
+        DetectionResult result;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [](const DetectionCompletion &) {
+    });
+
+    QVERIFY(!worker.submit(workerTestFrame(1)));
+    QVERIFY(worker.start());
+    QVERIFY(!worker.start());
+    worker.requestStop();
+    worker.wait();
+    QVERIFY(!worker.isRunning());
+    QVERIFY(!worker.submit(workerTestFrame(2)));
+}
+
+void DetectionCompletionTest::detectionWorkerCancellationSuppressesPendingResults()
+{
+    std::mutex gateMutex;
+    std::condition_variable gateChanged;
+    bool detectorEntered = false;
+    bool releaseDetector = false;
+    std::atomic<int> completionCount(0);
+
+    DetectionWorker worker(
+                3,
+                [&gateMutex, &gateChanged, &detectorEntered, &releaseDetector](
+                    const std::shared_ptr<const FrameData> &) {
+        std::unique_lock<std::mutex> lock(gateMutex);
+        detectorEntered = true;
+        gateChanged.notify_all();
+        gateChanged.wait(lock, [&releaseDetector]() {
+            return releaseDetector;
+        });
+        DetectionResult result;
+        result.verdict = AlgorithmVerdict::Ok;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [&completionCount](const DetectionCompletion &) {
+        completionCount.fetch_add(1);
+    });
+
+    QVERIFY(worker.start());
+    QVERIFY(worker.submit(workerTestFrame(1)));
+    {
+        std::unique_lock<std::mutex> lock(gateMutex);
+        QVERIFY(gateChanged.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&detectorEntered]() {
+            return detectorEntered;
+        }));
+    }
+    QVERIFY(worker.submit(workerTestFrame(2)));
+    QVERIFY(worker.submit(workerTestFrame(3)));
+
+    worker.requestStop();
+    {
+        std::lock_guard<std::mutex> lock(gateMutex);
+        releaseDetector = true;
+    }
+    gateChanged.notify_all();
+    worker.wait();
+
+    QCOMPARE(completionCount.load(), 0);
+    QCOMPARE(worker.processedFrameCount(), quint64(0));
+    QCOMPARE(worker.cancelledFrameCount(), quint64(3));
+    QCOMPARE(static_cast<int>(worker.queuedFrameCount()), 0);
+}
+
+void DetectionCompletionTest::detectionWorkerCanRestartAfterWait()
+{
+    std::mutex resultMutex;
+    std::condition_variable resultAvailable;
+    std::vector<quint64> resultSequences;
+
+    DetectionWorker worker(
+                1,
+                [](const std::shared_ptr<const FrameData> &) {
+        DetectionResult result;
+        result.verdict = AlgorithmVerdict::Ok;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [&resultMutex, &resultAvailable, &resultSequences](
+        const DetectionCompletion &completion) {
+        std::lock_guard<std::mutex> lock(resultMutex);
+        resultSequences.push_back(
+                    completion.frame->productKey.sequence);
+        resultAvailable.notify_all();
+    });
+
+    for (quint64 sequence = 1; sequence <= 2; ++sequence) {
+        QVERIFY(worker.start());
+        QVERIFY(worker.submit(workerTestFrame(sequence)));
+        {
+            std::unique_lock<std::mutex> lock(resultMutex);
+            QVERIFY(resultAvailable.wait_for(
+                        lock,
+                        std::chrono::seconds(2),
+                        [&resultSequences, sequence]() {
+                return resultSequences.size()
+                        == static_cast<std::size_t>(sequence);
+            }));
+        }
+        worker.requestStop();
+        worker.wait();
+        QVERIFY(!worker.isRunning());
+    }
+
+    QCOMPARE(worker.processedFrameCount(), quint64(2));
+    QCOMPARE(worker.cancelledFrameCount(), quint64(0));
+    QCOMPARE(resultSequences[0], quint64(1));
+    QCOMPARE(resultSequences[1], quint64(2));
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()
