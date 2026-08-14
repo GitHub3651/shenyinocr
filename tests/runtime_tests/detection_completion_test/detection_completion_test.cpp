@@ -152,6 +152,7 @@ private slots:
     void frameQueueWaitsForSpaceWithoutDroppingFrame();
     void frameQueueCancellationReleasesFramesAndSubmitter();
     void detectionWorkerProcessesFramesSeriallyInOrder();
+    void runtimeControllerAcceptedFramesFlowThroughDetectionWorker();
     void detectionWorkerRejectsSubmissionOutsideRun();
     void detectionWorkerCancellationSuppressesPendingResults();
     void detectionWorkerCanRestartAfterWait();
@@ -1350,6 +1351,75 @@ void DetectionCompletionTest::detectionWorkerProcessesFramesSeriallyInOrder()
         QCOMPARE(resultSequences[static_cast<std::size_t>(sequence - 1)],
                  sequence);
     }
+}
+
+void DetectionCompletionTest::runtimeControllerAcceptedFramesFlowThroughDetectionWorker()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("software-run");
+    });
+    QCOMPARE(controller.beginStart(), QStringLiteral("software-run"));
+    QVERIFY(controller.markRunning());
+
+    std::mutex outcomeMutex;
+    std::condition_variable outcomeAvailable;
+    bool resultRecorded = false;
+    ProductKey recordedKey;
+
+    DetectionWorker worker(
+                1,
+                [](const std::shared_ptr<const FrameData> &) {
+        DetectionResult result;
+        result.modeId = QStringLiteral("tissue_detection");
+        result.verdict = AlgorithmVerdict::Ok;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [&controller,
+     &outcomeMutex,
+     &outcomeAvailable,
+     &resultRecorded,
+     &recordedKey](const DetectionCompletion &workerCompletion) {
+        const DetectionCompletion acceptedCompletion =
+                controller.complete(
+                    workerCompletion.frame,
+                    workerCompletion.result);
+        const DetectionResultHandlingOutcome outcome =
+                controller.record(acceptedCompletion, 0, 0);
+        {
+            std::lock_guard<std::mutex> lock(outcomeMutex);
+            resultRecorded = outcome.resultRecorded;
+            if (acceptedCompletion.frame) {
+                recordedKey = acceptedCompletion.frame->productKey;
+            }
+        }
+        outcomeAvailable.notify_all();
+    });
+
+    QVERIFY(worker.start());
+    const std::shared_ptr<const FrameData> frame =
+            controller.acceptFrame(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(4)));
+    QVERIFY(frame);
+    QVERIFY(worker.submit(frame));
+    {
+        std::unique_lock<std::mutex> lock(outcomeMutex);
+        QVERIFY(outcomeAvailable.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&resultRecorded]() {
+            return resultRecorded;
+        }));
+    }
+    worker.requestStop();
+    worker.wait();
+
+    QCOMPARE(recordedKey.runId, QStringLiteral("software-run"));
+    QCOMPARE(recordedKey.sequence, quint64(1));
+    QCOMPARE(controller.acceptedProductCount(), quint64(1));
+    QCOMPARE(controller.completedProductCount(), quint64(1));
+    QCOMPARE(controller.totalCount(), 1);
+    QCOMPARE(controller.ngCount(), 0);
 }
 
 void DetectionCompletionTest::detectionWorkerRejectsSubmissionOutsideRun()

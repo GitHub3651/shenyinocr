@@ -16,6 +16,7 @@
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/imgproc.hpp"
 #include <chrono>
+#include <atomic>
 #include <iomanip>
 #include <memory>
 #include <vector>
@@ -60,6 +61,7 @@
 #include <Detector.h>
 #include "TrackingTypes.h"
 #include "appsettingsmanager.h"
+#include "recipes/product_recipe.h"
 #include "recipes/template_profile_assets.h"
 #include "recipes/template_recipe_workflow.h"
 #include "devices/barcode/barcode_decoder_adapter.h"
@@ -82,6 +84,7 @@ class QFrame;
 class QDialog;
 class QPushButton;
 class ImageSaveService;
+class DetectionWorker;
 struct RecipeSelection;
 
 /**
@@ -344,6 +347,18 @@ private:
     bool hasRunningInspectionThread() const;
     void handleStreamingFrame(const cv::Mat &image);
     bool shouldSuppressStreamingFrame() const;
+    void connectSoftwareDetectionSignals(MyThread *thread);
+    bool startSoftwareTissueDetectionWorker(QString *errorMessage);
+    void requestSoftwareDetectionWorkerStop();
+    void waitForSoftwareDetectionWorkerStop();
+    void submitSoftwareDetectionFrame(const cv::Mat &image);
+    void handleSoftwareTissueCompletion(
+        const DetectionCompletion &completion,
+        const TissueRollResult &tissueResult);
+    void finalizeTissueResult(
+        cv::Mat *image,
+        const TissueRollResult &tissueResult,
+        const DetectionCompletion &acceptedCompletion);
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -398,6 +413,9 @@ private:
     bool m_applicationExitInProgress = false;
     bool m_detectionRoiWarningActive = false;
     InspectionRuntimeController m_runtimeController;
+    std::unique_ptr<DetectionWorker> m_softwareDetectionWorker;
+    std::atomic<bool> m_softwareDetectionQueueActive{false};
+    TissueRecipeParameters m_tissueRecipeParameters;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;

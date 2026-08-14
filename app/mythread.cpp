@@ -36,11 +36,6 @@ void MyThread::setPresetBoxes(const std::vector<cv::Point2f>& datePoly, const cv
 
 void MyThread::clearPresetBoxes() { usePresetBoxes = false; }
 void MyThread::setBypassTracking(bool enabled) { bypassTracking = enabled; }
-void MyThread::setTissueRecipeParameters(
-        const TissueRecipeParameters &parameters)
-{
-    m_tissueRecipeParameters = parameters;
-}
 
 void MyThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles) {
     m_wordTrackingProfiles.clear();
@@ -246,9 +241,6 @@ void MyThread::run() {
         return;
     }
 
-    const TissueDetectionPipeline tissuePipeline(
-                m_tissueRecipeParameters);
-
     m_tracking.store(!m_trackingTemplate.empty() && m_poseMatcher.isReady());
 
     std::vector<cv::Point2f> initialDatePoly = presetDatePoly;
@@ -301,14 +293,8 @@ void MyThread::run() {
                 int interval = receivedata.toInt();
                 if (interval <= 0) interval = 300;
                 if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
-                    cv::Mat detectionImage = imagePtr->clone();
-                    auto detectStart = std::chrono::high_resolution_clock::now();
-                    TissueRollResult result =
-                            tissuePipeline.detect(detectionImage);
-                    auto detectEnd = std::chrono::high_resolution_clock::now();
-                    result.processingTimeMs = static_cast<int>(
-                        std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
-                    emit signal_sendTissueResult(detectionImage, result);
+                    emit signal_sendWholeFrameForDetection(
+                                imagePtr->clone());
                     lastDetectionTime = now;
                 }
             } else {

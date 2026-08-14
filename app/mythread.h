@@ -13,7 +13,6 @@
 #include "Zhuizong.h"
 #include "TrackingPoseMatcher.h"
 #include "TrackingTypes.h"
-#include "detection/tissue/tissue_detection_pipeline.h"
 
 using namespace cv;
 using namespace std;
@@ -81,8 +80,6 @@ public:
 
     // 纸巾检测使用整图，不需要追踪模板和定位姿态。
     void setBypassTracking(bool enabled);
-    void setTissueRecipeParameters(
-            const TissueRecipeParameters &parameters);
 
     void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
     void clearWordTemplateTrackingProfiles();
@@ -129,11 +126,9 @@ signals:
     void signal_sendForDetection(cv::Mat image, DetectionPose pose);
 
     /**
-     * @brief 发送纸巾检测结果
-     * @param image 已检测的整帧图像
-     * @param result 纸巾检测结果
+     * @brief 发送不需要定位姿态的整帧检测输入
      */
-    void signal_sendTissueResult(cv::Mat image, TissueRollResult result);
+    void signal_sendWholeFrameForDetection(cv::Mat image);
 
     /**
      * @brief 清除标签信号
@@ -196,8 +191,6 @@ private:
     int angle1;                         // 图像旋转角度 (0-3)
     int colorc1;                        // 图像颜色通道
     QString receivedata = "300";        // 检测间隔时间（毫秒）
-    TissueRecipeParameters m_tissueRecipeParameters;
-
     // 线程控制（线程安全）
     std::atomic<bool> m_stopRequested;  // 停止请求标志
     std::atomic<bool> m_tracking;       // 跟踪状态标志

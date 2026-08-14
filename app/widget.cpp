@@ -23,11 +23,13 @@
 #include "detection/common/detection_roi_geometry.h"
 #include "detection/ocr/ocr_detection_pipeline.h"
 #include "detection/stamp/stamp_detection_pipeline.h"
+#include "detection/tissue/tissue_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
 #include "devices/camera/hikvision_camera_device.h"
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
 #include "runtime/image_save_service.h"
+#include "runtime/detection_worker.h"
 
 
 // Qt核心组件
@@ -519,6 +521,11 @@ static bool g_lastStampIsOverlap = false;      // 记录钢印是否发生重叠
 static bool g_allowTissueDetectionFrameDisplay = false;
 static TissueRollItem g_lastTissueRoll;
 static bool g_hasLastTissueRoll = false;
+
+struct SoftwareTissueDetectionState
+{
+    TissueRollResult lastResult;
+};
 
 static cv::Mat makeBgrCopy(const cv::Mat& image)
 {
@@ -1131,6 +1138,7 @@ Widget::~Widget()
     qDebug() << "Widget destructor called";
 
     m_runtimeController.requestStop();
+    requestSoftwareDetectionWorkerStop();
     resetTemplateCaptureState();
 
     // 先停止线程并断开信号，避免窗口销毁时 queued signal 再访问 ui。
@@ -1172,6 +1180,8 @@ Widget::~Widget()
         }
         cameraThread = nullptr;
     }
+
+    waitForSoftwareDetectionWorkerStop();
 
     // 线程退出后再关闭相机，避免工作线程仍在访问相机对象。
     if (m_cameraDevice && m_bOpenDevice
@@ -1259,13 +1269,8 @@ void Widget::initWidget()
         this->handleStreamingFrame(img);
     }, Qt::QueuedConnection);
 
-    // 连接线程信号槽 - 图像检测（根据检测模式选择不同的处理函数）
-    QObject::connect(myThread, &MyThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-        this->dispatchDetectionByMode(&img, pose);
-    });
-    QObject::connect(myThread, &MyThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
-        this->slot_handleTissueResult(&img, result);
-    }, Qt::QueuedConnection);
+    // 连接软触发检测入口。纸巾模式直接反压采集线程，其他模式保持原UI排队路径。
+    connectSoftwareDetectionSignals(myThread);
 
 
     // 连接其他信号槽
@@ -1276,6 +1281,31 @@ void Widget::initWidget()
     connect(this, &Widget::imgshibie, templatematch, &TemplateMatch::receshibie);
     connect(this, &Widget::ssim, templatematch, &TemplateMatch::ssimvalue);
     connectTemplatePreviewSignals(myThread);
+}
+
+void Widget::connectSoftwareDetectionSignals(MyThread *thread)
+{
+    if (!thread) {
+        return;
+    }
+
+    connect(thread,
+            &MyThread::signal_sendWholeFrameForDetection,
+            this,
+            [this](cv::Mat image) {
+        if (m_softwareDetectionQueueActive.load()) {
+            submitSoftwareDetectionFrame(image);
+        }
+    },
+    Qt::DirectConnection);
+
+    connect(thread,
+            &MyThread::signal_sendForDetection,
+            this,
+            [this](cv::Mat image, DetectionPose pose) {
+        dispatchDetectionByMode(&image, pose);
+    },
+    Qt::QueuedConnection);
 }
 
 
@@ -1395,6 +1425,138 @@ void Widget::markInspectionRunning()
 void Widget::finishInspectionStop()
 {
     m_runtimeController.finishStop();
+}
+
+bool Widget::startSoftwareTissueDetectionWorker(
+        QString *errorMessage)
+{
+    waitForSoftwareDetectionWorkerStop();
+
+    const std::shared_ptr<TissueDetectionPipeline> pipeline(
+                new TissueDetectionPipeline(
+                    m_tissueRecipeParameters));
+    const std::shared_ptr<SoftwareTissueDetectionState> state(
+                new SoftwareTissueDetectionState);
+    std::unique_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    [pipeline, state](
+                        const std::shared_ptr<const FrameData> &frame) {
+        const std::chrono::high_resolution_clock::time_point start =
+                std::chrono::high_resolution_clock::now();
+        TissueRollResult tissueResult =
+                pipeline->detect(frame->originalImage);
+        tissueResult.processingTimeMs = static_cast<int>(
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::high_resolution_clock::now() - start)
+                    .count());
+        state->lastResult = tissueResult;
+        return TissueDetectionPipeline::toDetectionResult(
+                    tissueResult);
+    },
+    [this, state](const DetectionCompletion &completion) {
+        const TissueRollResult tissueResult = state->lastResult;
+        QMetaObject::invokeMethod(
+                    this,
+                    [this, completion, tissueResult]() {
+            handleSoftwareTissueCompletion(
+                        completion,
+                        tissueResult);
+        },
+        Qt::QueuedConnection);
+    },
+    [this](const QString &message) {
+        QMetaObject::invokeMethod(
+                    this,
+                    [message]() {
+            qWarning() << "[DETECTION_WORKER]"
+                       << message;
+        },
+        Qt::QueuedConnection);
+    }));
+
+    if (!worker->start()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u65e0\u6cd5\u542f\u52a8\u8f6f\u89e6\u53d1"
+                        "\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        }
+        return false;
+    }
+
+    m_softwareDetectionWorker = std::move(worker);
+    m_softwareDetectionQueueActive.store(true);
+    qDebug() << "[DETECTION_WORKER] software tissue worker started"
+             << "queueCapacity="
+             << static_cast<qulonglong>(
+                    m_softwareDetectionWorker->queueCapacity());
+    return true;
+}
+
+void Widget::requestSoftwareDetectionWorkerStop()
+{
+    m_softwareDetectionQueueActive.store(false);
+    if (m_softwareDetectionWorker) {
+        m_softwareDetectionWorker->requestStop();
+    }
+}
+
+void Widget::waitForSoftwareDetectionWorkerStop()
+{
+    requestSoftwareDetectionWorkerStop();
+    if (!m_softwareDetectionWorker) {
+        return;
+    }
+
+    m_softwareDetectionWorker->wait();
+    qDebug() << "[DETECTION_WORKER] software worker stopped"
+             << "processed="
+             << m_softwareDetectionWorker->processedFrameCount()
+             << "cancelled="
+             << m_softwareDetectionWorker->cancelledFrameCount();
+    m_softwareDetectionWorker.reset();
+}
+
+void Widget::submitSoftwareDetectionFrame(
+        const cv::Mat &image)
+{
+    if (!m_softwareDetectionQueueActive.load()
+            || image.empty()) {
+        return;
+    }
+
+    const std::shared_ptr<const FrameData> frame =
+            m_runtimeController.acceptFrame(image);
+    if (!frame) {
+        return;
+    }
+
+    DetectionWorker *worker = m_softwareDetectionWorker.get();
+    if (!worker || !worker->submit(frame)) {
+        qDebug() << "[DETECTION_WORKER] software frame rejected"
+                 << frame->productKey.runId
+                 << frame->productKey.sequence;
+    }
+}
+
+void Widget::handleSoftwareTissueCompletion(
+        const DetectionCompletion &completion,
+        const TissueRollResult &tissueResult)
+{
+    const DetectionCompletion acceptedCompletion =
+            m_runtimeController.complete(
+                completion.frame,
+                completion.result);
+    if (!acceptedCompletion.isValid()) {
+        qDebug() << "[DETECTION_WORKER] stale tissue completion ignored";
+        return;
+    }
+
+    cv::Mat image = acceptedCompletion.frame->originalImage;
+    finalizeTissueResult(
+                &image,
+                tissueResult,
+                acceptedCompletion);
 }
 
 DetectionCompletion Widget::makeDetectionCompletion(
@@ -3040,6 +3202,17 @@ void Widget::finalizeBarcodeWordNg(
  */
 void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResult)
 {
+    finalizeTissueResult(
+                image,
+                tissueResult,
+                DetectionCompletion());
+}
+
+void Widget::finalizeTissueResult(
+        cv::Mat *image,
+        const TissueRollResult &tissueResult,
+        const DetectionCompletion &acceptedCompletion)
+{
     processDueDelayedNgRequest();
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -3115,17 +3288,20 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
     }
 
     if (j % x == 0) {
-        const DetectionCompletion completion = makeDetectionCompletion(
-                    *image,
-                    isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
-                    tissueRecognitionText,
-                    QString::fromStdString(tissueResult.message),
-                    tissueResult.processingTimeMs > 0
-                    ? static_cast<double>(tissueResult.processingTimeMs)
-                    : static_cast<double>(
-                        std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::high_resolution_clock::now() - start)
-                        .count()));
+        DetectionCompletion completion = acceptedCompletion;
+        if (!completion.isValid()) {
+            completion = makeDetectionCompletion(
+                        *image,
+                        isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
+                        tissueRecognitionText,
+                        QString::fromStdString(tissueResult.message),
+                        tissueResult.processingTimeMs > 0
+                        ? static_cast<double>(tissueResult.processingTimeMs)
+                        : static_cast<double>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::high_resolution_clock::now() - start)
+                            .count()));
+        }
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
         const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
                     completion,
@@ -3493,6 +3669,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
 
         if (m_operationState
                 == OperationState::Detecting) {
+            requestSoftwareDetectionWorkerStop();
             finishInspectionStop();
             isCollecting = false;
             clearWordTemplateRunSnapshot();
@@ -8686,9 +8863,7 @@ void Widget::applyTissueRecipeParametersToThreads(
 {
     TissueRecipeParameters parameters;
     parameters.roughnessThreshold = roughnessThreshold;
-    if (myThread) {
-        myThread->setTissueRecipeParameters(parameters);
-    }
+    m_tissueRecipeParameters = parameters;
     if (cameraThread) {
         cameraThread->setTissueRecipeParameters(parameters);
     }
@@ -9387,6 +9562,7 @@ void Widget::on_cancel_clicked()
 
     m_operationState = OperationState::Stopping;
     m_runtimeController.requestStop();
+    requestSoftwareDetectionWorkerStop();
     updateOperationUiState();
     m_barcodeWordRunActive = false;
 
@@ -9431,6 +9607,8 @@ void Widget::on_cancel_clicked()
             cameraThread = nullptr;
         }
     }
+
+    waitForSoftwareDetectionWorkerStop();
 
     if (!myThreadStopped || !cameraThreadStopped) {
         ui->statusLabel->setText("停止中，请稍后再关闭相机");
@@ -10102,6 +10280,7 @@ void Widget::closeEvent(QCloseEvent *event)
     m_applicationExitInProgress = true;
     m_operationState = OperationState::Stopping;
     m_runtimeController.requestStop();
+    requestSoftwareDetectionWorkerStop();
     clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
     isCollecting = false;
@@ -12160,6 +12339,23 @@ void Widget::on_plcbtn_clicked()
             }
             m_resultBoundDisplayActive = isWordMode;
             beginInspectionStart();
+            if (isTissueMode) {
+                QString workerError;
+                if (!startSoftwareTissueDetectionWorker(
+                            &workerError)) {
+                    finishInspectionStop();
+                    m_resultBoundDisplayActive = false;
+                    clearWordTemplateRunSnapshot();
+                    m_barcodeWordRunActive = false;
+                    QMessageBox::warning(
+                                this,
+                                QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                                workerError);
+                    return;
+                }
+            } else {
+                waitForSoftwareDetectionWorkerStop();
+            }
             myThread->start();
             markInspectionRunning();
             m_barcodeWordRunActive = isBarcodeWordMode;
@@ -12349,13 +12545,8 @@ void Widget::reinitializeMyThread()
     connect(myThread, &MyThread::signal_boxesSelected,
             this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
 
-    // 连接信号槽 - 图像检测（根据检测模式）
-    QObject::connect(myThread, &MyThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-        this->dispatchDetectionByMode(&img, pose);
-    });
-    QObject::connect(myThread, &MyThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
-        this->slot_handleTissueResult(&img, result);
-    }, Qt::QueuedConnection);
+    // 连接信号槽 - 图像检测（纸巾走有界队列，其他模式保持原路径）
+    connectSoftwareDetectionSignals(myThread);
 
     // 步骤6: 连接其他控制信号
     connect(this, &Widget::rotate, myThread, &MyThread::receiveangle);

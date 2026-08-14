@@ -3,6 +3,8 @@
 #include "runtime/detection_session.h"
 #include "runtime/result_handler.h"
 
+#include <mutex>
+
 enum class InspectionRuntimeState {
     Idle,
     Starting,
@@ -65,6 +67,7 @@ public:
     void clearPendingDelayedNgRequests();
 
 private:
+    mutable std::mutex m_mutex;
     InspectionRuntimeState m_state = InspectionRuntimeState::Idle;
     DetectionSession m_session;
     DetectionResultHandler m_resultHandler;

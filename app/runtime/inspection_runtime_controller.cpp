@@ -8,6 +8,7 @@ InspectionRuntimeController::InspectionRuntimeController(
 
 QString InspectionRuntimeController::beginStart()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Idle) {
         return QString();
     }
@@ -20,6 +21,7 @@ QString InspectionRuntimeController::beginStart()
 
 bool InspectionRuntimeController::markRunning()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Starting) {
         return false;
     }
@@ -30,6 +32,7 @@ bool InspectionRuntimeController::markRunning()
 
 bool InspectionRuntimeController::requestStop()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state == InspectionRuntimeState::Stopping) {
         return true;
     }
@@ -44,16 +47,19 @@ bool InspectionRuntimeController::requestStop()
 
 void InspectionRuntimeController::finishStop()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_state = InspectionRuntimeState::Idle;
 }
 
 void InspectionRuntimeController::markFault()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_state = InspectionRuntimeState::Fault;
 }
 
 void InspectionRuntimeController::acknowledgeFault()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state == InspectionRuntimeState::Fault) {
         m_state = InspectionRuntimeState::Idle;
     }
@@ -61,11 +67,13 @@ void InspectionRuntimeController::acknowledgeFault()
 
 InspectionRuntimeState InspectionRuntimeController::state() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_state;
 }
 
 bool InspectionRuntimeController::isBusy() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_state == InspectionRuntimeState::Starting
             || m_state == InspectionRuntimeState::Running
             || m_state == InspectionRuntimeState::Stopping;
@@ -73,21 +81,25 @@ bool InspectionRuntimeController::isBusy() const
 
 bool InspectionRuntimeController::isRunning() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_state == InspectionRuntimeState::Running;
 }
 
 QString InspectionRuntimeController::runId() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_session.runId();
 }
 
 quint64 InspectionRuntimeController::completedProductCount() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_session.completedProductCount();
 }
 
 quint64 InspectionRuntimeController::acceptedProductCount() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_session.acceptedProductCount();
 }
 
@@ -97,6 +109,7 @@ std::shared_ptr<const FrameData> InspectionRuntimeController::acceptFrame(
     int cameraIndex,
     const QDateTime &timestampUtc)
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Starting
             && m_state != InspectionRuntimeState::Running) {
         return std::shared_ptr<const FrameData>();
@@ -113,6 +126,7 @@ DetectionCompletion InspectionRuntimeController::complete(
     const std::shared_ptr<const FrameData> &frame,
     const DetectionResult &result)
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state == InspectionRuntimeState::Idle
             || m_state == InspectionRuntimeState::Fault) {
         return DetectionCompletion();
@@ -128,6 +142,7 @@ DetectionCompletion InspectionRuntimeController::complete(
     int cameraIndex,
     const QDateTime &timestampUtc)
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state == InspectionRuntimeState::Idle
             || m_state == InspectionRuntimeState::Fault) {
         return DetectionCompletion();
@@ -146,6 +161,7 @@ DetectionResultHandlingOutcome InspectionRuntimeController::record(
     int imageSaveModeIndex,
     int delayedNgOffset)
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     DetectionResultHandlingOutcome rejected;
     rejected.statistics = m_resultHandler.statistics();
     if (m_state == InspectionRuntimeState::Idle
@@ -175,40 +191,48 @@ DetectionResultHandlingOutcome InspectionRuntimeController::record(
 
 bool InspectionRuntimeController::consumeDueDelayedNgRequest()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_resultHandler.consumeDueDelayedNgRequest();
 }
 
 DetectionResultStatistics InspectionRuntimeController::statistics() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_resultHandler.statistics();
 }
 
 int InspectionRuntimeController::totalCount() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_resultHandler.totalCount();
 }
 
 int InspectionRuntimeController::ngCount() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_resultHandler.ngCount();
 }
 
 int InspectionRuntimeController::pendingDelayedNgCount() const
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     return m_resultHandler.pendingDelayedNgCount();
 }
 
 void InspectionRuntimeController::resetStatistics()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_resultHandler.resetStatistics();
 }
 
 void InspectionRuntimeController::resetNgCount()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_resultHandler.resetNgCount();
 }
 
 void InspectionRuntimeController::clearPendingDelayedNgRequests()
 {
+    std::lock_guard<std::mutex> lock(m_mutex);
     m_resultHandler.clearPendingDelayedNgRequests();
 }

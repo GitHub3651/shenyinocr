@@ -11,6 +11,7 @@ private slots:
     void explicitRecipeThresholdIsRetainedByPipeline();
     void emptyImageIsRejectedWithCurrentDiagnostic();
     void blankImageIsRejectedWithoutAFalseRoll();
+    void genericResultPreservesVerdictTextAndOverlay();
 };
 
 void TissueRollDetectorBaselineTest::recipeDefaultIsSixPointZero()
@@ -55,6 +56,38 @@ void TissueRollDetectorBaselineTest::blankImageIsRejectedWithoutAFalseRoll()
     QVERIFY(QString::fromStdString(result.message).contains(QStringLiteral("rollFound=false")));
     QVERIFY(QString::fromStdString(result.message).contains(
                 QStringLiteral("thresholds(rough<6.000)")));
+}
+
+void TissueRollDetectorBaselineTest::genericResultPreservesVerdictTextAndOverlay()
+{
+    TissueRollResult tissueResult;
+    tissueResult.isOk = false;
+    tissueResult.rollFound = true;
+    tissueResult.processingTimeMs = 17;
+    tissueResult.message = "roughness rejected";
+    tissueResult.roll.roughnessScore = 8.125;
+    tissueResult.roll.outerBbox = cv::Rect(10, 20, 30, 40);
+
+    const DetectionResult result =
+            TissueDetectionPipeline::toDetectionResult(
+                tissueResult);
+
+    QCOMPARE(result.modeId, QStringLiteral("tissue_detection"));
+    QVERIFY(result.verdict == AlgorithmVerdict::Ng);
+    QVERIFY(result.status == DetectionStatus::Completed);
+    QCOMPARE(result.recognizedText,
+             QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a8.125"));
+    QCOMPARE(result.diagnostic,
+             QStringLiteral("roughness rejected"));
+    QCOMPARE(result.elapsedMs, 17.0);
+    QCOMPARE(static_cast<int>(result.overlay.polygons.size()), 1);
+    QCOMPARE(result.overlay.polygons[0].role,
+             QStringLiteral("tissue_roll"));
+    QCOMPARE(result.overlay.polygons[0].score, 8.125);
+    QCOMPARE(result.overlay.polygons[0].points[0].x, 10);
+    QCOMPARE(result.overlay.polygons[0].points[0].y, 20);
+    QCOMPARE(result.overlay.polygons[0].points[2].x, 40);
+    QCOMPARE(result.overlay.polygons[0].points[2].y, 60);
 }
 
 QTEST_APPLESS_MAIN(TissueRollDetectorBaselineTest)

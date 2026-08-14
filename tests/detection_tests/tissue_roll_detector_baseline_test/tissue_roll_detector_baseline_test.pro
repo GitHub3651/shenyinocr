@@ -17,6 +17,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/TissueRollDetector.cpp
 
 HEADERS += \
+    $$PROJECT_ROOT/app/TrackingTypes.h \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
     $$PROJECT_ROOT/app/TissueRollDetector.h
