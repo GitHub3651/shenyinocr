@@ -11,6 +11,12 @@
 
 namespace DetectionRoiGeometry {
 
+struct BarcodeWordOrientedRois
+{
+    OrientedBarcodeRoi barcode;
+    OrientedDateRoi date;
+};
+
 inline cv::Rect expandAndClampRect(
     const cv::Rect &rect,
     int padding,
@@ -172,6 +178,179 @@ inline OrientedDateRoi prepareOrientedDateRoi(
 
     oriented.valid = !oriented.croppedImage.empty();
     return oriented;
+}
+
+inline BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
+    const cv::Mat &source,
+    const DetectionPose &pose,
+    int barcodePaddingPercent,
+    int datePadding)
+{
+    BarcodeWordOrientedRois prepared;
+    if (source.empty() || !pose.valid
+            || pose.barcodePoly.size() != 4) {
+        return prepared;
+    }
+
+    const cv::Mat rotationMatrix = cv::getRotationMatrix2D(
+                pose.anchorCenter,
+                -pose.angleDeg,
+                1.0);
+    cv::Mat inverseRotationMatrix;
+    cv::invertAffineTransform(
+                rotationMatrix,
+                inverseRotationMatrix);
+
+    std::vector<cv::Point> rotatedBarcodePoly =
+            mapAffinePolygon(pose.barcodePoly, rotationMatrix);
+    if (rotatedBarcodePoly.size() != 4) {
+        return prepared;
+    }
+
+    rotatedBarcodePoly = clampPolygonToImage(
+                rotatedBarcodePoly,
+                source.size());
+    const cv::Rect barcodeBounds = cv::boundingRect(
+                rotatedBarcodePoly);
+    if (barcodeBounds.width <= 0 || barcodeBounds.height <= 0) {
+        return prepared;
+    }
+
+    const int shorterBarcodeSide = (std::min)(
+                barcodeBounds.width,
+                barcodeBounds.height);
+    const int barcodePaddingPixels = cvRound(
+                static_cast<double>(shorterBarcodeSide)
+                * static_cast<double>((std::max)(
+                    0,
+                    barcodePaddingPercent))
+                / 100.0);
+    const cv::Rect barcodeRoi = expandAndClampRect(
+                barcodeBounds,
+                barcodePaddingPixels,
+                source.size());
+    if (barcodeRoi.width <= 0 || barcodeRoi.height <= 0) {
+        return prepared;
+    }
+
+    std::vector<cv::Point> rotatedDatePoly;
+    cv::Rect dateRoi;
+    bool hasValidDateRoi = false;
+    if (pose.datePoly.size() >= 3) {
+        rotatedDatePoly = mapAffinePolygon(
+                    pose.datePoly,
+                    rotationMatrix);
+        if (rotatedDatePoly.size() >= 3) {
+            dateRoi = polygonRoiWithClampedPadding(
+                        rotatedDatePoly,
+                        (std::max)(0, datePadding),
+                        source.size(),
+                        &rotatedDatePoly);
+            hasValidDateRoi = dateRoi.width > 0
+                    && dateRoi.height > 0;
+        }
+    }
+
+    const cv::Rect combinedRoi = hasValidDateRoi
+            ? (barcodeRoi | dateRoi)
+            : barcodeRoi;
+    if (combinedRoi.width <= 0 || combinedRoi.height <= 0) {
+        return prepared;
+    }
+
+    cv::Mat localRotationMatrix = rotationMatrix.clone();
+    localRotationMatrix.at<double>(0, 2) -= combinedRoi.x;
+    localRotationMatrix.at<double>(1, 2) -= combinedRoi.y;
+
+    cv::Mat rotatedRegion;
+    cv::warpAffine(
+                source,
+                rotatedRegion,
+                localRotationMatrix,
+                combinedRoi.size(),
+                cv::INTER_LINEAR,
+                cv::BORDER_REPLICATE);
+    if (rotatedRegion.empty()) {
+        return prepared;
+    }
+
+    const cv::Rect localBarcodeRoi(
+                barcodeRoi.x - combinedRoi.x,
+                barcodeRoi.y - combinedRoi.y,
+                barcodeRoi.width,
+                barcodeRoi.height);
+    const cv::Mat barcodeCrop = rotatedRegion(localBarcodeRoi);
+    if (barcodeCrop.channels() == 1) {
+        if (barcodeCrop.depth() == CV_8U) {
+            prepared.barcode.grayRoi = barcodeCrop.clone();
+        } else {
+            barcodeCrop.convertTo(
+                        prepared.barcode.grayRoi,
+                        CV_8U);
+        }
+    } else if (barcodeCrop.channels() == 3) {
+        cv::cvtColor(
+                    barcodeCrop,
+                    prepared.barcode.grayRoi,
+                    cv::COLOR_BGR2GRAY);
+    } else if (barcodeCrop.channels() == 4) {
+        cv::cvtColor(
+                    barcodeCrop,
+                    prepared.barcode.grayRoi,
+                    cv::COLOR_BGRA2GRAY);
+    }
+
+    if (!prepared.barcode.grayRoi.empty()
+            && !prepared.barcode.grayRoi.isContinuous()) {
+        prepared.barcode.grayRoi =
+                prepared.barcode.grayRoi.clone();
+    }
+
+    prepared.barcode.rotatedImage = rotatedRegion;
+    prepared.barcode.rotatedBarcodePoly = rotatedBarcodePoly;
+    prepared.barcode.roi = barcodeRoi;
+    prepared.barcode.rotationMatrix = rotationMatrix;
+    prepared.barcode.inverseRotationMatrix = inverseRotationMatrix;
+    prepared.barcode.valid = !prepared.barcode.grayRoi.empty()
+            && prepared.barcode.grayRoi.type() == CV_8UC1
+            && prepared.barcode.grayRoi.isContinuous();
+
+    if (!hasValidDateRoi) {
+        return prepared;
+    }
+
+    const cv::Rect localDateRoi(
+                dateRoi.x - combinedRoi.x,
+                dateRoi.y - combinedRoi.y,
+                dateRoi.width,
+                dateRoi.height);
+    prepared.date.croppedImage =
+            rotatedRegion(localDateRoi).clone();
+    if (prepared.date.croppedImage.type() != CV_8UC3) {
+        cv::Mat converted;
+        if (prepared.date.croppedImage.channels() == 1) {
+            cv::cvtColor(
+                        prepared.date.croppedImage,
+                        converted,
+                        cv::COLOR_GRAY2BGR);
+        } else if (prepared.date.croppedImage.channels() == 4) {
+            cv::cvtColor(
+                        prepared.date.croppedImage,
+                        converted,
+                        cv::COLOR_BGRA2BGR);
+        } else {
+            converted = prepared.date.croppedImage.clone();
+        }
+        prepared.date.croppedImage = converted;
+    }
+
+    prepared.date.rotatedImage = rotatedRegion;
+    prepared.date.rotatedDatePoly = rotatedDatePoly;
+    prepared.date.roi = dateRoi;
+    prepared.date.rotationMatrix = rotationMatrix;
+    prepared.date.inverseRotationMatrix = inverseRotationMatrix;
+    prepared.date.valid = !prepared.date.croppedImage.empty();
+    return prepared;
 }
 
 inline std::vector<DetectionOverlayPolygon> mapCharacterMatchesToOverlay(

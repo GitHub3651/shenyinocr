@@ -90,6 +90,7 @@ struct RecipeSelection;
 struct OcrDetectionResult;
 struct StampDetectionWorkOutput;
 struct WordDetectionWorkOutput;
+struct BarcodeWordDetectionWorkOutput;
 
 /**
  * @brief 主窗口类
@@ -362,6 +363,7 @@ private:
     bool startSoftwareOcrDetectionWorker(QString *errorMessage);
     bool startSoftwareStampDetectionWorker(QString *errorMessage);
     bool startSoftwareWordDetectionWorker(QString *errorMessage);
+    bool startSoftwareBarcodeWordDetectionWorker(QString *errorMessage);
     void requestSoftwareDetectionWorkerStop();
     void waitForSoftwareDetectionWorkerStop();
     void submitSoftwareDetectionFrame(const cv::Mat &image);
@@ -380,6 +382,9 @@ private:
     void handleSoftwareWordCompletion(
         const DetectionCompletion &completion,
         const WordDetectionWorkOutput &output);
+    void handleSoftwareBarcodeWordCompletion(
+        const DetectionCompletion &completion,
+        const BarcodeWordDetectionWorkOutput &output);
     void finalizeOcrResult(
         cv::Mat *image,
         const DetectionPose &pose,
@@ -397,6 +402,10 @@ private:
     void finalizeSoftwareWordResult(
         cv::Mat *image,
         const WordDetectionWorkOutput &output,
+        const DetectionCompletion &acceptedCompletion);
+    void finalizeSoftwareBarcodeWordResult(
+        cv::Mat *image,
+        const BarcodeWordDetectionWorkOutput &output,
         const DetectionCompletion &acceptedCompletion);
 
     // ========== UI对象 ==========

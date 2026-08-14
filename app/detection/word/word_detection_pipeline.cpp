@@ -68,6 +68,51 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent) const
 {
+    if (!item.isValid() || !item.hasPose || !item.pose.valid) {
+        return detectPreparedDateRoi(
+                    item,
+                    OrientedDateRoi(),
+                    targetText,
+                    templateName,
+                    preparedTemplates,
+                    templateTargetIndexes,
+                    thresholdPercent);
+    }
+
+    const std::chrono::high_resolution_clock::time_point prepareStart =
+            std::chrono::high_resolution_clock::now();
+    const OrientedDateRoi oriented =
+            DetectionRoiGeometry::prepareOrientedDateRoi(
+                item.frame->originalImage,
+                item.pose,
+                20);
+    const double prepareElapsedMs = static_cast<double>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::high_resolution_clock::now()
+                    - prepareStart).count());
+    WordDetectionWorkOutput output = detectPreparedDateRoi(
+                item,
+                oriented,
+                targetText,
+                templateName,
+                preparedTemplates,
+                templateTargetIndexes,
+                thresholdPercent);
+    if (output.detectionResult.status == DetectionStatus::Completed) {
+        output.detectionResult.elapsedMs += prepareElapsedMs;
+    }
+    return output;
+}
+
+WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
+        const DetectionWorkItem &item,
+        const OrientedDateRoi &oriented,
+        const QString &targetText,
+        const QString &templateName,
+        const TemplateMatchPreparedTemplates &preparedTemplates,
+        const std::vector<int> &templateTargetIndexes,
+        int thresholdPercent) const
+{
     WordDetectionWorkOutput output;
     output.pose = item.pose;
     output.templateName = templateName;
@@ -92,11 +137,6 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
 
     const std::chrono::high_resolution_clock::time_point start =
             std::chrono::high_resolution_clock::now();
-    const OrientedDateRoi oriented =
-            DetectionRoiGeometry::prepareOrientedDateRoi(
-                item.frame->originalImage,
-                item.pose,
-                20);
     if (!oriented.valid) {
         result.diagnostic = QStringLiteral(
                     "\u65e5\u671fROI\u65e0\u6548\u6216"

@@ -10,6 +10,7 @@
 #include <opencv2/core.hpp>
 
 #include <functional>
+#include <vector>
 
 struct WordDetectionResult
 {
@@ -44,6 +45,15 @@ public:
 
     WordDetectionWorkOutput detect(
             const DetectionWorkItem &item,
+            const QString &targetText,
+            const QString &templateName,
+            const TemplateMatchPreparedTemplates &preparedTemplates,
+            const std::vector<int> &templateTargetIndexes,
+            int thresholdPercent) const;
+
+    WordDetectionWorkOutput detectPreparedDateRoi(
+            const DetectionWorkItem &item,
+            const OrientedDateRoi &orientedDateRoi,
             const QString &targetText,
             const QString &templateName,
             const TemplateMatchPreparedTemplates &preparedTemplates,

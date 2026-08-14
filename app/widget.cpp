@@ -542,6 +542,11 @@ struct SoftwareWordDetectionState
     WordDetectionWorkOutput lastOutput;
 };
 
+struct SoftwareBarcodeWordDetectionState
+{
+    BarcodeWordDetectionWorkOutput lastOutput;
+};
+
 static void installLegacyDetectionOverlay(
     const DetectionResult &result,
     const DetectionPose &pose)
@@ -1302,7 +1307,8 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
                     m_softwareDetectionModeIndex.load();
             if (workerMode == 0
                     || workerMode == 1
-                    || workerMode == 2) {
+                    || workerMode == 2
+                    || workerMode == 4) {
                 submitSoftwarePositionedDetectionFrame(
                             image,
                             pose);
@@ -1905,6 +1911,161 @@ bool Widget::startSoftwareWordDetectionWorker(
     return true;
 }
 
+bool Widget::startSoftwareBarcodeWordDetectionWorker(
+        QString *errorMessage)
+{
+    waitForSoftwareDetectionWorkerStop();
+    if (!m_wordTemplateRunActive
+            || m_runningWordTemplateProfiles.empty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u4e8c\u7ef4\u7801+\u4e09\u671f\u8fd0\u884c Profile \u5feb\u7167\u672a\u51c6\u5907\u3002");
+        }
+        return false;
+    }
+    if (!m_barcodeDecoder || !m_barcodeDecoder->ensureLoaded()) {
+        if (errorMessage) {
+            *errorMessage = m_barcodeDecoder
+                    ? m_barcodeDecoder->lastError()
+                    : QStringLiteral("Barcode decoder is null");
+        }
+        return false;
+    }
+
+    const std::shared_ptr<std::vector<WordTemplateProfile> > profiles(
+                new std::vector<WordTemplateProfile>(
+                    m_runningWordTemplateProfiles));
+    for (WordTemplateProfile &profile : *profiles) {
+        if (!profile.preparedDigitTemplates.isValid()) {
+            profile.preparedDigitTemplates =
+                    CharacterTemplateMatcher::prepare(
+                        profile.digitTemplates);
+        }
+        int thresholdValue = 0;
+        bool thresholdValid = parseIntValue(
+                    QString::number(profile.settings.imageThreshold),
+                    &thresholdValue);
+        if (!thresholdValid) {
+            thresholdValid = parseIntValue(
+                        ui->lineEdit_yuzhi->text(),
+                        &thresholdValue);
+        }
+        if (thresholdValid) {
+            profile.settings.imageThreshold = thresholdValue;
+        }
+    }
+
+    IBarcodeDecoder *decoder = m_barcodeDecoder.get();
+    const std::shared_ptr<BarcodeWordDetectionPipeline> pipeline(
+                new BarcodeWordDetectionPipeline);
+    const std::shared_ptr<SoftwareBarcodeWordDetectionState> state(
+                new SoftwareBarcodeWordDetectionState);
+    std::unique_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    DetectionWorker::WorkItemDetector(
+                        [pipeline, state, profiles, decoder](
+                            const DetectionWorkItem &item) {
+        if (!item.hasPose || !item.pose.valid) {
+            state->lastOutput = pipeline->detect(
+                        item,
+                        QString(),
+                        QString(),
+                        TemplateMatchPreparedTemplates(),
+                        std::vector<int>(),
+                        0,
+                        BarcodeDecodeOptions(),
+                        BarcodeWordDecodeStrategyState(),
+                        decoder);
+            return state->lastOutput.detectionResult;
+        }
+
+        const int profileIndex = item.pose.wordTemplateProfileIndex;
+        if (profileIndex < 0
+                || profileIndex >= static_cast<int>(profiles->size())) {
+            state->lastOutput = BarcodeWordDetectionWorkOutput();
+            state->lastOutput.pose = item.pose;
+            state->lastOutput.detectionResult.modeId =
+                    QStringLiteral("barcode_word_detection");
+            state->lastOutput.detectionResult.status =
+                    DetectionStatus::Cancelled;
+            state->lastOutput.detectionResult.diagnostic =
+                    QStringLiteral("Invalid barcode-word profile index");
+            return state->lastOutput.detectionResult;
+        }
+
+        WordTemplateProfile &profile =
+                profiles->at(static_cast<size_t>(profileIndex));
+        const QString templateName = profile.name.isEmpty()
+                ? QDir(profile.dirPath).dirName()
+                : profile.name;
+        BarcodeWordDecodeStrategyState decodeStrategy;
+        decodeStrategy.preferredStrategyId =
+                profile.preferredBarcodeStrategyId;
+        decodeStrategy.preferredOptionFlags =
+                profile.preferredBarcodeOptionFlags;
+        decodeStrategy.consecutiveFailures =
+                profile.consecutiveBarcodeFailures;
+        state->lastOutput = pipeline->detect(
+                    item,
+                    profile.settings.targetText,
+                    templateName,
+                    profile.preparedDigitTemplates,
+                    profile.digitTemplateTargetIndexes,
+                    static_cast<int>(profile.settings.imageThreshold),
+                    profile.settings.barcodeOptions,
+                    decodeStrategy,
+                    decoder);
+        profile.preferredBarcodeStrategyId =
+                state->lastOutput.nextDecodeStrategy
+                .preferredStrategyId;
+        profile.preferredBarcodeOptionFlags =
+                state->lastOutput.nextDecodeStrategy
+                .preferredOptionFlags;
+        profile.consecutiveBarcodeFailures =
+                state->lastOutput.nextDecodeStrategy
+                .consecutiveFailures;
+        return state->lastOutput.detectionResult;
+    }),
+    [this, state](const DetectionCompletion &completion) {
+        const BarcodeWordDetectionWorkOutput output =
+                state->lastOutput;
+        postSoftwareDetectionUiWork(
+                    [this, completion, output]() {
+            handleSoftwareBarcodeWordCompletion(
+                        completion,
+                        output);
+        });
+    },
+    [this](const QString &message) {
+        QMetaObject::invokeMethod(
+                    this,
+                    [message]() {
+            qWarning() << "[DETECTION_WORKER]" << message;
+        },
+        Qt::QueuedConnection);
+    }));
+
+    if (!m_softwareDetectionUiMailbox.reopen()
+            || !worker->start()) {
+        m_softwareDetectionUiMailbox.cancel();
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u65e0\u6cd5\u542f\u52a8\u4e8c\u7ef4\u7801+\u4e09\u671f\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        }
+        return false;
+    }
+
+    m_softwareDetectionWorker = std::move(worker);
+    m_softwareDetectionModeIndex.store(4);
+    m_softwareDetectionQueueActive.store(true);
+    qDebug() << "[DETECTION_WORKER] software barcode-word worker started"
+             << "queueCapacity="
+             << static_cast<qulonglong>(
+                    m_softwareDetectionWorker->queueCapacity());
+    return true;
+}
+
 void Widget::requestSoftwareDetectionWorkerStop()
 {
     m_softwareDetectionQueueActive.store(false);
@@ -2083,6 +2244,32 @@ void Widget::handleSoftwareWordCompletion(
                 acceptedCompletion);
 }
 
+void Widget::handleSoftwareBarcodeWordCompletion(
+        const DetectionCompletion &completion,
+        const BarcodeWordDetectionWorkOutput &output)
+{
+    const DetectionCompletion acceptedCompletion =
+            m_runtimeController.complete(
+                completion.frame,
+                completion.result);
+    if (!acceptedCompletion.isValid()) {
+        qDebug() << "[DETECTION_WORKER] stale barcode-word completion ignored";
+        return;
+    }
+    if (acceptedCompletion.result.status
+            == DetectionStatus::Cancelled) {
+        qDebug() << "[BARCODE_WORD] positioned work cancelled:"
+                 << acceptedCompletion.result.diagnostic;
+        return;
+    }
+
+    cv::Mat image = acceptedCompletion.frame->originalImage;
+    finalizeSoftwareBarcodeWordResult(
+                &image,
+                output,
+                acceptedCompletion);
+}
+
 void Widget::finalizeSoftwareStampResult(
         cv::Mat *image,
         const StampDetectionWorkOutput &output,
@@ -2252,6 +2439,129 @@ void Widget::finalizeSoftwareWordResult(
                .arg(output.wordResult.targetCharacterCount)
                .arg(output.wordResult.detectedCharacterCount)
                .arg(output.pose.score, 0, 'f', 4);
+    ++j;
+}
+
+void Widget::finalizeSoftwareBarcodeWordResult(
+        cv::Mat *image,
+        const BarcodeWordDetectionWorkOutput &output,
+        const DetectionCompletion &acceptedCompletion)
+{
+    if (!image || image->empty()
+            || !acceptedCompletion.isValid()) {
+        return;
+    }
+
+    processDueDelayedNgRequest();
+    if (judge) {
+        j = 1;
+        x++;
+        judge = false;
+    }
+    if ((j - 1) % x == 0) {
+        imageLabel->clearGreenRects();
+        detectedRects.clear();
+        string1.clear();
+    }
+
+    installLegacyDetectionOverlay(
+                acceptedCompletion.result,
+                output.pose);
+    g_lastStampIsOverlap = false;
+    if (!output.templateName.trimmed().isEmpty()) {
+        ui->currentTemplateName->setText(output.templateName);
+    } else if (!output.pose.valid) {
+        ui->currentTemplateName->setText(QStringLiteral("--"));
+    }
+    slot_displayAndDetect(image);
+
+    QStringList resultLines;
+    resultLines.append(
+                QStringLiteral("\u4e8c\u7ef4\u7801\uff1a%1")
+                .arg(output.barcodeState));
+    if (!output.barcode.text.isEmpty()) {
+        resultLines.append(
+                    QStringLiteral("\u4e8c\u7ef4\u7801\u5185\u5bb9\uff1a%1")
+                    .arg(output.barcode.text));
+    }
+    resultLines.append(
+                QStringLiteral("\u65e5\u671f\uff1a%1")
+                .arg(output.dateState));
+    if ((!output.barcodeWordResult.barcodeIsReadable
+         || !output.barcodeWordResult.dateDetectionExecuted)
+            && !output.reason.trimmed().isEmpty()) {
+        resultLines.append(
+                    QStringLiteral("\u539f\u56e0\uff1a%1")
+                    .arg(output.reason));
+    }
+    setLabelTextIfChanged(
+                ui->resultlabel_7,
+                resultLines.join(QStringLiteral("\n")));
+    ui->imagenum->setText(
+                QString::number(m_runtimeController.totalCount()));
+
+    if (j % x == 0) {
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome =
+                m_runtimeController.record(
+                    acceptedCompletion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected barcode-word completion";
+            return;
+        }
+
+        if (acceptedCompletion.result.verdict == AlgorithmVerdict::Ng) {
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveNg) {
+                saveWordResultImages(
+                            "png",
+                            "ng",
+                            acceptedCompletion);
+            }
+            ui->resultlabel->setText(
+                        QStringLiteral("<font size='10' color='red'>"
+                                       "\u9519\u8bef\uff01</font>"));
+        } else {
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
+                saveWordResultImages(
+                            "png",
+                            "ok",
+                            acceptedCompletion);
+            }
+            ui->resultlabel->setText(
+                        QStringLiteral("<font size='10' color='SpringGreen'>"
+                                       "\u6b63\u786e\uff01</font>"));
+        }
+        applyPlcResultRequest(outcome.plcAction);
+    }
+
+    refreshResultStatistics();
+    const double presentationElapsedMs =
+            resultPresentationElapsedMs(acceptedCompletion);
+    ui->speedLabel->setText(
+                QStringLiteral("\u68c0\u6d4b\u8017\u65f6 %1 ms")
+                .arg(presentationElapsedMs, 0, 'f', 2));
+    qDebug().noquote()
+            << QString("[BARCODE_WORD] template=%1 barcode=%2 date=%3 "
+                       "final=%4 trackingMs=%5 barcodeMs=%6 totalMs=%7 "
+                       "reason=%8 decoderReason=%9")
+               .arg(output.templateName.isEmpty()
+                    ? QStringLiteral("--")
+                    : output.templateName)
+               .arg(output.barcodeState)
+               .arg(output.dateState)
+               .arg(acceptedCompletion.result.verdict
+                    == AlgorithmVerdict::Ok
+                    ? QStringLiteral("OK")
+                    : QStringLiteral("NG"))
+               .arg(output.pose.trackingElapsedMs, 0, 'f', 3)
+               .arg(output.barcode.elapsedMs, 0, 'f', 3)
+               .arg(presentationElapsedMs, 0, 'f', 3)
+               .arg(output.reason)
+               .arg(output.barcode.errorReason);
     ++j;
 }
 
@@ -13074,11 +13384,17 @@ void Widget::on_plcbtn_clicked()
                          << "mode:" << currentDetectModeId();
             }
             m_resultBoundDisplayActive.store(true);
+            // Publish the selected orchestration mode before acquisition can
+            // emit its first frame.  The worker route already owns software
+            // barcode-word execution, while legacy hard-trigger dispatch still
+            // reads this flag to preserve its existing mode selection.
+            m_barcodeWordRunActive = isBarcodeWordMode;
             beginInspectionStart();
             if (isTissueMode
                     || isOcrMode
                     || isStampMode
-                    || isPlainWordMode) {
+                    || isPlainWordMode
+                    || isBarcodeWordMode) {
                 QString workerError;
                 bool workerStarted = false;
                 if (isTissueMode) {
@@ -13090,8 +13406,12 @@ void Widget::on_plcbtn_clicked()
                 } else if (isStampMode) {
                     workerStarted = startSoftwareStampDetectionWorker(
                                 &workerError);
-                } else {
+                } else if (isPlainWordMode) {
                     workerStarted = startSoftwareWordDetectionWorker(
+                                &workerError);
+                } else {
+                    workerStarted =
+                            startSoftwareBarcodeWordDetectionWorker(
                                 &workerError);
                 }
                 if (!workerStarted) {
@@ -13110,7 +13430,6 @@ void Widget::on_plcbtn_clicked()
             }
             myThread->start();
             markInspectionRunning();
-            m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
             m_operationState =
                     OperationState::Detecting;
