@@ -16,6 +16,8 @@ SOURCES += \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.cpp
 
 HEADERS += \
+    $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.h \
     $$PROJECT_ROOT/app/devices/ocr/ocr_engine.h
 

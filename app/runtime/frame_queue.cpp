@@ -11,23 +11,54 @@ FrameQueue::~FrameQueue()
 }
 
 bool FrameQueue::submit(
-    const std::shared_ptr<const FrameData> &frame)
+    const DetectionWorkItem &item)
 {
-    if (!isValidFrame(frame)) {
+    if (!item.isValid()) {
         return false;
     }
 
     std::unique_lock<std::mutex> lock(m_mutex);
     m_spaceAvailable.wait(lock, [this]() {
-        return m_cancelled || m_frames.size() < m_capacity;
+        return m_cancelled || m_items.size() < m_capacity;
     });
     if (m_cancelled) {
         return false;
     }
 
-    m_frames.push_back(frame);
+    m_items.push_back(item);
     lock.unlock();
     m_frameAvailable.notify_one();
+    return true;
+}
+
+bool FrameQueue::submit(
+    const std::shared_ptr<const FrameData> &frame)
+{
+    DetectionWorkItem item;
+    item.frame = frame;
+    return submit(item);
+}
+
+bool FrameQueue::waitAndTake(
+    DetectionWorkItem *item)
+{
+    if (!item) {
+        return false;
+    }
+
+    std::unique_lock<std::mutex> lock(m_mutex);
+    m_frameAvailable.wait(lock, [this]() {
+        return m_cancelled || !m_items.empty();
+    });
+    if (m_cancelled) {
+        *item = DetectionWorkItem();
+        return false;
+    }
+
+    *item = m_items.front();
+    m_items.pop_front();
+    lock.unlock();
+    m_spaceAvailable.notify_one();
     return true;
 }
 
@@ -38,39 +69,33 @@ bool FrameQueue::waitAndTake(
         return false;
     }
 
-    std::unique_lock<std::mutex> lock(m_mutex);
-    m_frameAvailable.wait(lock, [this]() {
-        return m_cancelled || !m_frames.empty();
-    });
-    if (m_cancelled) {
+    DetectionWorkItem item;
+    if (!waitAndTake(&item)) {
         frame->reset();
         return false;
     }
 
-    *frame = m_frames.front();
-    m_frames.pop_front();
-    lock.unlock();
-    m_spaceAvailable.notify_one();
+    *frame = item.frame;
     return true;
 }
 
 std::size_t FrameQueue::cancel()
 {
-    std::deque<std::shared_ptr<const FrameData>> releasedFrames;
+    std::deque<DetectionWorkItem> releasedItems;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_cancelled = true;
-        releasedFrames.swap(m_frames);
+        releasedItems.swap(m_items);
     }
     m_frameAvailable.notify_all();
     m_spaceAvailable.notify_all();
-    return releasedFrames.size();
+    return releasedItems.size();
 }
 
 bool FrameQueue::reopen()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!m_frames.empty()) {
+    if (!m_items.empty()) {
         return false;
     }
     m_cancelled = false;
@@ -85,19 +110,11 @@ std::size_t FrameQueue::capacity() const
 std::size_t FrameQueue::size() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_frames.size();
+    return m_items.size();
 }
 
 bool FrameQueue::isCancelled() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_cancelled;
-}
-
-bool FrameQueue::isValidFrame(
-    const std::shared_ptr<const FrameData> &frame) const
-{
-    return frame
-            && frame->productKey.isValid()
-            && !frame->originalImage.empty();
 }

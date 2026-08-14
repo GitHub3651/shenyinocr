@@ -15,6 +15,8 @@ class DetectionWorker
 public:
     typedef std::function<DetectionResult(
         const std::shared_ptr<const FrameData> &)> Detector;
+    typedef std::function<DetectionResult(
+        const DetectionWorkItem &)> WorkItemDetector;
     typedef std::function<void(
         const DetectionCompletion &)> CompletionConsumer;
     typedef std::function<void(const QString &)> FailureConsumer;
@@ -24,9 +26,15 @@ public:
         const Detector &detector,
         const CompletionConsumer &completionConsumer,
         const FailureConsumer &failureConsumer = FailureConsumer());
+    DetectionWorker(
+        std::size_t queueCapacity,
+        const WorkItemDetector &detector,
+        const CompletionConsumer &completionConsumer,
+        const FailureConsumer &failureConsumer = FailureConsumer());
     ~DetectionWorker();
 
     bool start();
+    bool submit(const DetectionWorkItem &item);
     bool submit(const std::shared_ptr<const FrameData> &frame);
     void requestStop();
     void wait();
@@ -42,7 +50,7 @@ private:
     void reportFailure(const QString &message) const;
 
     FrameQueue m_queue;
-    Detector m_detector;
+    WorkItemDetector m_detector;
     CompletionConsumer m_completionConsumer;
     FailureConsumer m_failureConsumer;
 

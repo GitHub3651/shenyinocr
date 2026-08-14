@@ -86,6 +86,7 @@ class QPushButton;
 class ImageSaveService;
 class DetectionWorker;
 struct RecipeSelection;
+struct OcrDetectionResult;
 
 /**
  * @brief 主窗口类
@@ -349,12 +350,25 @@ private:
     bool shouldSuppressStreamingFrame() const;
     void connectSoftwareDetectionSignals(MyThread *thread);
     bool startSoftwareTissueDetectionWorker(QString *errorMessage);
+    bool startSoftwareOcrDetectionWorker(QString *errorMessage);
     void requestSoftwareDetectionWorkerStop();
     void waitForSoftwareDetectionWorkerStop();
     void submitSoftwareDetectionFrame(const cv::Mat &image);
+    void submitSoftwarePositionedDetectionFrame(
+        const cv::Mat &image,
+        const DetectionPose &pose);
     void handleSoftwareTissueCompletion(
         const DetectionCompletion &completion,
         const TissueRollResult &tissueResult);
+    void handleSoftwareOcrCompletion(
+        const DetectionCompletion &completion,
+        const DetectionPose &pose);
+    void finalizeOcrResult(
+        cv::Mat *image,
+        const DetectionPose &pose,
+        const OcrDetectionResult &ocrResult,
+        const DetectionCompletion &acceptedCompletion,
+        double elapsedMs);
     void finalizeTissueResult(
         cv::Mat *image,
         const TissueRollResult &tissueResult,
@@ -415,6 +429,7 @@ private:
     InspectionRuntimeController m_runtimeController;
     std::unique_ptr<DetectionWorker> m_softwareDetectionWorker;
     std::atomic<bool> m_softwareDetectionQueueActive{false};
+    std::atomic<int> m_softwareDetectionModeIndex{-1};
     TissueRecipeParameters m_tissueRecipeParameters;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;

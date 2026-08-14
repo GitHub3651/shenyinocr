@@ -7,6 +7,22 @@ DetectionWorker::DetectionWorker(
     const Detector &detector,
     const CompletionConsumer &completionConsumer,
     const FailureConsumer &failureConsumer)
+    : DetectionWorker(
+          queueCapacity,
+          WorkItemDetector(
+              [detector](const DetectionWorkItem &item) {
+        return detector(item.frame);
+    }),
+          completionConsumer,
+          failureConsumer)
+{
+}
+
+DetectionWorker::DetectionWorker(
+    std::size_t queueCapacity,
+    const WorkItemDetector &detector,
+    const CompletionConsumer &completionConsumer,
+    const FailureConsumer &failureConsumer)
     : m_queue(queueCapacity),
       m_detector(detector),
       m_completionConsumer(completionConsumer),
@@ -56,12 +72,20 @@ bool DetectionWorker::start()
 }
 
 bool DetectionWorker::submit(
-    const std::shared_ptr<const FrameData> &frame)
+    const DetectionWorkItem &item)
 {
     if (!m_running.load() || m_stopRequested.load()) {
         return false;
     }
-    return m_queue.submit(frame);
+    return m_queue.submit(item);
+}
+
+bool DetectionWorker::submit(
+    const std::shared_ptr<const FrameData> &frame)
+{
+    DetectionWorkItem item;
+    item.frame = frame;
+    return submit(item);
 }
 
 void DetectionWorker::requestStop()
@@ -109,8 +133,8 @@ quint64 DetectionWorker::cancelledFrameCount() const
 void DetectionWorker::run()
 {
     while (!m_stopRequested.load()) {
-        std::shared_ptr<const FrameData> frame;
-        if (!m_queue.waitAndTake(&frame)) {
+        DetectionWorkItem item;
+        if (!m_queue.waitAndTake(&item)) {
             break;
         }
         if (m_stopRequested.load()) {
@@ -120,7 +144,7 @@ void DetectionWorker::run()
 
         DetectionResult result;
         try {
-            result = m_detector(frame);
+            result = m_detector(item);
         } catch (const std::exception &error) {
             reportFailure(QString::fromLocal8Bit(error.what()));
             m_cancelledFrameCount.fetch_add(1);
@@ -139,7 +163,7 @@ void DetectionWorker::run()
         }
 
         DetectionCompletion completion;
-        completion.frame = frame;
+        completion.frame = item.frame;
         completion.result = result;
         try {
             m_completionConsumer(completion);

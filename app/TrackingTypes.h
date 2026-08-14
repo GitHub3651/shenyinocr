@@ -100,6 +100,30 @@ struct DetectionPose {
 
 Q_DECLARE_METATYPE(DetectionPose)
 
+struct DetectionWorkItem {
+    std::shared_ptr<const FrameData> frame;
+    DetectionPose pose;
+    bool hasPose = false;
+
+    bool isValid() const
+    {
+        return frame
+                && frame->productKey.isValid()
+                && !frame->originalImage.empty();
+    }
+};
+
+inline DetectionWorkItem makeDetectionWorkItem(
+    const std::shared_ptr<const FrameData> &frame,
+    const DetectionPose &pose)
+{
+    DetectionWorkItem item;
+    item.frame = frame;
+    item.pose = pose;
+    item.hasPose = true;
+    return item;
+}
+
 struct WordTrackingProfile {
     QString name;
     int profileIndex = -1;

@@ -151,13 +151,16 @@ private slots:
     void frameQueuePreservesSubmissionOrder();
     void frameQueueWaitsForSpaceWithoutDroppingFrame();
     void frameQueueCancellationReleasesFramesAndSubmitter();
+    void frameQueuePreservesPositionedDetectionWorkItem();
     void detectionWorkerProcessesFramesSeriallyInOrder();
+    void detectionWorkerReceivesPositionedDetectionWorkItem();
     void runtimeControllerAcceptedFramesFlowThroughDetectionWorker();
     void detectionWorkerRejectsSubmissionOutsideRun();
     void detectionWorkerCancellationSuppressesPendingResults();
     void detectionWorkerCanRestartAfterWait();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
+    void orientedDateRoiClampsPaddingAtImageEdge();
     void saveTaskRequiresProductAndAllItems();
     void saveServicePreservesTaskAndItemOrder();
     void fullQueueWaitsForSpaceWithoutDroppingTask();
@@ -1283,6 +1286,37 @@ void DetectionCompletionTest::frameQueueCancellationReleasesFramesAndSubmitter()
     queue.cancel();
 }
 
+void DetectionCompletionTest::frameQueuePreservesPositionedDetectionWorkItem()
+{
+    FrameQueue queue(1);
+    const std::shared_ptr<const FrameData> frame = workerTestFrame(9);
+    DetectionPose pose;
+    pose.valid = true;
+    pose.wordTemplateProfileIndex = 3;
+    pose.angleDeg = 17.5f;
+    pose.datePoly = {
+        cv::Point(1, 2),
+        cv::Point(5, 2),
+        cv::Point(5, 6),
+        cv::Point(1, 6)
+    };
+    const DetectionWorkItem submitted =
+            makeDetectionWorkItem(frame, pose);
+
+    QVERIFY(queue.submit(submitted));
+    DetectionWorkItem received;
+    QVERIFY(queue.waitAndTake(&received));
+    QVERIFY(received.isValid());
+    QVERIFY(received.hasPose);
+    QCOMPARE(received.frame.get(), frame.get());
+    QCOMPARE(received.pose.wordTemplateProfileIndex, 3);
+    QCOMPARE(received.pose.angleDeg, 17.5f);
+    QCOMPARE(static_cast<int>(received.pose.datePoly.size()), 4);
+    QCOMPARE(received.pose.datePoly[2].x, 5);
+    QCOMPARE(received.pose.datePoly[2].y, 6);
+    QCOMPARE(static_cast<int>(queue.cancel()), 0);
+}
+
 void DetectionCompletionTest::detectionWorkerProcessesFramesSeriallyInOrder()
 {
     std::atomic<int> activeCount(0);
@@ -1351,6 +1385,53 @@ void DetectionCompletionTest::detectionWorkerProcessesFramesSeriallyInOrder()
         QCOMPARE(resultSequences[static_cast<std::size_t>(sequence - 1)],
                  sequence);
     }
+}
+
+void DetectionCompletionTest::detectionWorkerReceivesPositionedDetectionWorkItem()
+{
+    std::promise<DetectionCompletion> completionPromise;
+    std::future<DetectionCompletion> completionFuture =
+            completionPromise.get_future();
+    const DetectionWorker::WorkItemDetector detector =
+            [](const DetectionWorkItem &item) {
+        DetectionResult result;
+        result.modeId = QStringLiteral("ocr_detection");
+        result.status = DetectionStatus::Completed;
+        result.verdict = AlgorithmVerdict::Ok;
+        result.recognizedText = QStringLiteral("%1:%2")
+                .arg(item.pose.wordTemplateProfileIndex)
+                .arg(item.pose.angleDeg, 0, 'f', 1);
+        return result;
+    };
+    DetectionWorker worker(
+                1,
+                detector,
+                [&completionPromise](
+                    const DetectionCompletion &completion) {
+        completionPromise.set_value(completion);
+    });
+    QVERIFY(worker.start());
+
+    DetectionPose pose;
+    pose.valid = true;
+    pose.wordTemplateProfileIndex = 4;
+    pose.angleDeg = 22.5f;
+    const std::shared_ptr<const FrameData> frame = workerTestFrame(10);
+    QVERIFY(worker.submit(makeDetectionWorkItem(frame, pose)));
+    QVERIFY(completionFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    const DetectionCompletion completion = completionFuture.get();
+    worker.requestStop();
+    worker.wait();
+
+    QVERIFY(completion.isValid());
+    QCOMPARE(completion.frame.get(), frame.get());
+    QCOMPARE(completion.result.modeId,
+             QStringLiteral("ocr_detection"));
+    QCOMPARE(completion.result.recognizedText,
+             QStringLiteral("4:22.5"));
+    QCOMPARE(worker.processedFrameCount(), quint64(1));
+    QCOMPARE(worker.cancelledFrameCount(), quint64(0));
 }
 
 void DetectionCompletionTest::runtimeControllerAcceptedFramesFlowThroughDetectionWorker()
@@ -1592,6 +1673,37 @@ void DetectionCompletionTest::outsidePolygonIsClampedToNearestImageEdge()
         QCOMPARE(point.x, 99);
         QVERIFY(point.y >= 0 && point.y < 80);
     }
+}
+
+void DetectionCompletionTest::orientedDateRoiClampsPaddingAtImageEdge()
+{
+    const cv::Mat source(80, 100, CV_8UC3, cv::Scalar(20, 40, 60));
+    DetectionPose pose;
+    pose.valid = true;
+    pose.anchorCenter = cv::Point2f(5.0f, 7.0f);
+    pose.datePoly = {
+        cv::Point(-5, 2),
+        cv::Point(10, 2),
+        cv::Point(10, 12),
+        cv::Point(-5, 12)
+    };
+
+    const OrientedDateRoi oriented =
+            DetectionRoiGeometry::prepareOrientedDateRoi(
+                source,
+                pose,
+                20);
+
+    QVERIFY(oriented.valid);
+    QCOMPARE(oriented.roi.x, 0);
+    QCOMPARE(oriented.roi.y, 0);
+    QVERIFY(oriented.roi.x + oriented.roi.width
+            <= source.cols);
+    QVERIFY(oriented.roi.y + oriented.roi.height
+            <= source.rows);
+    QCOMPARE(oriented.croppedImage.cols, oriented.roi.width);
+    QCOMPARE(oriented.croppedImage.rows, oriented.roi.height);
+    QCOMPARE(oriented.croppedImage.type(), CV_8UC3);
 }
 
 void DetectionCompletionTest::saveTaskRequiresProductAndAllItems()

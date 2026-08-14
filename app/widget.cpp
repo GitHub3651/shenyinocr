@@ -527,6 +527,11 @@ struct SoftwareTissueDetectionState
     TissueRollResult lastResult;
 };
 
+struct SoftwareOcrDetectionState
+{
+    DetectionPose lastPose;
+};
+
 static cv::Mat makeBgrCopy(const cv::Mat& image)
 {
     if (image.empty()) {
@@ -617,50 +622,6 @@ static cv::Point getPolygonTopCenter(const std::vector<cv::Point>& poly)
     const cv::Point& p1 = sorted[0];
     const cv::Point& p2 = sorted[1];
     return cv::Point((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
-}
-
-static OrientedDateRoi prepareOrientedDateRoi(const cv::Mat& src, const DetectionPose& pose, int padding)
-{
-    OrientedDateRoi oriented;
-    if (src.empty() || !pose.valid || pose.datePoly.size() < 3) {
-        return oriented;
-    }
-
-    oriented.rotationMatrix = cv::getRotationMatrix2D(pose.anchorCenter, -pose.angleDeg, 1.0);
-    cv::invertAffineTransform(oriented.rotationMatrix, oriented.inverseRotationMatrix);
-    cv::warpAffine(src, oriented.rotatedImage, oriented.rotationMatrix, src.size(), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-
-    oriented.rotatedDatePoly = transformPolygon(
-                pose.datePoly,
-                oriented.rotationMatrix);
-    if (oriented.rotatedDatePoly.size() < 3) {
-        return oriented;
-    }
-
-    oriented.roi = DetectionRoiGeometry::polygonRoiWithClampedPadding(
-                oriented.rotatedDatePoly,
-                padding,
-                oriented.rotatedImage.size(),
-                &oriented.rotatedDatePoly);
-    if (oriented.roi.width <= 0 || oriented.roi.height <= 0) {
-        return oriented;
-    }
-
-    oriented.croppedImage = oriented.rotatedImage(oriented.roi).clone();
-    if (oriented.croppedImage.type() != CV_8UC3) {
-        cv::Mat converted;
-        if (oriented.croppedImage.channels() == 1) {
-            cv::cvtColor(oriented.croppedImage, converted, cv::COLOR_GRAY2BGR);
-        } else if (oriented.croppedImage.channels() == 4) {
-            cv::cvtColor(oriented.croppedImage, converted, cv::COLOR_BGRA2BGR);
-        } else {
-            converted = oriented.croppedImage.clone();
-        }
-        oriented.croppedImage = converted;
-    }
-
-    oriented.valid = !oriented.croppedImage.empty();
-    return oriented;
 }
 
 struct BarcodeWordOrientedRois
@@ -1269,7 +1230,7 @@ void Widget::initWidget()
         this->handleStreamingFrame(img);
     }, Qt::QueuedConnection);
 
-    // 连接软触发检测入口。纸巾模式直接反压采集线程，其他模式保持原UI排队路径。
+    // 连接软触发检测入口。纸巾和深度OCR直接反压采集线程，其他模式保持原UI排队路径。
     connectSoftwareDetectionSignals(myThread);
 
 
@@ -1293,7 +1254,8 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
             &MyThread::signal_sendWholeFrameForDetection,
             this,
             [this](cv::Mat image) {
-        if (m_softwareDetectionQueueActive.load()) {
+        if (m_softwareDetectionQueueActive.load()
+                && m_softwareDetectionModeIndex.load() == 3) {
             submitSoftwareDetectionFrame(image);
         }
     },
@@ -1303,9 +1265,25 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
             &MyThread::signal_sendForDetection,
             this,
             [this](cv::Mat image, DetectionPose pose) {
-        dispatchDetectionByMode(&image, pose);
+        if (m_softwareDetectionQueueActive.load()) {
+            const int workerMode =
+                    m_softwareDetectionModeIndex.load();
+            if (workerMode == 2) {
+                submitSoftwarePositionedDetectionFrame(
+                            image,
+                            pose);
+            }
+            return;
+        }
+
+        QMetaObject::invokeMethod(
+                    this,
+                    [this, image, pose]() mutable {
+            dispatchDetectionByMode(&image, pose);
+        },
+        Qt::QueuedConnection);
     },
-    Qt::QueuedConnection);
+    Qt::DirectConnection);
 }
 
 
@@ -1485,8 +1463,83 @@ bool Widget::startSoftwareTissueDetectionWorker(
     }
 
     m_softwareDetectionWorker = std::move(worker);
+    m_softwareDetectionModeIndex.store(3);
     m_softwareDetectionQueueActive.store(true);
     qDebug() << "[DETECTION_WORKER] software tissue worker started"
+             << "queueCapacity="
+             << static_cast<qulonglong>(
+                    m_softwareDetectionWorker->queueCapacity());
+    return true;
+}
+
+bool Widget::startSoftwareOcrDetectionWorker(
+        QString *errorMessage)
+{
+    waitForSoftwareDetectionWorkerStop();
+
+    if (!m_ocrEngine) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u6df1\u5ea6 OCR \u5f15\u64ce\u672a\u521d\u59cb\u5316\u3002");
+        }
+        return false;
+    }
+
+    const std::string targetText =
+            setdatetime().toStdString();
+    IOcrEngine *const ocrEngine = m_ocrEngine.get();
+    const std::shared_ptr<OcrDetectionPipeline> pipeline(
+                new OcrDetectionPipeline);
+    const std::shared_ptr<SoftwareOcrDetectionState> state(
+                new SoftwareOcrDetectionState);
+    std::unique_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    DetectionWorker::WorkItemDetector(
+                        [pipeline, state, targetText, ocrEngine](
+                            const DetectionWorkItem &item) {
+        state->lastPose = item.pose;
+        return pipeline->detect(
+                    item,
+                    targetText,
+                    *ocrEngine);
+    }),
+    [this, state](const DetectionCompletion &completion) {
+        const DetectionPose pose = state->lastPose;
+        QMetaObject::invokeMethod(
+                    this,
+                    [this,
+                     completion,
+                     pose]() {
+            handleSoftwareOcrCompletion(
+                        completion,
+                        pose);
+        },
+        Qt::QueuedConnection);
+    },
+    [this](const QString &message) {
+        QMetaObject::invokeMethod(
+                    this,
+                    [message]() {
+            qWarning() << "[DETECTION_WORKER]"
+                       << message;
+        },
+        Qt::QueuedConnection);
+    }));
+
+    if (!worker->start()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u65e0\u6cd5\u542f\u52a8\u6df1\u5ea6 OCR "
+                        "\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        }
+        return false;
+    }
+
+    m_softwareDetectionWorker = std::move(worker);
+    m_softwareDetectionModeIndex.store(2);
+    m_softwareDetectionQueueActive.store(true);
+    qDebug() << "[DETECTION_WORKER] software OCR worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
                     m_softwareDetectionWorker->queueCapacity());
@@ -1496,6 +1549,7 @@ bool Widget::startSoftwareTissueDetectionWorker(
 void Widget::requestSoftwareDetectionWorkerStop()
 {
     m_softwareDetectionQueueActive.store(false);
+    m_softwareDetectionModeIndex.store(-1);
     if (m_softwareDetectionWorker) {
         m_softwareDetectionWorker->requestStop();
     }
@@ -1539,6 +1593,32 @@ void Widget::submitSoftwareDetectionFrame(
     }
 }
 
+void Widget::submitSoftwarePositionedDetectionFrame(
+        const cv::Mat &image,
+        const DetectionPose &pose)
+{
+    if (!m_softwareDetectionQueueActive.load()
+            || m_softwareDetectionModeIndex.load() != 2
+            || image.empty()) {
+        return;
+    }
+
+    const std::shared_ptr<const FrameData> frame =
+            m_runtimeController.acceptFrame(image);
+    if (!frame) {
+        return;
+    }
+
+    DetectionWorker *worker = m_softwareDetectionWorker.get();
+    const DetectionWorkItem item =
+            makeDetectionWorkItem(frame, pose);
+    if (!worker || !worker->submit(item)) {
+        qDebug() << "[DETECTION_WORKER] positioned frame rejected"
+                 << frame->productKey.runId
+                 << frame->productKey.sequence;
+    }
+}
+
 void Widget::handleSoftwareTissueCompletion(
         const DetectionCompletion &completion,
         const TissueRollResult &tissueResult)
@@ -1557,6 +1637,38 @@ void Widget::handleSoftwareTissueCompletion(
                 &image,
                 tissueResult,
                 acceptedCompletion);
+}
+
+void Widget::handleSoftwareOcrCompletion(
+        const DetectionCompletion &completion,
+        const DetectionPose &pose)
+{
+    const DetectionCompletion acceptedCompletion =
+            m_runtimeController.complete(
+                completion.frame,
+                completion.result);
+    if (!acceptedCompletion.isValid()) {
+        qDebug() << "[DETECTION_WORKER] stale OCR completion ignored";
+        return;
+    }
+    if (acceptedCompletion.result.status
+            == DetectionStatus::Cancelled) {
+        qDebug() << "[OCR_ERROR] Invalid selection area!";
+        return;
+    }
+
+    OcrDetectionResult ocrResult;
+    ocrResult.recognizedText =
+            acceptedCompletion.result.recognizedText.toStdString();
+    ocrResult.isOk = acceptedCompletion.result.verdict
+            == AlgorithmVerdict::Ok;
+    cv::Mat image = acceptedCompletion.frame->originalImage;
+    finalizeOcrResult(
+                &image,
+                pose,
+                ocrResult,
+                acceptedCompletion,
+                acceptedCompletion.result.elapsedMs);
 }
 
 DetectionCompletion Widget::makeDetectionCompletion(
@@ -2090,16 +2202,56 @@ void Widget::dispatchDetectionByMode(cv::Mat *image, DetectionPose pose)
  */
 void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
 {
-    processDueDelayedNgRequest();
-    auto start = std::chrono::high_resolution_clock::now();
-
     if (!image || image->empty())
     {
         qDebug() << "[OCR_ERROR] Invalid input image. Image is null or empty.";
         return;
     }
 
-    // 按周期清理数据，不再清理 imageLabel 的矩形，因为不再绘制
+    const std::chrono::high_resolution_clock::time_point start =
+            std::chrono::high_resolution_clock::now();
+    OrientedDateRoi oriented =
+            DetectionRoiGeometry::prepareOrientedDateRoi(
+                *image,
+                pose,
+                0);
+    if (!oriented.valid) {
+        qDebug() << "[OCR_ERROR] Invalid selection area!";
+        return;
+    }
+
+    cv::Mat croppedImage = oriented.croppedImage.clone();
+    const OcrDetectionPipeline ocrPipeline;
+    const OcrDetectionResult ocrResult =
+            ocrPipeline.detect(
+                croppedImage,
+                setdatetime().toStdString(),
+                *m_ocrEngine);
+
+    const double elapsedMs = static_cast<double>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::high_resolution_clock::now() - start)
+                .count());
+    finalizeOcrResult(
+                image,
+                pose,
+                ocrResult,
+                DetectionCompletion(),
+                elapsedMs);
+}
+
+void Widget::finalizeOcrResult(
+        cv::Mat *image,
+        const DetectionPose &pose,
+        const OcrDetectionResult &ocrResult,
+        const DetectionCompletion &acceptedCompletion,
+        double elapsedMs)
+{
+    if (!image || image->empty()) {
+        return;
+    }
+
+    processDueDelayedNgRequest();
     if (judge)
     {
         j = 1;
@@ -2108,67 +2260,43 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     }
     if ((j - 1) % x == 0)
     {
-        // imageLabel->clearGreenRects(); // 去掉框显示，不再需要清理
         detectedRects.clear();
         string1.clear();
     }
 
     qDebug() << "----------------- OCR PROCESS START -----------------";
-    OrientedDateRoi oriented = prepareOrientedDateRoi(*image, pose, 0);
-    if (!oriented.valid) {
-        qDebug() << "[OCR_ERROR] Invalid selection area!";
-        return;
-    }
-
-    cv::Mat croppedImage = oriented.croppedImage.clone();
     g_lastPose = pose;
     g_lastDrawResults.clear();
     g_lastStampPoly.clear();
     g_lastStampIsOverlap = false;
-
-    // ================== 2. 执行 OCR 识别 (原生 Run API) ==================
-    QString target_qstring = setdatetime();
-    std::string target_string = target_qstring.toStdString();
-    ui->imagenum->setText(QString::number(m_runtimeController.totalCount()));
-
-    const OcrDetectionPipeline ocrPipeline;
-    const OcrDetectionResult ocrResult =
-            ocrPipeline.detect(
-                croppedImage,
-                target_string,
-                *m_ocrEngine);
+    ui->imagenum->setText(
+                QString::number(m_runtimeController.totalCount()));
 
     allResults = ocrResult.recognizedText;
-
-    // ================== 4. UI 文本更新与 PLC 判定 ==================
     setLabelTextIfChanged(
                 ui->resultlabel_7,
                 QString::fromStdString(allResults));
-
-    // 🔥 此处删掉了 imageLabel->addSelectionRect 和 imageLabel->update()
-    // 界面上不会再出现任何检测框
-
     qDebug() << "[OCR_LOG] Final String:" << QString::fromStdString(allResults);
 
-    // PLC 判定及存图逻辑
     if (j % x == 0)
     {
-        const double completionElapsedMs = static_cast<double>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::high_resolution_clock::now() - start)
-                    .count());
         const QString recognizedText = QString::fromStdString(allResults);
         const QString diagnostic = allResults.empty()
                 ? QStringLiteral("OCR清洗后文本为空")
                 : (ocrResult.isOk
                    ? QStringLiteral("OCR文本与目标完全一致")
                    : QStringLiteral("OCR文本与目标不一致"));
-        const DetectionCompletion completion = makeDetectionCompletion(
-                    *image,
-                    ocrResult.isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
-                    recognizedText,
-                    diagnostic,
-                    completionElapsedMs);
+        const DetectionCompletion completion =
+                acceptedCompletion.isValid()
+                ? acceptedCompletion
+                : makeDetectionCompletion(
+                      *image,
+                      ocrResult.isOk
+                      ? AlgorithmVerdict::Ok
+                      : AlgorithmVerdict::Ng,
+                      recognizedText,
+                      diagnostic,
+                      elapsedMs);
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
         const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
                     completion,
@@ -2197,10 +2325,9 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     }
 
     refreshResultStatistics();
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    ui->speedLabel->setText(QString("检测耗时 %1 毫秒").arg(duration));
+    ui->speedLabel->setText(
+                QString("检测耗时 %1 毫秒")
+                .arg(static_cast<qint64>(elapsedMs)));
 
     qDebug() << "----------------- OCR PROCESS END -----------------";
     j++;
@@ -2228,7 +2355,11 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
         string1.clear();
     }
     
-    OrientedDateRoi oriented = prepareOrientedDateRoi(*image, pose, 20);
+    OrientedDateRoi oriented =
+            DetectionRoiGeometry::prepareOrientedDateRoi(
+                *image,
+                pose,
+                20);
     if (!oriented.valid) {
         showDetectionRoiWarningOnce();
         return;
@@ -2381,7 +2512,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
     OrientedDateRoi generatedOriented;
     if (!preparedDateRoi) {
         generatedOriented =
-                prepareOrientedDateRoi(
+                DetectionRoiGeometry::prepareOrientedDateRoi(
                     *image,
                     pose,
                     20);
@@ -11922,6 +12053,7 @@ void Widget::on_plcbtn_clicked()
     const bool isBarcodeWordMode =
             currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
+    const bool isOcrMode = (ui->comboBox_4->currentIndex() == 2);
     const bool isWordProfileMode =
             isWordMode && !m_wordTemplateProfiles.empty();
 
@@ -12339,10 +12471,14 @@ void Widget::on_plcbtn_clicked()
             }
             m_resultBoundDisplayActive = isWordMode;
             beginInspectionStart();
-            if (isTissueMode) {
+            if (isTissueMode || isOcrMode) {
                 QString workerError;
-                if (!startSoftwareTissueDetectionWorker(
-                            &workerError)) {
+                const bool workerStarted = isTissueMode
+                        ? startSoftwareTissueDetectionWorker(
+                              &workerError)
+                        : startSoftwareOcrDetectionWorker(
+                              &workerError);
+                if (!workerStarted) {
                     finishInspectionStop();
                     m_resultBoundDisplayActive = false;
                     clearWordTemplateRunSnapshot();
@@ -12545,7 +12681,7 @@ void Widget::reinitializeMyThread()
     connect(myThread, &MyThread::signal_boxesSelected,
             this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
 
-    // 连接信号槽 - 图像检测（纸巾走有界队列，其他模式保持原路径）
+    // 连接信号槽 - 图像检测（纸巾和深度OCR走有界队列，其他模式保持原路径）
     connectSoftwareDetectionSignals(myThread);
 
     // 步骤6: 连接其他控制信号
