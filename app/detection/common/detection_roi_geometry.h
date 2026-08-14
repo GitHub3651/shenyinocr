@@ -6,6 +6,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
+#include <tuple>
 #include <vector>
 
 namespace DetectionRoiGeometry {
@@ -171,6 +172,46 @@ inline OrientedDateRoi prepareOrientedDateRoi(
 
     oriented.valid = !oriented.croppedImage.empty();
     return oriented;
+}
+
+inline std::vector<DetectionOverlayPolygon> mapCharacterMatchesToOverlay(
+    const std::vector<std::tuple<cv::Rect, double, size_t> > &matches,
+    const OrientedDateRoi &oriented,
+    const cv::Size &originalSize)
+{
+    std::vector<DetectionOverlayPolygon> polygons;
+    if (!oriented.valid || originalSize.width <= 0
+            || originalSize.height <= 0) {
+        return polygons;
+    }
+
+    polygons.reserve(matches.size());
+    for (const std::tuple<cv::Rect, double, size_t> &match : matches) {
+        cv::Rect rect = std::get<0>(match);
+        rect.x += oriented.roi.x;
+        rect.y += oriented.roi.y;
+        const std::vector<cv::Point> rectPolygon = {
+            cv::Point(rect.x, rect.y),
+            cv::Point(rect.x + rect.width, rect.y),
+            cv::Point(rect.x + rect.width, rect.y + rect.height),
+            cv::Point(rect.x, rect.y + rect.height)
+        };
+        const std::vector<cv::Point> mappedPolygon =
+                mapAffinePolygon(rectPolygon,
+                                 oriented.inverseRotationMatrix);
+        const cv::Rect mappedBounds = cv::boundingRect(mappedPolygon)
+                & cv::Rect(0, 0, originalSize.width, originalSize.height);
+        if (mappedBounds.width <= 0 || mappedBounds.height <= 0) {
+            continue;
+        }
+
+        DetectionOverlayPolygon polygon;
+        polygon.role = QStringLiteral("character");
+        polygon.points = mappedPolygon;
+        polygon.score = std::get<1>(match);
+        polygons.push_back(polygon);
+    }
+    return polygons;
 }
 
 } // namespace DetectionRoiGeometry

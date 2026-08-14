@@ -17,6 +17,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.cpp \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
+    $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
@@ -29,6 +30,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.h \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
     $$PROJECT_ROOT/app/runtime/detection_worker.h \
+    $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \

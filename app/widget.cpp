@@ -532,6 +532,37 @@ struct SoftwareOcrDetectionState
     DetectionPose lastPose;
 };
 
+struct SoftwareStampDetectionState
+{
+    StampDetectionWorkOutput lastOutput;
+};
+
+struct SoftwareWordDetectionState
+{
+    WordDetectionWorkOutput lastOutput;
+};
+
+static void installLegacyDetectionOverlay(
+    const DetectionResult &result,
+    const DetectionPose &pose)
+{
+    g_lastPose = pose;
+    g_lastDrawResults.clear();
+    g_lastStampPoly.clear();
+    for (const DetectionOverlayPolygon &polygon :
+         result.overlay.polygons) {
+        if (polygon.role == QLatin1String("character")) {
+            CVDrawResult drawResult;
+            drawResult.poly = polygon.points;
+            drawResult.score = polygon.score;
+            g_lastDrawResults.push_back(drawResult);
+        } else if (polygon.role == QLatin1String("stamp")) {
+            g_lastStampPoly = polygon.points;
+        }
+    }
+    g_lastDetectTime = QDateTime::currentMSecsSinceEpoch();
+}
+
 static cv::Mat makeBgrCopy(const cv::Mat& image)
 {
     if (image.empty()) {
@@ -1225,12 +1256,13 @@ void Widget::initWidget()
     // 创建模板匹配对象
     templatematch = new TemplateMatch();
 
-    // 连接线程信号槽 - 图像显示
-    connect(myThread, &MyThread::signal_messImage, this, [this](cv::Mat img) {
-        this->handleStreamingFrame(img);
-    }, Qt::QueuedConnection);
+    // Preview frames and tracking poses are gated before entering Qt's event
+    // queue while a result-bound production run is active.
+    connectSoftwarePreviewSignals(myThread);
 
-    // 连接软触发检测入口。纸巾和深度OCR直接反压采集线程，其他模式保持原UI排队路径。
+    // Connect the software-trigger detection ingress. Migrated modes submit
+    // directly and backpressure acquisition; remaining modes use the legacy
+    // UI dispatch path until their Stage 3 slice.
     connectSoftwareDetectionSignals(myThread);
 
 
@@ -1268,7 +1300,9 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
         if (m_softwareDetectionQueueActive.load()) {
             const int workerMode =
                     m_softwareDetectionModeIndex.load();
-            if (workerMode == 2) {
+            if (workerMode == 0
+                    || workerMode == 1
+                    || workerMode == 2) {
                 submitSoftwarePositionedDetectionFrame(
                             image,
                             pose);
@@ -1284,6 +1318,107 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
         Qt::QueuedConnection);
     },
     Qt::DirectConnection);
+}
+
+void Widget::connectSoftwarePreviewSignals(MyThread *thread)
+{
+    if (!thread) {
+        return;
+    }
+
+    connect(thread,
+            &MyThread::signal_messImage,
+            this,
+            [this](cv::Mat image) {
+        if (shouldSuppressStreamingFrame()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+                    this,
+                    [this, image]() {
+            handleStreamingFrame(image);
+        },
+        Qt::QueuedConnection);
+    },
+    Qt::DirectConnection);
+
+    connect(thread,
+            &MyThread::signal_boxesSelected,
+            this,
+            [this](DetectionPose pose) {
+        if (shouldSuppressStreamingFrame()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+                    this,
+                    [this, pose]() {
+            slot_saveBoxesFromThread(pose);
+        },
+        Qt::QueuedConnection);
+    },
+    Qt::DirectConnection);
+}
+
+void Widget::connectHardwarePreviewSignals(CameraThread *thread)
+{
+    if (!thread) {
+        return;
+    }
+
+    connect(thread,
+            &CameraThread::signal_messImage,
+            this,
+            [this](cv::Mat image) {
+        if (shouldSuppressStreamingFrame()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+                    this,
+                    [this, image]() {
+            handleStreamingFrame(image);
+        },
+        Qt::QueuedConnection);
+    },
+    Qt::DirectConnection);
+
+    connect(thread,
+            &CameraThread::signal_boxesSelected,
+            this,
+            [this](DetectionPose pose) {
+        if (shouldSuppressStreamingFrame()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+                    this,
+                    [this, pose]() {
+            slot_saveBoxesFromThread(pose);
+        },
+        Qt::QueuedConnection);
+    },
+    Qt::DirectConnection);
+}
+
+bool Widget::postSoftwareDetectionUiWork(
+        const UiCompletionMailbox::Work &work)
+{
+    if (!m_softwareDetectionUiMailbox.submit(work)) {
+        return false;
+    }
+
+    const bool posted = QMetaObject::invokeMethod(
+                this,
+                [this]() {
+        if (!m_softwareDetectionUiMailbox.processOne()) {
+            qDebug() << "[UI_COMPLETION] cancelled or empty UI work ignored";
+        }
+    },
+    Qt::QueuedConnection);
+    if (!posted) {
+        m_softwareDetectionUiMailbox.cancel();
+        qWarning() << "[UI_COMPLETION] unable to post result-bound UI work";
+        return false;
+    }
+    return true;
 }
 
 
@@ -1434,14 +1569,12 @@ bool Widget::startSoftwareTissueDetectionWorker(
     },
     [this, state](const DetectionCompletion &completion) {
         const TissueRollResult tissueResult = state->lastResult;
-        QMetaObject::invokeMethod(
-                    this,
+        postSoftwareDetectionUiWork(
                     [this, completion, tissueResult]() {
             handleSoftwareTissueCompletion(
                         completion,
                         tissueResult);
-        },
-        Qt::QueuedConnection);
+        });
     },
     [this](const QString &message) {
         QMetaObject::invokeMethod(
@@ -1453,7 +1586,9 @@ bool Widget::startSoftwareTissueDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!worker->start()) {
+    if (!m_softwareDetectionUiMailbox.reopen()
+            || !worker->start()) {
+        m_softwareDetectionUiMailbox.cancel();
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u8f6f\u89e6\u53d1"
@@ -1506,16 +1641,12 @@ bool Widget::startSoftwareOcrDetectionWorker(
     }),
     [this, state](const DetectionCompletion &completion) {
         const DetectionPose pose = state->lastPose;
-        QMetaObject::invokeMethod(
-                    this,
-                    [this,
-                     completion,
-                     pose]() {
+        postSoftwareDetectionUiWork(
+                    [this, completion, pose]() {
             handleSoftwareOcrCompletion(
                         completion,
                         pose);
-        },
-        Qt::QueuedConnection);
+        });
     },
     [this](const QString &message) {
         QMetaObject::invokeMethod(
@@ -1527,7 +1658,9 @@ bool Widget::startSoftwareOcrDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!worker->start()) {
+    if (!m_softwareDetectionUiMailbox.reopen()
+            || !worker->start()) {
+        m_softwareDetectionUiMailbox.cancel();
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u6df1\u5ea6 OCR "
@@ -1546,10 +1679,237 @@ bool Widget::startSoftwareOcrDetectionWorker(
     return true;
 }
 
+bool Widget::startSoftwareStampDetectionWorker(
+        QString *errorMessage)
+{
+    waitForSoftwareDetectionWorkerStop();
+
+    bool thresholdOk = false;
+    const int thresholdPercent =
+            ui->lineEdit_yuzhi->text().toInt(&thresholdOk);
+    if (!thresholdOk || digitTemplates.empty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u94a2\u5370\u5b57\u7b26\u6a21\u677f\u6216\u56fe\u50cf\u9608\u503c\u65e0\u6548\u3002");
+        }
+        return false;
+    }
+
+    const QString targetText = setdatetime();
+    const TemplateMatchPreparedTemplates preparedTemplates =
+            CharacterTemplateMatcher::prepare(digitTemplates);
+    std::vector<int> targetIndexes;
+    targetIndexes.reserve(digitTemplates.size());
+    for (int i = 0; i < static_cast<int>(digitTemplates.size()); ++i) {
+        targetIndexes.push_back(i);
+    }
+    const bool hasOverlapConfiguration = QFile::exists(
+                QDir(currentTemplateDirPath)
+                .filePath(QStringLiteral("calibrate_config.yaml")));
+    const std::shared_ptr<OverlapDetector> workerOverlapDetector(
+                new OverlapDetector(overlapDetector));
+    const std::shared_ptr<StampDetectionPipeline> pipeline(
+                new StampDetectionPipeline);
+    const std::shared_ptr<SoftwareStampDetectionState> state(
+                new SoftwareStampDetectionState);
+    std::unique_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    DetectionWorker::WorkItemDetector(
+                        [pipeline,
+                         state,
+                         targetText,
+                         preparedTemplates,
+                         targetIndexes,
+                         thresholdPercent,
+                         hasOverlapConfiguration,
+                         workerOverlapDetector](
+                            const DetectionWorkItem &item) {
+        StampDetectionPipeline::OverlapDetectionFunction detectOverlap;
+        if (hasOverlapConfiguration) {
+            detectOverlap = [workerOverlapDetector](
+                    const cv::Mat &sourceImage,
+                    const std::vector<cv::Point> &datePoly) {
+                const DetectResult overlap =
+                        workerOverlapDetector->processImage(
+                            sourceImage,
+                            datePoly);
+                StampOverlapResult result;
+                result.isOk = overlap.isOk;
+                result.finalStampPoly = overlap.finalStampPoly;
+                return result;
+            };
+        }
+        state->lastOutput = pipeline->detect(
+                    item,
+                    targetText,
+                    preparedTemplates,
+                    targetIndexes,
+                    thresholdPercent,
+                    detectOverlap);
+        return state->lastOutput.detectionResult;
+    }),
+    [this, state](const DetectionCompletion &completion) {
+        const StampDetectionWorkOutput output = state->lastOutput;
+        postSoftwareDetectionUiWork(
+                    [this, completion, output]() {
+            handleSoftwareStampCompletion(completion, output);
+        });
+    },
+    [this](const QString &message) {
+        QMetaObject::invokeMethod(
+                    this,
+                    [message]() {
+            qWarning() << "[DETECTION_WORKER]" << message;
+        },
+        Qt::QueuedConnection);
+    }));
+
+    if (!m_softwareDetectionUiMailbox.reopen()
+            || !worker->start()) {
+        m_softwareDetectionUiMailbox.cancel();
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u65e0\u6cd5\u542f\u52a8\u94a2\u5370\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        }
+        return false;
+    }
+
+    m_softwareDetectionWorker = std::move(worker);
+    m_softwareDetectionModeIndex.store(0);
+    m_softwareDetectionQueueActive.store(true);
+    qDebug() << "[DETECTION_WORKER] software stamp worker started"
+             << "queueCapacity="
+             << static_cast<qulonglong>(
+                    m_softwareDetectionWorker->queueCapacity());
+    return true;
+}
+
+bool Widget::startSoftwareWordDetectionWorker(
+        QString *errorMessage)
+{
+    waitForSoftwareDetectionWorkerStop();
+    if (!m_wordTemplateRunActive
+            || m_runningWordTemplateProfiles.empty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u5b57\u5e93\u8fd0\u884c Profile \u5feb\u7167\u672a\u51c6\u5907\u3002");
+        }
+        return false;
+    }
+
+    const std::shared_ptr<std::vector<WordTemplateProfile> > profiles(
+                new std::vector<WordTemplateProfile>(
+                    m_runningWordTemplateProfiles));
+    for (WordTemplateProfile &profile : *profiles) {
+        if (!profile.preparedDigitTemplates.isValid()) {
+            profile.preparedDigitTemplates =
+                    CharacterTemplateMatcher::prepare(
+                        profile.digitTemplates);
+        }
+        int thresholdValue = 0;
+        bool thresholdValid = parseIntValue(
+                    QString::number(profile.settings.imageThreshold),
+                    &thresholdValue);
+        if (!thresholdValid) {
+            thresholdValid = parseIntValue(
+                        ui->lineEdit_yuzhi->text(),
+                        &thresholdValue);
+        }
+        if (thresholdValid) {
+            profile.settings.imageThreshold = thresholdValue;
+        }
+    }
+    const std::shared_ptr<WordDetectionPipeline> pipeline(
+                new WordDetectionPipeline);
+    const std::shared_ptr<SoftwareWordDetectionState> state(
+                new SoftwareWordDetectionState);
+    std::unique_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    DetectionWorker::WorkItemDetector(
+                        [pipeline, state, profiles](
+                            const DetectionWorkItem &item) {
+        if (!item.hasPose || !item.pose.valid) {
+            state->lastOutput = pipeline->detect(
+                        item,
+                        QString(),
+                        QString(),
+                        TemplateMatchPreparedTemplates(),
+                        std::vector<int>(),
+                        0);
+            return state->lastOutput.detectionResult;
+        }
+
+        const int profileIndex = item.pose.wordTemplateProfileIndex;
+        if (profileIndex < 0
+                || profileIndex >= static_cast<int>(profiles->size())) {
+            state->lastOutput = WordDetectionWorkOutput();
+            state->lastOutput.pose = item.pose;
+            state->lastOutput.detectionResult.modeId =
+                    QStringLiteral("word_detection");
+            state->lastOutput.detectionResult.status =
+                    DetectionStatus::Cancelled;
+            state->lastOutput.detectionResult.diagnostic =
+                    QStringLiteral("Invalid word profile index");
+            return state->lastOutput.detectionResult;
+        }
+
+        const WordTemplateProfile &profile =
+                profiles->at(static_cast<size_t>(profileIndex));
+        const QString templateName = profile.name.isEmpty()
+                ? QDir(profile.dirPath).dirName()
+                : profile.name;
+        state->lastOutput = pipeline->detect(
+                    item,
+                    profile.settings.targetText,
+                    templateName,
+                    profile.preparedDigitTemplates,
+                    profile.digitTemplateTargetIndexes,
+                    static_cast<int>(profile.settings.imageThreshold));
+        return state->lastOutput.detectionResult;
+    }),
+    [this, state](const DetectionCompletion &completion) {
+        const WordDetectionWorkOutput output = state->lastOutput;
+        postSoftwareDetectionUiWork(
+                    [this, completion, output]() {
+            handleSoftwareWordCompletion(completion, output);
+        });
+    },
+    [this](const QString &message) {
+        QMetaObject::invokeMethod(
+                    this,
+                    [message]() {
+            qWarning() << "[DETECTION_WORKER]" << message;
+        },
+        Qt::QueuedConnection);
+    }));
+
+    if (!m_softwareDetectionUiMailbox.reopen()
+            || !worker->start()) {
+        m_softwareDetectionUiMailbox.cancel();
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u65e0\u6cd5\u542f\u52a8\u5b57\u5e93\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        }
+        return false;
+    }
+
+    m_softwareDetectionWorker = std::move(worker);
+    m_softwareDetectionModeIndex.store(1);
+    m_softwareDetectionQueueActive.store(true);
+    qDebug() << "[DETECTION_WORKER] software word worker started"
+             << "queueCapacity="
+             << static_cast<qulonglong>(
+                    m_softwareDetectionWorker->queueCapacity());
+    return true;
+}
+
 void Widget::requestSoftwareDetectionWorkerStop()
 {
     m_softwareDetectionQueueActive.store(false);
     m_softwareDetectionModeIndex.store(-1);
+    m_softwareDetectionUiMailbox.cancel();
     if (m_softwareDetectionWorker) {
         m_softwareDetectionWorker->requestStop();
     }
@@ -1598,7 +1958,6 @@ void Widget::submitSoftwarePositionedDetectionFrame(
         const DetectionPose &pose)
 {
     if (!m_softwareDetectionQueueActive.load()
-            || m_softwareDetectionModeIndex.load() != 2
             || image.empty()) {
         return;
     }
@@ -1668,7 +2027,232 @@ void Widget::handleSoftwareOcrCompletion(
                 pose,
                 ocrResult,
                 acceptedCompletion,
-                acceptedCompletion.result.elapsedMs);
+                resultPresentationElapsedMs(
+                    acceptedCompletion));
+}
+
+void Widget::handleSoftwareStampCompletion(
+        const DetectionCompletion &completion,
+        const StampDetectionWorkOutput &output)
+{
+    const DetectionCompletion acceptedCompletion =
+            m_runtimeController.complete(
+                completion.frame,
+                completion.result);
+    if (!acceptedCompletion.isValid()) {
+        qDebug() << "[DETECTION_WORKER] stale stamp completion ignored";
+        return;
+    }
+    if (acceptedCompletion.result.status
+            == DetectionStatus::Cancelled) {
+        showDetectionRoiWarningOnce();
+        return;
+    }
+
+    clearDetectionRoiWarning();
+    cv::Mat image = acceptedCompletion.frame->originalImage;
+    finalizeSoftwareStampResult(
+                &image,
+                output,
+                acceptedCompletion);
+}
+
+void Widget::handleSoftwareWordCompletion(
+        const DetectionCompletion &completion,
+        const WordDetectionWorkOutput &output)
+{
+    const DetectionCompletion acceptedCompletion =
+            m_runtimeController.complete(
+                completion.frame,
+                completion.result);
+    if (!acceptedCompletion.isValid()) {
+        qDebug() << "[DETECTION_WORKER] stale word completion ignored";
+        return;
+    }
+    if (acceptedCompletion.result.status
+            == DetectionStatus::Cancelled) {
+        qDebug() << "[WORD_DETECT] positioned work cancelled:"
+                 << acceptedCompletion.result.diagnostic;
+        return;
+    }
+
+    cv::Mat image = acceptedCompletion.frame->originalImage;
+    finalizeSoftwareWordResult(
+                &image,
+                output,
+                acceptedCompletion);
+}
+
+void Widget::finalizeSoftwareStampResult(
+        cv::Mat *image,
+        const StampDetectionWorkOutput &output,
+        const DetectionCompletion &acceptedCompletion)
+{
+    if (!image || image->empty()
+            || !acceptedCompletion.isValid()) {
+        return;
+    }
+
+    processDueDelayedNgRequest();
+    if (judge) {
+        j = 1;
+        x++;
+        judge = false;
+    }
+    if ((j - 1) % x == 0) {
+        imageLabel->clearGreenRects();
+        detectedRects.clear();
+        string1.clear();
+    }
+
+    ui->imagenum->setText(
+                QString::number(m_runtimeController.totalCount()));
+    installLegacyDetectionOverlay(
+                acceptedCompletion.result,
+                output.pose);
+    g_lastStampIsOverlap = output.hasOverlapDetection
+            && !output.stampResult.overlapIsOk;
+    slot_displayAndDetect(image);
+
+    if (j % x == 0) {
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome =
+                m_runtimeController.record(
+                    acceptedCompletion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected stamp completion";
+            return;
+        }
+
+        if (acceptedCompletion.result.verdict == AlgorithmVerdict::Ng) {
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveNg) {
+                saveResultImages("png", "ng", acceptedCompletion);
+            }
+            if (!output.stampResult.characterIsOk
+                    && output.stampResult.overlapIsOk) {
+                ui->resultlabel->setText(
+                            QString("<font size='10' color='red'>"
+                                    "错误(喷码不合格)</font>"));
+            } else if (output.stampResult.characterIsOk
+                       && !output.stampResult.overlapIsOk) {
+                ui->resultlabel->setText(
+                            QString("<font size='10' color='red'>"
+                                    "错误(钢印重叠)</font>"));
+            } else {
+                ui->resultlabel->setText(
+                            QString("<font size='10' color='red'>"
+                                    "错误(喷码与钢印均不合格)</font>"));
+            }
+        } else {
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
+                saveResultImages("png", "ok", acceptedCompletion);
+            }
+            ui->resultlabel->setText(
+                        QString("<font size='10' color='SpringGreen'>"
+                                "正确！</font>"));
+        }
+        applyPlcResultRequest(outcome.plcAction);
+    }
+
+    refreshResultStatistics();
+    ui->speedLabel->setText(
+                QString("检测耗时 %1 毫秒")
+                .arg(resultPresentationElapsedMs(
+                    acceptedCompletion)));
+    ++j;
+}
+
+void Widget::finalizeSoftwareWordResult(
+        cv::Mat *image,
+        const WordDetectionWorkOutput &output,
+        const DetectionCompletion &acceptedCompletion)
+{
+    if (!image || image->empty()
+            || !acceptedCompletion.isValid()) {
+        return;
+    }
+
+    processDueDelayedNgRequest();
+    if (judge) {
+        j = 1;
+        x++;
+        judge = false;
+    }
+    if ((j - 1) % x == 0) {
+        imageLabel->clearGreenRects();
+        detectedRects.clear();
+        string1.clear();
+    }
+
+    installLegacyDetectionOverlay(
+                acceptedCompletion.result,
+                output.pose);
+    g_lastStampIsOverlap = false;
+    if (!output.templateName.trimmed().isEmpty()) {
+        ui->currentTemplateName->setText(output.templateName);
+    } else if (!output.pose.valid) {
+        ui->currentTemplateName->setText(QStringLiteral("--"));
+    }
+    slot_displayAndDetect(image);
+    setLabelTextIfChanged(ui->resultlabel_7, QString());
+    ui->imagenum->setText(
+                QString::number(m_runtimeController.totalCount()));
+
+    if (j % x == 0) {
+        const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome =
+                m_runtimeController.record(
+                    acceptedCompletion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected word completion";
+            return;
+        }
+
+        if (acceptedCompletion.result.verdict == AlgorithmVerdict::Ng) {
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveNg) {
+                saveWordResultImages("png", "ng", acceptedCompletion);
+            }
+            ui->resultlabel->setText(
+                        QString("<font size='10' color='red'>错误！</font>"));
+        } else {
+            if (outcome.imageSaveAction
+                    == DetectionResultSaveAction::SaveOk) {
+                saveWordResultImages("png", "ok", acceptedCompletion);
+            }
+            ui->resultlabel->setText(
+                        QString("<font size='10' color='SpringGreen'>"
+                                "正确！</font>"));
+        }
+        applyPlcResultRequest(outcome.plcAction);
+    }
+
+    refreshResultStatistics();
+    ui->speedLabel->setText(
+                QString("检测耗时 %1 毫秒")
+                .arg(resultPresentationElapsedMs(
+                    acceptedCompletion)));
+    qDebug().noquote()
+            << QString("[WORD_DETECT] template=%1 result=%2 reason=%3 "
+                       "targetCount=%4 detectedCount=%5 poseScore=%6")
+               .arg(output.templateName.isEmpty()
+                    ? QStringLiteral("--")
+                    : output.templateName)
+               .arg(acceptedCompletion.result.verdict
+                    == AlgorithmVerdict::Ok
+                    ? QStringLiteral("OK")
+                    : QStringLiteral("NG"))
+               .arg(acceptedCompletion.result.diagnostic)
+               .arg(output.wordResult.targetCharacterCount)
+               .arg(output.wordResult.detectedCharacterCount)
+               .arg(output.pose.score, 0, 'f', 4);
+    ++j;
 }
 
 DetectionCompletion Widget::makeDetectionCompletion(
@@ -3460,7 +4044,10 @@ void Widget::finalizeTissueResult(
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    if (tissueResult.processingTimeMs > 0) {
+    if (acceptedCompletion.isValid()) {
+        duration = resultPresentationElapsedMs(
+                    acceptedCompletion);
+    } else if (tissueResult.processingTimeMs > 0) {
         duration = tissueResult.processingTimeMs;
     }
     ui->speedLabel->setText(QString("检测耗时 %1 毫秒").arg(duration));
@@ -3501,8 +4088,26 @@ void Widget::clearInspectionTransientDisplay()
 
 bool Widget::shouldSuppressStreamingFrame() const
 {
-    return m_resultBoundDisplayActive
-            && isWordFamilyMode(currentDetectModeId());
+    return m_resultBoundDisplayActive.load();
+}
+
+qint64 Widget::resultPresentationElapsedMs(
+        const DetectionCompletion &completion) const
+{
+    qint64 elapsedMs = static_cast<qint64>(
+                completion.result.elapsedMs + 0.5);
+    if (!completion.frame
+            || !completion.frame->timestampUtc.isValid()) {
+        return elapsedMs;
+    }
+
+    const qint64 endToEndMs =
+            completion.frame->timestampUtc.msecsTo(
+                QDateTime::currentDateTimeUtc());
+    if (endToEndMs > elapsedMs) {
+        elapsedMs = endToEndMs;
+    }
+    return elapsedMs;
 }
 
 void Widget::handleStreamingFrame(const cv::Mat &image)
@@ -3803,6 +4408,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
             requestSoftwareDetectionWorkerStop();
             finishInspectionStop();
             isCollecting = false;
+            m_resultBoundDisplayActive.store(false);
             clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             m_operationState = m_bOpenDevice
@@ -12054,6 +12660,8 @@ void Widget::on_plcbtn_clicked()
             currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
     const bool isOcrMode = (ui->comboBox_4->currentIndex() == 2);
+    const bool isStampMode = (ui->comboBox_4->currentIndex() == 0);
+    const bool isPlainWordMode = (ui->comboBox_4->currentIndex() == 1);
     const bool isWordProfileMode =
             isWordMode && !m_wordTemplateProfiles.empty();
 
@@ -12322,6 +12930,7 @@ void Widget::on_plcbtn_clicked()
                 return;
             }
             isCollecting = false;
+            m_resultBoundDisplayActive.store(false);
             clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             finishInspectionStop();
@@ -12347,10 +12956,7 @@ void Widget::on_plcbtn_clicked()
         connect(this, &Widget::choosechannel,cameraThread,&CameraThread::receivecolorchannel);
         connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
         connect(cameraThread, &CameraThread::signal_cleanlabel, this, &Widget::slot_clearResultLabel, Qt::QueuedConnection);
-        connect(cameraThread, &CameraThread::signal_messImage, this, [this](cv::Mat img) {
-            this->handleStreamingFrame(img);
-        }, Qt::QueuedConnection);
-        connect(cameraThread, &CameraThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
+        connectHardwarePreviewSignals(cameraThread);
         connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
             this->dispatchDetectionByMode(&img, pose);
         }, Qt::QueuedConnection);
@@ -12376,7 +12982,7 @@ void Widget::on_plcbtn_clicked()
         // 发送模板匹配相关参数
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
-        m_resultBoundDisplayActive = isWordMode;
+        m_resultBoundDisplayActive.store(true);
         beginInspectionStart();
         cameraThread->start();
         if (!cameraThread->wait(100)) {
@@ -12429,8 +13035,6 @@ void Widget::on_plcbtn_clicked()
                     savedTrackingBox,
                     m_loadedTrackingTemplate);
 
-        connect(myThread, &MyThread::signal_boxesSelected, this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
-
         applyErrors.clear();
         if (!applyRuntimeThreadSettingsFromUi(&applyErrors, false)) {
             QMessageBox::warning(this, "启动失败",
@@ -12469,15 +13073,27 @@ void Widget::on_plcbtn_clicked()
                          << static_cast<int>(m_runningWordTemplateProfiles.size())
                          << "mode:" << currentDetectModeId();
             }
-            m_resultBoundDisplayActive = isWordMode;
+            m_resultBoundDisplayActive.store(true);
             beginInspectionStart();
-            if (isTissueMode || isOcrMode) {
+            if (isTissueMode
+                    || isOcrMode
+                    || isStampMode
+                    || isPlainWordMode) {
                 QString workerError;
-                const bool workerStarted = isTissueMode
-                        ? startSoftwareTissueDetectionWorker(
-                              &workerError)
-                        : startSoftwareOcrDetectionWorker(
-                              &workerError);
+                bool workerStarted = false;
+                if (isTissueMode) {
+                    workerStarted = startSoftwareTissueDetectionWorker(
+                                &workerError);
+                } else if (isOcrMode) {
+                    workerStarted = startSoftwareOcrDetectionWorker(
+                                &workerError);
+                } else if (isStampMode) {
+                    workerStarted = startSoftwareStampDetectionWorker(
+                                &workerError);
+                } else {
+                    workerStarted = startSoftwareWordDetectionWorker(
+                                &workerError);
+                }
                 if (!workerStarted) {
                     finishInspectionStop();
                     m_resultBoundDisplayActive = false;
@@ -12669,19 +13285,13 @@ void Widget::reinitializeMyThread()
     qDebug() << "Creating new myThread...";
     myThread = new MyThread();
 
-    // 连接信号槽 - 图像显示
-    connect(myThread, &MyThread::signal_messImage, this, [this](cv::Mat img) {
-        this->handleStreamingFrame(img);
-    }, Qt::QueuedConnection);
+    // Connect bounded preview ingress once for this thread instance.
+    connectSoftwarePreviewSignals(myThread);
     // 连接信号槽 - 清除标签
     connect(myThread, &MyThread::signal_cleanlabel,
             this, &Widget::slot_clearResultLabel);
 
-    // 🔥 新增：连接框坐标信号（关键！）
-    connect(myThread, &MyThread::signal_boxesSelected,
-            this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
-
-    // 连接信号槽 - 图像检测（纸巾和深度OCR走有界队列，其他模式保持原路径）
+    // Connect software-trigger detection routing for all current migrated modes.
     connectSoftwareDetectionSignals(myThread);
 
     // 步骤6: 连接其他控制信号
@@ -12757,13 +13367,8 @@ void Widget::reinitializeCameraThread()
     connect(cameraThread, &CameraThread::signal_cleanlabel,
             this, &Widget::slot_clearResultLabel);
 
-    // 步骤6: 连接信号槽 - 图像显示
-    connect(cameraThread, &CameraThread::signal_messImage, this, [this](cv::Mat img) {
-        this->handleStreamingFrame(img);
-    }, Qt::QueuedConnection);
-
-    connect(cameraThread, &CameraThread::signal_boxesSelected,
-            this, &Widget::slot_saveBoxesFromThread, Qt::QueuedConnection);
+    // Step 6: gate preview ingress before it can accumulate in the UI queue.
+    connectHardwarePreviewSignals(cameraThread);
 
     // 步骤7: 连接信号槽 - 图像检测（根据检测模式）
     connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {

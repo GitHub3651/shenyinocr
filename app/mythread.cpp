@@ -232,6 +232,48 @@ void MyThread::runTemplatePreview(quint64 sessionId)
     m_templatePreviewFramePending.store(false);
 }
 
+bool MyThread::captureSoftwareTriggeredFrame(cv::Mat *frame)
+{
+    if (!frame || !m_cameraDevice || m_stopRequested.load()) {
+        return false;
+    }
+
+    cv::Mat discardedFrame;
+    m_cameraDevice->takeImageForMainIfReady(discardedFrame);
+    const uint64_t frameSequenceBefore =
+            m_cameraDevice->frameSequence();
+    const CameraOperationResult triggerResult =
+            m_cameraDevice->executeCommand("TriggerSoftware");
+    if (!triggerResult.isSuccess()) {
+        qWarning() << "[SOFTWARE_ACQUISITION] trigger failed:"
+                   << triggerResult.nativeErrorCode;
+        return false;
+    }
+
+    const std::chrono::steady_clock::time_point waitStart =
+            std::chrono::steady_clock::now();
+    while (!m_stopRequested.load()) {
+        if (m_cameraDevice->frameSequence() > frameSequenceBefore
+                && m_cameraDevice->takeImageForMainIfReady(*frame)
+                && !frame->empty()) {
+            return true;
+        }
+
+        const qint64 waitedMs =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - waitStart).count();
+        if (waitedMs >= 500) {
+            qWarning() << "[SOFTWARE_ACQUISITION] frame timeout:"
+                       << "sequenceBefore=" << frameSequenceBefore
+                       << "sequenceAfter="
+                       << m_cameraDevice->frameSequence();
+            return false;
+        }
+        msleep(2);
+    }
+    return false;
+}
+
 void MyThread::run() {
     if (!m_cameraDevice || !imagePtr) return;
     m_stopRequested.store(false);
@@ -251,9 +293,13 @@ void MyThread::run() {
 
     while (m_cameraDevice && !m_stopRequested.load()) {
         try {
-            m_cameraDevice->executeCommand("TriggerSoftware"); //
-            *imagePtr = m_cameraDevice->waitForImage(); //
-            if (imagePtr->empty()) { msleep(10); continue; }
+            if (!imagePtr
+                    || !captureSoftwareTriggeredFrame(imagePtr)) {
+                if (!m_stopRequested.load()) {
+                    msleep(10);
+                }
+                continue;
+            }
 
             // 图像旋转与通道处理
             if (angle1 == 1) cv::rotate(*imagePtr, *imagePtr, cv::ROTATE_90_CLOCKWISE);
@@ -291,8 +337,9 @@ void MyThread::run() {
             if (bypassTracking) {
                 auto now = std::chrono::steady_clock::now();
                 int interval = receivedata.toInt();
-                if (interval <= 0) interval = 300;
-                if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
+                if (interval < 0) interval = 0;
+                if (interval == 0
+                        || std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
                     emit signal_sendWholeFrameForDetection(
                                 imagePtr->clone());
                     lastDetectionTime = now;
@@ -368,9 +415,10 @@ void MyThread::run() {
                     emit signal_boxesSelected(bestPose);
                     auto now = std::chrono::steady_clock::now();
                     int interval = receivedata.toInt();
-                    if (interval <= 0) interval = 300;
+                    if (interval < 0) interval = 0;
                     const bool detectionDue =
-                            std::chrono::duration_cast<
+                            interval == 0
+                            || std::chrono::duration_cast<
                                 std::chrono::milliseconds>(
                                 now - lastDetectionTime).count()
                             >= interval;
@@ -397,8 +445,9 @@ void MyThread::run() {
                     if (pose.valid) {
                         auto now = std::chrono::steady_clock::now();
                         int interval = receivedata.toInt();
-                        if (interval <= 0) interval = 300;
-                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
+                        if (interval < 0) interval = 0;
+                        if (interval == 0
+                                || std::chrono::duration_cast<std::chrono::milliseconds>(now - lastDetectionTime).count() >= interval) {
                             emit signal_sendForDetection(imagePtr->clone(), pose); //
                             lastDetectionTime = now;
                         }
@@ -411,7 +460,6 @@ void MyThread::run() {
             }
 
         } catch (...) { qDebug() << "Exception in run loop"; }
-        msleep(100);
     }
 }
 

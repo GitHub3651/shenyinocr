@@ -13,19 +13,8 @@
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <tuple>
+#include "detection/common/character_template_matcher.h"
 using namespace cv;
-
-struct TemplateMatchPreparedTemplates
-{
-    std::vector<cv::Mat> grayTemplates;
-    std::vector<cv::Mat> smallTemplates;
-
-    bool isValid() const
-    {
-        return !grayTemplates.empty()
-            && grayTemplates.size() == smallTemplates.size();
-    }
-};
 
 class TemplateMatch:public QThread
 {

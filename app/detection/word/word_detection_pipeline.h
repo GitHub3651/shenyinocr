@@ -1,6 +1,9 @@
 #ifndef DETECTION_WORD_WORD_DETECTION_PIPELINE_H
 #define DETECTION_WORD_WORD_DETECTION_PIPELINE_H
 
+#include "TrackingTypes.h"
+#include "detection/common/character_template_matcher.h"
+
 #include <QString>
 #include <QStringList>
 
@@ -16,6 +19,19 @@ struct WordDetectionResult
     bool isOk = false;
 };
 
+struct WordDetectionWorkOutput
+{
+    DetectionResult detectionResult;
+    WordDetectionResult wordResult;
+    DetectionPose pose;
+    QString templateName;
+    QStringList detectedUnits;
+    QStringList matchDetails;
+    QStringList missingUnits;
+    QString reason;
+    bool roiValid = false;
+};
+
 class WordDetectionPipeline
 {
 public:
@@ -25,6 +41,14 @@ public:
             cv::Mat &dateRoi,
             const QString &targetText,
             const CharacterMatchFunction &matchCharacters) const;
+
+    WordDetectionWorkOutput detect(
+            const DetectionWorkItem &item,
+            const QString &targetText,
+            const QString &templateName,
+            const TemplateMatchPreparedTemplates &preparedTemplates,
+            const std::vector<int> &templateTargetIndexes,
+            int thresholdPercent) const;
 };
 
 #endif // DETECTION_WORD_WORD_DETECTION_PIPELINE_H

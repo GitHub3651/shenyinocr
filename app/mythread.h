@@ -163,6 +163,7 @@ protected:
 
 private:
     void runTemplatePreview(quint64 sessionId);
+    bool captureSoftwareTriggeredFrame(cv::Mat *frame);
 
     // Qt相关
     QImage *myImage;                    // QImage图像对象
@@ -190,7 +191,7 @@ private:
     // 配置参数
     int angle1;                         // 图像旋转角度 (0-3)
     int colorc1;                        // 图像颜色通道
-    QString receivedata = "300";        // 检测间隔时间（毫秒）
+    QString receivedata = "300";        // Minimum detection interval in ms; 0 means full speed.
     // 线程控制（线程安全）
     std::atomic<bool> m_stopRequested;  // 停止请求标志
     std::atomic<bool> m_tracking;       // 跟踪状态标志

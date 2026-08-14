@@ -105,6 +105,9 @@ double TemplateMatch::calculateIOU(const cv::Rect& rectA, const cv::Rect& rectB)
 TemplateMatchPreparedTemplates TemplateMatch::prepareDigitTemplates(
     const std::vector<cv::Mat> &digitTemplates)
 {
+    return CharacterTemplateMatcher::prepare(digitTemplates);
+
+#if 0 // Kept until the shared matcher passes the Stage 3 parity gate.
     TemplateMatchPreparedTemplates prepared;
     prepared.grayTemplates.reserve(digitTemplates.size());
     prepared.smallTemplates.reserve(digitTemplates.size());
@@ -150,6 +153,7 @@ TemplateMatchPreparedTemplates TemplateMatch::prepareDigitTemplates(
     }
 
     return prepared;
+#endif
 }
 
 int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {
@@ -184,6 +188,16 @@ int TemplateMatch::run3(
     const TemplateMatchPreparedTemplates &preparedTemplates,
     const std::vector<int> &templateTargetIndexes)
 {
+    const CharacterTemplateMatchResult matchResult =
+            CharacterTemplateMatcher::match(
+                targetImage,
+                preparedTemplates,
+                templateTargetIndexes,
+                value);
+    lastMatchResults = matchResult.matches;
+    return matchResult.detectedCount;
+
+#if 0 // Kept until the shared matcher passes the Stage 3 parity gate.
     cv::Mat targetGrayImage;
 
     // --- 1. 基础检查与图像预处理 ---
@@ -441,6 +455,7 @@ int TemplateMatch::run3(
     }
 
     return totalDetectedRects;
+#endif
 }
 
 //int TemplateMatch::run3(std::vector<cv::Mat> digitTemplates) {

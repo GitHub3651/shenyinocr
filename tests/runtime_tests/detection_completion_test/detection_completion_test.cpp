@@ -11,6 +11,7 @@
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/result_handler.h"
+#include "runtime/result_presentation_mailbox.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -158,6 +159,8 @@ private slots:
     void detectionWorkerRejectsSubmissionOutsideRun();
     void detectionWorkerCancellationSuppressesPendingResults();
     void detectionWorkerCanRestartAfterWait();
+    void uiCompletionMailboxSerializesWholeProductWork();
+    void uiCompletionMailboxCancellationReleasesProducer();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void orientedDateRoiClampsPaddingAtImageEdge();
@@ -1623,6 +1626,70 @@ void DetectionCompletionTest::detectionWorkerCanRestartAfterWait()
     QCOMPARE(worker.cancelledFrameCount(), quint64(0));
     QCOMPARE(resultSequences[0], quint64(1));
     QCOMPARE(resultSequences[1], quint64(2));
+}
+
+void DetectionCompletionTest::uiCompletionMailboxSerializesWholeProductWork()
+{
+    UiCompletionMailbox mailbox;
+    QVERIFY(mailbox.reopen());
+
+    std::vector<int> presentedProducts;
+    bool firstObservedProcessing = false;
+    QVERIFY(mailbox.submit([&]() {
+        firstObservedProcessing = mailbox.isProcessing();
+        presentedProducts.push_back(1);
+    }));
+    QVERIFY(mailbox.hasPendingWork());
+
+    std::future<bool> secondSubmission = std::async(
+                std::launch::async,
+                [&]() {
+        return mailbox.submit([&]() {
+            presentedProducts.push_back(2);
+        });
+    });
+    QVERIFY(secondSubmission.wait_for(
+                std::chrono::milliseconds(30))
+            == std::future_status::timeout);
+
+    QVERIFY(mailbox.processOne());
+    QVERIFY(firstObservedProcessing);
+    QCOMPARE(secondSubmission.get(), true);
+    QVERIFY(mailbox.hasPendingWork());
+    QVERIFY(mailbox.processOne());
+    QVERIFY(!mailbox.hasPendingWork());
+    QCOMPARE(static_cast<int>(presentedProducts.size()), 2);
+    QCOMPARE(presentedProducts.at(0), 1);
+    QCOMPARE(presentedProducts.at(1), 2);
+}
+
+void DetectionCompletionTest::uiCompletionMailboxCancellationReleasesProducer()
+{
+    UiCompletionMailbox mailbox;
+    QVERIFY(mailbox.reopen());
+    QVERIFY(mailbox.submit([]() {}));
+
+    std::future<bool> blockedSubmission = std::async(
+                std::launch::async,
+                [&]() {
+        return mailbox.submit([]() {});
+    });
+    QVERIFY(blockedSubmission.wait_for(
+                std::chrono::milliseconds(30))
+            == std::future_status::timeout);
+
+    mailbox.cancel();
+    QCOMPARE(blockedSubmission.get(), false);
+    QVERIFY(!mailbox.hasPendingWork());
+    QVERIFY(!mailbox.processOne());
+
+    int presentedCount = 0;
+    QVERIFY(mailbox.reopen());
+    QVERIFY(mailbox.submit([&presentedCount]() {
+        ++presentedCount;
+    }));
+    QVERIFY(mailbox.processOne());
+    QCOMPARE(presentedCount, 1);
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()

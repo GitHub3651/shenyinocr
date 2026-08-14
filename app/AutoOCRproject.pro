@@ -74,10 +74,12 @@ SOURCES += \
     runtime/detection_shadow_comparator.cpp \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
+    runtime/result_presentation_mailbox.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/detection_session.cpp \
     runtime/result_handler.cpp \
     runtime/image_save_service.cpp \
+    detection/common/character_template_matcher.cpp \
     detection/common/profile_pose_selector.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/barcode_word/barcode_word_detection_pipeline.cpp \
@@ -141,10 +143,12 @@ HEADERS += \
     runtime/detection_shadow_comparator.h \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
+    runtime/result_presentation_mailbox.h \
     runtime/inspection_runtime_controller.h \
     runtime/detection_session.h \
     runtime/result_handler.h \
     runtime/image_save_service.h \
+    detection/common/character_template_matcher.h \
     detection/common/detection_roi_geometry.h \
     detection/common/profile_pose_selector.h \
     detection/ocr/ocr_detection_pipeline.h \

@@ -70,6 +70,7 @@
 #include "devices/plc/plc_device.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
+#include "runtime/result_presentation_mailbox.h"
 
 using namespace cv;
 
@@ -87,6 +88,8 @@ class ImageSaveService;
 class DetectionWorker;
 struct RecipeSelection;
 struct OcrDetectionResult;
+struct StampDetectionWorkOutput;
+struct WordDetectionWorkOutput;
 
 /**
  * @brief 主窗口类
@@ -348,9 +351,17 @@ private:
     bool hasRunningInspectionThread() const;
     void handleStreamingFrame(const cv::Mat &image);
     bool shouldSuppressStreamingFrame() const;
+    qint64 resultPresentationElapsedMs(
+        const DetectionCompletion &completion) const;
+    void connectSoftwarePreviewSignals(MyThread *thread);
+    void connectHardwarePreviewSignals(CameraThread *thread);
     void connectSoftwareDetectionSignals(MyThread *thread);
+    bool postSoftwareDetectionUiWork(
+        const UiCompletionMailbox::Work &work);
     bool startSoftwareTissueDetectionWorker(QString *errorMessage);
     bool startSoftwareOcrDetectionWorker(QString *errorMessage);
+    bool startSoftwareStampDetectionWorker(QString *errorMessage);
+    bool startSoftwareWordDetectionWorker(QString *errorMessage);
     void requestSoftwareDetectionWorkerStop();
     void waitForSoftwareDetectionWorkerStop();
     void submitSoftwareDetectionFrame(const cv::Mat &image);
@@ -363,6 +374,12 @@ private:
     void handleSoftwareOcrCompletion(
         const DetectionCompletion &completion,
         const DetectionPose &pose);
+    void handleSoftwareStampCompletion(
+        const DetectionCompletion &completion,
+        const StampDetectionWorkOutput &output);
+    void handleSoftwareWordCompletion(
+        const DetectionCompletion &completion,
+        const WordDetectionWorkOutput &output);
     void finalizeOcrResult(
         cv::Mat *image,
         const DetectionPose &pose,
@@ -372,6 +389,14 @@ private:
     void finalizeTissueResult(
         cv::Mat *image,
         const TissueRollResult &tissueResult,
+        const DetectionCompletion &acceptedCompletion);
+    void finalizeSoftwareStampResult(
+        cv::Mat *image,
+        const StampDetectionWorkOutput &output,
+        const DetectionCompletion &acceptedCompletion);
+    void finalizeSoftwareWordResult(
+        cv::Mat *image,
+        const WordDetectionWorkOutput &output,
         const DetectionCompletion &acceptedCompletion);
 
     // ========== UI对象 ==========
@@ -423,11 +448,12 @@ private:
     };
     OperationState m_operationState =
             OperationState::CameraClosed;
-    bool m_resultBoundDisplayActive = false;
+    std::atomic<bool> m_resultBoundDisplayActive{false};
     bool m_applicationExitInProgress = false;
     bool m_detectionRoiWarningActive = false;
     InspectionRuntimeController m_runtimeController;
     std::unique_ptr<DetectionWorker> m_softwareDetectionWorker;
+    UiCompletionMailbox m_softwareDetectionUiMailbox;
     std::atomic<bool> m_softwareDetectionQueueActive{false};
     std::atomic<int> m_softwareDetectionModeIndex{-1};
     TissueRecipeParameters m_tissueRecipeParameters;

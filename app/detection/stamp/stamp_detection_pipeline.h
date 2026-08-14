@@ -1,6 +1,9 @@
 #ifndef DETECTION_STAMP_STAMP_DETECTION_PIPELINE_H
 #define DETECTION_STAMP_STAMP_DETECTION_PIPELINE_H
 
+#include "TrackingTypes.h"
+#include "detection/common/character_template_matcher.h"
+
 #include <QString>
 
 #include <opencv2/core.hpp>
@@ -24,6 +27,15 @@ struct StampDetectionResult
     std::vector<cv::Point> finalStampPoly;
 };
 
+struct StampDetectionWorkOutput
+{
+    DetectionResult detectionResult;
+    StampDetectionResult stampResult;
+    DetectionPose pose;
+    bool roiValid = false;
+    bool hasOverlapDetection = false;
+};
+
 class StampDetectionPipeline
 {
 public:
@@ -39,6 +51,14 @@ public:
             const std::vector<cv::Point> &datePoly,
             const QString &targetText,
             const CharacterMatchFunction &matchCharacters,
+            const OverlapDetectionFunction &detectOverlap) const;
+
+    StampDetectionWorkOutput detect(
+            const DetectionWorkItem &item,
+            const QString &targetText,
+            const TemplateMatchPreparedTemplates &preparedTemplates,
+            const std::vector<int> &templateTargetIndexes,
+            int thresholdPercent,
             const OverlapDetectionFunction &detectOverlap) const;
 };
 
