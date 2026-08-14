@@ -23,7 +23,8 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
     $$PROJECT_ROOT/app/runtime/detection_session.cpp \
     $$PROJECT_ROOT/app/runtime/result_handler.cpp \
-    $$PROJECT_ROOT/app/runtime/image_save_service.cpp
+    $$PROJECT_ROOT/app/runtime/image_save_service.cpp \
+    $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/TrackingTypes.h \
@@ -37,7 +38,8 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/detection_session.h \
     $$PROJECT_ROOT/app/runtime/result_handler.h \
     $$PROJECT_ROOT/app/runtime/image_save_service.h \
-    $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h
+    $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \
+    $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

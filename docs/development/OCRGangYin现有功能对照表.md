@@ -33,7 +33,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | UI-001 | 模式与参数页面 | “识别模式”下拉框 | 非检测/非模板忙碌状态 | `comboBox_4::currentIndexChanged`→`setupDetectModeChangeTracking`→存旧模式路径→`restoreTemplatesForMode`→更新可见参数；本切片统一钢印与字库家族的当前模板编辑区并恢复钢印字符切割入口 | 界面固定顺序：模板匹配、字库匹配、深度模型、纸巾检测、二维码+三期；内部ID依次为stamp/word/ocr/tissue/barcode_word | 切换对应参数和模板历史；钢印显示单Profile编辑选择及字符切割；无效历史保留空状态并可提示 | 保存当前模式和模板历史 | 五个现有入口不可丢失，钢印不能退化为仅重叠检测 | `ui/pages/` | 保留 | 依次切换五模式，核对控件显隐、模板名、历史恢复；钢印编辑区与字库家族布局一致 | 已基线 | S；U；2026-08-13用户确认钢印编辑区、字符裁切入口及两种单模板模式切换均正常 |
 | UI-002 | 操作状态与按钮使能 | 开相机、预览、冻结、检测、停止、关闭 | 任意主流程状态变化 | `updateOperationUiState`+`updateHardwareParameterUiEnabled`；检测ROI外扩碰边时直接裁到原图边界 | `CameraClosed/CameraReady/TemplatePreviewing/TemplateFrozen/Detecting/Stopping` | 只允许当前状态合法动作；边缘ROI继续检测，不再逐帧弹窗阻断停止按钮 | 控件enable/style变化 | 状态机可观察行为保持 | `ui/controllers/main_page_controller.*` | Stage 2修复后再抽离 | 喷码区域靠四边连续检测并点击停止，确认继续检测、无弹窗且可停止 | 已验证 | S；T；U；2026-08-14用户确认靠边ROI按原图边界裁剪、无逐帧弹窗且可正常停止 |
-| UI-003 | 图像自适应显示 | 相机帧、检测结果、模板原图 | `ImageLabel`有图像 | `ImageLabel::setPixmap/resizeEvent`→按宽高比缩放居中 | 当前控件尺寸 | 缩放但不改变原图；空图清空 | 仅UI缓存QPixmap | 保持缩放、居中和重绘 | `ui/widgets/image_label.*` | 保留后移动 | 用横图/竖图并调整窗口，核对比例、居中和Overlay位置 | 已基线 | S；U |
+| UI-003 | 图像自适应显示 | 相机帧、检测结果、模板原图 | `ImageLabel`有图像 | `DetectionResultPresenter`按原图绘制结果Overlay并输出QImage，Widget薄桥继续交给`ImageLabel::setAutoFitPixmap/resizeEvent`按宽高比缩放居中 | 当前控件尺寸 | 缩放但不改变原图；空图清空 | Presenter短期生成QImage，ImageLabel仅缓存QPixmap | 保持缩放、居中和重绘 | `ui/presenters/detection_result_presenter.*`+后续`ui/widgets/image_label.*` | Stage 3结果绘制职责已迁移 | 用横图/竖图并调整窗口，核对比例、居中和Overlay位置 | 已验证 | S；T；U；2026-08-15用户确认五模式结果图、Overlay及窗口缩放均正常，ImageLabel物理移动留后续独立切片 |
 | UI-004 | 结果帧绑定显示 | 任一模式产生正式检测结果 | 检测运行 | 生产期流帧/pose在进入Qt事件队列前抑制；五模式软硬触发均通过容量1 `UiCompletionMailbox`整体交付结果 | 生产检测启用结果绑定；邮箱满时检测线程等待 | 结果图不被实时帧覆盖；不会只刷新文字或只刷新图片；下一完整产品结果整体替换 | 容量1 UI完成邮箱反压检测线程 | 保持画面、框、OK/NG、统计和耗时来自同一`ProductKey` | `runtime/result_presentation_mailbox.*`+后续`ui/presenters/result_presenter.*` | Stage 3先固定原子交付 | 软硬触发连续检测并移动产品，确认图像、框、模板名、OK/NG、统计和耗时同步替换 | 迁移中 | S；T；U；五模式软硬触发图文原子交付均已由用户确认，当前继续拆分Widget最终显示职责 |
 | UI-005 | 结果与状态展示 | 任一检测完成或状态变化 | 已启动检测 | 五模式槽→`resultlabel/resultlabel_7/speedLabel/currentTemplateName/statusLabel` | 识别文本、模板Profile、耗时和判定 | 展示OK/NG、文本、模板名、耗时；靠边但仍有有效面积的ROI正常产生结果 | 更新UI文本 | 文本和保留时机纳入回归 | `ui/presenters/` | Stage 2修复后再拆分 | 模板匹配靠边ROI检测/停止，核对无越界提示并保留最终结果 | 已验证 | S；T；U；2026-08-14用户确认靠边检测继续产生结果并保持原结果展示 |
 | UI-006 | 模板引导与提示 | 制作模板、绘图事件、悬停 | 模板预览或冻结 | `setupTemplateGuide`→`handleTemplateGuideEvent`→`updateTemplateGuideText`；`eventFilter`延迟500ms工具提示 | 当前模式与已画点数 | 显示分步引导和模式专用说明；离开隐藏 | 创建/调整引导Frame | 保持中文提示和步骤含义 | `ui/template_editor/` | 保留 | 五模式进入制作模板，悬停按钮并执行绘图，核对引导变化 | 已基线 | S；U |
@@ -132,7 +132,7 @@
 | RES-004 | 检测耗时 | 五模式检测完成 | 正式检测执行 | 算法计时→`speedLabel`/结果文本 | 各模式当前计时范围不同 | 显示毫秒耗时；失败分支按其路径记录或缺失 | UI/日志 | Stage 0需固定P50/P95实际值 | `detection/result` | 保留并统一类型 | 每模式固定样本Release运行30次，记录P50/P95 | 已基线 | S；U |
 | RES-005 | 当前模板名 | 选择/保存/Profile命中/停止 | 模板状态存在 | `updateCurrentTemplateName`及各模式结果槽 | 单模板目录名或命中Profile名 | 显示当前/命中模板；无模板`--`或隐藏策略 | UI | 保持名称来源 | `ui/presenters/` | 保留 | 单/多模板选择与自动命中，核对名称和停止后状态 | 已基线 | S；U |
 | SAVE-001 | 按判定选择存图 | 正式结果完成 | 已设置保存模式和目录 | 五模式完成对象→协调器唯一产品门禁→ResultHandler选择不保存/NG/OK→`ImageSaveTask`→`ImageSaveService::submit` | 不保存/NG/OK/全部 | 只保存策略允许的判定；重复/倒序产品不再次提交；队列满时等待空位，不因容量丢弃 | 向容量32存图队列提交一个产品任务 | 选择语义保持；用户确认正常检测宁可减速也不能漏存 | `runtime/inspection_runtime_controller.*`+`image_save_service.*` | Stage 2运行统一 | OK/NG命中保存策略并模拟重复完成对象，核对每产品只产生一组文件 | 已验证 | S；T；U；29项测试确认重复完成拒绝，用户确认模板匹配OK/NG存图正常且路径格式未变 |
-| SAVE-002 | 标注图/原图组合 | 存图被允许 | 保存类型已设置 | `shouldSaveRecognitionBoxImage/shouldSaveNoRecognitionBoxImage`→同一产品任务内按标注图、原图顺序写盘 | 两者都存/仅标注/仅原图 | 生成对应组合；一件产品的多个文件不再占多个队列名额 | 单任务短期持有标注QImage和/或只读原帧 | 组合与文件内容保持 | `runtime/image_save_service.*` | Stage 2当前切片 | 三种组合各跑1次，像素比对标注/原图及同名时间戳 | 已验证 | S；T；U；一个产品只提交一个有序存图任务，用户确认主程序无问题 |
+| SAVE-002 | 标注图/原图组合 | 存图被允许 | 保存类型已设置 | `shouldSaveRecognitionBoxImage/shouldSaveNoRecognitionBoxImage`→同一产品任务内按标注图、原图顺序写盘；纸巾标注图改由当前`DetectionResultPresenter`状态生成 | 两者都存/仅标注/仅原图 | 生成对应组合；一件产品的多个文件不再占多个队列名额；纸巾存图与当前显示使用同一Overlay状态 | 单任务短期持有标注QImage和/或只读原帧 | 组合与文件内容保持 | `runtime/image_save_service.*`+`ui/presenters/detection_result_presenter.*` | Stage 3标注状态来源已迁移 | 三种组合各跑1次，像素比对标注/原图及同名时间戳 | 已验证 | S；T；U；2026-08-15用户确认纸巾显示圆框与带框存图正常，原组合、目录和命名行为保持 |
 | SAVE-003 | 目录和命名 | 任一保存任务 | 根目录可写 | UI生成原时间戳和`selectedDir/{ok,ng,ok_raw,ng_raw}`目标→存图工作线程建目录并写PNG/JPG | 当前时间和结果分类 | 成功写对应目录；创建/写入失败累计并合并提示 | 后台创建目录和写文件 | 正常路径、扩展名和命名保持 | `runtime/image_save_service.*` | Stage 2当前切片 | 核对四类目录、扩展名、同产品基名和不可写目录红色警告 | 已验证 | S；T；U；路径和命名规则不变，失败告警编码修复后用户确认无问题 |
 | SAVE-004 | OCR原图来源 | OCR结果触发原图保存 | 相机仍可取图 | OCR槽→`DetectionCompletion`→`saveImage2Async`直接持有本次检测只读原帧，不再向相机另取一帧 | 本次检测帧 | 保存帧与产生OCR判定的输入帧一致；空帧拒绝并记录日志 | 后台短期持有只读帧并写盘 | 计划内修复检测与存图错帧风险 | `TrackingTypes.h`+Widget临时结果桥 | Stage 2当前切片 | 移动物体连续OCR，像素对照检测图和raw文件 | 已验证 | S；T；U；DetectionCompletion测试及主程序同帧存图门禁由用户确认无问题 |
 | SAVE-005 | 异步写盘容量与失败 | 每个需保存结果 | 磁盘正常/慢/满 | `ImageSaveService`两个工作线程；在写+待写产品任务合计容量32 | 正常异步；容量满时提交者持有当前图并等待空位，不丢任务；实际写失败累计 | 短期持有最多32个服务内产品任务，另由当前提交者持有等待任务；失败向UI报警 | 队列满可降低检测吞吐；实际写失败不改变已产生的算法结论、统计或PLC | `runtime/image_save_service.*` | Stage 2当前切片 | Fake慢盘锁定满队列提交等待、腾位后全部写入、失败累计；主程序连续检测核对检测数量与文件组数 | 已验证 | S；T；U；用户确认接受存图反压，更新后的测试和主程序门禁均无问题；不增加断电恢复等持久队列 |
@@ -175,9 +175,9 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 51 | 当前尚未进入迁移或仍保持旧实现的功能ID |
+| 已基线 | 50 | 当前尚未进入迁移或仍保持旧实现的功能ID |
 | 迁移中 | 5 | UI-004、RUN-001..004 |
-| 已验证 | 32 | 已完成迁移并通过约定Qt Creator及主程序门禁的功能ID |
+| 已验证 | 33 | 已完成迁移并通过约定Qt Creator及主程序门禁的功能ID |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
 

@@ -71,6 +71,7 @@
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/result_presentation_mailbox.h"
+#include "ui/presenters/detection_result_presenter.h"
 
 using namespace cv;
 
@@ -179,7 +180,6 @@ private slots:
     void on_textsure_btn_clicked();     ///< 文本确定按钮
     void on_batchTextsure_btn_clicked(); ///< 批量文本确定按钮
     void on_batchImageThresholdButton_clicked(); ///< 批量设置字库模板图像阈值
-    QImage cvMatToQImage(const cv::Mat& mat); ///< Mat转QImage
     Mat* QImageToMat(const QImage &image);    ///< QImage转Mat
     void on_cancel_clicked();           ///< 取消按钮
     void slot_clearResultLabel();       ///< 清除结果标签
@@ -461,6 +461,8 @@ private:
     UiCompletionMailbox m_softwareDetectionUiMailbox;
     std::atomic<bool> m_softwareDetectionQueueActive{false};
     std::atomic<int> m_softwareDetectionModeIndex{-1};
+    DetectionResultPresenter m_detectionResultPresenter;
+    bool m_allowTissueDetectionFrameDisplay = false;
     TissueRecipeParameters m_tissueRecipeParameters;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;
@@ -715,12 +717,6 @@ private:
     void beginInspectionStart();
     void markInspectionRunning();
     void finishInspectionStop();
-    DetectionCompletion makeDetectionCompletion(
-        const cv::Mat &image,
-        AlgorithmVerdict verdict,
-        const QString &recognizedText,
-        const QString &diagnostic,
-        double elapsedMs);
     void processDueDelayedNgRequest();
     void applyPlcResultRequest(DetectionPlcAction action);
     void refreshResultStatistics();

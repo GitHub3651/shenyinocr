@@ -6,7 +6,7 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 3 新线程链和UI减负（按用户风险接受条件进入）
-- 当前切片：Stage 3旧Widget检测分发与CameraThread纸巾兼容算法零引用清理（开始追踪）
+- 当前切片：Stage 3结果图与Overlay Presenter（静态检查完成，等待Qt Creator门禁）
 - 阶段结论：**Stage 2结构关口已通过，Stage 3进行中**。五种模式的软硬触发正式检测链均已通过门禁；外部Line触发、相机参数、算法、PLC时序和Stage 4异常策略边界保持不变。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
@@ -858,6 +858,14 @@
 - [x] 删除`CameraThread`门禁前内置`TissueDetectionPipeline`、纸巾参数副本、外部Worker切换开关和旧纸巾结果信号；硬触发纸巾现在与其他模式一样只交付正式整帧给统一Worker。Widget纸巾参数只保留为Worker启动快照，并把旧`applyTissueRecipeParametersToThreads`更名为`updateTissueRecipeParameters`。
 - [x] 零引用清理Agent静态检查通过：10个旧Widget分发/算法/收尾符号及4个CameraThread纸巾兼容符号在`app/tests`源码、头文件、UI和工程文件中均为0处；五模式Worker启动分发、软硬采集Direct入口及最终完成处理声明/定义完整；二维码模板验证仍使用定向ROI和解码适配器；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 旧检测副本零引用清理Qt Creator门禁通过：2026-08-15用户确认`detection_completion_test`、主工程Run qmake/Rebuild/Run、五模式软硬触发代表检测、图像/Overlay/文字/统计/存图以及停止重启均无问题；可以提交本切片并继续Stage 3 UI结果呈现职责拆分。
+- [x] 旧检测副本零引用清理已提交为`f1ade04`（`refactor(runtime): 删除旧检测分发副本`），提交后工作区干净。
+- [x] 开始Stage 3结果图与Overlay Presenter切片；影响`UI-003、UI-004、RUN-004、SAVE-002`。只迁移五模式结果几何缓存、原图标注渲染、纸巾圆框和预览Pose跟随；判定、识别文字、模板名、统计、存图目录/命名、PLC以及模板制作绘图均保持原入口和语义。
+- [x] 新增无控件依赖的`ui/presenters/DetectionResultPresenter`：统一持有当前结果Pose、字符/钢印多边形、钢印重叠颜色及纸巾内外圆状态，并从1/3/4通道原图生成标注`QImage`。原蓝色定位框、黄色二维码框、绿色日期/字符框、黄色分数、钢印正常黄色/重叠红色及纸巾黄/蓝圆规则保持。
+- [x] Widget删除文件级结果绘制全局变量、OpenCV标注函数和旧Overlay安装桥；五模式完成收尾只把通用结果/Pose交给Presenter，`slot_displayAndDetect`缩为渲染结果交付`ImageLabel::setAutoFitPixmap`的薄桥。非生产预览Pose仍通过Presenter更新；生产期流帧/Pose抑制和同产品完整UI闭包保持。
+- [x] 纸巾带框存图改为从同一Presenter状态和当前产品只读原帧生成，避免依赖控件缩放后的Pixmap；其他模式标注图、原图组合、目录/文件名、容量32无丢弃存图队列和失败提示均未修改。
+- [x] `detection_completion_test`新增3项Presenter合同测试，覆盖五类Overlay颜色、四通道输入、Pose平移/失效清理及纸巾圆框/状态清理；业务测试由65项增至68项，Qt Test预期汇总由`67 passed, 0 failed`增至`70 passed, 0 failed`。
+- [x] 结果图与Overlay Presenter Agent静态检查通过：主工程和运行测试工程对新源/头各唯一登记；测试声明/定义各68项；旧绘制全局状态、旧Overlay安装/转换/纸巾绘制及兼容完成构造符号在`app/tests`中均为0处；90个功能ID唯一，状态50/7/31/2；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 结果图与Overlay Presenter集中Qt Creator门禁通过：2026-08-15用户确认`detection_completion_test`预期`70 passed, 0 failed`、主工程Run qmake/Rebuild/Run、五模式结果图/Overlay/文字/统计/耗时、窗口缩放、纸巾带框保存以及停止重启均无问题；`UI-003、SAVE-002`转为已验证，`UI-004、RUN-004`继续进入后续完整呈现快照拆分。
 
 ## 本地提交记录
 
@@ -931,7 +939,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3旧Widget检测分发与CameraThread纸巾兼容算法已完成零引用删除并通过Qt Creator集中门禁，最终结果显示、统计、存图、PLC及模板制作入口继续保留；准备提交。
+- 当前切片：Stage 3结果图与Overlay Presenter已通过Qt Creator集中门禁，准备独立提交。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线51 / 迁移中5 / 已验证32 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交零引用清理，再继续把五模式最终显示/Overlay安装从Widget抽到结果Presenter边界。
+- 功能状态计数：待盘点0 / 已基线50 / 迁移中5 / 已验证33 / 已延期2 / 已确认删除0。
+- 下一允许动作：用户执行`detection_completion_test`及主工程五模式结果图/标注存图集中门禁；通过后提交，并继续拆分Widget中的结果文字、统计和状态Presenter职责。

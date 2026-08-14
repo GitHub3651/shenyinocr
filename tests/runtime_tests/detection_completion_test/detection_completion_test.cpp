@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QColor>
 
 #include "TrackingTypes.h"
 #include "detection/common/detection_roi_geometry.h"
@@ -12,6 +13,7 @@
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
+#include "ui/presenters/detection_result_presenter.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -161,6 +163,9 @@ private slots:
     void detectionWorkerCanRestartAfterWait();
     void uiCompletionMailboxSerializesWholeProductWork();
     void uiCompletionMailboxCancellationReleasesProducer();
+    void resultPresenterRendersDetectionOverlays();
+    void resultPresenterMovesDetailsWithPose();
+    void resultPresenterRendersAndClearsTissueOverlay();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void orientedDateRoiClampsPaddingAtImageEdge();
@@ -1690,6 +1695,134 @@ void DetectionCompletionTest::uiCompletionMailboxCancellationReleasesProducer()
     }));
     QVERIFY(mailbox.processOne());
     QCOMPARE(presentedCount, 1);
+}
+
+void DetectionCompletionTest::resultPresenterRendersDetectionOverlays()
+{
+    DetectionResult result;
+    DetectionOverlayPolygon character;
+    character.role = QStringLiteral("character");
+    character.points = {
+        cv::Point(20, 20),
+        cv::Point(26, 20),
+        cv::Point(26, 26),
+        cv::Point(20, 26)
+    };
+    character.score = -1.0;
+    result.overlay.polygons.push_back(character);
+
+    DetectionOverlayPolygon stamp;
+    stamp.role = QStringLiteral("stamp");
+    stamp.points = {
+        cv::Point(32, 32),
+        cv::Point(38, 32),
+        cv::Point(38, 38),
+        cv::Point(32, 38)
+    };
+    result.overlay.polygons.push_back(stamp);
+
+    DetectionPose pose;
+    pose.valid = true;
+    pose.anchorCenter = cv::Point2f(8.0f, 8.0f);
+    pose.trackingPoly = {
+        cv::Point(2, 2),
+        cv::Point(8, 2),
+        cv::Point(8, 8),
+        cv::Point(2, 8)
+    };
+    pose.barcodePoly = {
+        cv::Point(42, 2),
+        cv::Point(48, 2),
+        cv::Point(48, 8),
+        cv::Point(42, 8)
+    };
+    pose.datePoly = {
+        cv::Point(2, 42),
+        cv::Point(8, 42),
+        cv::Point(8, 48),
+        cv::Point(2, 48)
+    };
+
+    DetectionResultPresenter presenter;
+    presenter.installDetectionResult(result, pose, true);
+    const QImage rendered = presenter.renderFrame(
+                cv::Mat(60, 60, CV_8UC3, cv::Scalar(0, 0, 0)),
+                false);
+
+    QVERIFY(!rendered.isNull());
+    QCOMPARE(rendered.size(), QSize(60, 60));
+    QCOMPARE(rendered.pixelColor(2, 2), QColor(Qt::blue));
+    QCOMPARE(rendered.pixelColor(20, 20), QColor(Qt::green));
+    QCOMPARE(rendered.pixelColor(32, 32), QColor(Qt::red));
+    QCOMPARE(rendered.pixelColor(42, 2), QColor(Qt::yellow));
+
+    const QImage fourChannelRendered = presenter.renderFrame(
+                cv::Mat(60, 60, CV_8UC4, cv::Scalar(0, 0, 0, 255)),
+                false);
+    QVERIFY(!fourChannelRendered.isNull());
+    QCOMPARE(fourChannelRendered.size(), QSize(60, 60));
+}
+
+void DetectionCompletionTest::resultPresenterMovesDetailsWithPose()
+{
+    DetectionResult result;
+    DetectionOverlayPolygon character;
+    character.role = QStringLiteral("character");
+    character.points = {
+        cv::Point(10, 10),
+        cv::Point(14, 10),
+        cv::Point(14, 14),
+        cv::Point(10, 14)
+    };
+    result.overlay.polygons.push_back(character);
+
+    DetectionPose initialPose;
+    initialPose.valid = true;
+    initialPose.anchorCenter = cv::Point2f(10.0f, 10.0f);
+
+    DetectionResultPresenter presenter;
+    presenter.installDetectionResult(result, initialPose);
+
+    DetectionPose movedPose = initialPose;
+    movedPose.anchorCenter = cv::Point2f(15.0f, 12.0f);
+    presenter.updatePose(movedPose);
+
+    QCOMPARE(
+                presenter.state().detailPolygons.front().points.front().x,
+                15);
+    QCOMPARE(
+                presenter.state().detailPolygons.front().points.front().y,
+                12);
+    QCOMPARE(presenter.state().pose.anchorCenter.x, 15.0f);
+    QCOMPARE(presenter.state().pose.anchorCenter.y, 12.0f);
+
+    presenter.updatePose(DetectionPose());
+    QVERIFY(presenter.state().detailPolygons.empty());
+    QVERIFY(!presenter.state().pose.valid);
+}
+
+void DetectionCompletionTest::resultPresenterRendersAndClearsTissueOverlay()
+{
+    TissueRollPresentation tissueRoll;
+    tissueRoll.center = cv::Point2f(20.0f, 20.0f);
+    tissueRoll.outerAxes = cv::Size2f(5.0f, 5.0f);
+    tissueRoll.innerCenter = cv::Point2f(20.0f, 20.0f);
+    tissueRoll.innerAxes = cv::Size2f(2.0f, 2.0f);
+
+    DetectionResultPresenter presenter;
+    presenter.installTissueRoll(tissueRoll, true);
+    QVERIFY(presenter.state().hasTissueRoll);
+
+    const QImage rendered = presenter.renderFrame(
+                cv::Mat(50, 50, CV_8UC3, cv::Scalar(0, 0, 0)),
+                true);
+    QVERIFY(!rendered.isNull());
+    QCOMPARE(rendered.pixelColor(25, 20), QColor(Qt::yellow));
+    QCOMPARE(rendered.pixelColor(22, 20), QColor(Qt::blue));
+
+    presenter.clear();
+    QVERIFY(!presenter.state().hasTissueRoll);
+    QVERIFY(presenter.state().detailPolygons.empty());
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()

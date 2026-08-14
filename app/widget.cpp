@@ -42,7 +42,6 @@
 #include <QLabel>
 #include <QFontMetrics>
 #include <QListView>
-#include <QPainter>
 #include <QLineEdit>
 #include <QInputDialog>
 #include <QMetaType>
@@ -497,25 +496,6 @@ static cv::Rect getQuickRectROI(const cv::Mat& img, const std::string& windowTit
     return finalRoi;
 }
 
-
-
-
-
-struct CVDrawResult {
-    std::vector<cv::Point> poly;
-    double score;
-};
-static std::vector<CVDrawResult> g_lastDrawResults;
-static DetectionPose g_lastPose;
-static qint64 g_lastDetectTime = 0;
-
-// ============ 新增：用于绘制钢印的数据缓存 ============
-static std::vector<cv::Point> g_lastStampPoly; // 保存钢印的多边形坐标
-static bool g_lastStampIsOverlap = false;      // 记录钢印是否发生重叠
-static bool g_allowTissueDetectionFrameDisplay = false;
-static TissueRollItem g_lastTissueRoll;
-static bool g_hasLastTissueRoll = false;
-
 struct SoftwareTissueDetectionState
 {
     TissueRollResult lastResult;
@@ -541,68 +521,6 @@ struct SoftwareBarcodeWordDetectionState
     BarcodeWordDetectionWorkOutput lastOutput;
 };
 
-static void installLegacyDetectionOverlay(
-    const DetectionResult &result,
-    const DetectionPose &pose)
-{
-    g_lastPose = pose;
-    g_lastDrawResults.clear();
-    g_lastStampPoly.clear();
-    for (const DetectionOverlayPolygon &polygon :
-         result.overlay.polygons) {
-        if (polygon.role == QLatin1String("character")) {
-            CVDrawResult drawResult;
-            drawResult.poly = polygon.points;
-            drawResult.score = polygon.score;
-            g_lastDrawResults.push_back(drawResult);
-        } else if (polygon.role == QLatin1String("stamp")) {
-            g_lastStampPoly = polygon.points;
-        }
-    }
-    g_lastDetectTime = QDateTime::currentMSecsSinceEpoch();
-}
-
-static cv::Mat makeBgrCopy(const cv::Mat& image)
-{
-    if (image.empty()) {
-        return cv::Mat();
-    }
-    if (image.channels() == 3) {
-        return image.clone();
-    }
-
-    cv::Mat bgr;
-    if (image.channels() == 1) {
-        cv::cvtColor(image, bgr, cv::COLOR_GRAY2BGR);
-    } else if (image.channels() == 4) {
-        cv::cvtColor(image, bgr, cv::COLOR_BGRA2BGR);
-    }
-    return bgr;
-}
-
-static void drawTissueRollOverlay(cv::Mat& image, const TissueRollItem& roll)
-{
-    if (image.empty()) {
-        return;
-    }
-
-    const double dynamicScale = std::max(1.0, image.rows / 800.0);
-    const int boxThickness = std::max(2, static_cast<int>(2 * dynamicScale));
-    const int outerRadius = std::max(1, cvRound(std::max(roll.outerAxes.width, roll.outerAxes.height)));
-    const int innerRadius = std::max(1, cvRound(std::max(roll.innerAxes.width, roll.innerAxes.height)));
-
-    cv::circle(image,
-               cv::Point(cvRound(roll.center.x), cvRound(roll.center.y)),
-               outerRadius,
-               cv::Scalar(0, 255, 255),
-               boxThickness);
-    cv::circle(image,
-               cv::Point(cvRound(roll.innerCenter.x), cvRound(roll.innerCenter.y)),
-               innerRadius,
-               cv::Scalar(255, 0, 0),
-               boxThickness);
-}
-
 static cv::Point2f transformPoint(const cv::Mat& affine, const cv::Point2f& pt)
 {
     return cv::Point2f(
@@ -620,28 +538,6 @@ static std::vector<cv::Point> transformPolygon(const std::vector<cv::Point>& pol
         transformed.emplace_back(cvRound(mapped.x), cvRound(mapped.y));
     }
     return transformed;
-}
-
-static cv::Point getPolygonTopCenter(const std::vector<cv::Point>& poly)
-{
-    if (poly.empty()) {
-        return cv::Point();
-    }
-    if (poly.size() == 1) {
-        return poly.front();
-    }
-
-    std::vector<cv::Point> sorted = poly;
-    std::sort(sorted.begin(), sorted.end(), [](const cv::Point& lhs, const cv::Point& rhs) {
-        if (lhs.y != rhs.y) {
-            return lhs.y < rhs.y;
-        }
-        return lhs.x < rhs.x;
-    });
-
-    const cv::Point& p1 = sorted[0];
-    const cv::Point& p2 = sorted[1];
-    return cv::Point((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
 }
 
 struct BarcodeWordOrientedRois
@@ -837,41 +733,6 @@ static BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
             !prepared.date.croppedImage.empty();
 
     return prepared;
-}
-
-static std::vector<CVDrawResult> mapMatchResultsToOriginal(
-    const std::vector<std::tuple<cv::Rect, double, size_t>>& matchResults,
-    const OrientedDateRoi& oriented,
-    const cv::Size& originalSize)
-{
-    std::vector<CVDrawResult> mapped;
-    mapped.reserve(matchResults.size());
-
-    for (const auto& match : matchResults) {
-        cv::Rect rect = std::get<0>(match);
-        rect.x += oriented.roi.x;
-        rect.y += oriented.roi.y;
-
-        const std::vector<cv::Point> rectPoly = {
-            cv::Point(rect.x, rect.y),
-            cv::Point(rect.x + rect.width, rect.y),
-            cv::Point(rect.x + rect.width, rect.y + rect.height),
-            cv::Point(rect.x, rect.y + rect.height)
-        };
-        std::vector<cv::Point> mappedPoly = transformPolygon(rectPoly, oriented.inverseRotationMatrix);
-        cv::Rect mappedBounds = cv::boundingRect(mappedPoly) &
-                                cv::Rect(0, 0, originalSize.width, originalSize.height);
-        if (mappedBounds.width <= 0 || mappedBounds.height <= 0) {
-            continue;
-        }
-
-        CVDrawResult drawResult;
-        drawResult.poly = std::move(mappedPoly);
-        drawResult.score = std::get<1>(match);
-        mapped.push_back(drawResult);
-    }
-
-    return mapped;
 }
 
 /**
@@ -2331,11 +2192,11 @@ void Widget::finalizeSoftwareStampResult(
 
     ui->imagenum->setText(
                 QString::number(m_runtimeController.totalCount()));
-    installLegacyDetectionOverlay(
+    m_detectionResultPresenter.installDetectionResult(
                 acceptedCompletion.result,
-                output.pose);
-    g_lastStampIsOverlap = output.hasOverlapDetection
-            && !output.stampResult.overlapIsOk;
+                output.pose,
+                output.hasOverlapDetection
+                && !output.stampResult.overlapIsOk);
     slot_displayAndDetect(image);
 
     if (j % x == 0) {
@@ -2412,10 +2273,9 @@ void Widget::finalizeSoftwareWordResult(
         string1.clear();
     }
 
-    installLegacyDetectionOverlay(
+    m_detectionResultPresenter.installDetectionResult(
                 acceptedCompletion.result,
                 output.pose);
-    g_lastStampIsOverlap = false;
     if (!output.templateName.trimmed().isEmpty()) {
         ui->currentTemplateName->setText(output.templateName);
     } else if (!output.pose.valid) {
@@ -2501,10 +2361,9 @@ void Widget::finalizeSoftwareBarcodeWordResult(
         string1.clear();
     }
 
-    installLegacyDetectionOverlay(
+    m_detectionResultPresenter.installDetectionResult(
                 acceptedCompletion.result,
                 output.pose);
-    g_lastStampIsOverlap = false;
     if (!output.templateName.trimmed().isEmpty()) {
         ui->currentTemplateName->setText(output.templateName);
     } else if (!output.pose.valid) {
@@ -2600,58 +2459,6 @@ void Widget::finalizeSoftwareBarcodeWordResult(
                .arg(output.reason)
                .arg(output.barcode.errorReason);
     ++j;
-}
-
-DetectionCompletion Widget::makeDetectionCompletion(
-    const cv::Mat &image,
-    AlgorithmVerdict verdict,
-    const QString &recognizedText,
-    const QString &diagnostic,
-    double elapsedMs)
-{
-    DetectionResult result;
-    result.modeId = currentDetectModeId();
-    result.verdict = verdict;
-    result.status = DetectionStatus::Completed;
-    result.recognizedText = recognizedText;
-    result.diagnostic = diagnostic;
-    result.elapsedMs = elapsedMs;
-
-    const auto appendPolygon = [&result](
-        const QString &role,
-        const std::vector<cv::Point> &points,
-        double score) {
-        if (points.empty()) {
-            return;
-        }
-        DetectionOverlayPolygon polygon;
-        polygon.role = role;
-        polygon.points = points;
-        polygon.score = score;
-        result.overlay.polygons.push_back(polygon);
-    };
-    appendPolygon(QStringLiteral("tracking"), g_lastPose.trackingPoly, g_lastPose.score);
-    appendPolygon(QStringLiteral("barcode"), g_lastPose.barcodePoly, 0.0);
-    appendPolygon(QStringLiteral("date"), g_lastPose.datePoly, 0.0);
-    for (const CVDrawResult &drawResult : g_lastDrawResults) {
-        appendPolygon(QStringLiteral("character"), drawResult.poly, drawResult.score);
-    }
-    appendPolygon(QStringLiteral("stamp"), g_lastStampPoly, 0.0);
-    if (g_hasLastTissueRoll) {
-        const cv::Rect &box = g_lastTissueRoll.outerBbox;
-        const std::vector<cv::Point> tissueBox = {
-            cv::Point(box.x, box.y),
-            cv::Point(box.x + box.width, box.y),
-            cv::Point(box.x + box.width, box.y + box.height),
-            cv::Point(box.x, box.y + box.height)
-        };
-        appendPolygon(
-                    QStringLiteral("tissue_roll"),
-                    tissueBox,
-                    g_lastTissueRoll.roughnessScore);
-    }
-
-    return m_runtimeController.complete(image, result);
 }
 
 void Widget::processDueDelayedNgRequest()
@@ -2841,12 +2648,12 @@ void Widget::saveResultImages(
         const bool tissueMode = ui
                 && ui->comboBox_4
                 && ui->comboBox_4->currentIndex() == 3;
-        if (tissueMode && g_hasLastTissueRoll) {
-            cv::Mat annotatedMat = makeBgrCopy(image);
-            if (!annotatedMat.empty()) {
-                drawTissueRollOverlay(annotatedMat, g_lastTissueRoll);
-                annotatedImage = cvMatToQImage(annotatedMat);
-            } else {
+        if (tissueMode
+                && m_detectionResultPresenter.state().hasTissueRoll) {
+            annotatedImage = m_detectionResultPresenter.renderFrame(
+                        image,
+                        true);
+            if (annotatedImage.isNull()) {
                 qDebug() << "纸巾带框图生成失败，回退保存界面图像";
             }
         }
@@ -2906,11 +2713,10 @@ void Widget::saveWordResultImages(
  */
 void Widget::slot_displayAndDetect(cv::Mat *image)
 {
-    // 1. 校验图像有效性
-    if (!image || image->empty()) return;
+    if (!image || image->empty()) {
+        return;
+    }
 
-    // 纸巾检测生产运行时，画面应当和检测结果绑定。
-    // 普通预览帧不再覆盖界面，只有检测槽主动放行的那一帧会显示。
     const bool tissueMode = ui->comboBox_4->currentIndex() == 3;
     const bool productionRunning =
             isCollecting
@@ -2918,101 +2724,20 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
                == OperationState::Detecting
             || m_operationState
                == OperationState::Stopping;
-    if (tissueMode && productionRunning && !g_allowTissueDetectionFrameDisplay) {
+    if (tissueMode
+            && productionRunning
+            && !m_allowTissueDetectionFrameDisplay) {
         return;
     }
 
-    // 2. 深拷贝原图，准备作为画板
-    cv::Mat displayImg;
-    if (image->channels() == 3) {
-        displayImg = image->clone();
-    } else if (image->channels() == 1) {
-        cv::cvtColor(*image, displayImg, cv::COLOR_GRAY2BGR);
-    } else {
+    const QImage rendered = m_detectionResultPresenter.renderFrame(
+                *image,
+                tissueMode);
+    if (rendered.isNull()) {
         return;
     }
 
-    // 3. 核心重绘机制：只要缓存里还有上一轮检测结果，就持续绘制，直到被新结果覆盖或主动清空。
-    if (!g_lastDrawResults.empty() ||
-        !g_lastPose.trackingPoly.empty() ||
-        !g_lastPose.barcodePoly.empty() ||
-        !g_lastPose.datePoly.empty() ||
-        !g_lastStampPoly.empty() ||
-        (tissueMode && g_hasLastTissueRoll)) {
-
-        // 动态计算自适应比例
-        double dynamicScale = std::max(1.0, displayImg.rows / 800.0);
-        double fontScale = 0.4 * dynamicScale;
-
-        // 框和字的粗细
-        int boxThickness = std::max(2, static_cast<int>(2 * dynamicScale));
-        int textThickness = std::max(1, static_cast<int>(1.5 * dynamicScale));
-
-        for (const auto& res : g_lastDrawResults) {
-            if (res.poly.size() < 4) {
-                continue;
-            }
-
-            // 画字符绿框
-            std::vector<std::vector<cv::Point>> charPolys = {res.poly};
-            cv::polylines(displayImg, charPolys, true, cv::Scalar(0, 255, 0), boxThickness);
-
-            // 分数大于等于0才显示数字 (带描边显示)
-            if (res.score >= 0) {
-                std::string scoreText = std::to_string(static_cast<int>(res.score * 100));
-                int baseline = 0;
-                cv::Size textSize = cv::getTextSize(scoreText, cv::FONT_HERSHEY_SIMPLEX, fontScale, textThickness, &baseline);
-
-                cv::Point textAnchor = getPolygonTopCenter(res.poly);
-                int textX = std::max(0, std::min(textAnchor.x - textSize.width / 2, displayImg.cols - textSize.width));
-                int textY = std::max(textSize.height, std::min(textAnchor.y - 5, displayImg.rows));
-
-                cv::putText(displayImg, scoreText, cv::Point(textX, textY),
-                    cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(0, 0, 0), textThickness + 2);
-                cv::putText(displayImg, scoreText, cv::Point(textX, textY),
-                    cv::FONT_HERSHEY_SIMPLEX, fontScale, cv::Scalar(0, 255, 255), textThickness);
-            }
-        }
-
-        if (!g_lastPose.trackingPoly.empty()) {
-            std::vector<std::vector<cv::Point>> trackingPolys = {g_lastPose.trackingPoly};
-            cv::polylines(displayImg, trackingPolys, true, cv::Scalar(255, 0, 0), boxThickness);
-        }
-
-        // 二维码独立区域：黄色
-        if (!g_lastPose.barcodePoly.empty()) {
-            std::vector<std::vector<cv::Point>> barcodePolys = {g_lastPose.barcodePoly};
-            cv::polylines(displayImg, barcodePolys, true, cv::Scalar(0, 255, 255), boxThickness);
-        }
-
-        // ================== 绘制喷码检测区域 ==================
-        if (!g_lastPose.datePoly.empty()) {
-            std::vector<std::vector<cv::Point>> datePolys = {g_lastPose.datePoly};
-            cv::polylines(displayImg, datePolys, true, cv::Scalar(0, 255, 0), boxThickness);
-        }
-
-        // ================== 绘制钢印多边形 ==================
-        if (!g_lastStampPoly.empty()) {
-            // 正常颜色为黄色，重叠则显示红色
-            cv::Scalar stampColor = g_lastStampIsOverlap ? cv::Scalar(0, 0, 255) : cv::Scalar(0, 255, 255);
-            std::vector<std::vector<cv::Point>> polys = {g_lastStampPoly};
-            cv::polylines(displayImg, polys, true, stampColor, boxThickness);
-        }
-
-        if (tissueMode && g_hasLastTissueRoll) {
-            drawTissueRollOverlay(displayImg, g_lastTissueRoll);
-        }
-    }
-
-    // 4. OpenCV Mat 转 Qt QImage 显示
-    QImage img((const uchar *)displayImg.data, displayImg.cols, displayImg.rows, displayImg.step, QImage::Format_RGB888);
-    img = img.rgbSwapped();
-
-    // 🔥 【核心修改：这里彻底删除了 QPainter 绘制“日期”和“钢印”中文标签的所有代码】 🔥
-
-    // 5. 渲染到 UI
-    QPixmap pixmap = QPixmap::fromImage(img);
-
+    const QPixmap pixmap = QPixmap::fromImage(rendered);
     ui->image_undetected->setScaledContents(false);
     ui->image_undetected->setAlignment(Qt::AlignCenter);
     ui->image_undetected->setAutoFitPixmap(pixmap);
@@ -3029,7 +2754,8 @@ void Widget::finalizeOcrResult(
         const DetectionCompletion &acceptedCompletion,
         double elapsedMs)
 {
-    if (!image || image->empty()) {
+    if (!image || image->empty()
+            || !acceptedCompletion.isValid()) {
         return;
     }
 
@@ -3047,10 +2773,9 @@ void Widget::finalizeOcrResult(
     }
 
     qDebug() << "----------------- OCR PROCESS START -----------------";
-    g_lastPose = pose;
-    g_lastDrawResults.clear();
-    g_lastStampPoly.clear();
-    g_lastStampIsOverlap = false;
+    m_detectionResultPresenter.installDetectionResult(
+                acceptedCompletion.result,
+                pose);
     ui->imagenum->setText(
                 QString::number(m_runtimeController.totalCount()));
 
@@ -3062,26 +2787,9 @@ void Widget::finalizeOcrResult(
 
     if (j % x == 0)
     {
-        const QString recognizedText = QString::fromStdString(allResults);
-        const QString diagnostic = allResults.empty()
-                ? QStringLiteral("OCR清洗后文本为空")
-                : (ocrResult.isOk
-                   ? QStringLiteral("OCR文本与目标完全一致")
-                   : QStringLiteral("OCR文本与目标不一致"));
-        const DetectionCompletion completion =
-                acceptedCompletion.isValid()
-                ? acceptedCompletion
-                : makeDetectionCompletion(
-                      *image,
-                      ocrResult.isOk
-                      ? AlgorithmVerdict::Ok
-                      : AlgorithmVerdict::Ng,
-                      recognizedText,
-                      diagnostic,
-                      elapsedMs);
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
         const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
-                    completion,
+                    acceptedCompletion,
                     imageSaveModeIndex,
                     wrongindex);
         if (!outcome.resultRecorded) {
@@ -3091,14 +2799,14 @@ void Widget::finalizeOcrResult(
         if (!ocrResult.isOk) {
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveNg) {
-                saveImage2Async("jpg", selectedDir + "/ng/", completion);
+                saveImage2Async("jpg", selectedDir + "/ng/", acceptedCompletion);
             }
             ui->resultlabel->setText(
                         QString("<font size='10' color='red'>错误！</font>"));
         } else {
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveOk) {
-                saveImage2Async("jpg", selectedDir + "/ok/", completion);
+                saveImage2Async("jpg", selectedDir + "/ok/", acceptedCompletion);
             }
             ui->resultlabel->setText(
                         QString("<font size='10' color='SpringGreen'>正确！</font>"));
@@ -3332,9 +3040,9 @@ void Widget::finalizeTissueResult(
         const DetectionCompletion &acceptedCompletion)
 {
     processDueDelayedNgRequest();
-    auto start = std::chrono::high_resolution_clock::now();
 
-    if (!image || image->empty()) {
+    if (!image || image->empty()
+            || !acceptedCompletion.isValid()) {
         qDebug() << "[TISSUE_DETECT] Invalid input image.";
         return;
     }
@@ -3351,18 +3059,16 @@ void Widget::finalizeTissueResult(
 
     const bool isOk = tissueResult.isOk;
 
-    g_lastDrawResults.clear();
-    g_lastPose = DetectionPose();
-    g_lastStampPoly.clear();
-    g_lastStampIsOverlap = false;
+    TissueRollPresentation tissuePresentation;
     if (tissueResult.rollFound) {
-        g_lastTissueRoll = tissueResult.roll;
-        g_hasLastTissueRoll = true;
-    } else {
-        g_lastTissueRoll = TissueRollItem();
-        g_hasLastTissueRoll = false;
+        tissuePresentation.center = tissueResult.roll.center;
+        tissuePresentation.outerAxes = tissueResult.roll.outerAxes;
+        tissuePresentation.innerCenter = tissueResult.roll.innerCenter;
+        tissuePresentation.innerAxes = tissueResult.roll.innerAxes;
     }
-    g_lastDetectTime = QDateTime::currentMSecsSinceEpoch();
+    m_detectionResultPresenter.installTissueRoll(
+                tissuePresentation,
+                tissueResult.rollFound);
 
     ui->resultlabel->setText(isOk ? "OK" : "NG");
     ui->resultlabel->setStyleSheet(isOk
@@ -3378,9 +3084,9 @@ void Widget::finalizeTissueResult(
                 ui->resultlabel_7,
                 tissueRecognitionText);
 
-    g_allowTissueDetectionFrameDisplay = true;
+    m_allowTissueDetectionFrameDisplay = true;
     slot_displayAndDetect(image);
-    g_allowTissueDetectionFrameDisplay = false;
+    m_allowTissueDetectionFrameDisplay = false;
 
     qDebug() << "[TISSUE_DETECT]" << QString::fromStdString(tissueResult.message);
     qDebug() << "[TISSUE_DETECT_DEBUG]"
@@ -3406,23 +3112,9 @@ void Widget::finalizeTissueResult(
     }
 
     if (j % x == 0) {
-        DetectionCompletion completion = acceptedCompletion;
-        if (!completion.isValid()) {
-            completion = makeDetectionCompletion(
-                        *image,
-                        isOk ? AlgorithmVerdict::Ok : AlgorithmVerdict::Ng,
-                        tissueRecognitionText,
-                        QString::fromStdString(tissueResult.message),
-                        tissueResult.processingTimeMs > 0
-                        ? static_cast<double>(tissueResult.processingTimeMs)
-                        : static_cast<double>(
-                            std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::high_resolution_clock::now() - start)
-                            .count()));
-        }
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
         const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
-                    completion,
+                    acceptedCompletion,
                     imageSaveModeIndex,
                     wrongindex);
         if (!outcome.resultRecorded) {
@@ -3432,12 +3124,12 @@ void Widget::finalizeTissueResult(
         if (!isOk) {
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveNg) {
-                saveResultImages("png", "ng", completion);
+                saveResultImages("png", "ng", acceptedCompletion);
             }
         } else {
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveOk) {
-                saveResultImages("png", "ok", completion);
+                saveResultImages("png", "ok", acceptedCompletion);
             }
         }
         applyPlcResultRequest(outcome.plcAction);
@@ -3445,14 +3137,8 @@ void Widget::finalizeTissueResult(
 
     refreshResultStatistics();
 
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    if (acceptedCompletion.isValid()) {
-        duration = resultPresentationElapsedMs(
-                    acceptedCompletion);
-    } else if (tissueResult.processingTimeMs > 0) {
-        duration = tissueResult.processingTimeMs;
-    }
+    const qint64 duration = resultPresentationElapsedMs(
+                acceptedCompletion);
     ui->speedLabel->setText(QString("检测耗时 %1 毫秒").arg(duration));
 
     j++;
@@ -9622,38 +9308,6 @@ void Widget::on_pushButton_8_clicked()
     applyPlcRunSettingsFromUi(&errors, true);
 }
 
-/**
- * @brief cv::Mat转换为QImage
- * @param mat 输入的cv::Mat对象
- * @return QImage 转换后的QImage对象
- */
-QImage Widget::cvMatToQImage(const cv::Mat &mat)
-{
-    if (mat.type() == CV_8UC1)
-    {
-        QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
-                     QImage::Format_Grayscale8);
-        return image.copy();
-    }
-    else if (mat.type() == CV_8UC3)
-    {
-        QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
-                     QImage::Format_RGB888);
-        return image.rgbSwapped();
-    }
-    else if (mat.type() == CV_8UC4)
-    {
-        QImage image(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step),
-                     QImage::Format_ARGB32);
-        return image.copy();
-    }
-    else
-    {
-        qDebug() << "ERROR: Mat could not be converted to QImage.";
-        return QImage();
-    }
-}
-
 
 
 void Widget::on_cancel_clicked()
@@ -9814,11 +9468,7 @@ void Widget::on_cancel_clicked()
     }
     hideTemplateGuide();
 
-    g_lastDrawResults.clear();
-    g_lastPose = DetectionPose();
-    g_lastStampPoly.clear();
-    g_lastStampIsOverlap = false;
-    g_lastDetectTime = 0;
+    m_detectionResultPresenter.clear();
     clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
 
@@ -12813,43 +12463,7 @@ void Widget::slot_saveBoxesFromThread(DetectionPose pose)
     if (shouldSuppressStreamingFrame()) {
         return;
     }
-
-    // 1. 如果目标离开了视野，立刻清空屏幕上的字符框和钢印框，保持画面干净
-    if (!pose.valid) {
-        g_lastDrawResults.clear();
-        g_lastStampPoly.clear();
-        g_lastStampIsOverlap = false;
-    }
-    // 2. 如果目标还在视野中，并且内存里有上一轮识别出的字符框
-    else if (g_lastPose.valid && (!g_lastDrawResults.empty() || !g_lastStampPoly.empty())) {
-
-        // 计算两帧之间的物理位移和旋转角度差
-        float angleDiff = pose.angleDeg - g_lastPose.angleDeg;
-        cv::Point2f oldCenter = g_lastPose.anchorCenter;
-        cv::Point2f newCenter = pose.anchorCenter;
-
-        // 让所有字符框跟随产品一起物理移动（AR视觉跟随）
-        for (auto& res : g_lastDrawResults) {
-            for (auto& pt : res.poly) {
-                // 转为相对于旧中心的相对坐标
-                cv::Point2f rel(pt.x - oldCenter.x, pt.y - oldCenter.y);
-                // 叠加这两帧之间的微小旋转
-                cv::Point2f rot = rotateRelativePoint(rel, angleDiff);
-                // 叠加上新中心点，得出全新的绝对坐标
-                pt = cv::Point(cvRound(rot.x + newCenter.x), cvRound(rot.y + newCenter.y));
-            }
-        }
-
-        // 让黄/红色的钢印检测框也跟随产品一起移动
-        for (auto& pt : g_lastStampPoly) {
-            cv::Point2f rel(pt.x - oldCenter.x, pt.y - oldCenter.y);
-            cv::Point2f rot = rotateRelativePoint(rel, angleDiff);
-            pt = cv::Point(cvRound(rot.x + newCenter.x), cvRound(rot.y + newCenter.y));
-        }
-    }
-
-    // 最后更新全局位姿
-    g_lastPose = pose;
+    m_detectionResultPresenter.updatePose(pose);
 }
 
 //加载UI样式表模板
