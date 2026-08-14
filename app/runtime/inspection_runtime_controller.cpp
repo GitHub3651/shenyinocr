@@ -1,9 +1,18 @@
 #include "runtime/inspection_runtime_controller.h"
 
+#include <QDebug>
+
 InspectionRuntimeController::InspectionRuntimeController(
     const RunIdFactory &runIdFactory)
-    : m_session(runIdFactory)
+    : m_session(runIdFactory),
+      m_detectionWorkerModeIndex(-1)
 {
+}
+
+InspectionRuntimeController::~InspectionRuntimeController()
+{
+    requestDetectionWorkerStop();
+    waitForDetectionWorkerStop();
 }
 
 QString InspectionRuntimeController::beginStart()
@@ -32,17 +41,22 @@ bool InspectionRuntimeController::markRunning()
 
 bool InspectionRuntimeController::requestStop()
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state == InspectionRuntimeState::Stopping) {
-        return true;
-    }
-    if (m_state != InspectionRuntimeState::Starting
-            && m_state != InspectionRuntimeState::Running) {
-        return false;
+    bool stopAccepted = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state == InspectionRuntimeState::Stopping) {
+            stopAccepted = true;
+        } else if (m_state == InspectionRuntimeState::Starting
+                   || m_state == InspectionRuntimeState::Running) {
+            m_state = InspectionRuntimeState::Stopping;
+            stopAccepted = true;
+        }
     }
 
-    m_state = InspectionRuntimeState::Stopping;
-    return true;
+    if (stopAccepted) {
+        requestDetectionWorkerStop();
+    }
+    return stopAccepted;
 }
 
 void InspectionRuntimeController::finishStop()
@@ -235,4 +249,145 @@ void InspectionRuntimeController::clearPendingDelayedNgRequests()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_resultHandler.clearPendingDelayedNgRequests();
+}
+
+bool InspectionRuntimeController::startDetectionWorker(
+    int modeIndex,
+    const std::shared_ptr<DetectionWorker> &worker)
+{
+    if (modeIndex < 0 || !worker) {
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != InspectionRuntimeState::Starting) {
+            return false;
+        }
+    }
+
+    waitForDetectionWorkerStop();
+    {
+        std::lock_guard<std::mutex> workerLock(
+                    m_detectionWorkerMutex);
+        std::lock_guard<std::mutex> stateLock(m_mutex);
+        if (m_state != InspectionRuntimeState::Starting) {
+            return false;
+        }
+        if (!m_uiCompletionMailbox.reopen()
+                || !worker->start()) {
+            m_uiCompletionMailbox.cancel();
+            return false;
+        }
+        m_detectionWorker = worker;
+        m_detectionWorkerModeIndex.store(modeIndex);
+    }
+    return true;
+}
+
+void InspectionRuntimeController::requestDetectionWorkerStop()
+{
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        m_detectionWorkerModeIndex.store(-1);
+        m_uiCompletionMailbox.cancel();
+        worker = m_detectionWorker;
+    }
+    if (worker) {
+        worker->requestStop();
+    }
+}
+
+void InspectionRuntimeController::waitForDetectionWorkerStop()
+{
+    requestDetectionWorkerStop();
+
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        worker = m_detectionWorker;
+    }
+    if (!worker) {
+        return;
+    }
+
+    worker->wait();
+    qDebug() << "[DETECTION_WORKER] worker stopped"
+             << "processed=" << worker->processedFrameCount()
+             << "cancelled=" << worker->cancelledFrameCount();
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        if (m_detectionWorker == worker) {
+            m_detectionWorker.reset();
+        }
+    }
+}
+
+bool InspectionRuntimeController::isDetectionWorkerActive() const
+{
+    return m_detectionWorkerModeIndex.load() >= 0;
+}
+
+bool InspectionRuntimeController::isDetectionWorkerActiveForMode(
+    int modeIndex) const
+{
+    return modeIndex >= 0
+            && m_detectionWorkerModeIndex.load() == modeIndex;
+}
+
+int InspectionRuntimeController::detectionWorkerModeIndex() const
+{
+    return m_detectionWorkerModeIndex.load();
+}
+
+std::size_t InspectionRuntimeController::detectionWorkerQueueCapacity() const
+{
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        worker = m_detectionWorker;
+    }
+    return worker ? worker->queueCapacity() : 0;
+}
+
+bool InspectionRuntimeController::submitDetectionFrame(
+    const std::shared_ptr<const FrameData> &frame)
+{
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        worker = m_detectionWorker;
+    }
+    return isDetectionWorkerActive()
+            && worker
+            && worker->submit(frame);
+}
+
+bool InspectionRuntimeController::submitDetectionWorkItem(
+    const DetectionWorkItem &item)
+{
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        worker = m_detectionWorker;
+    }
+    return isDetectionWorkerActive()
+            && worker
+            && worker->submit(item);
+}
+
+bool InspectionRuntimeController::submitUiCompletion(
+    const UiCompletionMailbox::Work &work)
+{
+    return m_uiCompletionMailbox.submit(work);
+}
+
+bool InspectionRuntimeController::processOneUiCompletion()
+{
+    return m_uiCompletionMailbox.processOne();
+}
+
+void InspectionRuntimeController::cancelUiCompletion()
+{
+    m_uiCompletionMailbox.cancel();
 }

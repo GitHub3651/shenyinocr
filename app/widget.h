@@ -70,7 +70,6 @@
 #include "devices/plc/plc_device.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
-#include "runtime/result_presentation_mailbox.h"
 #include "ui/presenters/detection_result_presenter.h"
 
 using namespace cv;
@@ -86,7 +85,6 @@ class QFrame;
 class QDialog;
 class QPushButton;
 class ImageSaveService;
-class DetectionWorker;
 struct RecipeSelection;
 struct OcrDetectionResult;
 struct StampDetectionWorkOutput;
@@ -362,8 +360,6 @@ private:
     bool startSoftwareBarcodeWordDetectionWorker(QString *errorMessage);
     bool startDetectionWorkerForMode(int modeIndex,
                                      QString *errorMessage);
-    void requestSoftwareDetectionWorkerStop();
-    void waitForSoftwareDetectionWorkerStop();
     void submitSoftwareDetectionFrame(const cv::Mat &image);
     void submitSoftwarePositionedDetectionFrame(
         const cv::Mat &image,
@@ -454,10 +450,6 @@ private:
     bool m_applicationExitInProgress = false;
     bool m_detectionRoiWarningActive = false;
     InspectionRuntimeController m_runtimeController;
-    std::unique_ptr<DetectionWorker> m_softwareDetectionWorker;
-    UiCompletionMailbox m_softwareDetectionUiMailbox;
-    std::atomic<bool> m_softwareDetectionQueueActive{false};
-    std::atomic<int> m_softwareDetectionModeIndex{-1};
     DetectionResultPresenter m_detectionResultPresenter;
     TissueRecipeParameters m_tissueRecipeParameters;
     std::unique_ptr<ImageSaveService> m_imageSaveService;

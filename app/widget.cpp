@@ -1033,7 +1033,6 @@ Widget::~Widget()
     qDebug() << "Widget destructor called";
 
     m_runtimeController.requestStop();
-    requestSoftwareDetectionWorkerStop();
     resetTemplateCaptureState();
 
     // 先停止线程并断开信号，避免窗口销毁时 queued signal 再访问 ui。
@@ -1076,7 +1075,7 @@ Widget::~Widget()
         cameraThread = nullptr;
     }
 
-    waitForSoftwareDetectionWorkerStop();
+    m_runtimeController.waitForDetectionWorkerStop();
 
     // 线程退出后再关闭相机，避免工作线程仍在访问相机对象。
     if (m_cameraDevice && m_bOpenDevice
@@ -1189,8 +1188,7 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
             &MyThread::signal_sendWholeFrameForDetection,
             this,
             [this](cv::Mat image) {
-        if (m_softwareDetectionQueueActive.load()
-                && m_softwareDetectionModeIndex.load() == 3) {
+        if (m_runtimeController.isDetectionWorkerActiveForMode(3)) {
             submitSoftwareDetectionFrame(image);
         }
     },
@@ -1200,9 +1198,9 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
             &MyThread::signal_sendForDetection,
             this,
             [this](cv::Mat image, DetectionPose pose) {
-        if (m_softwareDetectionQueueActive.load()) {
+        if (m_runtimeController.isDetectionWorkerActive()) {
             const int workerMode =
-                    m_softwareDetectionModeIndex.load();
+                    m_runtimeController.detectionWorkerModeIndex();
             if (workerMode == 0
                     || workerMode == 1
                     || workerMode == 2
@@ -1226,8 +1224,7 @@ void Widget::connectHardwareDetectionSignals(CameraThread *thread)
             &CameraThread::signal_sendWholeFrameForDetection,
             this,
             [this](cv::Mat image) {
-        if (m_softwareDetectionQueueActive.load()
-                && m_softwareDetectionModeIndex.load() == 3) {
+        if (m_runtimeController.isDetectionWorkerActiveForMode(3)) {
             submitSoftwareDetectionFrame(image);
         }
     },
@@ -1237,11 +1234,12 @@ void Widget::connectHardwareDetectionSignals(CameraThread *thread)
             &CameraThread::signal_sendForDetection,
             this,
             [this](cv::Mat image, DetectionPose pose) {
-        if (!m_softwareDetectionQueueActive.load()) {
+        if (!m_runtimeController.isDetectionWorkerActive()) {
             return;
         }
 
-        const int workerMode = m_softwareDetectionModeIndex.load();
+        const int workerMode =
+                m_runtimeController.detectionWorkerModeIndex();
         if (workerMode == 0
                 || workerMode == 1
                 || workerMode == 2
@@ -1333,20 +1331,20 @@ void Widget::connectHardwarePreviewSignals(CameraThread *thread)
 bool Widget::postSoftwareDetectionUiWork(
         const UiCompletionMailbox::Work &work)
 {
-    if (!m_softwareDetectionUiMailbox.submit(work)) {
+    if (!m_runtimeController.submitUiCompletion(work)) {
         return false;
     }
 
     const bool posted = QMetaObject::invokeMethod(
                 this,
                 [this]() {
-        if (!m_softwareDetectionUiMailbox.processOne()) {
+        if (!m_runtimeController.processOneUiCompletion()) {
             qDebug() << "[UI_COMPLETION] cancelled or empty UI work ignored";
         }
     },
     Qt::QueuedConnection);
     if (!posted) {
-        m_softwareDetectionUiMailbox.cancel();
+        m_runtimeController.cancelUiCompletion();
         qWarning() << "[UI_COMPLETION] unable to post result-bound UI work";
         return false;
     }
@@ -1475,14 +1473,12 @@ void Widget::finishInspectionStop()
 bool Widget::startSoftwareTissueDetectionWorker(
         QString *errorMessage)
 {
-    waitForSoftwareDetectionWorkerStop();
-
     const std::shared_ptr<TissueDetectionPipeline> pipeline(
                 new TissueDetectionPipeline(
                     m_tissueRecipeParameters));
     const std::shared_ptr<SoftwareTissueDetectionState> state(
                 new SoftwareTissueDetectionState);
-    std::unique_ptr<DetectionWorker> worker(
+    std::shared_ptr<DetectionWorker> worker(
                 new DetectionWorker(
                     1,
                     [pipeline, state](
@@ -1518,9 +1514,7 @@ bool Widget::startSoftwareTissueDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!m_softwareDetectionUiMailbox.reopen()
-            || !worker->start()) {
-        m_softwareDetectionUiMailbox.cancel();
+    if (!m_runtimeController.startDetectionWorker(3, worker)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u7eb8\u5dfe"
@@ -1529,21 +1523,16 @@ bool Widget::startSoftwareTissueDetectionWorker(
         return false;
     }
 
-    m_softwareDetectionWorker = std::move(worker);
-    m_softwareDetectionModeIndex.store(3);
-    m_softwareDetectionQueueActive.store(true);
     qDebug() << "[DETECTION_WORKER] tissue worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
-                    m_softwareDetectionWorker->queueCapacity());
+                    m_runtimeController.detectionWorkerQueueCapacity());
     return true;
 }
 
 bool Widget::startSoftwareOcrDetectionWorker(
         QString *errorMessage)
 {
-    waitForSoftwareDetectionWorkerStop();
-
     if (!m_ocrEngine) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
@@ -1559,7 +1548,7 @@ bool Widget::startSoftwareOcrDetectionWorker(
                 new OcrDetectionPipeline);
     const std::shared_ptr<SoftwareOcrDetectionState> state(
                 new SoftwareOcrDetectionState);
-    std::unique_ptr<DetectionWorker> worker(
+    std::shared_ptr<DetectionWorker> worker(
                 new DetectionWorker(
                     1,
                     DetectionWorker::WorkItemDetector(
@@ -1590,9 +1579,7 @@ bool Widget::startSoftwareOcrDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!m_softwareDetectionUiMailbox.reopen()
-            || !worker->start()) {
-        m_softwareDetectionUiMailbox.cancel();
+    if (!m_runtimeController.startDetectionWorker(2, worker)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u6df1\u5ea6 OCR "
@@ -1601,21 +1588,16 @@ bool Widget::startSoftwareOcrDetectionWorker(
         return false;
     }
 
-    m_softwareDetectionWorker = std::move(worker);
-    m_softwareDetectionModeIndex.store(2);
-    m_softwareDetectionQueueActive.store(true);
     qDebug() << "[DETECTION_WORKER] OCR worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
-                    m_softwareDetectionWorker->queueCapacity());
+                    m_runtimeController.detectionWorkerQueueCapacity());
     return true;
 }
 
 bool Widget::startSoftwareStampDetectionWorker(
         QString *errorMessage)
 {
-    waitForSoftwareDetectionWorkerStop();
-
     bool thresholdOk = false;
     const int thresholdPercent =
             ui->lineEdit_yuzhi->text().toInt(&thresholdOk);
@@ -1644,7 +1626,7 @@ bool Widget::startSoftwareStampDetectionWorker(
                 new StampDetectionPipeline);
     const std::shared_ptr<SoftwareStampDetectionState> state(
                 new SoftwareStampDetectionState);
-    std::unique_ptr<DetectionWorker> worker(
+    std::shared_ptr<DetectionWorker> worker(
                 new DetectionWorker(
                     1,
                     DetectionWorker::WorkItemDetector(
@@ -1697,9 +1679,7 @@ bool Widget::startSoftwareStampDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!m_softwareDetectionUiMailbox.reopen()
-            || !worker->start()) {
-        m_softwareDetectionUiMailbox.cancel();
+    if (!m_runtimeController.startDetectionWorker(0, worker)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u94a2\u5370\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
@@ -1707,20 +1687,16 @@ bool Widget::startSoftwareStampDetectionWorker(
         return false;
     }
 
-    m_softwareDetectionWorker = std::move(worker);
-    m_softwareDetectionModeIndex.store(0);
-    m_softwareDetectionQueueActive.store(true);
     qDebug() << "[DETECTION_WORKER] stamp worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
-                    m_softwareDetectionWorker->queueCapacity());
+                    m_runtimeController.detectionWorkerQueueCapacity());
     return true;
 }
 
 bool Widget::startSoftwareWordDetectionWorker(
         QString *errorMessage)
 {
-    waitForSoftwareDetectionWorkerStop();
     if (!m_wordTemplateRunActive
             || m_runningWordTemplateProfiles.empty()) {
         if (errorMessage) {
@@ -1756,7 +1732,7 @@ bool Widget::startSoftwareWordDetectionWorker(
                 new WordDetectionPipeline);
     const std::shared_ptr<SoftwareWordDetectionState> state(
                 new SoftwareWordDetectionState);
-    std::unique_ptr<DetectionWorker> worker(
+    std::shared_ptr<DetectionWorker> worker(
                 new DetectionWorker(
                     1,
                     DetectionWorker::WorkItemDetector(
@@ -1817,9 +1793,7 @@ bool Widget::startSoftwareWordDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!m_softwareDetectionUiMailbox.reopen()
-            || !worker->start()) {
-        m_softwareDetectionUiMailbox.cancel();
+    if (!m_runtimeController.startDetectionWorker(1, worker)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u5b57\u5e93\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
@@ -1827,20 +1801,16 @@ bool Widget::startSoftwareWordDetectionWorker(
         return false;
     }
 
-    m_softwareDetectionWorker = std::move(worker);
-    m_softwareDetectionModeIndex.store(1);
-    m_softwareDetectionQueueActive.store(true);
     qDebug() << "[DETECTION_WORKER] word worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
-                    m_softwareDetectionWorker->queueCapacity());
+                    m_runtimeController.detectionWorkerQueueCapacity());
     return true;
 }
 
 bool Widget::startSoftwareBarcodeWordDetectionWorker(
         QString *errorMessage)
 {
-    waitForSoftwareDetectionWorkerStop();
     if (!m_wordTemplateRunActive
             || m_runningWordTemplateProfiles.empty()) {
         if (errorMessage) {
@@ -1886,7 +1856,7 @@ bool Widget::startSoftwareBarcodeWordDetectionWorker(
                 new BarcodeWordDetectionPipeline);
     const std::shared_ptr<SoftwareBarcodeWordDetectionState> state(
                 new SoftwareBarcodeWordDetectionState);
-    std::unique_ptr<DetectionWorker> worker(
+    std::shared_ptr<DetectionWorker> worker(
                 new DetectionWorker(
                     1,
                     DetectionWorker::WorkItemDetector(
@@ -1972,9 +1942,7 @@ bool Widget::startSoftwareBarcodeWordDetectionWorker(
         Qt::QueuedConnection);
     }));
 
-    if (!m_softwareDetectionUiMailbox.reopen()
-            || !worker->start()) {
-        m_softwareDetectionUiMailbox.cancel();
+    if (!m_runtimeController.startDetectionWorker(4, worker)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
                         "\u65e0\u6cd5\u542f\u52a8\u4e8c\u7ef4\u7801+\u4e09\u671f\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
@@ -1982,13 +1950,10 @@ bool Widget::startSoftwareBarcodeWordDetectionWorker(
         return false;
     }
 
-    m_softwareDetectionWorker = std::move(worker);
-    m_softwareDetectionModeIndex.store(4);
-    m_softwareDetectionQueueActive.store(true);
     qDebug() << "[DETECTION_WORKER] barcode-word worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
-                    m_softwareDetectionWorker->queueCapacity());
+                    m_runtimeController.detectionWorkerQueueCapacity());
     return true;
 }
 
@@ -2017,36 +1982,10 @@ bool Widget::startDetectionWorkerForMode(
     }
 }
 
-void Widget::requestSoftwareDetectionWorkerStop()
-{
-    m_softwareDetectionQueueActive.store(false);
-    m_softwareDetectionModeIndex.store(-1);
-    m_softwareDetectionUiMailbox.cancel();
-    if (m_softwareDetectionWorker) {
-        m_softwareDetectionWorker->requestStop();
-    }
-}
-
-void Widget::waitForSoftwareDetectionWorkerStop()
-{
-    requestSoftwareDetectionWorkerStop();
-    if (!m_softwareDetectionWorker) {
-        return;
-    }
-
-    m_softwareDetectionWorker->wait();
-    qDebug() << "[DETECTION_WORKER] worker stopped"
-             << "processed="
-             << m_softwareDetectionWorker->processedFrameCount()
-             << "cancelled="
-             << m_softwareDetectionWorker->cancelledFrameCount();
-    m_softwareDetectionWorker.reset();
-}
-
 void Widget::submitSoftwareDetectionFrame(
         const cv::Mat &image)
 {
-    if (!m_softwareDetectionQueueActive.load()
+    if (!m_runtimeController.isDetectionWorkerActive()
             || image.empty()) {
         return;
     }
@@ -2057,8 +1996,7 @@ void Widget::submitSoftwareDetectionFrame(
         return;
     }
 
-    DetectionWorker *worker = m_softwareDetectionWorker.get();
-    if (!worker || !worker->submit(frame)) {
+    if (!m_runtimeController.submitDetectionFrame(frame)) {
         qDebug() << "[DETECTION_WORKER] software frame rejected"
                  << frame->productKey.runId
                  << frame->productKey.sequence;
@@ -2069,7 +2007,7 @@ void Widget::submitSoftwarePositionedDetectionFrame(
         const cv::Mat &image,
         const DetectionPose &pose)
 {
-    if (!m_softwareDetectionQueueActive.load()
+    if (!m_runtimeController.isDetectionWorkerActive()
             || image.empty()) {
         return;
     }
@@ -2080,10 +2018,9 @@ void Widget::submitSoftwarePositionedDetectionFrame(
         return;
     }
 
-    DetectionWorker *worker = m_softwareDetectionWorker.get();
     const DetectionWorkItem item =
             makeDetectionWorkItem(frame, pose);
-    if (!worker || !worker->submit(item)) {
+    if (!m_runtimeController.submitDetectionWorkItem(item)) {
         qDebug() << "[DETECTION_WORKER] positioned frame rejected"
                  << frame->productKey.runId
                  << frame->productKey.sequence;
@@ -3492,7 +3429,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
 
         if (m_operationState
                 == OperationState::Detecting) {
-            requestSoftwareDetectionWorkerStop();
+            m_runtimeController.requestStop();
             finishInspectionStop();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
@@ -9360,7 +9297,6 @@ void Widget::on_cancel_clicked()
 
     m_operationState = OperationState::Stopping;
     m_runtimeController.requestStop();
-    requestSoftwareDetectionWorkerStop();
     updateOperationUiState();
     m_barcodeWordRunActive = false;
 
@@ -9406,7 +9342,7 @@ void Widget::on_cancel_clicked()
         }
     }
 
-    waitForSoftwareDetectionWorkerStop();
+    m_runtimeController.waitForDetectionWorkerStop();
 
     if (!myThreadStopped || !cameraThreadStopped) {
         ui->statusLabel->setText("停止中，请稍后再关闭相机");
@@ -10071,7 +10007,6 @@ void Widget::closeEvent(QCloseEvent *event)
     m_applicationExitInProgress = true;
     m_operationState = OperationState::Stopping;
     m_runtimeController.requestStop();
-    requestSoftwareDetectionWorkerStop();
     clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
     isCollecting = false;
@@ -11981,8 +11916,8 @@ void Widget::on_plcbtn_clicked()
                        != OperationState::Detecting) {
                 return;
             }
-            requestSoftwareDetectionWorkerStop();
-            waitForSoftwareDetectionWorkerStop();
+            m_runtimeController.requestStop();
+            m_runtimeController.waitForDetectionWorkerStop();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
             clearWordTemplateRunSnapshot();
@@ -12067,7 +12002,7 @@ void Widget::on_plcbtn_clicked()
             ui->statusLabel->setText("触发模式运行中");
             updateOperationUiState();
         } else {
-            waitForSoftwareDetectionWorkerStop();
+            m_runtimeController.waitForDetectionWorkerStop();
             finishInspectionStop();
             m_resultBoundDisplayActive = false;
             clearWordTemplateRunSnapshot();

@@ -1,8 +1,12 @@
 #pragma once
 
+#include "runtime/detection_worker.h"
 #include "runtime/detection_session.h"
 #include "runtime/result_handler.h"
+#include "runtime/result_presentation_mailbox.h"
 
+#include <atomic>
+#include <memory>
 #include <mutex>
 
 enum class InspectionRuntimeState {
@@ -20,6 +24,7 @@ public:
 
     explicit InspectionRuntimeController(
         const RunIdFactory &runIdFactory = RunIdFactory());
+    ~InspectionRuntimeController();
 
     QString beginStart();
     bool markRunning();
@@ -66,6 +71,23 @@ public:
     void resetNgCount();
     void clearPendingDelayedNgRequests();
 
+    bool startDetectionWorker(
+        int modeIndex,
+        const std::shared_ptr<DetectionWorker> &worker);
+    void requestDetectionWorkerStop();
+    void waitForDetectionWorkerStop();
+    bool isDetectionWorkerActive() const;
+    bool isDetectionWorkerActiveForMode(int modeIndex) const;
+    int detectionWorkerModeIndex() const;
+    std::size_t detectionWorkerQueueCapacity() const;
+    bool submitDetectionFrame(
+        const std::shared_ptr<const FrameData> &frame);
+    bool submitDetectionWorkItem(const DetectionWorkItem &item);
+
+    bool submitUiCompletion(const UiCompletionMailbox::Work &work);
+    bool processOneUiCompletion();
+    void cancelUiCompletion();
+
 private:
     mutable std::mutex m_mutex;
     InspectionRuntimeState m_state = InspectionRuntimeState::Idle;
@@ -73,4 +95,9 @@ private:
     DetectionResultHandler m_resultHandler;
     QString m_lastRecordedRunId;
     quint64 m_lastRecordedProductSequence = 0;
+
+    mutable std::mutex m_detectionWorkerMutex;
+    std::shared_ptr<DetectionWorker> m_detectionWorker;
+    UiCompletionMailbox m_uiCompletionMailbox;
+    std::atomic<int> m_detectionWorkerModeIndex;
 };

@@ -158,6 +158,8 @@ private slots:
     void detectionWorkerProcessesFramesSeriallyInOrder();
     void detectionWorkerReceivesPositionedDetectionWorkItem();
     void runtimeControllerAcceptedFramesFlowThroughDetectionWorker();
+    void runtimeControllerOwnsDetectionWorkerLifecycle();
+    void runtimeControllerSerializesAndCancelsUiCompletion();
     void detectionWorkerRejectsSubmissionOutsideRun();
     void detectionWorkerCancellationSuppressesPendingResults();
     void detectionWorkerCanRestartAfterWait();
@@ -1511,6 +1513,128 @@ void DetectionCompletionTest::runtimeControllerAcceptedFramesFlowThroughDetectio
     QCOMPARE(controller.completedProductCount(), quint64(1));
     QCOMPARE(controller.totalCount(), 1);
     QCOMPARE(controller.ngCount(), 0);
+}
+
+void DetectionCompletionTest::runtimeControllerOwnsDetectionWorkerLifecycle()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("owned-worker-run");
+    });
+    std::promise<DetectionCompletion> completionPromise;
+    std::future<DetectionCompletion> completionFuture =
+            completionPromise.get_future();
+    const std::shared_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    [](const std::shared_ptr<const FrameData> &) {
+        DetectionResult result;
+        result.modeId = QStringLiteral("tissue_detection");
+        result.verdict = AlgorithmVerdict::Ok;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [&completionPromise](const DetectionCompletion &completion) {
+        completionPromise.set_value(completion);
+    }));
+
+    QVERIFY(!controller.startDetectionWorker(3, worker));
+    QCOMPARE(controller.beginStart(),
+             QStringLiteral("owned-worker-run"));
+    QVERIFY(!controller.startDetectionWorker(-1, worker));
+    QVERIFY(controller.startDetectionWorker(3, worker));
+    QVERIFY(controller.isDetectionWorkerActive());
+    QVERIFY(controller.isDetectionWorkerActiveForMode(3));
+    QVERIFY(!controller.isDetectionWorkerActiveForMode(1));
+    QCOMPARE(controller.detectionWorkerModeIndex(), 3);
+    QCOMPARE(static_cast<qulonglong>(
+                 controller.detectionWorkerQueueCapacity()),
+             qulonglong(1));
+    QVERIFY(controller.markRunning());
+
+    const std::shared_ptr<const FrameData> frame =
+            controller.acceptFrame(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(7)));
+    QVERIFY(frame);
+    QVERIFY(controller.submitDetectionFrame(frame));
+    QVERIFY(completionFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    const DetectionCompletion completion = completionFuture.get();
+    QCOMPARE(completion.frame.get(), frame.get());
+    QCOMPARE(completion.result.modeId,
+             QStringLiteral("tissue_detection"));
+
+    QVERIFY(controller.requestStop());
+    QVERIFY(controller.state() == InspectionRuntimeState::Stopping);
+    QVERIFY(!controller.isDetectionWorkerActive());
+    QCOMPARE(controller.detectionWorkerModeIndex(), -1);
+    QVERIFY(!controller.submitDetectionFrame(frame));
+    controller.waitForDetectionWorkerStop();
+    QVERIFY(!worker->isRunning());
+    QCOMPARE(static_cast<qulonglong>(
+                 controller.detectionWorkerQueueCapacity()),
+             qulonglong(0));
+    QCOMPARE(worker->processedFrameCount(), quint64(1));
+    QCOMPARE(worker->cancelledFrameCount(), quint64(0));
+
+    controller.finishStop();
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+}
+
+void DetectionCompletionTest::runtimeControllerSerializesAndCancelsUiCompletion()
+{
+    InspectionRuntimeController controller;
+    QVERIFY(!controller.beginStart().isEmpty());
+    const std::shared_ptr<DetectionWorker> worker(
+                new DetectionWorker(
+                    1,
+                    [](const std::shared_ptr<const FrameData> &) {
+        DetectionResult result;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [](const DetectionCompletion &) {
+    }));
+    QVERIFY(controller.startDetectionWorker(1, worker));
+    QVERIFY(controller.markRunning());
+
+    std::vector<int> presentedProducts;
+    QVERIFY(controller.submitUiCompletion([&presentedProducts]() {
+        presentedProducts.push_back(1);
+    }));
+    std::future<bool> secondSubmission = std::async(
+                std::launch::async,
+                [&controller, &presentedProducts]() {
+        return controller.submitUiCompletion([&presentedProducts]() {
+            presentedProducts.push_back(2);
+        });
+    });
+    QVERIFY(secondSubmission.wait_for(
+                std::chrono::milliseconds(30))
+            == std::future_status::timeout);
+
+    QVERIFY(controller.processOneUiCompletion());
+    QCOMPARE(secondSubmission.get(), true);
+    QVERIFY(controller.processOneUiCompletion());
+    QCOMPARE(static_cast<int>(presentedProducts.size()), 2);
+    QCOMPARE(presentedProducts.at(0), 1);
+    QCOMPARE(presentedProducts.at(1), 2);
+
+    QVERIFY(controller.submitUiCompletion([]() {}));
+    std::future<bool> blockedSubmission = std::async(
+                std::launch::async,
+                [&controller]() {
+        return controller.submitUiCompletion([]() {});
+    });
+    QVERIFY(blockedSubmission.wait_for(
+                std::chrono::milliseconds(30))
+            == std::future_status::timeout);
+
+    QVERIFY(controller.requestStop());
+    QCOMPARE(blockedSubmission.get(), false);
+    QVERIFY(!controller.processOneUiCompletion());
+    controller.waitForDetectionWorkerStop();
+    QVERIFY(!worker->isRunning());
+    controller.finishStop();
 }
 
 void DetectionCompletionTest::detectionWorkerRejectsSubmissionOutsideRun()
