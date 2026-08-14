@@ -155,13 +155,6 @@ private slots:
     void showscreen();                  ///< 显示屏幕
     void slot_displayAndDetect(cv::Mat *image);  ///< 显示和检测槽
 
-    // ========== 检测相关槽函数 ==========
-    void slot_readAndDetect(cv::Mat *image, DetectionPose pose);   ///< 读取并检测（主检测框）
-    void slot_readAndDetect3(cv::Mat *image, DetectionPose pose);  ///< 读取并检测3（模板匹配）
-    void slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResult); ///< 处理纸巾检测结果
-
-    // ❌ 已移除：void slot_readAndDetect2() - 额外检测框处理函数（简化版不支持）
-
     // ========== 按钮点击槽函数 ==========
     void on_VideoShoot_clicked();       ///< 单词采集按钮
 //    void on_ReShoot_clicked();          ///< 重新采集按钮
@@ -312,7 +305,7 @@ private:
     void updateImageSaveOptionsVisibility();
     void updateTissueRoughnessUiVisibility();
     bool applyTissueRoughnessThresholdFromUi(bool showMessage);
-    void applyTissueRecipeParametersToThreads(double roughnessThreshold);
+    void updateTissueRecipeParameters(double roughnessThreshold);
     void setupTemplateGuide();
     void adjustTemplateGuideHeight();
     void showTemplateGuideForCurrentMode();
@@ -702,27 +695,6 @@ private:
     void displayWordTemplateRawImage(const QString &dirPath);
     void displayWordTemplateRawImageFile(const QString &rawImagePath,
                                          const QString &templateName);
-    void runWordTemplateDetection(cv::Mat *image,
-                                  const DetectionPose &pose,
-                                  const std::vector<cv::Mat> &templates,
-                                  const std::vector<int> &templateTargetIndexes,
-                                  const QString &targetText,
-                                  const QString &imageThresholdText,
-                                  const QString &templateName,
-                                  const TemplateMatchPreparedTemplates *preparedTemplates = nullptr,
-                                  const OrientedDateRoi *preparedDateRoi = nullptr);
-    void runBarcodeWordDetection(cv::Mat *image,
-                                 const DetectionPose &pose,
-                                 const WordTemplateProfile &profile);
-    void finalizeWordTrackingNg(cv::Mat *image,
-                                const DetectionPose &pose,
-                                const QString &reason);
-    void finalizeBarcodeWordNg(cv::Mat *image,
-                               const DetectionPose &pose,
-                               const BarcodeReadResult &barcode,
-                               const QString &barcodeState,
-                               const QString &reason,
-                               double postTrackingElapsedMs);
     BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
     bool validateBarcodeTemplateRect(
         const QRect &uiBarcodeRect,
@@ -755,7 +727,6 @@ private:
     void showDetectionRoiWarningOnce();
     void clearDetectionRoiWarning();
     void scheduleImageSaveWarning();
-    void dispatchDetectionByMode(cv::Mat *image, DetectionPose pose); ///< 根据识别模式分发检测逻辑
     QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生
     QString templateBaseDirPath;          // 产品模板父目录
     void initStyle();  // 声明后才能在 cpp 中实现和调用

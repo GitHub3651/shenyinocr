@@ -6,7 +6,7 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 3 新线程链和UI减负（按用户风险接受条件进入）
-- 当前切片：硬触发五模式接入通用检测Worker和UI完成邮箱（用户集中门禁通过，等待提交）
+- 当前切片：Stage 3旧Widget检测分发与CameraThread纸巾兼容算法零引用清理（开始追踪）
 - 阶段结论：**Stage 2结构关口已通过，Stage 3进行中**。五种模式的软硬触发正式检测链均已通过门禁；外部Line触发、相机参数、算法、PLC时序和Stage 4异常策略边界保持不变。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
@@ -852,6 +852,12 @@
 - [x] `Widget`增加硬触发Direct入口并统一五模式Worker启动分派；运行Profile/二维码模式快照在启动采集线程前冻结，Worker启动失败会回滚运行会话且不启动`CameraThread`。正常停止、硬触发线程异常结束和启动早退均先取消入口/UI邮箱，再等待Worker退出。
 - [x] 当前切片静态审计通过：硬触发正式`signal_sendForDetection`已无旧Widget排队分发接线；新增声明/定义/调用完整，五模式索引映射保持0钢印、1字库、2深度OCR、3纸巾、4二维码；`git diff --check`通过。Agent未运行qmake、编译、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 硬触发五模式集中门禁通过：2026-08-15用户确认`detection_completion_test`、主工程构建运行、五模式硬触发代表判定/图文/统计/存图/PLC、停止再次启动及软触发回归均无问题；`DET-002..007、CAM-004`恢复已验证，`UI-004、RUN-001..004`因Stage 3后续职责拆分继续保持迁移中。
+- [x] 硬触发五模式统一Worker切片已提交为`b7cca6e`（`refactor(runtime): 统一硬触发检测工作线程`），提交后工作区干净。
+- [x] 开始零引用清理切片；影响`DET-002..007、RUN-003、UI-004`。候选范围仅限旧`dispatchDetectionByMode`及其独占OCR/钢印/字库/二维码算法路径、旧定位失败收尾，以及`CameraThread`门禁前纸巾内置Pipeline/结果信号；当前Worker完成处理、最终UI/统计/存图/PLC收尾和模板制作二维码验证不在删除范围。
+- [x] 删除`Widget::dispatchDetectionByMode`及其独占的旧OCR、钢印、字库和二维码检测函数、旧字库/二维码定位失败收尾与旧纸巾结果槽；保留五个Worker完成处理、模式最终结果显示、唯一统计/存图/PLC收尾以及二维码模板框选即时校验。`widget.cpp`本切片净删约978行，不再同时维护两份产品算法。
+- [x] 删除`CameraThread`门禁前内置`TissueDetectionPipeline`、纸巾参数副本、外部Worker切换开关和旧纸巾结果信号；硬触发纸巾现在与其他模式一样只交付正式整帧给统一Worker。Widget纸巾参数只保留为Worker启动快照，并把旧`applyTissueRecipeParametersToThreads`更名为`updateTissueRecipeParameters`。
+- [x] 零引用清理Agent静态检查通过：10个旧Widget分发/算法/收尾符号及4个CameraThread纸巾兼容符号在`app/tests`源码、头文件、UI和工程文件中均为0处；五模式Worker启动分发、软硬采集Direct入口及最终完成处理声明/定义完整；二维码模板验证仍使用定向ROI和解码适配器；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 旧检测副本零引用清理Qt Creator门禁通过：2026-08-15用户确认`detection_completion_test`、主工程Run qmake/Rebuild/Run、五模式软硬触发代表检测、图像/Overlay/文字/统计/存图以及停止重启均无问题；可以提交本切片并继续Stage 3 UI结果呈现职责拆分。
 
 ## 本地提交记录
 
@@ -925,7 +931,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3硬触发五模式正常路径已接入容量1检测Worker和UI完成邮箱，用户集中门禁已通过，等待创建独立提交。
+- 当前切片：Stage 3旧Widget检测分发与CameraThread纸巾兼容算法已完成零引用删除并通过Qt Creator集中门禁，最终结果显示、统计、存图、PLC及模板制作入口继续保留；准备提交。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线51 / 迁移中5 / 已验证32 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交硬触发Worker切片；随后进入Stage 3旧Widget结果路径零引用审计与删除切片，继续保留外部触发、算法、PLC和Stage 4异常策略边界。
+- 下一允许动作：提交零引用清理，再继续把五模式最终显示/Overlay安装从Widget抽到结果Presenter边界。

@@ -22,7 +22,6 @@
 #include "Zhuizong.h"
 #include "TrackingPoseMatcher.h"
 #include "TrackingTypes.h"
-#include "detection/tissue/tissue_detection_pipeline.h"
 
 using namespace cv;
 
@@ -77,13 +76,10 @@ public:
 
     // 纸巾检测使用整图，不需要追踪模板和定位姿态。
     void setBypassTracking(bool enabled);
-    void setTissueRecipeParameters(
-            const TissueRecipeParameters &parameters);
 
     void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
     void clearWordTemplateTrackingProfiles();
     void setBarcodeWordHardTriggerMode(bool enabled);
-    void setExternalDetectionWorkerEnabled(bool enabled);
 
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
@@ -159,13 +155,6 @@ signals:
     void signal_sendWholeFrameForDetection(cv::Mat image);
 
     /**
-     * @brief 发送纸巾检测结果
-     * @param image 已检测的整帧图像
-     * @param result 纸巾检测结果
-     */
-    void signal_sendTissueResult(cv::Mat image, TissueRollResult result);
-
-    /**
      * @brief 清除标签信号
      */
     void signal_cleanlabel();
@@ -198,12 +187,10 @@ private:
     std::vector<WordTrackingState> m_wordTrackingProfiles;
     bool m_wordTemplateProfileMode = false;
     bool m_barcodeWordHardTriggerMode = false;
-    std::atomic<bool> m_externalDetectionWorkerEnabled{false};
 
     // ========== 配置参数 ==========
     int angle2 = 0;  ///< 图像旋转角度 (默认0，不旋转)
     int colorc = 0;  ///< 颜色通道 （默认0，彩色）
-    TissueRecipeParameters m_tissueRecipeParameters;
 
     // ========== 时间相关 ==========
     std::chrono::steady_clock::time_point lastDetectionTime;  ///< 上次检测时间点

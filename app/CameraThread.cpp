@@ -25,12 +25,6 @@ void CameraThread::setBypassTracking(bool enabled) {
     bypassTracking = enabled;
 }
 
-void CameraThread::setTissueRecipeParameters(
-        const TissueRecipeParameters &parameters)
-{
-    m_tissueRecipeParameters = parameters;
-}
-
 void CameraThread::setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles) {
     m_wordTrackingProfiles.clear();
     m_wordTemplateProfileMode = false;
@@ -74,10 +68,6 @@ void CameraThread::setBarcodeWordHardTriggerMode(bool enabled) {
     m_barcodeWordHardTriggerMode = enabled;
 }
 
-void CameraThread::setExternalDetectionWorkerEnabled(bool enabled) {
-    m_externalDetectionWorkerEnabled.store(enabled);
-}
-
 void CameraThread::run() {
     if (!m_cameraDevice) {
         return;
@@ -87,9 +77,6 @@ void CameraThread::run() {
 
     std::unique_ptr<cv::Mat> image = std::make_unique<cv::Mat>();
     m_cameraDevice->setNonBlocking(true); //
-
-    const TissueDetectionPipeline tissuePipeline(
-                m_tissueRecipeParameters);
 
     std::vector<cv::Point2f> initialDatePoly = presetDatePoly;
     cv::Rect2d initialTrackingBox = presetTrackingBox;
@@ -149,23 +136,8 @@ void CameraThread::run() {
 
                 if (bypassTracking) {
                     if (m_cameraDevice->isImageReadyForMain()) {
-                        cv::Mat detectionImage = image->clone();
-                        if (m_externalDetectionWorkerEnabled.load()) {
-                            emit signal_sendWholeFrameForDetection(
-                                        detectionImage);
-                        } else {
-                            auto detectStart =
-                                    std::chrono::high_resolution_clock::now();
-                            TissueRollResult result =
-                                    tissuePipeline.detect(detectionImage);
-                            auto detectEnd =
-                                    std::chrono::high_resolution_clock::now();
-                            result.processingTimeMs = static_cast<int>(
-                                std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
-                            emit signal_sendTissueResult(
-                                        detectionImage,
-                                        result);
-                        }
+                        emit signal_sendWholeFrameForDetection(
+                                    image->clone());
                     }
                 } else {
                     cv::Mat displayImage = image->clone();
