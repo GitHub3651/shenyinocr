@@ -4,6 +4,7 @@
 #include "detection/common/detection_roi_geometry.h"
 #include "runtime/detection_session.h"
 #include "runtime/image_save_service.h"
+#include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/result_handler.h"
 
@@ -81,6 +82,14 @@ private slots:
     void runtimeControllerRejectsDuplicateAndForeignCompletions();
     void runtimeControllerStartsNewRunWithoutResettingStatistics();
     void runtimeControllerPreservesSeparateResetScopes();
+    void startAccessAcceptsIdleOpenCamera();
+    void startAccessPreservesGuardOrder();
+    void dirtySettingsPrecedePlcConnectivity();
+    void tissueStartNeedsNoTemplateAssets();
+    void singleTemplateStartReportsOrderedMissingAssets();
+    void wordStartRequiresProfilesAndCompleteCharacters();
+    void barcodeStartAggregatesDecoderAndProfileErrors();
+    void validWordAndBarcodeStartsAreAccepted();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void saveTaskRequiresProductAndAllItems();
@@ -602,6 +611,179 @@ void DetectionCompletionTest::runtimeControllerPreservesSeparateResetScopes()
 
     controller.clearPendingDelayedNgRequests();
     QCOMPARE(controller.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::startAccessAcceptsIdleOpenCamera()
+{
+    InspectionStartAccessInput input;
+    input.cameraOpen = true;
+
+    const InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateAccess(input);
+
+    QVERIFY(result.isAccepted());
+    QVERIFY(result.details.isEmpty());
+}
+
+void DetectionCompletionTest::startAccessPreservesGuardOrder()
+{
+    InspectionStartAccessInput input;
+    input.templateOperationActive = true;
+    input.runtimeBusy = true;
+    input.cameraOpen = false;
+    input.dirtySettings = true;
+    input.plcTriggerEnabled = true;
+    input.plcConnected = false;
+
+    InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateAccess(input);
+    QVERIFY(result.issue
+            == InspectionStartIssue::TemplateOperationActive);
+
+    input.templateOperationActive = false;
+    result = InspectionStartPreflight::evaluateAccess(input);
+    QVERIFY(result.issue == InspectionStartIssue::RuntimeBusy);
+
+    input.runtimeBusy = false;
+    result = InspectionStartPreflight::evaluateAccess(input);
+    QVERIFY(result.issue == InspectionStartIssue::CameraClosed);
+}
+
+void DetectionCompletionTest::dirtySettingsPrecedePlcConnectivity()
+{
+    InspectionStartAccessInput input;
+    input.cameraOpen = true;
+    input.dirtySettings = true;
+    input.plcTriggerEnabled = true;
+    input.plcConnected = false;
+
+    InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateAccess(input);
+    QVERIFY(result.issue
+            == InspectionStartIssue::DirtySettingsConfirmationRequired);
+
+    input.dirtySettings = false;
+    result = InspectionStartPreflight::evaluateAccess(input);
+    QVERIFY(result.issue == InspectionStartIssue::PlcDisconnected);
+}
+
+void DetectionCompletionTest::tissueStartNeedsNoTemplateAssets()
+{
+    InspectionStartResourceInput input;
+    input.modeKind = InspectionStartModeKind::Tissue;
+
+    const InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateResources(input);
+
+    QVERIFY(result.isAccepted());
+}
+
+void DetectionCompletionTest::singleTemplateStartReportsOrderedMissingAssets()
+{
+    InspectionStartResourceInput input;
+    input.modeKind = InspectionStartModeKind::SingleTemplate;
+
+    const InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateResources(input);
+
+    QVERIFY(result.issue
+            == InspectionStartIssue::ProductTemplateIncomplete);
+    QCOMPARE(result.details.size(), 3);
+    QCOMPARE(result.details.at(0),
+             QString::fromWCharArray(
+                 L"\u672a\u9009\u62e9\u4ea7\u54c1\u6a21\u677f\u6587\u4ef6\u5939"));
+    QCOMPARE(result.details.at(1),
+             QString::fromWCharArray(
+                 L"\u5b9a\u4f4d\u6a21\u677f\u56fe\u7247 tracking_template.bmp "
+                 L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
+    QCOMPARE(result.details.at(2),
+             QString::fromWCharArray(
+                 L"\u55b7\u7801\u68c0\u6d4b\u533a\u57df "
+                 L"calibrate_config.yaml/date_poly "
+                 L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
+}
+
+void DetectionCompletionTest::wordStartRequiresProfilesAndCompleteCharacters()
+{
+    InspectionStartResourceInput input;
+    input.modeKind = InspectionStartModeKind::WordProfiles;
+
+    InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateResources(input);
+    QVERIFY(result.issue == InspectionStartIssue::WordProfilesMissing);
+
+    InspectionStartProfileReadiness incomplete;
+    incomplete.displayName = QStringLiteral("8135");
+    incomplete.targetTextReady = true;
+    input.profiles.push_back(incomplete);
+    result = InspectionStartPreflight::evaluateResources(input);
+    QVERIFY(result.issue
+            == InspectionStartIssue::WordProfilesIncomplete);
+    QCOMPARE(result.details,
+             QStringList() << QStringLiteral("8135"));
+}
+
+void DetectionCompletionTest::barcodeStartAggregatesDecoderAndProfileErrors()
+{
+    InspectionStartResourceInput input;
+    input.modeKind = InspectionStartModeKind::BarcodeWordProfiles;
+    input.barcodeDecoderReady = false;
+    input.barcodeDecoderError = QStringLiteral("DLL missing");
+
+    InspectionStartProfileReadiness profile;
+    profile.displayName = QStringLiteral("566");
+    input.profiles.push_back(profile);
+
+    const InspectionStartPreflightResult result =
+            InspectionStartPreflight::evaluateResources(input);
+
+    QVERIFY(result.issue
+            == InspectionStartIssue::BarcodeResourcesInvalid);
+    QCOMPARE(result.details.size(), 2);
+    QCOMPARE(result.details.at(0),
+             QString::fromWCharArray(
+                 L"\u8bfb\u7801\u7ec4\u4ef6\u4e0d\u53ef\u7528\uff1aDLL missing"));
+    QVERIFY(result.details.at(1).startsWith(
+                QString::fromWCharArray(
+                    L"\u6a21\u677f\u201c566\u201d\uff1a")));
+    QVERIFY(result.details.at(1).contains(
+                QString::fromWCharArray(
+                    L"\u5b9a\u4f4d\u6a21\u677f tracking_template.bmp "
+                    L"\u7f3a\u5931\u6216\u65e0\u6cd5\u8bfb\u53d6")));
+    QVERIFY(result.details.at(1).contains(
+                QString::fromWCharArray(
+                    L"calibrate_config.yaml "
+                    L"\u7f3a\u5931\u6216\u65e0\u6cd5\u8bfb\u53d6")));
+    QVERIFY(result.details.at(1).contains(
+                QString::fromWCharArray(
+                    L"\u76ee\u6807\u5b57\u7b26\u5c1a\u672a\u8bbe\u7f6e")));
+    QVERIFY(result.details.at(1).contains(
+                QString::fromWCharArray(
+                    L"\u5b57\u7b26\u6a21\u677f\u7f3a\u5931\u6216"
+                    L"\u7d22\u5f15\u914d\u7f6e\u65e0\u6548")));
+    QVERIFY(!result.details.at(1).contains(
+                QStringLiteral("barcode_poly")));
+}
+
+void DetectionCompletionTest::validWordAndBarcodeStartsAreAccepted()
+{
+    InspectionStartProfileReadiness profile;
+    profile.displayName = QStringLiteral("566");
+    profile.trackingTemplateReady = true;
+    profile.calibrationReady = true;
+    profile.barcodeRegionReady = true;
+    profile.dateRegionReady = true;
+    profile.targetTextReady = true;
+    profile.characterTemplatesReady = true;
+
+    InspectionStartResourceInput input;
+    input.modeKind = InspectionStartModeKind::WordProfiles;
+    input.profiles.push_back(profile);
+    QVERIFY(InspectionStartPreflight::evaluateResources(input).isAccepted());
+
+    input.modeKind = InspectionStartModeKind::BarcodeWordProfiles;
+    input.barcodeDecoderReady = true;
+    QVERIFY(InspectionStartPreflight::evaluateResources(input).isAccepted());
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()

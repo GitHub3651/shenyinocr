@@ -14,6 +14,7 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     detection_completion_test.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
     $$PROJECT_ROOT/app/runtime/detection_session.cpp \
     $$PROJECT_ROOT/app/runtime/result_handler.cpp \
@@ -21,6 +22,7 @@ SOURCES += \
 
 HEADERS += \
     $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
     $$PROJECT_ROOT/app/runtime/detection_session.h \
     $$PROJECT_ROOT/app/runtime/result_handler.h \

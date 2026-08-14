@@ -66,6 +66,7 @@
 #include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
 #include "devices/plc/plc_device.h"
+#include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 
 using namespace cv;

@@ -11672,31 +11672,37 @@ void Widget::on_plcbtn_clicked()
 {
     qDebug() << "=== on_plcbtn_clicked() START ===";
 
-    if (m_templateCaptureState
-            != TemplateCaptureState::Idle
-            || m_operationState
-               == OperationState::TemplatePreviewing
-            || m_operationState
-               == OperationState::TemplateFrozen) {
+    InspectionStartAccessInput startAccess;
+    startAccess.templateOperationActive =
+            m_templateCaptureState != TemplateCaptureState::Idle
+            || m_operationState == OperationState::TemplatePreviewing
+            || m_operationState == OperationState::TemplateFrozen;
+    startAccess.runtimeBusy =
+            m_operationState == OperationState::Detecting
+            || m_operationState == OperationState::Stopping
+            || isCollecting
+            || hasRunningInspectionThread()
+            || m_runtimeController.isBusy();
+    startAccess.cameraOpen = m_bOpenDevice;
+
+    InspectionStartPreflightResult accessResult =
+            InspectionStartPreflight::evaluateAccess(startAccess);
+    if (accessResult.issue
+            == InspectionStartIssue::TemplateOperationActive) {
         QMessageBox::warning(
                     this,
                     "提示",
                     "当前正在制作模板，请先点击【退出模板制作】。");
         return;
     }
-    if (m_operationState == OperationState::Detecting
-            || m_operationState == OperationState::Stopping
-            || isCollecting
-            || hasRunningInspectionThread()
-            || m_runtimeController.isBusy()) {
+    if (accessResult.issue == InspectionStartIssue::RuntimeBusy) {
         QMessageBox::information(
                     this,
                     "提示",
                     "当前正在识别或停止中，请勿重复启动。");
         return;
     }
-    if (!m_bOpenDevice)
-    {
+    if (accessResult.issue == InspectionStartIssue::CameraClosed) {
         QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return;
     }
@@ -11705,7 +11711,16 @@ void Widget::on_plcbtn_clicked()
     refreshAllGlobalSettingDirty();
     refreshTemplatePrivateSettingDirty();
 
-    if (hasDirtySettings()) {
+    startAccess = InspectionStartAccessInput();
+    startAccess.cameraOpen = true;
+    startAccess.dirtySettings = hasDirtySettings();
+    startAccess.plcTriggerEnabled = ui->checkBox->isChecked();
+    startAccess.plcConnected =
+            m_plcDevice && m_plcDevice->isConnected();
+    accessResult = InspectionStartPreflight::evaluateAccess(startAccess);
+
+    if (accessResult.issue
+            == InspectionStartIssue::DirtySettingsConfirmationRequired) {
         QMessageBox confirmBox(this);
         confirmBox.setIcon(QMessageBox::Warning);
         confirmBox.setWindowTitle("提示");
@@ -11722,10 +11737,15 @@ void Widget::on_plcbtn_clicked()
         }
 
         restoreUnappliedSettingsFromApplied();
+        startAccess.dirtySettings = false;
+        startAccess.plcTriggerEnabled = ui->checkBox->isChecked();
+        startAccess.plcConnected =
+                m_plcDevice && m_plcDevice->isConnected();
+        accessResult =
+                InspectionStartPreflight::evaluateAccess(startAccess);
     }
 
-    if (ui->checkBox->isChecked()
-            && (!m_plcDevice || !m_plcDevice->isConnected())) {
+    if (accessResult.issue == InspectionStartIssue::PlcDisconnected) {
         showParameterWarning("提示", "已启用 PLC 触发，但 PLC 未连接，请先连接 PLC。");
         return;
     }
@@ -11735,122 +11755,133 @@ void Widget::on_plcbtn_clicked()
     const bool isBarcodeWordMode =
             currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
-    const bool isWordProfileMode = isWordMode && !m_wordTemplateProfiles.empty();
+    const bool isWordProfileMode =
+            isWordMode && !m_wordTemplateProfiles.empty();
 
-    if (isWordMode && m_wordTemplateProfiles.empty()) {
-        QMessageBox::warning(this, "提示", "当前没有加载产品模板，请重新选择产品模板文件夹。");
-        return;
+    InspectionStartResourceInput resourceInput;
+    if (isTissueMode) {
+        resourceInput.modeKind = InspectionStartModeKind::Tissue;
+    } else if (isBarcodeWordMode) {
+        resourceInput.modeKind =
+                InspectionStartModeKind::BarcodeWordProfiles;
+    } else if (isWordMode) {
+        resourceInput.modeKind = InspectionStartModeKind::WordProfiles;
+    } else {
+        resourceInput.modeKind =
+                InspectionStartModeKind::SingleTemplate;
     }
+    resourceInput.productTemplateDirectorySelected =
+            !currentTemplateDirPath.trimmed().isEmpty();
+    resourceInput.trackingTemplateReady =
+            !m_loadedTrackingTemplate.empty();
+    resourceInput.dateRegionReady = !savedDatePoly.empty();
 
-    if (isBarcodeWordMode) {
-        QStringList barcodeStartErrors;
-        if (!m_barcodeDecoder->ensureLoaded()) {
-            barcodeStartErrors.append(
-                        QString("读码组件不可用：%1")
-                        .arg(m_barcodeDecoder->lastError()));
+    if (isWordMode) {
+        resourceInput.barcodeDecoderReady = !isBarcodeWordMode;
+        if (isBarcodeWordMode
+                && !m_wordTemplateProfiles.empty()) {
+            resourceInput.barcodeDecoderReady =
+                    m_barcodeDecoder->ensureLoaded();
+            if (!resourceInput.barcodeDecoderReady) {
+                resourceInput.barcodeDecoderError =
+                        m_barcodeDecoder->lastError();
+            }
         }
 
-        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
+        for (const WordTemplateProfile &profile
+             : m_wordTemplateProfiles) {
             const QString profileName = profile.name.isEmpty()
                     ? QDir(profile.dirPath).dirName()
                     : profile.name;
-            QStringList profileErrors;
+            InspectionStartProfileReadiness readiness;
+            readiness.displayName = profileName;
+            readiness.targetTextReady =
+                    !profile.settings.targetText.trimmed().isEmpty();
+            readiness.characterTemplatesReady =
+                    !profile.digitTemplates.empty();
 
-            const QString trackingPath =
-                    wordTemplateProfileAssetPath(
-                        profile,
-                        QStringLiteral("trackingTemplate"),
-                        QStringLiteral("tracking_template.bmp"));
-            QFile trackingFile(trackingPath);
-            cv::Mat diskTrackingTemplate;
-            if (trackingFile.open(QIODevice::ReadOnly)) {
-                const QByteArray bytes = trackingFile.readAll();
-                if (!bytes.isEmpty()) {
-                    try {
-                        const std::vector<uchar> buffer(
-                                    bytes.begin(),
-                                    bytes.end());
-                        diskTrackingTemplate =
-                                cv::imdecode(buffer, cv::IMREAD_COLOR);
-                    } catch (...) {
-                        diskTrackingTemplate.release();
+            if (isBarcodeWordMode) {
+                const QString trackingPath =
+                        wordTemplateProfileAssetPath(
+                            profile,
+                            QStringLiteral("trackingTemplate"),
+                            QStringLiteral("tracking_template.bmp"));
+                QFile trackingFile(trackingPath);
+                cv::Mat diskTrackingTemplate;
+                if (trackingFile.open(QIODevice::ReadOnly)) {
+                    const QByteArray bytes = trackingFile.readAll();
+                    if (!bytes.isEmpty()) {
+                        try {
+                            const std::vector<uchar> buffer(
+                                        bytes.begin(),
+                                        bytes.end());
+                            diskTrackingTemplate =
+                                    cv::imdecode(
+                                        buffer,
+                                        cv::IMREAD_COLOR);
+                        } catch (...) {
+                            diskTrackingTemplate.release();
+                        }
                     }
                 }
-            }
-            if (profile.trackingTemplate.empty()
-                    || diskTrackingTemplate.empty()) {
-                profileErrors.append(
-                            "定位模板 tracking_template.bmp 缺失或无法读取");
-            }
+                readiness.trackingTemplateReady =
+                        !profile.trackingTemplate.empty()
+                        && !diskTrackingTemplate.empty();
 
-            CalibrationData diskCalibration;
-            const QString calibrationPath =
-                    wordTemplateProfileAssetPath(
-                        profile,
-                        QStringLiteral("calibration"),
-                        QStringLiteral("calibrate_config.yaml"));
-            const bool calibrationValid =
-                    QFileInfo::exists(calibrationPath)
-                    && diskCalibration.load(
-                        calibrationPath.toLocal8Bit().toStdString());
-            if (!calibrationValid) {
-                profileErrors.append(
-                            "calibrate_config.yaml 缺失或无法读取");
-            } else {
-                if (diskCalibration.barcode_poly.size() != 4
-                        || profile.barcodePoly.size() != 4) {
-                    profileErrors.append(
-                                "二维码区域 barcode_poly 必须包含4个点");
+                CalibrationData diskCalibration;
+                const QString calibrationPath =
+                        wordTemplateProfileAssetPath(
+                            profile,
+                            QStringLiteral("calibration"),
+                            QStringLiteral("calibrate_config.yaml"));
+                readiness.calibrationReady =
+                        QFileInfo::exists(calibrationPath)
+                        && diskCalibration.load(
+                            calibrationPath
+                            .toLocal8Bit()
+                            .toStdString());
+                if (readiness.calibrationReady) {
+                    readiness.barcodeRegionReady =
+                            diskCalibration.barcode_poly.size() == 4
+                            && profile.barcodePoly.size() == 4;
+                    readiness.dateRegionReady =
+                            diskCalibration.date_poly.size() >= 3
+                            && profile.datePoly.size() >= 3;
                 }
-                if (diskCalibration.date_poly.size() < 3
-                        || profile.datePoly.size() < 3) {
-                    profileErrors.append(
-                                "日期区域 date_poly 至少需要3个点");
-                }
-            }
 
-            if (profile.settings.targetText.trimmed().isEmpty()
-                    || profile.targetCount <= 0) {
-                profileErrors.append("目标字符尚未设置");
+                readiness.targetTextReady =
+                        readiness.targetTextReady
+                        && profile.targetCount > 0;
+                readiness.characterTemplatesReady =
+                        readiness.characterTemplatesReady
+                        && profile.digitTemplates.size()
+                           == profile.digitTemplateTargetIndexes.size();
             }
-            if (profile.digitTemplates.empty()
-                    || profile.digitTemplates.size()
-                       != profile.digitTemplateTargetIndexes.size()) {
-                profileErrors.append("字符模板缺失或索引配置无效");
-            }
-
-            if (!profileErrors.isEmpty()) {
-                barcodeStartErrors.append(
-                            QString("模板“%1”：%2")
-                            .arg(profileName)
-                            .arg(profileErrors.join("；")));
-            }
-        }
-
-        if (!barcodeStartErrors.isEmpty()) {
-            QMessageBox::warning(
-                        this,
-                        "二维码+三期模板预检失败",
-                        QString("以下问题必须处理后才能启动检测：\n\n%1")
-                        .arg(barcodeStartErrors.join("\n")));
-            return;
+            resourceInput.profiles.push_back(readiness);
         }
     }
 
-    // 启动检测只检查真实模板文件，不再让历史 hasValidBoxes=false 单独阻止启动。
-    QStringList productTemplateErrors;
-    if (!isTissueMode && !isWordProfileMode) {
-        if (currentTemplateDirPath.trimmed().isEmpty()) {
-            productTemplateErrors.append("未选择产品模板文件夹");
-        }
-        if (m_loadedTrackingTemplate.empty()) {
-            productTemplateErrors.append("定位模板图片 tracking_template.bmp 缺失或读取失败");
-        }
-        if (savedDatePoly.empty()) {
-            productTemplateErrors.append("喷码检测区域 calibrate_config.yaml/date_poly 缺失或读取失败");
-        }
+    const InspectionStartPreflightResult resourceResult =
+            InspectionStartPreflight::evaluateResources(resourceInput);
+    if (resourceResult.issue
+            == InspectionStartIssue::WordProfilesMissing) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    "当前没有加载产品模板，请重新选择产品模板文件夹。");
+        return;
     }
-    if (!productTemplateErrors.isEmpty()) {
+    if (resourceResult.issue
+            == InspectionStartIssue::BarcodeResourcesInvalid) {
+        QMessageBox::warning(
+                    this,
+                    "二维码+三期模板预检失败",
+                    QString("以下问题必须处理后才能启动检测：\n\n%1")
+                    .arg(resourceResult.details.join("\n")));
+        return;
+    }
+    if (resourceResult.issue
+            == InspectionStartIssue::ProductTemplateIncomplete) {
         QMessageBox::warning(this, "操作规范",
                              QString("缺少可用产品模板，无法启动检测。\n\n"
                                      "具体原因：\n%1\n\n"
@@ -11858,7 +11889,16 @@ void Widget::on_plcbtn_clicked()
                                      "请先【拍照】，框选定位区域和喷码检测区域，然后点击【保存模板】。\n\n"
                                      "如果是已有产品：\n"
                                      "请点击【选择模板】，选择对应产品模板文件夹。")
-                             .arg(productTemplateErrors.join("\n")));
+                             .arg(resourceResult.details.join("\n")));
+        return;
+    }
+    if (resourceResult.issue
+            == InspectionStartIssue::WordProfilesIncomplete) {
+        QMessageBox::warning(
+                    this,
+                    "提示",
+                    QString("以下产品模板还没有确认目标字符，不能启动检测：\n%1")
+                    .arg(resourceResult.details.join("\n")));
         return;
     }
 
@@ -11868,17 +11908,11 @@ void Widget::on_plcbtn_clicked()
         wordTemplateProfilesForRun = createWordTemplateRunSnapshot();
         const std::vector<WordTemplateProfile> &profilesForRun =
                 wordTemplateProfilesForRun;
-        QStringList pendingProfiles;
         for (int i = 0; i < static_cast<int>(profilesForRun.size()); ++i) {
             const WordTemplateProfile &profile = profilesForRun[static_cast<size_t>(i)];
             const QString profileName = profile.name.isEmpty()
                     ? QDir(profile.dirPath).dirName()
                     : profile.name;
-
-            if (profile.settings.targetText.trimmed().isEmpty() || profile.digitTemplates.empty()) {
-                pendingProfiles.append(profileName);
-                continue;
-            }
 
             WordTrackingProfile trackingProfile;
             trackingProfile.name = profileName;
@@ -11887,14 +11921,6 @@ void Widget::on_plcbtn_clicked()
             trackingProfile.barcodePoly = profile.barcodePoly;
             trackingProfile.datePoly = profile.datePoly;
             wordTrackingProfilesForRun.push_back(trackingProfile);
-        }
-
-        if (!pendingProfiles.isEmpty()) {
-            QMessageBox::warning(this,
-                                 "提示",
-                                 QString("以下产品模板还没有确认目标字符，不能启动检测：\n%1")
-                                 .arg(pendingProfiles.join("\n")));
-            return;
         }
         if (wordTrackingProfilesForRun.empty()) {
             QMessageBox::warning(this, "提示", "没有可用的字库定位配置。");
