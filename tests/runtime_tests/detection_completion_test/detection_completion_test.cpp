@@ -3,6 +3,9 @@
 
 #include "TrackingTypes.h"
 #include "detection/common/detection_roi_geometry.h"
+#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/ocr/ocr_engine.h"
+#include "runtime/detection_mode_worker_factory.h"
 #include "runtime/detection_shadow_comparator.h"
 #include "runtime/detection_worker.h"
 #include "runtime/detection_session.h"
@@ -22,6 +25,55 @@
 #include <thread>
 
 namespace {
+
+class FactoryFakeOcrEngine : public IOcrEngine
+{
+public:
+    std::vector<std::string> recognize(cv::Mat &) override
+    {
+        ++recognizeCalls;
+        return std::vector<std::string>(1, "UNEXPECTED");
+    }
+
+    int recognizeCalls = 0;
+};
+
+class FactoryFakeBarcodeDecoder : public IBarcodeDecoder
+{
+public:
+    bool ensureLoaded() override
+    {
+        ++ensureLoadedCalls;
+        return true;
+    }
+
+    QString lastError() const override
+    {
+        return QString();
+    }
+
+    BarcodeReadResult decode(
+            const cv::Mat &,
+            const BarcodeDecodeOptions &,
+            int preferredStrategyId,
+            unsigned int preferredOptionFlags,
+            int *,
+            unsigned int *) override
+    {
+        ++decodeCalls;
+        receivedStrategyIds.push_back(preferredStrategyId);
+        receivedOptionFlags.push_back(preferredOptionFlags);
+        BarcodeReadResult result;
+        result.status = BarcodeReadStatus::NotFound;
+        return result;
+    }
+
+    int ensureLoadedCalls = 0;
+    int decodeCalls = 0;
+    std::vector<int> receivedStrategyIds;
+    std::vector<unsigned int> receivedOptionFlags;
+};
+
 ProductKey testProductKey(quint64 sequence)
 {
     ProductKey key;
@@ -99,6 +151,44 @@ std::shared_ptr<const FrameData> workerTestFrame(quint64 sequence)
                     CV_8UC1,
                     cv::Scalar(static_cast<int>(sequence % 255))));
 }
+
+DetectionWorkItem factoryPositionedWorkItem(
+        quint64 sequence,
+        bool poseValid,
+        int profileIndex)
+{
+    const std::shared_ptr<const FrameData> frame = makeFrameData(
+                testProductKey(sequence),
+                sequence,
+                0,
+                QDateTime::currentDateTimeUtc(),
+                cv::Mat(100, 140, CV_8UC3, cv::Scalar(0, 0, 0)));
+    DetectionPose pose;
+    pose.valid = poseValid;
+    pose.wordTemplateProfileIndex = profileIndex;
+    pose.anchorCenter = cv::Point2f(70.0f, 50.0f);
+    pose.trackingPoly = {
+        cv::Point(55, 35),
+        cv::Point(85, 35),
+        cv::Point(85, 65),
+        cv::Point(55, 65)
+    };
+    pose.barcodePoly = {
+        cv::Point(8, 8),
+        cv::Point(38, 8),
+        cv::Point(38, 38),
+        cv::Point(8, 38)
+    };
+    pose.datePoly = {
+        cv::Point(55, 35),
+        cv::Point(130, 35),
+        cv::Point(130, 90),
+        cv::Point(55, 90)
+    };
+    pose.score = 0.95f;
+    pose.trackingElapsedMs = 2.0;
+    return makeDetectionWorkItem(frame, pose);
+}
 }
 
 class DetectionCompletionTest : public QObject
@@ -160,6 +250,11 @@ private slots:
     void runtimeControllerAcceptedFramesFlowThroughDetectionWorker();
     void runtimeControllerOwnsDetectionWorkerLifecycle();
     void runtimeControllerSerializesAndCancelsUiCompletion();
+    void modeWorkerFactoryCreatesTissueWorker();
+    void modeWorkerFactoryPreservesOcrPose();
+    void modeWorkerFactoryReturnsTypedStampOutput();
+    void modeWorkerFactoryRejectsInvalidWordProfileIndex();
+    void modeWorkerFactoryCarriesBarcodeStrategyAcrossFrames();
     void detectionWorkerRejectsSubmissionOutsideRun();
     void detectionWorkerCancellationSuppressesPendingResults();
     void detectionWorkerCanRestartAfterWait();
@@ -1635,6 +1730,241 @@ void DetectionCompletionTest::runtimeControllerSerializesAndCancelsUiCompletion(
     controller.waitForDetectionWorkerStop();
     QVERIFY(!worker->isRunning());
     controller.finishStop();
+}
+
+void DetectionCompletionTest::modeWorkerFactoryCreatesTissueWorker()
+{
+    std::promise<DetectionCompletion> completionPromise;
+    std::future<DetectionCompletion> completionFuture =
+            completionPromise.get_future();
+    std::promise<TissueRollResult> resultPromise;
+    std::future<TissueRollResult> resultFuture =
+            resultPromise.get_future();
+    TissueRecipeParameters parameters;
+    parameters.roughnessThreshold = 6.25;
+    const std::shared_ptr<DetectionWorker> worker =
+            DetectionModeWorkerFactory::createTissueWorker(
+                parameters,
+                [&completionPromise, &resultPromise](
+                    const DetectionCompletion &completion,
+                    const TissueRollResult &result) {
+        completionPromise.set_value(completion);
+        resultPromise.set_value(result);
+    });
+
+    QVERIFY(worker);
+    QCOMPARE(static_cast<qulonglong>(worker->queueCapacity()),
+             qulonglong(1));
+    QVERIFY(worker->start());
+    const std::shared_ptr<const FrameData> frame = makeFrameData(
+                testProductKey(101),
+                101,
+                0,
+                QDateTime::currentDateTimeUtc(),
+                cv::Mat::zeros(128, 128, CV_8UC3));
+    QVERIFY(worker->submit(frame));
+    QVERIFY(completionFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    QVERIFY(resultFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    const DetectionCompletion completion = completionFuture.get();
+    const TissueRollResult result = resultFuture.get();
+    worker->requestStop();
+    worker->wait();
+
+    QCOMPARE(completion.frame.get(), frame.get());
+    QCOMPARE(completion.result.modeId,
+             QStringLiteral("tissue_detection"));
+    QVERIFY(completion.result.status == DetectionStatus::Completed);
+    QCOMPARE(result.imageWidth, 128);
+    QCOMPARE(result.imageHeight, 128);
+    QVERIFY(result.processingTimeMs >= 0);
+}
+
+void DetectionCompletionTest::modeWorkerFactoryPreservesOcrPose()
+{
+    FactoryFakeOcrEngine ocrEngine;
+    std::promise<DetectionCompletion> completionPromise;
+    std::future<DetectionCompletion> completionFuture =
+            completionPromise.get_future();
+    std::promise<DetectionPose> posePromise;
+    std::future<DetectionPose> poseFuture = posePromise.get_future();
+    const std::shared_ptr<DetectionWorker> worker =
+            DetectionModeWorkerFactory::createOcrWorker(
+                "TARGET",
+                &ocrEngine,
+                [&completionPromise, &posePromise](
+                    const DetectionCompletion &completion,
+                    const DetectionPose &pose) {
+        completionPromise.set_value(completion);
+        posePromise.set_value(pose);
+    });
+
+    QVERIFY(worker);
+    QVERIFY(worker->start());
+    const DetectionWorkItem item =
+            factoryPositionedWorkItem(102, false, -1);
+    QVERIFY(worker->submit(item));
+    QVERIFY(completionFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    QVERIFY(poseFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    const DetectionCompletion completion = completionFuture.get();
+    const DetectionPose pose = poseFuture.get();
+    worker->requestStop();
+    worker->wait();
+
+    QCOMPARE(completion.frame.get(), item.frame.get());
+    QCOMPARE(completion.result.modeId,
+             QStringLiteral("ocr_detection"));
+    QVERIFY(completion.result.status == DetectionStatus::Cancelled);
+    QCOMPARE(pose.wordTemplateProfileIndex, -1);
+    QCOMPARE(ocrEngine.recognizeCalls, 0);
+}
+
+void DetectionCompletionTest::modeWorkerFactoryReturnsTypedStampOutput()
+{
+    StampDetectionWorkerConfiguration configuration;
+    configuration.targetText = QStringLiteral("1");
+    configuration.thresholdPercent = 70;
+    std::promise<DetectionCompletion> completionPromise;
+    std::future<DetectionCompletion> completionFuture =
+            completionPromise.get_future();
+    std::promise<StampDetectionWorkOutput> outputPromise;
+    std::future<StampDetectionWorkOutput> outputFuture =
+            outputPromise.get_future();
+    const std::shared_ptr<DetectionWorker> worker =
+            DetectionModeWorkerFactory::createStampWorker(
+                configuration,
+                [&completionPromise, &outputPromise](
+                    const DetectionCompletion &completion,
+                    const StampDetectionWorkOutput &output) {
+        completionPromise.set_value(completion);
+        outputPromise.set_value(output);
+    });
+
+    QVERIFY(worker);
+    QVERIFY(worker->start());
+    const DetectionWorkItem item =
+            factoryPositionedWorkItem(103, true, 0);
+    QVERIFY(worker->submit(item));
+    QVERIFY(completionFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    QVERIFY(outputFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    const DetectionCompletion completion = completionFuture.get();
+    const StampDetectionWorkOutput output = outputFuture.get();
+    worker->requestStop();
+    worker->wait();
+
+    QCOMPARE(completion.result.modeId,
+             QStringLiteral("stamp_detection"));
+    QCOMPARE(output.detectionResult.modeId,
+             QStringLiteral("stamp_detection"));
+    QVERIFY(output.detectionResult.status
+            == DetectionStatus::Completed);
+    QVERIFY(output.roiValid);
+    QVERIFY(!output.hasOverlapDetection);
+    QCOMPARE(output.stampResult.targetCharacterCount, 1);
+}
+
+void DetectionCompletionTest::modeWorkerFactoryRejectsInvalidWordProfileIndex()
+{
+    DetectionModeWorkerProfile profile;
+    profile.templateName = QStringLiteral("profile-a");
+    profile.targetText = QStringLiteral("1");
+    profile.thresholdPercent = 70;
+    std::promise<WordDetectionWorkOutput> outputPromise;
+    std::future<WordDetectionWorkOutput> outputFuture =
+            outputPromise.get_future();
+    const std::shared_ptr<DetectionWorker> worker =
+            DetectionModeWorkerFactory::createWordWorker(
+                std::vector<DetectionModeWorkerProfile>(1, profile),
+                [&outputPromise](
+                    const DetectionCompletion &,
+                    const WordDetectionWorkOutput &output) {
+        outputPromise.set_value(output);
+    });
+
+    QVERIFY(worker);
+    QVERIFY(worker->start());
+    const DetectionWorkItem item =
+            factoryPositionedWorkItem(104, true, 3);
+    QVERIFY(worker->submit(item));
+    QVERIFY(outputFuture.wait_for(std::chrono::seconds(2))
+            == std::future_status::ready);
+    const WordDetectionWorkOutput output = outputFuture.get();
+    worker->requestStop();
+    worker->wait();
+
+    QCOMPARE(output.pose.wordTemplateProfileIndex, 3);
+    QCOMPARE(output.detectionResult.modeId,
+             QStringLiteral("word_detection"));
+    QVERIFY(output.detectionResult.status
+            == DetectionStatus::Cancelled);
+    QCOMPARE(output.detectionResult.diagnostic,
+             QStringLiteral("Invalid word profile index"));
+}
+
+void DetectionCompletionTest::modeWorkerFactoryCarriesBarcodeStrategyAcrossFrames()
+{
+    FactoryFakeBarcodeDecoder decoder;
+    DetectionModeWorkerProfile profile;
+    profile.templateName = QStringLiteral("profile-a");
+    profile.targetText = QStringLiteral("1");
+    profile.thresholdPercent = 70;
+    profile.decodeStrategy.preferredStrategyId = 9;
+    profile.decodeStrategy.preferredOptionFlags = 7u;
+    profile.decodeStrategy.consecutiveFailures = 2;
+
+    std::mutex outputMutex;
+    std::condition_variable outputAvailable;
+    std::vector<BarcodeWordDetectionWorkOutput> outputs;
+    const std::shared_ptr<DetectionWorker> worker =
+            DetectionModeWorkerFactory::createBarcodeWordWorker(
+                std::vector<DetectionModeWorkerProfile>(1, profile),
+                &decoder,
+                [&outputMutex, &outputAvailable, &outputs](
+                    const DetectionCompletion &,
+                    const BarcodeWordDetectionWorkOutput &output) {
+        {
+            std::lock_guard<std::mutex> lock(outputMutex);
+            outputs.push_back(output);
+        }
+        outputAvailable.notify_all();
+    });
+
+    QVERIFY(worker);
+    QVERIFY(worker->start());
+    QVERIFY(worker->submit(
+                factoryPositionedWorkItem(105, true, 0)));
+    QVERIFY(worker->submit(
+                factoryPositionedWorkItem(106, true, 0)));
+    {
+        std::unique_lock<std::mutex> lock(outputMutex);
+        QVERIFY(outputAvailable.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&outputs]() {
+            return outputs.size() == 2;
+        }));
+    }
+    worker->requestStop();
+    worker->wait();
+
+    QCOMPARE(decoder.decodeCalls, 2);
+    QCOMPARE(static_cast<int>(decoder.receivedStrategyIds.size()), 2);
+    QCOMPARE(decoder.receivedStrategyIds.at(0), 9);
+    QCOMPARE(decoder.receivedOptionFlags.at(0), 7u);
+    QCOMPARE(decoder.receivedStrategyIds.at(1), -1);
+    QCOMPARE(decoder.receivedOptionFlags.at(1),
+             static_cast<unsigned int>(BARCODE_DECODER_OPTION_NONE));
+    QCOMPARE(outputs.at(0).nextDecodeStrategy.consecutiveFailures, 3);
+    QCOMPARE(outputs.at(1).nextDecodeStrategy.consecutiveFailures, 3);
+    QVERIFY(outputs.at(0).detectionResult.status
+            == DetectionStatus::Completed);
+    QVERIFY(outputs.at(0).detectionResult.verdict
+            == AlgorithmVerdict::Ng);
 }
 
 void DetectionCompletionTest::detectionWorkerRejectsSubmissionOutsideRun()

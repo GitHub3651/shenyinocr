@@ -358,6 +358,13 @@ private:
     bool startSoftwareStampDetectionWorker(QString *errorMessage);
     bool startSoftwareWordDetectionWorker(QString *errorMessage);
     bool startSoftwareBarcodeWordDetectionWorker(QString *errorMessage);
+    DetectionWorker::FailureConsumer detectionWorkerFailureConsumer();
+    bool installDetectionWorker(
+        int modeIndex,
+        const std::shared_ptr<DetectionWorker> &worker,
+        const QString &startFailureMessage,
+        const char *workerLogName,
+        QString *errorMessage);
     bool startDetectionWorkerForMode(int modeIndex,
                                      QString *errorMessage);
     void submitSoftwareDetectionFrame(const cv::Mat &image);

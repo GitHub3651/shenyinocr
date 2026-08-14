@@ -75,6 +75,7 @@ SOURCES += \
     runtime/detection_shadow_comparator.cpp \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
+    runtime/detection_mode_worker_factory.cpp \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/detection_session.cpp \
@@ -145,6 +146,7 @@ HEADERS += \
     runtime/detection_shadow_comparator.h \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
+    runtime/detection_mode_worker_factory.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_runtime_controller.h \
     runtime/detection_session.h \

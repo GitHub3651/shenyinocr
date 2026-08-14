@@ -6,7 +6,7 @@
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
 - 当前阶段：Stage 3 新线程链和UI减负（按用户风险接受条件进入）
-- 当前切片：Stage 3检测Worker与UI邮箱运行所有权收口（Qt Creator门禁通过，待提交）
+- 当前切片：Stage 3五模式Worker与算法资源装配迁出Widget（静态门禁通过，等待Qt Creator集中验证）
 - 阶段结论：**Stage 2结构关口已通过，Stage 3进行中**。五种模式的软硬触发正式检测链均已通过门禁；外部Line触发、相机参数、算法、PLC时序和Stage 4异常策略边界保持不变。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
@@ -885,6 +885,15 @@
 - [x] `detection_completion_test`新增2项控制器合同测试，覆盖Starting态启动门禁、模式与容量、正式帧提交、协作停止/等待/清理，以及容量1 UI邮箱顺序、满时反压和停止取消释放；业务测试由70项增至72项，Qt Test预期汇总由`72 passed, 0 failed`增至`74 passed, 0 failed`。
 - [x] 当前切片Agent静态审计通过：测试声明/定义各72项；五模式控制器启动调用恰为5处；Widget旧Worker/邮箱/活动模式/停止包装符号为0处；控制器Worker/邮箱所有权成员唯一；无`.pro/.pri`变更；90个正式功能ID状态仍为48项已基线、3项迁移中、37项已验证、2项已延期；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 检测Worker与UI邮箱运行所有权集中门禁通过：2026-08-15用户确认`detection_completion_test`预期`74 passed, 0 failed`、主工程构建运行、模板匹配软触发和二维码+三期硬触发的判定/统计/图文/存图、停止重启及跨模式切换均无问题；当前切片可以独立提交，`RUN-001..003`继续进入模式运行资源装配拆分。
+- [x] 检测Worker与UI邮箱运行所有权切片已提交为`b95091e`（`refactor(runtime): 收口检测工作线程所有权`），提交后工作区干净。
+- [x] 开始Stage 3“五模式Worker与算法资源装配迁出Widget”大切片；影响`RUN-001..003、DET-002..006`并进入迁移中。新增独立`DetectionModeWorkerFactory`，统一装配纸巾、深度OCR、钢印、字库和二维码+三期的容量1 Worker及模式私有运行状态；Widget仅冻结运行参数/资源、安装Worker并把类型化完成结果投递到既有UI邮箱。
+- [x] 保持边界：不修改五种Pipeline算法、目标字符/阈值/Profile选择、二维码7路策略和60ms预算、相机软硬触发/取帧、PLC值与100ms脉冲、统计、存图、图文原子呈现或停止重启顺序；钢印重叠检测仍使用启动时复制的现有引擎。
+- [x] 五种Pipeline构造、逐帧调用、类型化结果暂存和完成回调已全部迁入`runtime/detection_mode_worker_factory.*`；字库/二维码运行Profile由值语义只读副本持有，二维码首选策略和连续失败计数只在工厂私有副本中按原规则逐帧更新。
+- [x] Widget删除五种`Software*DetectionState`和五段算法Worker闭包；五个启动函数保留原预检、参数/Profile冻结和钢印重叠引擎复制，通过统一安装函数交给`InspectionRuntimeController`启动。硬触发与软触发继续共用同一个活动Worker，原模式索引`0..4`映射不变。
+- [x] `detection_completion_test`新增5项工厂合同测试，覆盖纸巾整帧与耗时结果、OCR Pose交接、钢印类型化输出、字库Profile索引门禁，以及二维码连续失败后首选策略跨帧更新；业务测试由72项增至77项，Qt Test预期汇总由`74 passed, 0 failed`增至`79 passed, 0 failed`。
+- [x] 当前切片Agent静态审计通过：测试声明/定义各77项；Widget工厂调用5处、五种Pipeline构造0处、旧五种临时状态0处；工厂实现5个模式入口；主工程和运行测试`.pro`均各登记新工厂一次且依赖路径存在；正式功能状态为48项已基线、8项迁移中、32项已验证、2项已延期；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 首次Qt Creator主工程构建发现`widget.cpp`中的旧OCR最终呈现兼容函数仍按值构造`OcrDetectionResult`，而迁移Worker时一并移除了提供完整类型的OCR Pipeline头，产生C2079/C2027及后续参数级联错误。已只恢复`detection/ocr/ocr_detection_pipeline.h`直接include；OCR Pipeline构造和逐帧调用仍全部位于运行时工厂，Widget内`new OcrDetectionPipeline`保持0处，测试数量和`.pro`清单不变，等待重新构建。
+- [x] 五模式运行时工厂Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test`预期`79 passed, 0 failed`、主工程重新构建运行、模板匹配/字库/深度OCR/纸巾软触发及二维码硬触发的结果、图文、耗时、统计、存图、停止重启均无问题；`DET-002..006`恢复已验证，`RUN-001..003`继续进入运行配置装配拆分。
 
 ## 本地提交记录
 
@@ -951,6 +960,7 @@
 | `f1ade04` | Stage 3旧检测副本零引用清理 | DET-002..007、RUN-003、UI-004 | 删除Widget旧模式分发和CameraThread内置纸巾检测副本，生产检测只保留统一Worker路径 | 用户确认五模式软硬触发、结果、存图和停止重启均无问题 |
 | `b111649` | Stage 3结果图与Overlay Presenter | UI-003、UI-004、RUN-004、SAVE-002 | 抽离五模式结果几何与标注图渲染，纸巾圆框和组合存图使用同产品原帧 | 用户确认运行测试70项及五模式图像、Overlay、缩放和存图均无问题 |
 | `88b4f1c` | Stage 3完整检测结果呈现 | UI-004、UI-005、RUN-004、RES-001..005、SAVE-002 | 同一ProductKey快照一次更新图像、框、文字、统一“正确/错误”、统计、模板名和耗时 | 用户确认运行测试72项及五模式统一样式、图文绑定、组合存图和模式切换均无问题 |
+| `b95091e` | Stage 3检测Worker运行所有权 | RUN-001..003 | 活动Worker、模式索引和容量1 UI完成邮箱收口到`InspectionRuntimeController`，Widget只保留模式装配桥 | 用户确认运行测试74项及软硬触发代表模式、图文统计存图、停止重启和跨模式切换均无问题 |
 
 ## 未解决事项
 
@@ -962,7 +972,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3检测Worker与UI邮箱运行所有权已从Widget收口到`InspectionRuntimeController`，Qt Creator集中门禁通过，待提交。
+- 当前切片：Stage 3五模式Worker与算法资源装配已从Widget迁入独立运行时工厂，Qt Creator集中门禁通过，待独立提交。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线48 / 迁移中3 / 已验证37 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交当前切片并继续拆分Widget剩余模式资源装配桥，影响`RUN-001..003、DET-002..006`。
+- 下一允许动作：独立提交五模式运行时工厂切片，然后继续把运行Profile转换、模式启动准备和Worker安装胶水从Widget迁入runtime边界。

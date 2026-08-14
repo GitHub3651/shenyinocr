@@ -17,6 +17,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.cpp \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
+    $$PROJECT_ROOT/app/runtime/detection_mode_worker_factory.cpp \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
@@ -24,6 +25,13 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/detection_session.cpp \
     $$PROJECT_ROOT/app/runtime/result_handler.cpp \
     $$PROJECT_ROOT/app/runtime/image_save_service.cpp \
+    $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp \
+    $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.cpp \
+    $$PROJECT_ROOT/app/detection/barcode_word/barcode_word_detection_pipeline.cpp \
+    $$PROJECT_ROOT/app/detection/stamp/stamp_detection_pipeline.cpp \
+    $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.cpp \
+    $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.cpp \
+    $$PROJECT_ROOT/app/TissueRollDetector.cpp \
     $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.cpp
 
 HEADERS += \
@@ -31,6 +39,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.h \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
     $$PROJECT_ROOT/app/runtime/detection_worker.h \
+    $$PROJECT_ROOT/app/runtime/detection_mode_worker_factory.h \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
@@ -38,7 +47,19 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/detection_session.h \
     $$PROJECT_ROOT/app/runtime/result_handler.h \
     $$PROJECT_ROOT/app/runtime/image_save_service.h \
+    $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
+    $$PROJECT_ROOT/app/BarcodeTypes.h \
+    $$PROJECT_ROOT/app/TissueRollDetector.h \
+    $$PROJECT_ROOT/app/recipes/product_recipe.h \
+    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder_adapter.h \
+    $$PROJECT_ROOT/app/devices/ocr/ocr_engine.h \
+    $$PROJECT_ROOT/app/detection/common/character_template_matcher.h \
     $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \
+    $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.h \
+    $$PROJECT_ROOT/app/detection/barcode_word/barcode_word_detection_pipeline.h \
+    $$PROJECT_ROOT/app/detection/stamp/stamp_detection_pipeline.h \
+    $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.h \
+    $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.h \
     $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.h
 
 INCLUDEPATH += \
