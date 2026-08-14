@@ -2,6 +2,7 @@
 
 #include "TrackingTypes.h"
 #include "detection/common/detection_roi_geometry.h"
+#include "runtime/detection_shadow_comparator.h"
 #include "runtime/detection_session.h"
 #include "runtime/image_save_service.h"
 #include "runtime/inspection_run_configuration.h"
@@ -56,6 +57,27 @@ DetectionCompletion testCompletion(
     completion.result.status = DetectionStatus::Completed;
     return completion;
 }
+
+DetectionResult shadowSampleResult()
+{
+    DetectionResult result;
+    result.modeId = QStringLiteral("word_matching");
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    result.recognizedText = QStringLiteral("8135");
+    result.diagnostic = QStringLiteral("primary diagnostic");
+    result.elapsedMs = 12.5;
+
+    DetectionOverlayPolygon polygon;
+    polygon.role = QStringLiteral("date_roi");
+    polygon.points.push_back(cv::Point(10, 20));
+    polygon.points.push_back(cv::Point(30, 20));
+    polygon.points.push_back(cv::Point(30, 40));
+    polygon.points.push_back(cv::Point(10, 40));
+    polygon.score = 0.875;
+    result.overlay.polygons.push_back(polygon);
+    return result;
+}
 }
 
 class DetectionCompletionTest : public QObject
@@ -98,6 +120,12 @@ private slots:
     void runtimeSettingsUseLegacyDefaultsForUnknownIndexes();
     void runtimeSettingsRejectInvalidImageThreshold();
     void runtimeSettingsRejectInvalidTissueThreshold();
+    void shadowComparisonAcceptsEquivalentResults();
+    void shadowComparisonIgnoresTimingAndDiagnosticByDefault();
+    void shadowComparisonReportsBusinessResultDifferences();
+    void shadowComparisonAppliesGeometryTolerance();
+    void shadowComparisonReportsOrderedOverlayDifferences();
+    void shadowComparisonCanIncludeDiagnostic();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void saveTaskRequiresProductAndAllItems();
@@ -903,6 +931,119 @@ void DetectionCompletionTest::runtimeSettingsRejectInvalidTissueThreshold()
     result = InspectionRunConfiguration::parseSettings(input);
     QVERIFY(result.issue
             == InspectionRuntimeSettingsIssue::InvalidTissueThreshold);
+}
+
+void DetectionCompletionTest::shadowComparisonAcceptsEquivalentResults()
+{
+    const DetectionResult primary = shadowSampleResult();
+    const DetectionResult shadow = primary;
+
+    const DetectionShadowComparison comparison =
+            DetectionShadowComparator::compare(primary, shadow);
+
+    QVERIFY(comparison.isEquivalent());
+    QVERIFY(comparison.differences.isEmpty());
+}
+
+void DetectionCompletionTest::shadowComparisonIgnoresTimingAndDiagnosticByDefault()
+{
+    const DetectionResult primary = shadowSampleResult();
+    DetectionResult shadow = primary;
+    shadow.elapsedMs = 999.0;
+    shadow.diagnostic = QStringLiteral("shadow diagnostic");
+
+    const DetectionShadowComparison comparison =
+            DetectionShadowComparator::compare(primary, shadow);
+
+    QVERIFY(comparison.isEquivalent());
+}
+
+void DetectionCompletionTest::shadowComparisonReportsBusinessResultDifferences()
+{
+    const DetectionResult primary = shadowSampleResult();
+    DetectionResult shadow = primary;
+    shadow.modeId = QStringLiteral("barcode_word");
+    shadow.verdict = AlgorithmVerdict::Ng;
+    shadow.status = DetectionStatus::SystemFault;
+    shadow.recognizedText = QStringLiteral("8136");
+
+    const DetectionShadowComparison comparison =
+            DetectionShadowComparator::compare(primary, shadow);
+
+    QVERIFY(!comparison.isEquivalent());
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("result.modeId")));
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("result.verdict")));
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("result.status")));
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("result.recognizedText")));
+    QVERIFY(!comparison.differences.contains(
+                QStringLiteral("result.elapsedMs")));
+}
+
+void DetectionCompletionTest::shadowComparisonAppliesGeometryTolerance()
+{
+    const DetectionResult primary = shadowSampleResult();
+    DetectionResult shadow = primary;
+    shadow.overlay.polygons[0].points[0] += cv::Point(1, -1);
+    shadow.overlay.polygons[0].score += 0.005;
+
+    DetectionShadowComparisonOptions options;
+    options.coordinateTolerance = 1;
+    options.scoreTolerance = 0.01;
+    DetectionShadowComparison comparison =
+            DetectionShadowComparator::compare(primary, shadow, options);
+    QVERIFY(comparison.isEquivalent());
+
+    options.coordinateTolerance = 0;
+    options.scoreTolerance = 0.001;
+    comparison = DetectionShadowComparator::compare(
+                primary,
+                shadow,
+                options);
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("overlay[0].points[0]")));
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("overlay[0].score")));
+}
+
+void DetectionCompletionTest::shadowComparisonReportsOrderedOverlayDifferences()
+{
+    const DetectionResult primary = shadowSampleResult();
+    DetectionResult shadow = primary;
+    shadow.overlay.polygons[0].role = QStringLiteral("tracking_roi");
+    shadow.overlay.polygons[0].points.pop_back();
+
+    DetectionOverlayPolygon extra;
+    extra.role = QStringLiteral("extra");
+    shadow.overlay.polygons.push_back(extra);
+
+    const DetectionShadowComparison comparison =
+            DetectionShadowComparator::compare(primary, shadow);
+
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("overlay.count")));
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("overlay[0].role")));
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("overlay[0].points.count")));
+}
+
+void DetectionCompletionTest::shadowComparisonCanIncludeDiagnostic()
+{
+    const DetectionResult primary = shadowSampleResult();
+    DetectionResult shadow = primary;
+    shadow.diagnostic = QStringLiteral("shadow diagnostic");
+
+    DetectionShadowComparisonOptions options;
+    options.compareDiagnostic = true;
+    const DetectionShadowComparison comparison =
+            DetectionShadowComparator::compare(primary, shadow, options);
+
+    QVERIFY(comparison.differences.contains(
+                QStringLiteral("result.diagnostic")));
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()

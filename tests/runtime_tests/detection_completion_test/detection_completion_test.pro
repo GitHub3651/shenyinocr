@@ -14,6 +14,7 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     detection_completion_test.cpp \
+    $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
@@ -23,6 +24,7 @@ SOURCES += \
 
 HEADERS += \
     $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
