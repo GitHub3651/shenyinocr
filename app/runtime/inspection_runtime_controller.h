@@ -30,7 +30,18 @@ public:
     bool isBusy() const;
     bool isRunning() const;
     QString runId() const;
+    quint64 acceptedProductCount() const;
     quint64 completedProductCount() const;
+
+    std::shared_ptr<const FrameData> acceptFrame(
+        const cv::Mat &image,
+        quint64 frameNumber = 0,
+        int cameraIndex = 0,
+        const QDateTime &timestampUtc = QDateTime());
+
+    DetectionCompletion complete(
+        const std::shared_ptr<const FrameData> &frame,
+        const DetectionResult &result);
 
     DetectionCompletion complete(
         const cv::Mat &image,

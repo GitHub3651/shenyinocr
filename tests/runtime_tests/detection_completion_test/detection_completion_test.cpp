@@ -111,6 +111,8 @@ private slots:
     void immutableFrameCanBeSharedForShortLivedConsumers();
     void sessionBeginCreatesNewRunAndResetsProductSequence();
     void sessionCompletionOwnsFrameAndCopiesDetectionResult();
+    void sessionAcceptsFrameBeforeDetectionAndCompletesSameFrame();
+    void sessionRejectsInvalidForeignAndRepeatedFrameCompletion();
     void resultHandlerRejectsInvalidCompletionWithoutSideEffects();
     void resultHandlerRecordsOkAndRequestsOkOutput();
     void resultHandlerRecordsImmediateNgAndRequestsNgOutput();
@@ -123,6 +125,7 @@ private slots:
     void runtimeControllerRejectsDuplicateAndForeignCompletions();
     void runtimeControllerStartsNewRunWithoutResettingStatistics();
     void runtimeControllerPreservesSeparateResetScopes();
+    void runtimeControllerStopsAdmissionBeforeDrainingAcceptedFrames();
     void startAccessAcceptsIdleOpenCamera();
     void startAccessPreservesGuardOrder();
     void dirtySettingsPrecedePlcConnectivity();
@@ -362,6 +365,90 @@ void DetectionCompletionTest::sessionCompletionOwnsFrameAndCopiesDetectionResult
     QCOMPARE(completion.result.recognizedText, QStringLiteral("123"));
     QCOMPARE(completion.result.overlay.polygons[0].role,
              QStringLiteral("character"));
+}
+
+void DetectionCompletionTest::sessionAcceptsFrameBeforeDetectionAndCompletesSameFrame()
+{
+    DetectionSession session([]() {
+        return QStringLiteral("accepted-run");
+    });
+    session.begin();
+
+    cv::Mat source(2, 3, CV_8UC1, cv::Scalar(17));
+    const QDateTime timestamp = QDateTime::fromMSecsSinceEpoch(
+                1234567,
+                Qt::UTC);
+    const std::shared_ptr<const FrameData> frame = session.acceptFrame(
+                source,
+                91,
+                2,
+                timestamp);
+    source.setTo(cv::Scalar(99));
+
+    QVERIFY(frame);
+    QCOMPARE(frame->productKey.runId, QStringLiteral("accepted-run"));
+    QCOMPARE(frame->productKey.sequence, quint64(1));
+    QCOMPARE(frame->frameNumber, quint64(91));
+    QCOMPARE(frame->cameraIndex, 2);
+    QCOMPARE(frame->timestampUtc, timestamp);
+    QCOMPARE(frame->originalImage.at<uchar>(0, 0), uchar(17));
+    QCOMPARE(session.acceptedProductCount(), quint64(1));
+    QCOMPARE(session.completedProductCount(), quint64(0));
+
+    DetectionResult result;
+    result.modeId = QStringLiteral("word_matching");
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    const DetectionCompletion completion = session.complete(frame, result);
+
+    QVERIFY(completion.isValid());
+    QCOMPARE(completion.frame.get(), frame.get());
+    QCOMPARE(completion.result.modeId, QStringLiteral("word_matching"));
+    QCOMPARE(session.acceptedProductCount(), quint64(1));
+    QCOMPARE(session.completedProductCount(), quint64(1));
+}
+
+void DetectionCompletionTest::sessionRejectsInvalidForeignAndRepeatedFrameCompletion()
+{
+    DetectionSession session([]() {
+        return QStringLiteral("current-run");
+    });
+    session.begin();
+
+    QVERIFY(!session.acceptFrame(cv::Mat()));
+    QCOMPARE(session.acceptedProductCount(), quint64(0));
+
+    const std::shared_ptr<const FrameData> accepted = session.acceptFrame(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(7)));
+    QVERIFY(accepted);
+    QCOMPARE(session.acceptedProductCount(), quint64(1));
+
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ng;
+    result.status = DetectionStatus::Completed;
+
+    const std::shared_ptr<const FrameData> forged = makeFrameData(
+                accepted->productKey,
+                accepted->frameNumber,
+                accepted->cameraIndex,
+                accepted->timestampUtc,
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(9)));
+    QVERIFY(!session.complete(forged, result).isValid());
+    QVERIFY(session.complete(accepted, result).isValid());
+    QVERIFY(!session.complete(accepted, result).isValid());
+
+    ProductKey foreignKey;
+    foreignKey.runId = QStringLiteral("foreign-run");
+    foreignKey.sequence = 1;
+    const std::shared_ptr<const FrameData> foreign = makeFrameData(
+                foreignKey,
+                1,
+                0,
+                QDateTime::currentDateTimeUtc(),
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(8)));
+    QVERIFY(!session.complete(foreign, result).isValid());
+    QCOMPARE(session.acceptedProductCount(), quint64(1));
+    QCOMPARE(session.completedProductCount(), quint64(1));
 }
 
 void DetectionCompletionTest::resultHandlerRejectsInvalidCompletionWithoutSideEffects()
@@ -673,6 +760,40 @@ void DetectionCompletionTest::runtimeControllerPreservesSeparateResetScopes()
 
     controller.clearPendingDelayedNgRequests();
     QCOMPARE(controller.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::runtimeControllerStopsAdmissionBeforeDrainingAcceptedFrames()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("drain-run");
+    });
+    const cv::Mat image(1, 1, CV_8UC1, cv::Scalar(5));
+
+    QVERIFY(!controller.acceptFrame(image));
+    QCOMPARE(controller.beginStart(), QStringLiteral("drain-run"));
+    const std::shared_ptr<const FrameData> startingFrame =
+            controller.acceptFrame(image);
+    QVERIFY(startingFrame);
+    QVERIFY(controller.markRunning());
+    const std::shared_ptr<const FrameData> runningFrame =
+            controller.acceptFrame(image);
+    QVERIFY(runningFrame);
+    QCOMPARE(controller.acceptedProductCount(), quint64(2));
+    QCOMPARE(controller.completedProductCount(), quint64(0));
+
+    QVERIFY(controller.requestStop());
+    QVERIFY(!controller.acceptFrame(image));
+
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    QVERIFY(controller.complete(startingFrame, result).isValid());
+    QVERIFY(controller.complete(runningFrame, result).isValid());
+    QCOMPARE(controller.acceptedProductCount(), quint64(2));
+    QCOMPARE(controller.completedProductCount(), quint64(2));
+
+    controller.finishStop();
+    QVERIFY(!controller.complete(runningFrame, result).isValid());
 }
 
 void DetectionCompletionTest::startAccessAcceptsIdleOpenCamera()

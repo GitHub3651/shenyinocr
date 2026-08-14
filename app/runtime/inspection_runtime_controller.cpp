@@ -86,6 +86,41 @@ quint64 InspectionRuntimeController::completedProductCount() const
     return m_session.completedProductCount();
 }
 
+quint64 InspectionRuntimeController::acceptedProductCount() const
+{
+    return m_session.acceptedProductCount();
+}
+
+std::shared_ptr<const FrameData> InspectionRuntimeController::acceptFrame(
+    const cv::Mat &image,
+    quint64 frameNumber,
+    int cameraIndex,
+    const QDateTime &timestampUtc)
+{
+    if (m_state != InspectionRuntimeState::Starting
+            && m_state != InspectionRuntimeState::Running) {
+        return std::shared_ptr<const FrameData>();
+    }
+
+    return m_session.acceptFrame(
+                image,
+                frameNumber,
+                cameraIndex,
+                timestampUtc);
+}
+
+DetectionCompletion InspectionRuntimeController::complete(
+    const std::shared_ptr<const FrameData> &frame,
+    const DetectionResult &result)
+{
+    if (m_state == InspectionRuntimeState::Idle
+            || m_state == InspectionRuntimeState::Fault) {
+        return DetectionCompletion();
+    }
+
+    return m_session.complete(frame, result);
+}
+
 DetectionCompletion InspectionRuntimeController::complete(
     const cv::Mat &image,
     const DetectionResult &result,
