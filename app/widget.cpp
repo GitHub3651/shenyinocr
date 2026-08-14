@@ -1326,6 +1326,42 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
     Qt::DirectConnection);
 }
 
+void Widget::connectHardwareDetectionSignals(CameraThread *thread)
+{
+    if (!thread) {
+        return;
+    }
+
+    connect(thread,
+            &CameraThread::signal_sendWholeFrameForDetection,
+            this,
+            [this](cv::Mat image) {
+        if (m_softwareDetectionQueueActive.load()
+                && m_softwareDetectionModeIndex.load() == 3) {
+            submitSoftwareDetectionFrame(image);
+        }
+    },
+    Qt::DirectConnection);
+
+    connect(thread,
+            &CameraThread::signal_sendForDetection,
+            this,
+            [this](cv::Mat image, DetectionPose pose) {
+        if (!m_softwareDetectionQueueActive.load()) {
+            return;
+        }
+
+        const int workerMode = m_softwareDetectionModeIndex.load();
+        if (workerMode == 0
+                || workerMode == 1
+                || workerMode == 2
+                || workerMode == 4) {
+            submitSoftwarePositionedDetectionFrame(image, pose);
+        }
+    },
+    Qt::DirectConnection);
+}
+
 void Widget::connectSoftwarePreviewSignals(MyThread *thread)
 {
     if (!thread) {
@@ -1597,7 +1633,7 @@ bool Widget::startSoftwareTissueDetectionWorker(
         m_softwareDetectionUiMailbox.cancel();
         if (errorMessage) {
             *errorMessage = QStringLiteral(
-                        "\u65e0\u6cd5\u542f\u52a8\u8f6f\u89e6\u53d1"
+                        "\u65e0\u6cd5\u542f\u52a8\u7eb8\u5dfe"
                         "\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
         }
         return false;
@@ -1606,7 +1642,7 @@ bool Widget::startSoftwareTissueDetectionWorker(
     m_softwareDetectionWorker = std::move(worker);
     m_softwareDetectionModeIndex.store(3);
     m_softwareDetectionQueueActive.store(true);
-    qDebug() << "[DETECTION_WORKER] software tissue worker started"
+    qDebug() << "[DETECTION_WORKER] tissue worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
                     m_softwareDetectionWorker->queueCapacity());
@@ -1678,7 +1714,7 @@ bool Widget::startSoftwareOcrDetectionWorker(
     m_softwareDetectionWorker = std::move(worker);
     m_softwareDetectionModeIndex.store(2);
     m_softwareDetectionQueueActive.store(true);
-    qDebug() << "[DETECTION_WORKER] software OCR worker started"
+    qDebug() << "[DETECTION_WORKER] OCR worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
                     m_softwareDetectionWorker->queueCapacity());
@@ -1784,7 +1820,7 @@ bool Widget::startSoftwareStampDetectionWorker(
     m_softwareDetectionWorker = std::move(worker);
     m_softwareDetectionModeIndex.store(0);
     m_softwareDetectionQueueActive.store(true);
-    qDebug() << "[DETECTION_WORKER] software stamp worker started"
+    qDebug() << "[DETECTION_WORKER] stamp worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
                     m_softwareDetectionWorker->queueCapacity());
@@ -1904,7 +1940,7 @@ bool Widget::startSoftwareWordDetectionWorker(
     m_softwareDetectionWorker = std::move(worker);
     m_softwareDetectionModeIndex.store(1);
     m_softwareDetectionQueueActive.store(true);
-    qDebug() << "[DETECTION_WORKER] software word worker started"
+    qDebug() << "[DETECTION_WORKER] word worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
                     m_softwareDetectionWorker->queueCapacity());
@@ -2059,11 +2095,36 @@ bool Widget::startSoftwareBarcodeWordDetectionWorker(
     m_softwareDetectionWorker = std::move(worker);
     m_softwareDetectionModeIndex.store(4);
     m_softwareDetectionQueueActive.store(true);
-    qDebug() << "[DETECTION_WORKER] software barcode-word worker started"
+    qDebug() << "[DETECTION_WORKER] barcode-word worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
                     m_softwareDetectionWorker->queueCapacity());
     return true;
+}
+
+bool Widget::startDetectionWorkerForMode(
+        int modeIndex,
+        QString *errorMessage)
+{
+    switch (modeIndex) {
+    case 0:
+        return startSoftwareStampDetectionWorker(errorMessage);
+    case 1:
+        return startSoftwareWordDetectionWorker(errorMessage);
+    case 2:
+        return startSoftwareOcrDetectionWorker(errorMessage);
+    case 3:
+        return startSoftwareTissueDetectionWorker(errorMessage);
+    case 4:
+        return startSoftwareBarcodeWordDetectionWorker(errorMessage);
+    default:
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "\u4e0d\u652f\u6301\u7684\u68c0\u6d4b"
+                        "\u6a21\u5f0f\u3002");
+        }
+        return false;
+    }
 }
 
 void Widget::requestSoftwareDetectionWorkerStop()
@@ -2084,7 +2145,7 @@ void Widget::waitForSoftwareDetectionWorkerStop()
     }
 
     m_softwareDetectionWorker->wait();
-    qDebug() << "[DETECTION_WORKER] software worker stopped"
+    qDebug() << "[DETECTION_WORKER] worker stopped"
              << "processed="
              << m_softwareDetectionWorker->processedFrameCount()
              << "cancelled="
@@ -12969,9 +13030,6 @@ void Widget::on_plcbtn_clicked()
     const bool isBarcodeWordMode =
             currentDetectModeId() == BarcodeWordDetectionMode;
     const bool isTissueMode = (ui->comboBox_4->currentIndex() == 3);
-    const bool isOcrMode = (ui->comboBox_4->currentIndex() == 2);
-    const bool isStampMode = (ui->comboBox_4->currentIndex() == 0);
-    const bool isPlainWordMode = (ui->comboBox_4->currentIndex() == 1);
     const bool isWordProfileMode =
             isWordMode && !m_wordTemplateProfiles.empty();
 
@@ -13239,6 +13297,8 @@ void Widget::on_plcbtn_clicked()
                        != OperationState::Detecting) {
                 return;
             }
+            requestSoftwareDetectionWorkerStop();
+            waitForSoftwareDetectionWorkerStop();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
             clearWordTemplateRunSnapshot();
@@ -13267,9 +13327,7 @@ void Widget::on_plcbtn_clicked()
         connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
         connect(cameraThread, &CameraThread::signal_cleanlabel, this, &Widget::slot_clearResultLabel, Qt::QueuedConnection);
         connectHardwarePreviewSignals(cameraThread);
-        connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-            this->dispatchDetectionByMode(&img, pose);
-        }, Qt::QueuedConnection);
+        connectHardwareDetectionSignals(cameraThread);
         connect(cameraThread, &CameraThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
             this->slot_handleTissueResult(&img, result);
         }, Qt::QueuedConnection);
@@ -13292,26 +13350,44 @@ void Widget::on_plcbtn_clicked()
         // 发送模板匹配相关参数
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
+        if (isWordProfileMode) {
+            m_runningWordTemplateProfiles.swap(
+                        wordTemplateProfilesForRun);
+            m_wordTemplateRunActive = true;
+            qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
+                     << static_cast<int>(m_runningWordTemplateProfiles.size())
+                     << "mode:" << currentDetectModeId();
+        }
+        m_barcodeWordRunActive = isBarcodeWordMode;
         m_resultBoundDisplayActive.store(true);
         beginInspectionStart();
+        QString workerError;
+        if (!startDetectionWorkerForMode(
+                    ui->comboBox_4->currentIndex(),
+                    &workerError)) {
+            finishInspectionStop();
+            m_resultBoundDisplayActive.store(false);
+            clearWordTemplateRunSnapshot();
+            m_barcodeWordRunActive = false;
+            QMessageBox::warning(
+                        this,
+                        QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                        workerError);
+            return;
+        }
+        cameraThread->setExternalDetectionWorkerEnabled(true);
+        qDebug() << "[DETECTION_WORKER] hard-trigger ingress enabled"
+                 << "modeIndex=" << ui->comboBox_4->currentIndex();
         cameraThread->start();
         if (!cameraThread->wait(100)) {
             markInspectionRunning();
-            if (isWordProfileMode) {
-                m_runningWordTemplateProfiles.swap(
-                            wordTemplateProfilesForRun);
-                m_wordTemplateRunActive = true;
-                qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
-                         << static_cast<int>(m_runningWordTemplateProfiles.size())
-                         << "mode:" << currentDetectModeId();
-            }
-            m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
             m_operationState =
                     OperationState::Detecting;
             ui->statusLabel->setText("触发模式运行中");
             updateOperationUiState();
         } else {
+            waitForSoftwareDetectionWorkerStop();
             finishInspectionStop();
             m_resultBoundDisplayActive = false;
             clearWordTemplateRunSnapshot();
@@ -13385,48 +13461,22 @@ void Widget::on_plcbtn_clicked()
             }
             m_resultBoundDisplayActive.store(true);
             // Publish the selected orchestration mode before acquisition can
-            // emit its first frame.  The worker route already owns software
-            // barcode-word execution, while legacy hard-trigger dispatch still
-            // reads this flag to preserve its existing mode selection.
+            // emit its first frame.
             m_barcodeWordRunActive = isBarcodeWordMode;
             beginInspectionStart();
-            if (isTissueMode
-                    || isOcrMode
-                    || isStampMode
-                    || isPlainWordMode
-                    || isBarcodeWordMode) {
-                QString workerError;
-                bool workerStarted = false;
-                if (isTissueMode) {
-                    workerStarted = startSoftwareTissueDetectionWorker(
-                                &workerError);
-                } else if (isOcrMode) {
-                    workerStarted = startSoftwareOcrDetectionWorker(
-                                &workerError);
-                } else if (isStampMode) {
-                    workerStarted = startSoftwareStampDetectionWorker(
-                                &workerError);
-                } else if (isPlainWordMode) {
-                    workerStarted = startSoftwareWordDetectionWorker(
-                                &workerError);
-                } else {
-                    workerStarted =
-                            startSoftwareBarcodeWordDetectionWorker(
-                                &workerError);
-                }
-                if (!workerStarted) {
-                    finishInspectionStop();
-                    m_resultBoundDisplayActive = false;
-                    clearWordTemplateRunSnapshot();
-                    m_barcodeWordRunActive = false;
-                    QMessageBox::warning(
-                                this,
-                                QStringLiteral("\u542f\u52a8\u5931\u8d25"),
-                                workerError);
-                    return;
-                }
-            } else {
-                waitForSoftwareDetectionWorkerStop();
+            QString workerError;
+            if (!startDetectionWorkerForMode(
+                        ui->comboBox_4->currentIndex(),
+                        &workerError)) {
+                finishInspectionStop();
+                m_resultBoundDisplayActive.store(false);
+                clearWordTemplateRunSnapshot();
+                m_barcodeWordRunActive = false;
+                QMessageBox::warning(
+                            this,
+                            QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                            workerError);
+                return;
             }
             myThread->start();
             markInspectionRunning();
@@ -13689,10 +13739,8 @@ void Widget::reinitializeCameraThread()
     // Step 6: gate preview ingress before it can accumulate in the UI queue.
     connectHardwarePreviewSignals(cameraThread);
 
-    // 步骤7: 连接信号槽 - 图像检测（根据检测模式）
-    connect(cameraThread, &CameraThread::signal_sendForDetection, this, [this](cv::Mat img, DetectionPose pose) {
-        this->dispatchDetectionByMode(&img, pose);
-    }, Qt::QueuedConnection);
+    // 步骤7: 连接统一检测Worker入口。
+    connectHardwareDetectionSignals(cameraThread);
     connect(cameraThread, &CameraThread::signal_sendTissueResult, this, [this](cv::Mat img, TissueRollResult result) {
         this->slot_handleTissueResult(&img, result);
     }, Qt::QueuedConnection);

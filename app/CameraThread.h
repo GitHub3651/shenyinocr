@@ -83,6 +83,7 @@ public:
     void setWordTemplateTrackingProfiles(const std::vector<WordTrackingProfile>& profiles);
     void clearWordTemplateTrackingProfiles();
     void setBarcodeWordHardTriggerMode(bool enabled);
+    void setExternalDetectionWorkerEnabled(bool enabled);
 
     // 🔥 新增：接收从硬盘加载的静态完美模板
     void setPreloadedTemplate(const cv::Mat& tpl) {
@@ -154,6 +155,9 @@ signals:
      */
     void signal_sendForDetection(cv::Mat image, DetectionPose pose);
 
+    // 硬触发纸巾模式把本次正式整帧交给统一检测Worker。
+    void signal_sendWholeFrameForDetection(cv::Mat image);
+
     /**
      * @brief 发送纸巾检测结果
      * @param image 已检测的整帧图像
@@ -194,6 +198,7 @@ private:
     std::vector<WordTrackingState> m_wordTrackingProfiles;
     bool m_wordTemplateProfileMode = false;
     bool m_barcodeWordHardTriggerMode = false;
+    std::atomic<bool> m_externalDetectionWorkerEnabled{false};
 
     // ========== 配置参数 ==========
     int angle2 = 0;  ///< 图像旋转角度 (默认0，不旋转)

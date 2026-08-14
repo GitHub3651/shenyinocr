@@ -357,6 +357,7 @@ private:
     void connectSoftwarePreviewSignals(MyThread *thread);
     void connectHardwarePreviewSignals(CameraThread *thread);
     void connectSoftwareDetectionSignals(MyThread *thread);
+    void connectHardwareDetectionSignals(CameraThread *thread);
     bool postSoftwareDetectionUiWork(
         const UiCompletionMailbox::Work &work);
     bool startSoftwareTissueDetectionWorker(QString *errorMessage);
@@ -364,6 +365,8 @@ private:
     bool startSoftwareStampDetectionWorker(QString *errorMessage);
     bool startSoftwareWordDetectionWorker(QString *errorMessage);
     bool startSoftwareBarcodeWordDetectionWorker(QString *errorMessage);
+    bool startDetectionWorkerForMode(int modeIndex,
+                                     QString *errorMessage);
     void requestSoftwareDetectionWorkerStop();
     void waitForSoftwareDetectionWorkerStop();
     void submitSoftwareDetectionFrame(const cv::Mat &image);

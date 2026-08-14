@@ -74,6 +74,10 @@ void CameraThread::setBarcodeWordHardTriggerMode(bool enabled) {
     m_barcodeWordHardTriggerMode = enabled;
 }
 
+void CameraThread::setExternalDetectionWorkerEnabled(bool enabled) {
+    m_externalDetectionWorkerEnabled.store(enabled);
+}
+
 void CameraThread::run() {
     if (!m_cameraDevice) {
         return;
@@ -146,13 +150,22 @@ void CameraThread::run() {
                 if (bypassTracking) {
                     if (m_cameraDevice->isImageReadyForMain()) {
                         cv::Mat detectionImage = image->clone();
-                        auto detectStart = std::chrono::high_resolution_clock::now();
-                        TissueRollResult result =
-                                tissuePipeline.detect(detectionImage);
-                        auto detectEnd = std::chrono::high_resolution_clock::now();
-                        result.processingTimeMs = static_cast<int>(
-                            std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
-                        emit signal_sendTissueResult(detectionImage, result);
+                        if (m_externalDetectionWorkerEnabled.load()) {
+                            emit signal_sendWholeFrameForDetection(
+                                        detectionImage);
+                        } else {
+                            auto detectStart =
+                                    std::chrono::high_resolution_clock::now();
+                            TissueRollResult result =
+                                    tissuePipeline.detect(detectionImage);
+                            auto detectEnd =
+                                    std::chrono::high_resolution_clock::now();
+                            result.processingTimeMs = static_cast<int>(
+                                std::chrono::duration_cast<std::chrono::milliseconds>(detectEnd - detectStart).count());
+                            emit signal_sendTissueResult(
+                                        detectionImage,
+                                        result);
+                        }
                     }
                 } else {
                     cv::Mat displayImage = image->clone();
