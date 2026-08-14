@@ -761,6 +761,12 @@
 - [x] `detection_completion_test`新增两项ROI几何业务测试，覆盖左上边缘外扩不足20像素时裁到0，以及多边形整体越过右边界时吸附到最邻近图像边缘并形成有效ROI；业务测试由19项增至21项，Qt Test预期汇总由`21 passed, 0 failed`增至`23 passed, 0 failed`。
 - [x] ROI边界策略Agent静态检查通过：90个功能ID唯一且状态61/17/10/2；公共几何头在主工程/运行测试各唯一登记，Widget旧局部外扩函数0处、公共边界函数4处调用；ROI越界模态窗口0处；21项业务测试对应Qt Test预期23项；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
 - [x] ResultHandler与ROI边界Qt Creator集中门禁：2026-08-14用户确认`detection_completion_test`预期`23 passed, 0 failed`、主工程靠边ROI按原图边界裁剪、连续检测无模态弹窗且可正常停止；模板匹配和二维码模式OK/NG、总数/NG/合格率、四种存图选择、PLC请求、延迟位置2、剔除复位以及两个统计清零入口均无问题。本切片17个迁移中功能转为已验证。
+- [x] ResultHandler与ROI边界切片已创建独立提交`6050116`，开始Stage 2运行协调器大切片时工作区干净。
+- [x] 新增全ASCII `runtime/inspection_runtime_controller.*`，统一持有`DetectionSession`和`DetectionResultHandler`，建立`Idle→Starting→Running→Stopping→Idle`及显式Fault确认状态；Widget删除两个直接成员，只保留运行按钮、线程和UI桥接。
+- [x] 五模式六个正式结果入口统一先调用协调器`record`，只有被当前运行UUID和递增产品序号接受的完成对象才继续按返回动作存图和请求PLC；同运行重复/倒序完成对象及其他运行完成对象不再重复计数、存图或产生逻辑PLC请求。图像路径、格式、有界队列、PLC写值、100ms Timer及延迟剔除公式未修改。
+- [x] 运行协调器新增6项业务测试，覆盖启停状态、重复启动、Fault确认、会话+结果所有权、重复/外来完成拒绝、新运行序号复位但统计保留、统计与延迟队列独立清理；`detection_completion_test`业务测试由21项增至27项，Qt Test预期汇总由`23 passed, 0 failed`增至`29 passed, 0 failed`。
+- [x] 运行协调器Agent静态检查通过：90个正式功能ID唯一且状态60/15/13/2；新头文件非ASCII字节0；主/测试工程各唯一登记controller源码和头文件；测试声明/定义各27项；Widget直接持有旧Session/ResultHandler为0处、六个正式结果入口全部经协调器、预存图策略旁路0处；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] 运行协调器Qt Creator集中门禁：2026-08-14用户确认`detection_completion_test`预期`29 passed, 0 failed`、主工程Run qmake/Rebuild/Run、模板匹配软触发OK/NG及停止/再次启动、二维码+三期硬触发启停/再次启动、判定/统计/存图和`[RUNTIME_CONTROLLER] starting`日志均无问题；15个迁移中功能转为已验证。
 
 ## 本地提交记录
 
@@ -812,6 +818,7 @@
 | `e6dc0d2` | Stage 2海康单相机设备适配 | SYS-009、SET-005..007、TPL-001..002、CAM-001..005、RUN-001..003、SAVE-004 | 海康SDK枚举、首台打开、参数、回调、帧读取与停止唤醒收口到`devices/camera/`，Widget和两采集线程改用共享`ICameraDevice` | 用户确认适配器测试及主工程开关相机、参数、预览、启停、存图和退出均无问题；现场量化证据仍延期 |
 | `fabc7b0` | Stage 2检测结果帧与无丢弃存图 | DET-002..006、RUN-001、SAVE-001..005 | `DetectionCompletion`统一携带本次检测只读原帧；五模式存图统一为容量32、双写线程、满时等待的产品任务队列 | 用户确认更新后的运行测试及主工程无问题；正常条件下不再因队列容量漏图，实际磁盘失败仍报警 |
 | `45e7340` | Stage 2检测运行会话 | RUN-001、DET-002..006 | 运行UUID、产品递增序号及完成对象组装迁入`DetectionSession`，Widget删除对应可变状态 | 用户确认运行测试及主工程多模式启停、再次启动、判定、计数、存图和PLC均无问题 |
+| `6050116` | Stage 2统一结果处理与ROI边界 | UI-002、UI-005、DET-002..008、RUN-002、PLC-005..007、RES-001..003、SAVE-001 | 五模式统计、存图选择、PLC结果请求和延迟剔除收口到`DetectionResultHandler`；日期ROI期望外扩20像素并裁到原图边界 | 用户确认运行测试23项、靠边ROI连续检测/停止、OK/NG、统计、存图、PLC、延迟剔除和清零入口均正常 |
 
 ## 未解决事项
 
@@ -823,7 +830,7 @@
 
 ## 结论
 
-- 当前切片：Stage 2统一ResultHandler与ROI边界裁剪已通过Qt Creator集中门禁，准备创建独立提交。
+- 当前切片：Stage 2运行协调器已通过Qt Creator集中门禁，准备创建独立提交。
 - 当前阶段：Stage 1结构关口已通过，Stage 2进行中；人工样本与现场证据按用户明确决定延期，不声称最终产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线61 / 迁移中0 / 已验证27 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交ResultHandler切片并继续拆分运行协调器。
+- 功能状态计数：待盘点0 / 已基线60 / 迁移中0 / 已验证28 / 已延期2 / 已确认删除0。
+- 下一允许动作：提交运行协调器切片并进入Stage 2剩余启动预检/参数门禁拆分。

@@ -1047,7 +1047,7 @@ Widget::Widget(QWidget *parent)
     savedDatePoly.clear();
     recognitionCompletedFlag = false;
     isCollecting = false;
-    m_resultHandler.resetStatistics();
+    m_runtimeController.resetStatistics();
     allResults = "";
     wrongindex = ui->lineEdit_12->text().toInt();
 
@@ -1128,6 +1128,7 @@ Widget::~Widget()
 {
     qDebug() << "Widget destructor called";
 
+    m_runtimeController.requestStop();
     resetTemplateCaptureState();
 
     // 先停止线程并断开信号，避免窗口销毁时 queued signal 再访问 ui。
@@ -1206,6 +1207,8 @@ Widget::~Widget()
         m_imageSaveService->shutdown();
         m_imageSaveService.reset();
     }
+
+    finishInspectionStop();
 
     delete ui;
     ui = nullptr;
@@ -1371,11 +1374,25 @@ void Widget::wrongremove()
     }
 }
 
-// 每次正式启动生成新的运行身份；序号只在形成正式检测完成对象时递增。
-void Widget::beginDetectionSession()
+// 启动、运行和停止状态由运行协调器统一维护；Widget只同步界面状态。
+void Widget::beginInspectionStart()
 {
-    qDebug() << "[DETECTION_SESSION] started"
-             << m_detectionSession.begin();
+    const QString runId = m_runtimeController.beginStart();
+    qDebug() << "[RUNTIME_CONTROLLER] starting"
+             << runId;
+}
+
+void Widget::markInspectionRunning()
+{
+    if (!m_runtimeController.markRunning()) {
+        qWarning() << "[RUNTIME_CONTROLLER] unable to enter running state from"
+                   << static_cast<int>(m_runtimeController.state());
+    }
+}
+
+void Widget::finishInspectionStop()
+{
+    m_runtimeController.finishStop();
 }
 
 DetectionCompletion Widget::makeDetectionCompletion(
@@ -1427,17 +1444,17 @@ DetectionCompletion Widget::makeDetectionCompletion(
                     g_lastTissueRoll.roughnessScore);
     }
 
-    return m_detectionSession.complete(image, result);
+    return m_runtimeController.complete(image, result);
 }
 
 void Widget::processDueDelayedNgRequest()
 {
-    if (!m_resultHandler.consumeDueDelayedNgRequest()) {
+    if (!m_runtimeController.consumeDueDelayedNgRequest()) {
         return;
     }
 
     qDebug() << "[RESULT_HANDLER] Triggering delayed NG PLC request,"
-             << "totalCount:" << m_resultHandler.totalCount();
+             << "totalCount:" << m_runtimeController.totalCount();
     wrongremove();
 }
 
@@ -1452,7 +1469,7 @@ void Widget::applyPlcResultRequest(DetectionPlcAction action)
 
 void Widget::refreshResultStatistics()
 {
-    const DetectionResultStatistics statistics = m_resultHandler.statistics();
+    const DetectionResultStatistics statistics = m_runtimeController.statistics();
     ui->lineBoxIndex_6->setText(
                 QString::number(statistics.passRatePercent(), 'f', 1));
     ui->ngnum->setText(QString::number(statistics.ngCount));
@@ -1948,7 +1965,7 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
     // ================== 2. 执行 OCR 识别 (原生 Run API) ==================
     QString target_qstring = setdatetime();
     std::string target_string = target_qstring.toStdString();
-    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
+    ui->imagenum->setText(QString::number(m_runtimeController.totalCount()));
 
     const OcrDetectionPipeline ocrPipeline;
     const OcrDetectionResult ocrResult =
@@ -1989,33 +2006,30 @@ void Widget::slot_readAndDetect(cv::Mat *image, DetectionPose pose)
                     diagnostic,
                     completionElapsedMs);
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
+                    completion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected OCR completion";
+            return;
+        }
         if (!ocrResult.isOk) {
-            if (DetectionResultHandler::imageSaveActionFor(
-                        completion.result.verdict,
-                        imageSaveModeIndex)
+            if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveNg) {
                 saveImage2Async("jpg", selectedDir + "/ng/", completion);
             }
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
             ui->resultlabel->setText(
                         QString("<font size='10' color='red'>错误！</font>"));
-            applyPlcResultRequest(outcome.plcAction);
         } else {
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveOk) {
                 saveImage2Async("jpg", selectedDir + "/ok/", completion);
             }
             ui->resultlabel->setText(
                         QString("<font size='10' color='SpringGreen'>正确！</font>"));
-            applyPlcResultRequest(outcome.plcAction);
         }
+        applyPlcResultRequest(outcome.plcAction);
     }
 
     refreshResultStatistics();
@@ -2059,7 +2073,7 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
 
     cv::Mat croppedImage = oriented.croppedImage.clone();
 
-    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
+    ui->imagenum->setText(QString::number(m_runtimeController.totalCount()));
 
     QString targetString = ui->dateEdit->toPlainText();
     g_lastStampPoly.clear();
@@ -2131,35 +2145,31 @@ void Widget::slot_readAndDetect3(cv::Mat *image, DetectionPose pose)
                     diagnostic,
                     completionElapsedMs);
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
+                    completion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected stamp completion";
+            return;
+        }
         if (!stampResult.isOk) {
-            if (DetectionResultHandler::imageSaveActionFor(
-                        completion.result.verdict,
-                        imageSaveModeIndex)
+            if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveNg) {
                 saveResultImages("png", "ng", completion);
             }
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
 
             if (!charIsOk && overlapIsOk) ui->resultlabel->setText(QString("<font size='10' color='red'>错误(喷码不合格)</font>"));
             else if (charIsOk && !overlapIsOk) ui->resultlabel->setText(QString("<font size='10' color='red'>错误(钢印重叠)</font>"));
             else ui->resultlabel->setText(QString("<font size='10' color='red'>错误(喷码与钢印均不合格)</font>"));
-
-            applyPlcResultRequest(outcome.plcAction);
         } else {
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveOk) {
                 saveResultImages("png", "ok", completion);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
-            applyPlcResultRequest(outcome.plcAction);
         }
+        applyPlcResultRequest(outcome.plcAction);
     }
 
     refreshResultStatistics();
@@ -2225,7 +2235,7 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
 
     cv::Mat croppedImage =
             oriented.croppedImage;
-    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
+    ui->imagenum->setText(QString::number(m_runtimeController.totalCount()));
 
     int thresholdValue = 0;
     bool thresholdOk = parseIntValue(imageThresholdText, &thresholdValue);
@@ -2350,31 +2360,28 @@ void Widget::runWordTemplateDetection(cv::Mat *image,
                     reason,
                     completionElapsedMs);
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
+                    completion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected word completion";
+            return;
+        }
         if (!wordResult.isOk) {
-            if (DetectionResultHandler::imageSaveActionFor(
-                        completion.result.verdict,
-                        imageSaveModeIndex)
+            if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveNg) {
                 saveWordResultImages("png", "ng", completion);
             }
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
             ui->resultlabel->setText(QString("<font size='10' color='red'>错误！</font>"));
-            applyPlcResultRequest(outcome.plcAction);
         } else {
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveOk) {
                 saveWordResultImages("png", "ok", completion);
             }
             ui->resultlabel->setText(QString("<font size='10' color='SpringGreen'>正确！</font>"));
-            applyPlcResultRequest(outcome.plcAction);
         }
+        applyPlcResultRequest(outcome.plcAction);
     }
 
     refreshResultStatistics();
@@ -2540,8 +2547,8 @@ void Widget::runBarcodeWordDetection(
                        .arg(barcode.elapsedMs, 0, 'f', 3)
                        .arg(barcode.text);
 
-            const int totalBeforeDate = m_resultHandler.totalCount();
-            const int ngBeforeDate = m_resultHandler.ngCount();
+            const int totalBeforeDate = m_runtimeController.totalCount();
+            const int ngBeforeDate = m_runtimeController.ngCount();
             runWordTemplateDetection(
                         image,
                         pose,
@@ -2555,9 +2562,9 @@ void Widget::runBarcodeWordDetection(
 
             BarcodeWordDateDetectionResult dateResult;
             dateResult.resultProduced =
-                    m_resultHandler.totalCount() > totalBeforeDate;
+                    m_runtimeController.totalCount() > totalBeforeDate;
             dateResult.isOk = dateResult.resultProduced
-                    && m_resultHandler.ngCount() == ngBeforeDate;
+                    && m_runtimeController.ngCount() == ngBeforeDate;
             return dateResult;
         };
     }
@@ -2891,20 +2898,21 @@ void Widget::finalizeWordTrackingNg(
                 + elapsedMilliseconds(finalizationTimer));
 
     const int imageSaveModeIndex = ui->comboBox->currentIndex();
-    if (DetectionResultHandler::imageSaveActionFor(
-                completion.result.verdict,
-                imageSaveModeIndex)
+    const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
+                completion,
+                imageSaveModeIndex,
+                wrongindex);
+    if (!outcome.resultRecorded) {
+        qWarning() << "[RUNTIME_CONTROLLER] rejected word tracking NG completion";
+        return;
+    }
+    if (outcome.imageSaveAction
             == DetectionResultSaveAction::SaveNg) {
         saveWordResultImages(
                     "png",
                     "ng",
                     completion);
     }
-
-    const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                completion,
-                imageSaveModeIndex,
-                wrongindex);
     ui->resultlabel->setText(
                 QString("<font size='10' color='red'>"
                         "错误！</font>"));
@@ -2981,17 +2989,18 @@ void Widget::finalizeBarcodeWordNg(
                     + postTrackingElapsedMs
                     + elapsedMilliseconds(finalizationTimer));
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
-        if (DetectionResultHandler::imageSaveActionFor(
-                    completion.result.verdict,
-                    imageSaveModeIndex)
-                == DetectionResultSaveAction::SaveNg) {
-            saveWordResultImages("png", "ng", completion);
-        }
-
-        const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
+        const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
                     completion,
                     imageSaveModeIndex,
                     wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected barcode NG completion";
+            return;
+        }
+        if (outcome.imageSaveAction
+                == DetectionResultSaveAction::SaveNg) {
+            saveWordResultImages("png", "ng", completion);
+        }
         ui->resultlabel->setText(
                     QString("<font size='10' color='red'>错误！</font>"));
         applyPlcResultRequest(outcome.plcAction);
@@ -3116,29 +3125,26 @@ void Widget::slot_handleTissueResult(cv::Mat *image, TissueRollResult tissueResu
                         std::chrono::high_resolution_clock::now() - start)
                         .count()));
         const int imageSaveModeIndex = ui->comboBox->currentIndex();
+        const DetectionResultHandlingOutcome outcome = m_runtimeController.record(
+                    completion,
+                    imageSaveModeIndex,
+                    wrongindex);
+        if (!outcome.resultRecorded) {
+            qWarning() << "[RUNTIME_CONTROLLER] rejected tissue completion";
+            return;
+        }
         if (!isOk) {
-            if (DetectionResultHandler::imageSaveActionFor(
-                        completion.result.verdict,
-                        imageSaveModeIndex)
+            if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveNg) {
                 saveResultImages("png", "ng", completion);
             }
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
-            applyPlcResultRequest(outcome.plcAction);
         } else {
-            const DetectionResultHandlingOutcome outcome = m_resultHandler.record(
-                        completion,
-                        imageSaveModeIndex,
-                        wrongindex);
             if (outcome.imageSaveAction
                     == DetectionResultSaveAction::SaveOk) {
                 saveResultImages("png", "ok", completion);
             }
-            applyPlcResultRequest(outcome.plcAction);
         }
+        applyPlcResultRequest(outcome.plcAction);
     }
 
     refreshResultStatistics();
@@ -3485,6 +3491,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
 
         if (m_operationState
                 == OperationState::Detecting) {
+            finishInspectionStop();
             isCollecting = false;
             clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
@@ -9384,12 +9391,14 @@ void Widget::on_cancel_clicked()
 
     if (m_operationState != OperationState::Detecting
             && !isCollecting
-            && !hasRunningInspectionThread()) {
+            && !hasRunningInspectionThread()
+            && !m_runtimeController.isBusy()) {
         updateOperationUiState();
         return;
     }
 
     m_operationState = OperationState::Stopping;
+    m_runtimeController.requestStop();
     updateOperationUiState();
     m_barcodeWordRunActive = false;
 
@@ -9517,6 +9526,7 @@ void Widget::on_cancel_clicked()
 
     ui->statusLabel->setText("已停止");
     isCollecting = false;
+    finishInspectionStop();
     m_operationState = m_bOpenDevice
             ? OperationState::CameraReady
             : OperationState::CameraClosed;
@@ -10103,6 +10113,7 @@ void Widget::closeEvent(QCloseEvent *event)
 
     m_applicationExitInProgress = true;
     m_operationState = OperationState::Stopping;
+    m_runtimeController.requestStop();
     clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
     isCollecting = false;
@@ -10165,6 +10176,7 @@ void Widget::closeEvent(QCloseEvent *event)
     } catch (...) {
     }
     saveSettings(false);
+    finishInspectionStop();
     event->accept();
 }
 
@@ -11118,9 +11130,9 @@ void Widget::on_pushButton_browseImageSavePath_clicked()
  */
 void Widget::on_cut_cancelButton_2_clicked()
 {
-    m_resultHandler.resetStatistics();
-    ui->ngnum->setText(QString::number(m_resultHandler.ngCount()));
-    ui->imagenum->setText(QString::number(m_resultHandler.totalCount()));
+    m_runtimeController.resetStatistics();
+    ui->ngnum->setText(QString::number(m_runtimeController.ngCount()));
+    ui->imagenum->setText(QString::number(m_runtimeController.totalCount()));
 }
 
 /**
@@ -11128,8 +11140,8 @@ void Widget::on_cut_cancelButton_2_clicked()
  */
 void Widget::on_cut_cancelButton_3_clicked()
 {
-    m_resultHandler.resetNgCount();
-    ui->ngnum->setText(QString::number(m_resultHandler.ngCount()));
+    m_runtimeController.resetNgCount();
+    ui->ngnum->setText(QString::number(m_runtimeController.ngCount()));
 }
 
 /**
@@ -11588,7 +11600,8 @@ void Widget::on_CloseCamera_clicked()
     if (m_operationState == OperationState::Detecting
             || m_operationState == OperationState::Stopping
             || isCollecting
-            || hasRunningInspectionThread()) {
+            || hasRunningInspectionThread()
+            || m_runtimeController.isBusy()) {
         QMessageBox::warning(
                     this,
                     "警告",
@@ -11613,7 +11626,7 @@ void Widget::on_CloseCamera_clicked()
     //    ui->ocrResult->clear();
     ui->resultlabel_7->clear();
     ui->speedLabel->clear();
-    m_resultHandler.resetStatistics();
+    m_runtimeController.resetStatistics();
     //    qDebug()<<"totaltime"<<totalTime<<"s";
     //    totalTime=0;
     // 标记相机关闭状态
@@ -11674,7 +11687,8 @@ void Widget::on_plcbtn_clicked()
     if (m_operationState == OperationState::Detecting
             || m_operationState == OperationState::Stopping
             || isCollecting
-            || hasRunningInspectionThread()) {
+            || hasRunningInspectionThread()
+            || m_runtimeController.isBusy()) {
         QMessageBox::information(
                     this,
                     "提示",
@@ -11922,7 +11936,7 @@ void Widget::on_plcbtn_clicked()
         ui->ngnum->clear();
         ui->resultlabel_7->clear();
         ui->speedLabel->clear();
-        m_resultHandler.resetStatistics();
+        m_runtimeController.resetStatistics();
 
         // 重置相机状态
         if (m_cameraDevice && m_bOpenDevice) {
@@ -11979,6 +11993,7 @@ void Widget::on_plcbtn_clicked()
             isCollecting = false;
             clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
+            finishInspectionStop();
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
@@ -12037,9 +12052,10 @@ void Widget::on_plcbtn_clicked()
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
         m_resultBoundDisplayActive = isWordMode;
-        beginDetectionSession();
+        beginInspectionStart();
         cameraThread->start();
         if (!cameraThread->wait(100)) {
+            markInspectionRunning();
             if (isWordProfileMode) {
                 m_runningWordTemplateProfiles.swap(
                             wordTemplateProfilesForRun);
@@ -12055,6 +12071,7 @@ void Widget::on_plcbtn_clicked()
             ui->statusLabel->setText("触发模式运行中");
             updateOperationUiState();
         } else {
+            finishInspectionStop();
             m_resultBoundDisplayActive = false;
             clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
@@ -12133,8 +12150,9 @@ void Widget::on_plcbtn_clicked()
                          << "mode:" << currentDetectModeId();
             }
             m_resultBoundDisplayActive = isWordMode;
-            beginDetectionSession();
+            beginInspectionStart();
             myThread->start();
+            markInspectionRunning();
             m_barcodeWordRunActive = isBarcodeWordMode;
             isCollecting = true;
             m_operationState =
@@ -12154,7 +12172,8 @@ void Widget::on_HandwareDetect_clicked()
             || m_operationState == OperationState::Stopping
             || m_templateCaptureState
                != TemplateCaptureState::Idle
-            || hasRunningInspectionThread()) {
+            || hasRunningInspectionThread()
+            || m_runtimeController.isBusy()) {
         QMessageBox::warning(
                     this,
                     "提示",
@@ -12269,7 +12288,7 @@ void Widget::on_eliminatebutton_clicked()
 //剔除队列复位 清空还未发出的剔除信号
 void Widget::on_pushButton_10_clicked()
 {
-    m_resultHandler.clearPendingDelayedNgRequests();
+    m_runtimeController.clearPendingDelayedNgRequests();
     QMessageBox::information(this, "提示", "剔除队列已清空！");
 }
 

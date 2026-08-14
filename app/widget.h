@@ -66,8 +66,7 @@
 #include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
 #include "devices/plc/plc_device.h"
-#include "runtime/detection_session.h"
-#include "runtime/result_handler.h"
+#include "runtime/inspection_runtime_controller.h"
 
 using namespace cv;
 
@@ -397,8 +396,7 @@ private:
     bool m_resultBoundDisplayActive = false;
     bool m_applicationExitInProgress = false;
     bool m_detectionRoiWarningActive = false;
-    DetectionSession m_detectionSession;
-    DetectionResultHandler m_resultHandler;
+    InspectionRuntimeController m_runtimeController;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;
@@ -670,7 +668,9 @@ private:
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
-    void beginDetectionSession();
+    void beginInspectionStart();
+    void markInspectionRunning();
+    void finishInspectionStop();
     DetectionCompletion makeDetectionCompletion(
         const cv::Mat &image,
         AlgorithmVerdict verdict,

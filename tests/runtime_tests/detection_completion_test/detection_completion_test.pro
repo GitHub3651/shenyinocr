@@ -14,12 +14,14 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     detection_completion_test.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
     $$PROJECT_ROOT/app/runtime/detection_session.cpp \
     $$PROJECT_ROOT/app/runtime/result_handler.cpp \
     $$PROJECT_ROOT/app/runtime/image_save_service.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
     $$PROJECT_ROOT/app/runtime/detection_session.h \
     $$PROJECT_ROOT/app/runtime/result_handler.h \
     $$PROJECT_ROOT/app/runtime/image_save_service.h \

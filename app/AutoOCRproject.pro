@@ -68,6 +68,7 @@ SOURCES += \
     devices/camera/hikvision_camera_device_native.cpp \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
+    runtime/inspection_runtime_controller.cpp \
     runtime/detection_session.cpp \
     runtime/result_handler.cpp \
     runtime/image_save_service.cpp \
@@ -128,6 +129,7 @@ HEADERS += \
     devices/ocr/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
     devices/plc/snap7_plc_device.h \
+    runtime/inspection_runtime_controller.h \
     runtime/detection_session.h \
     runtime/result_handler.h \
     runtime/image_save_service.h \

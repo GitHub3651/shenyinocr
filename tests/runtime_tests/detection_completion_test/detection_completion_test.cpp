@@ -4,6 +4,7 @@
 #include "detection/common/detection_roi_geometry.h"
 #include "runtime/detection_session.h"
 #include "runtime/image_save_service.h"
+#include "runtime/inspection_runtime_controller.h"
 #include "runtime/result_handler.h"
 
 #include <chrono>
@@ -74,6 +75,12 @@ private slots:
     void resultHandlerDelaysNgUntilConfiguredProductOffset();
     void resultHandlerPreservesFourImageSaveModes();
     void resultHandlerResetsStatisticsAndPendingOutputsSeparately();
+    void runtimeControllerTransitionsFromStartToStop();
+    void runtimeControllerRejectsConcurrentAndFaultedStarts();
+    void runtimeControllerOwnsCompletionAndResultHandling();
+    void runtimeControllerRejectsDuplicateAndForeignCompletions();
+    void runtimeControllerStartsNewRunWithoutResettingStatistics();
+    void runtimeControllerPreservesSeparateResetScopes();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void saveTaskRequiresProductAndAllItems();
@@ -407,6 +414,194 @@ void DetectionCompletionTest::resultHandlerResetsStatisticsAndPendingOutputsSepa
 
     handler.clearPendingDelayedNgRequests();
     QCOMPARE(handler.pendingDelayedNgCount(), 0);
+}
+
+void DetectionCompletionTest::runtimeControllerTransitionsFromStartToStop()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("coordinated-run");
+    });
+    DetectionResult result;
+    result.status = DetectionStatus::Completed;
+
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!controller.isBusy());
+    QVERIFY(!controller.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(1)),
+                result).isValid());
+    QCOMPARE(controller.beginStart(), QStringLiteral("coordinated-run"));
+    QVERIFY(controller.state() == InspectionRuntimeState::Starting);
+    QVERIFY(controller.isBusy());
+    QVERIFY(!controller.isRunning());
+    QVERIFY(controller.markRunning());
+    QVERIFY(controller.state() == InspectionRuntimeState::Running);
+    QVERIFY(controller.isRunning());
+    QVERIFY(controller.requestStop());
+    QVERIFY(controller.state() == InspectionRuntimeState::Stopping);
+    QVERIFY(controller.requestStop());
+
+    controller.finishStop();
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!controller.isBusy());
+    QVERIFY(!controller.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(2)),
+                result).isValid());
+}
+
+void DetectionCompletionTest::runtimeControllerRejectsConcurrentAndFaultedStarts()
+{
+    int runNumber = 0;
+    InspectionRuntimeController controller([&runNumber]() {
+        return QStringLiteral("run-%1").arg(++runNumber);
+    });
+
+    QCOMPARE(controller.beginStart(), QStringLiteral("run-1"));
+    QVERIFY(controller.beginStart().isEmpty());
+    QCOMPARE(controller.runId(), QStringLiteral("run-1"));
+    QVERIFY(controller.markRunning());
+    QVERIFY(!controller.markRunning());
+    controller.markFault();
+    QVERIFY(controller.state() == InspectionRuntimeState::Fault);
+    QVERIFY(controller.beginStart().isEmpty());
+
+    controller.acknowledgeFault();
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QCOMPARE(controller.beginStart(), QStringLiteral("run-2"));
+}
+
+void DetectionCompletionTest::runtimeControllerOwnsCompletionAndResultHandling()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("owned-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+
+    DetectionResult result;
+    result.modeId = QStringLiteral("stamp");
+    result.verdict = AlgorithmVerdict::Ng;
+    result.status = DetectionStatus::Completed;
+    result.recognizedText = QStringLiteral("12");
+    const DetectionCompletion completion = controller.complete(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(23)),
+                result);
+    const DetectionResultHandlingOutcome outcome = controller.record(
+                completion,
+                1,
+                0);
+
+    QVERIFY(completion.isValid());
+    QCOMPARE(completion.frame->productKey.runId,
+             QStringLiteral("owned-run"));
+    QCOMPARE(completion.frame->productKey.sequence, quint64(1));
+    QCOMPARE(controller.completedProductCount(), quint64(1));
+    QVERIFY(outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveAction
+            == DetectionResultSaveAction::SaveNg);
+    QVERIFY(outcome.plcAction == DetectionPlcAction::RequestNg);
+    QCOMPARE(controller.totalCount(), 1);
+    QCOMPARE(controller.ngCount(), 1);
+}
+
+void DetectionCompletionTest::runtimeControllerRejectsDuplicateAndForeignCompletions()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("current-run");
+    });
+    controller.beginStart();
+    controller.markRunning();
+
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    const DetectionCompletion completion = controller.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(1)),
+                result);
+    QVERIFY(controller.record(completion, 0, 0).resultRecorded);
+
+    const DetectionResultHandlingOutcome duplicate = controller.record(
+                completion,
+                0,
+                0);
+    QVERIFY(!duplicate.resultRecorded);
+    QCOMPARE(controller.totalCount(), 1);
+
+    const DetectionResultHandlingOutcome foreign = controller.record(
+                testCompletion(2, AlgorithmVerdict::Ng),
+                0,
+                0);
+    QVERIFY(!foreign.resultRecorded);
+    QCOMPARE(controller.totalCount(), 1);
+    QCOMPARE(controller.ngCount(), 0);
+}
+
+void DetectionCompletionTest::runtimeControllerStartsNewRunWithoutResettingStatistics()
+{
+    int runNumber = 0;
+    InspectionRuntimeController controller([&runNumber]() {
+        return QStringLiteral("run-%1").arg(++runNumber);
+    });
+
+    controller.beginStart();
+    controller.markRunning();
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    controller.record(
+                controller.complete(
+                    cv::Mat(1, 1, CV_8UC1, cv::Scalar(1)),
+                    result),
+                0,
+                0);
+    controller.requestStop();
+    controller.finishStop();
+
+    QCOMPARE(controller.beginStart(), QStringLiteral("run-2"));
+    QCOMPARE(controller.completedProductCount(), quint64(0));
+    QCOMPARE(controller.totalCount(), 1);
+    QCOMPARE(controller.ngCount(), 0);
+    const DetectionCompletion restarted = controller.complete(
+                cv::Mat(1, 1, CV_8UC1, cv::Scalar(2)),
+                result);
+    QCOMPARE(restarted.frame->productKey.runId, QStringLiteral("run-2"));
+    QCOMPARE(restarted.frame->productKey.sequence, quint64(1));
+}
+
+void DetectionCompletionTest::runtimeControllerPreservesSeparateResetScopes()
+{
+    InspectionRuntimeController controller;
+    controller.beginStart();
+    DetectionResult ngResult;
+    ngResult.verdict = AlgorithmVerdict::Ng;
+    ngResult.status = DetectionStatus::Completed;
+    controller.record(
+                controller.complete(
+                    cv::Mat(1, 1, CV_8UC1, cv::Scalar(1)),
+                    ngResult),
+                0,
+                3);
+    DetectionResult okResult;
+    okResult.verdict = AlgorithmVerdict::Ok;
+    okResult.status = DetectionStatus::Completed;
+    controller.record(
+                controller.complete(
+                    cv::Mat(1, 1, CV_8UC1, cv::Scalar(2)),
+                    okResult),
+                0,
+                0);
+
+    controller.resetNgCount();
+    QCOMPARE(controller.totalCount(), 2);
+    QCOMPARE(controller.ngCount(), 0);
+    QCOMPARE(controller.pendingDelayedNgCount(), 1);
+
+    controller.resetStatistics();
+    QCOMPARE(controller.totalCount(), 0);
+    QCOMPARE(controller.ngCount(), 0);
+    QCOMPARE(controller.pendingDelayedNgCount(), 1);
+
+    controller.clearPendingDelayedNgRequests();
+    QCOMPARE(controller.pendingDelayedNgCount(), 0);
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()
