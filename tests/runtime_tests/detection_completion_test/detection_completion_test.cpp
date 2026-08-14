@@ -255,6 +255,11 @@ private slots:
     void modeWorkerFactoryReturnsTypedStampOutput();
     void modeWorkerFactoryRejectsInvalidWordProfileIndex();
     void modeWorkerFactoryCarriesBarcodeStrategyAcrossFrames();
+    void profileSnapshotPreservesOrderAndOwnsImages();
+    void profileSnapshotUsesLegacyThresholdFallback();
+    void modeWorkerDispatcherRejectsInvalidRequests();
+    void modeWorkerDispatcherCreatesRequestedWorker();
+    void modeWorkerDispatcherLoadsBarcodeDecoderBeforeCreation();
     void detectionWorkerRejectsSubmissionOutsideRun();
     void detectionWorkerCancellationSuppressesPendingResults();
     void detectionWorkerCanRestartAfterWait();
@@ -1965,6 +1970,169 @@ void DetectionCompletionTest::modeWorkerFactoryCarriesBarcodeStrategyAcrossFrame
             == DetectionStatus::Completed);
     QVERIFY(outputs.at(0).detectionResult.verdict
             == AlgorithmVerdict::Ng);
+}
+
+void DetectionCompletionTest::profileSnapshotPreservesOrderAndOwnsImages()
+{
+    InspectionProfileSource first;
+    first.directoryPath = QStringLiteral("C:/recipes/profile-a");
+    first.trackingTemplate = cv::Mat(
+                3, 4, CV_8UC1, cv::Scalar(17));
+    first.datePoly.push_back(cv::Point2f(1.0f, 2.0f));
+    first.targetText = QStringLiteral("12");
+    first.imageThreshold = 73.0;
+    first.digitTemplates.push_back(cv::Mat(
+                2, 2, CV_8UC1, cv::Scalar(23)));
+    first.digitTemplateTargetIndexes.push_back(0);
+
+    InspectionProfileSource second;
+    second.name = QStringLiteral("profile-b");
+    second.directoryPath = QStringLiteral("C:/recipes/ignored");
+    second.trackingTemplate = cv::Mat(
+                2, 5, CV_8UC1, cv::Scalar(31));
+    second.targetText = QStringLiteral("3");
+    second.imageThreshold = 82.0;
+    second.digitTemplates.push_back(cv::Mat(
+                2, 2, CV_8UC1, cv::Scalar(41)));
+    second.digitTemplateTargetIndexes.push_back(0);
+
+    std::vector<InspectionProfileSource> sources;
+    sources.push_back(first);
+    sources.push_back(second);
+    const InspectionProfileSnapshot snapshot =
+            InspectionProfileSnapshotBuilder::create(
+                sources,
+                QStringLiteral("66"));
+
+    sources[0].trackingTemplate.setTo(cv::Scalar(99));
+    sources[0].digitTemplates[0].setTo(cv::Scalar(101));
+
+    QVERIFY(snapshot.isValid());
+    QCOMPARE(static_cast<int>(snapshot.trackingProfiles.size()), 2);
+    QCOMPARE(static_cast<int>(snapshot.detectionProfiles.size()), 2);
+    QCOMPARE(snapshot.trackingProfiles[0].name,
+             QStringLiteral("profile-a"));
+    QCOMPARE(snapshot.trackingProfiles[1].name,
+             QStringLiteral("profile-b"));
+    QCOMPARE(snapshot.trackingProfiles[0].profileIndex, 0);
+    QCOMPARE(snapshot.trackingProfiles[1].profileIndex, 1);
+    QCOMPARE(snapshot.trackingProfiles[0].trackingTemplate.at<uchar>(0, 0),
+             uchar(17));
+    QCOMPARE(snapshot.detectionProfiles[0]
+             .preparedTemplates.grayTemplates[0].at<uchar>(0, 0),
+             uchar(23));
+    QCOMPARE(snapshot.detectionProfiles[0].targetText,
+             QStringLiteral("12"));
+    QCOMPARE(snapshot.detectionProfiles[1].thresholdPercent, 82);
+}
+
+void DetectionCompletionTest::profileSnapshotUsesLegacyThresholdFallback()
+{
+    InspectionProfileSource source;
+    source.name = QStringLiteral("profile-a");
+    source.trackingTemplate = cv::Mat::ones(2, 2, CV_8UC1);
+    source.targetText = QStringLiteral("1");
+    source.imageThreshold = 78.5;
+    source.digitTemplates.push_back(
+                cv::Mat::ones(2, 2, CV_8UC1));
+    source.digitTemplateTargetIndexes.push_back(0);
+    source.barcodeOptions.roiPaddingPercent = 11;
+    source.decodeStrategy.preferredStrategyId = 4;
+    source.decodeStrategy.preferredOptionFlags = 7u;
+    source.decodeStrategy.consecutiveFailures = 2;
+
+    const InspectionProfileSnapshot snapshot =
+            InspectionProfileSnapshotBuilder::create(
+                std::vector<InspectionProfileSource>(1, source),
+                QStringLiteral("66"));
+
+    QVERIFY(snapshot.isValid());
+    QCOMPARE(snapshot.detectionProfiles[0].thresholdPercent, 66);
+    QCOMPARE(snapshot.detectionProfiles[0]
+             .barcodeOptions.roiPaddingPercent, 11);
+    QCOMPARE(snapshot.detectionProfiles[0]
+             .decodeStrategy.preferredStrategyId, 4);
+    QCOMPARE(snapshot.detectionProfiles[0]
+             .decodeStrategy.preferredOptionFlags, 7u);
+    QCOMPARE(snapshot.detectionProfiles[0]
+             .decodeStrategy.consecutiveFailures, 2);
+}
+
+void DetectionCompletionTest::modeWorkerDispatcherRejectsInvalidRequests()
+{
+    DetectionModeWorkerConsumers consumers;
+    DetectionModeWorkerRequest request;
+    request.modeIndex = 99;
+    DetectionModeWorkerCreationResult result =
+            DetectionModeWorkerDispatcher::create(request, consumers);
+    QVERIFY(!result.isAccepted());
+    QVERIFY(result.errorMessage.contains(
+                QStringLiteral("\u4e0d\u652f\u6301")));
+
+    request.modeIndex = 1;
+    result = DetectionModeWorkerDispatcher::create(request, consumers);
+    QVERIFY(!result.isAccepted());
+    QVERIFY(result.errorMessage.contains(QStringLiteral("Profile")));
+
+    request.modeIndex = 2;
+    result = DetectionModeWorkerDispatcher::create(request, consumers);
+    QVERIFY(!result.isAccepted());
+    QVERIFY(result.errorMessage.contains(QStringLiteral("OCR")));
+
+    request.modeIndex = 4;
+    request.profiles.push_back(DetectionModeWorkerProfile());
+    result = DetectionModeWorkerDispatcher::create(request, consumers);
+    QVERIFY(!result.isAccepted());
+    QCOMPARE(result.errorMessage,
+             QStringLiteral("Barcode decoder is null"));
+}
+
+void DetectionCompletionTest::modeWorkerDispatcherCreatesRequestedWorker()
+{
+    DetectionModeWorkerRequest request;
+    request.modeIndex = 3;
+    request.tissueParameters.roughnessThreshold = 6.25;
+    DetectionModeWorkerConsumers consumers;
+    consumers.tissue = [](
+            const DetectionCompletion &,
+            const TissueRollResult &) {
+    };
+
+    const DetectionModeWorkerCreationResult result =
+            DetectionModeWorkerDispatcher::create(request, consumers);
+
+    QVERIFY(result.isAccepted());
+    QVERIFY(result.worker);
+    QCOMPARE(result.workerLogName, QStringLiteral("tissue"));
+    QVERIFY(result.startFailureMessage.contains(
+                QStringLiteral("\u7eb8\u5dfe")));
+    QCOMPARE(static_cast<qulonglong>(result.worker->queueCapacity()),
+             qulonglong(1));
+}
+
+void DetectionCompletionTest::modeWorkerDispatcherLoadsBarcodeDecoderBeforeCreation()
+{
+    FactoryFakeBarcodeDecoder decoder;
+    DetectionModeWorkerProfile profile;
+    profile.templateName = QStringLiteral("profile-a");
+    profile.targetText = QStringLiteral("1");
+
+    DetectionModeWorkerRequest request;
+    request.modeIndex = 4;
+    request.profiles.push_back(profile);
+    request.barcodeDecoder = &decoder;
+    DetectionModeWorkerConsumers consumers;
+    consumers.barcodeWord = [](
+            const DetectionCompletion &,
+            const BarcodeWordDetectionWorkOutput &) {
+    };
+
+    const DetectionModeWorkerCreationResult result =
+            DetectionModeWorkerDispatcher::create(request, consumers);
+
+    QVERIFY(result.isAccepted());
+    QCOMPARE(decoder.ensureLoadedCalls, 1);
+    QCOMPARE(result.workerLogName, QStringLiteral("barcode-word"));
 }
 
 void DetectionCompletionTest::detectionWorkerRejectsSubmissionOutsideRun()

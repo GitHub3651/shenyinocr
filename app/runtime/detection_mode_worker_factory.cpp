@@ -284,3 +284,107 @@ DetectionModeWorkerFactory::createBarcodeWordWorker(
     },
                     failureConsumer));
 }
+
+DetectionModeWorkerCreationResult DetectionModeWorkerDispatcher::create(
+        const DetectionModeWorkerRequest &request,
+        const DetectionModeWorkerConsumers &consumers,
+        const DetectionWorker::FailureConsumer &failureConsumer)
+{
+    DetectionModeWorkerCreationResult result;
+    switch (request.modeIndex) {
+    case 0:
+        result.workerLogName = QStringLiteral("stamp");
+        result.startFailureMessage = QStringLiteral(
+                    "\u65e0\u6cd5\u542f\u52a8\u94a2\u5370\u68c0\u6d4b"
+                    "\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        if (!request.stampConfiguration.preparedTemplates.isValid()) {
+            result.errorMessage = QStringLiteral(
+                        "\u94a2\u5370\u5b57\u7b26\u6a21\u677f\u6216"
+                        "\u56fe\u50cf\u9608\u503c\u65e0\u6548\u3002");
+            return result;
+        }
+        result.worker = DetectionModeWorkerFactory::createStampWorker(
+                    request.stampConfiguration,
+                    consumers.stamp,
+                    failureConsumer);
+        break;
+    case 1:
+        result.workerLogName = QStringLiteral("word");
+        result.startFailureMessage = QStringLiteral(
+                    "\u65e0\u6cd5\u542f\u52a8\u5b57\u5e93\u68c0\u6d4b"
+                    "\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        if (request.profiles.empty()) {
+            result.errorMessage = QStringLiteral(
+                        "\u5b57\u5e93\u8fd0\u884c Profile "
+                        "\u5feb\u7167\u672a\u51c6\u5907\u3002");
+            return result;
+        }
+        result.worker = DetectionModeWorkerFactory::createWordWorker(
+                    request.profiles,
+                    consumers.word,
+                    failureConsumer);
+        break;
+    case 2:
+        result.workerLogName = QStringLiteral("OCR");
+        result.startFailureMessage = QStringLiteral(
+                    "\u65e0\u6cd5\u542f\u52a8\u6df1\u5ea6 OCR "
+                    "\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        if (!request.ocrEngine) {
+            result.errorMessage = QStringLiteral(
+                        "\u6df1\u5ea6 OCR \u5f15\u64ce\u672a\u521d\u59cb\u5316\u3002");
+            return result;
+        }
+        result.worker = DetectionModeWorkerFactory::createOcrWorker(
+                    request.targetText,
+                    request.ocrEngine,
+                    consumers.ocr,
+                    failureConsumer);
+        break;
+    case 3:
+        result.workerLogName = QStringLiteral("tissue");
+        result.startFailureMessage = QStringLiteral(
+                    "\u65e0\u6cd5\u542f\u52a8\u7eb8\u5dfe\u68c0\u6d4b"
+                    "\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        result.worker = DetectionModeWorkerFactory::createTissueWorker(
+                    request.tissueParameters,
+                    consumers.tissue,
+                    failureConsumer);
+        break;
+    case 4:
+        result.workerLogName = QStringLiteral("barcode-word");
+        result.startFailureMessage = QStringLiteral(
+                    "\u65e0\u6cd5\u542f\u52a8\u4e8c\u7ef4\u7801+"
+                    "\u4e09\u671f\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002");
+        if (request.profiles.empty()) {
+            result.errorMessage = QStringLiteral(
+                        "\u4e8c\u7ef4\u7801+\u4e09\u671f\u8fd0\u884c "
+                        "Profile \u5feb\u7167\u672a\u51c6\u5907\u3002");
+            return result;
+        }
+        if (!request.barcodeDecoder) {
+            result.errorMessage = QStringLiteral(
+                        "Barcode decoder is null");
+            return result;
+        }
+        if (!request.barcodeDecoder->ensureLoaded()) {
+            result.errorMessage = request.barcodeDecoder->lastError();
+            return result;
+        }
+        result.worker =
+                DetectionModeWorkerFactory::createBarcodeWordWorker(
+                    request.profiles,
+                    request.barcodeDecoder,
+                    consumers.barcodeWord,
+                    failureConsumer);
+        break;
+    default:
+        result.errorMessage = QStringLiteral(
+                    "\u4e0d\u652f\u6301\u7684\u68c0\u6d4b\u6a21\u5f0f\u3002");
+        return result;
+    }
+
+    if (!result.worker) {
+        result.errorMessage = result.startFailureMessage;
+    }
+    return result;
+}

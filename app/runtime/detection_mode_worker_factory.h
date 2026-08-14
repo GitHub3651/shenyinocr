@@ -7,6 +7,7 @@
 #include "detection/tissue/tissue_detection_pipeline.h"
 #include "detection/word/word_detection_pipeline.h"
 #include "runtime/detection_worker.h"
+#include "runtime/inspection_profile_snapshot.h"
 
 #include <QString>
 
@@ -17,17 +18,6 @@
 
 class IBarcodeDecoder;
 class IOcrEngine;
-
-struct DetectionModeWorkerProfile
-{
-    QString templateName;
-    QString targetText;
-    TemplateMatchPreparedTemplates preparedTemplates;
-    std::vector<int> templateTargetIndexes;
-    int thresholdPercent = 0;
-    BarcodeDecodeOptions barcodeOptions;
-    BarcodeWordDecodeStrategyState decodeStrategy;
-};
 
 struct StampDetectionWorkerConfiguration
 {
@@ -87,6 +77,49 @@ public:
         const std::vector<DetectionModeWorkerProfile> &profiles,
         IBarcodeDecoder *decoder,
         const BarcodeWordCompletionConsumer &completionConsumer,
+        const DetectionWorker::FailureConsumer &failureConsumer =
+            DetectionWorker::FailureConsumer());
+};
+
+struct DetectionModeWorkerRequest
+{
+    int modeIndex = -1;
+    TissueRecipeParameters tissueParameters;
+    std::string targetText;
+    IOcrEngine *ocrEngine = nullptr;
+    StampDetectionWorkerConfiguration stampConfiguration;
+    std::vector<DetectionModeWorkerProfile> profiles;
+    IBarcodeDecoder *barcodeDecoder = nullptr;
+};
+
+struct DetectionModeWorkerConsumers
+{
+    DetectionModeWorkerFactory::TissueCompletionConsumer tissue;
+    DetectionModeWorkerFactory::OcrCompletionConsumer ocr;
+    DetectionModeWorkerFactory::StampCompletionConsumer stamp;
+    DetectionModeWorkerFactory::WordCompletionConsumer word;
+    DetectionModeWorkerFactory::BarcodeWordCompletionConsumer barcodeWord;
+};
+
+struct DetectionModeWorkerCreationResult
+{
+    std::shared_ptr<DetectionWorker> worker;
+    QString errorMessage;
+    QString startFailureMessage;
+    QString workerLogName;
+
+    bool isAccepted() const
+    {
+        return worker && errorMessage.isEmpty();
+    }
+};
+
+class DetectionModeWorkerDispatcher
+{
+public:
+    static DetectionModeWorkerCreationResult create(
+        const DetectionModeWorkerRequest &request,
+        const DetectionModeWorkerConsumers &consumers,
         const DetectionWorker::FailureConsumer &failureConsumer =
             DetectionWorker::FailureConsumer());
 };

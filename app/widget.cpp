@@ -1458,7 +1458,7 @@ bool Widget::installDetectionWorker(
         int modeIndex,
         const std::shared_ptr<DetectionWorker> &worker,
         const QString &startFailureMessage,
-        const char *workerLogName,
+        const QString &workerLogName,
         QString *errorMessage)
 {
     if (!worker
@@ -1471,7 +1471,7 @@ bool Widget::installDetectionWorker(
         return false;
     }
 
-    qDebug() << "[DETECTION_WORKER]" << workerLogName
+    qDebug() << "[DETECTION_WORKER]" << qPrintable(workerLogName)
              << "worker started"
              << "queueCapacity="
              << static_cast<qulonglong>(
@@ -1479,307 +1479,76 @@ bool Widget::installDetectionWorker(
     return true;
 }
 
-bool Widget::startSoftwareTissueDetectionWorker(
-        QString *errorMessage)
-{
-    const std::shared_ptr<DetectionWorker> worker =
-            DetectionModeWorkerFactory::createTissueWorker(
-                m_tissueRecipeParameters,
-                [this](
-                    const DetectionCompletion &completion,
-                    const TissueRollResult &tissueResult) {
-        postSoftwareDetectionUiWork(
-                    [this, completion, tissueResult]() {
-            handleSoftwareTissueCompletion(
-                        completion,
-                        tissueResult);
-        });
-    },
-                detectionWorkerFailureConsumer());
-    return installDetectionWorker(
-                3,
-                worker,
-                QStringLiteral(
-                    "\u65e0\u6cd5\u542f\u52a8\u7eb8\u5dfe"
-                    "\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002"),
-                "tissue",
-                errorMessage);
-}
-
-bool Widget::startSoftwareOcrDetectionWorker(
-        QString *errorMessage)
-{
-    if (!m_ocrEngine) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u6df1\u5ea6 OCR \u5f15\u64ce\u672a\u521d\u59cb\u5316\u3002");
-        }
-        return false;
-    }
-
-    const std::string targetText =
-            setdatetime().toStdString();
-    IOcrEngine *const ocrEngine = m_ocrEngine.get();
-    const std::shared_ptr<DetectionWorker> worker =
-            DetectionModeWorkerFactory::createOcrWorker(
-                targetText,
-                ocrEngine,
-                [this](
-                    const DetectionCompletion &completion,
-                    const DetectionPose &pose) {
-        postSoftwareDetectionUiWork(
-                    [this, completion, pose]() {
-            handleSoftwareOcrCompletion(
-                        completion,
-                        pose);
-        });
-    },
-                detectionWorkerFailureConsumer());
-    return installDetectionWorker(
-                2,
-                worker,
-                QStringLiteral(
-                    "\u65e0\u6cd5\u542f\u52a8\u6df1\u5ea6 OCR "
-                    "\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002"),
-                "OCR",
-                errorMessage);
-}
-
-bool Widget::startSoftwareStampDetectionWorker(
-        QString *errorMessage)
-{
-    bool thresholdOk = false;
-    const int thresholdPercent =
-            ui->lineEdit_yuzhi->text().toInt(&thresholdOk);
-    if (!thresholdOk || digitTemplates.empty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u94a2\u5370\u5b57\u7b26\u6a21\u677f\u6216\u56fe\u50cf\u9608\u503c\u65e0\u6548\u3002");
-        }
-        return false;
-    }
-
-    const QString targetText = setdatetime();
-    const TemplateMatchPreparedTemplates preparedTemplates =
-            CharacterTemplateMatcher::prepare(digitTemplates);
-    std::vector<int> targetIndexes;
-    targetIndexes.reserve(digitTemplates.size());
-    for (int i = 0; i < static_cast<int>(digitTemplates.size()); ++i) {
-        targetIndexes.push_back(i);
-    }
-    const bool hasOverlapConfiguration = QFile::exists(
-                QDir(currentTemplateDirPath)
-                .filePath(QStringLiteral("calibrate_config.yaml")));
-    const std::shared_ptr<OverlapDetector> workerOverlapDetector(
-                new OverlapDetector(overlapDetector));
-    StampDetectionWorkerConfiguration configuration;
-    configuration.targetText = targetText;
-    configuration.preparedTemplates = preparedTemplates;
-    configuration.templateTargetIndexes = targetIndexes;
-    configuration.thresholdPercent = thresholdPercent;
-    if (hasOverlapConfiguration) {
-        configuration.detectOverlap = [workerOverlapDetector](
-                const cv::Mat &sourceImage,
-                const std::vector<cv::Point> &datePoly) {
-            const DetectResult overlap =
-                    workerOverlapDetector->processImage(
-                        sourceImage,
-                        datePoly);
-            StampOverlapResult result;
-            result.isOk = overlap.isOk;
-            result.finalStampPoly = overlap.finalStampPoly;
-            return result;
-        };
-    }
-
-    const std::shared_ptr<DetectionWorker> worker =
-            DetectionModeWorkerFactory::createStampWorker(
-                configuration,
-                [this](
-                    const DetectionCompletion &completion,
-                    const StampDetectionWorkOutput &output) {
-        postSoftwareDetectionUiWork(
-                    [this, completion, output]() {
-            handleSoftwareStampCompletion(completion, output);
-        });
-    },
-                detectionWorkerFailureConsumer());
-    return installDetectionWorker(
-                0,
-                worker,
-                QStringLiteral(
-                    "\u65e0\u6cd5\u542f\u52a8\u94a2\u5370\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002"),
-                "stamp",
-                errorMessage);
-}
-
-bool Widget::startSoftwareWordDetectionWorker(
-        QString *errorMessage)
-{
-    if (!m_wordTemplateRunActive
-            || m_runningWordTemplateProfiles.empty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u5b57\u5e93\u8fd0\u884c Profile \u5feb\u7167\u672a\u51c6\u5907\u3002");
-        }
-        return false;
-    }
-
-    std::vector<DetectionModeWorkerProfile> profiles;
-    profiles.reserve(m_runningWordTemplateProfiles.size());
-    for (const WordTemplateProfile &profile :
-         m_runningWordTemplateProfiles) {
-        DetectionModeWorkerProfile runtimeProfile;
-        runtimeProfile.templateName = profile.name.isEmpty()
-                ? QDir(profile.dirPath).dirName()
-                : profile.name;
-        runtimeProfile.targetText = profile.settings.targetText;
-        runtimeProfile.preparedTemplates =
-                profile.preparedDigitTemplates.isValid()
-                ? profile.preparedDigitTemplates
-                : CharacterTemplateMatcher::prepare(
-                    profile.digitTemplates);
-        runtimeProfile.templateTargetIndexes =
-                profile.digitTemplateTargetIndexes;
-        runtimeProfile.thresholdPercent =
-                static_cast<int>(profile.settings.imageThreshold);
-        int thresholdValue = 0;
-        bool thresholdValid = parseIntValue(
-                    QString::number(profile.settings.imageThreshold),
-                    &thresholdValue);
-        if (!thresholdValid) {
-            thresholdValid = parseIntValue(
-                        ui->lineEdit_yuzhi->text(),
-                        &thresholdValue);
-        }
-        if (thresholdValid) {
-            runtimeProfile.thresholdPercent = thresholdValue;
-        }
-        profiles.push_back(runtimeProfile);
-    }
-
-    const std::shared_ptr<DetectionWorker> worker =
-            DetectionModeWorkerFactory::createWordWorker(
-                profiles,
-                [this](
-                    const DetectionCompletion &completion,
-                    const WordDetectionWorkOutput &output) {
-        postSoftwareDetectionUiWork(
-                    [this, completion, output]() {
-            handleSoftwareWordCompletion(completion, output);
-        });
-    },
-                detectionWorkerFailureConsumer());
-    return installDetectionWorker(
-                1,
-                worker,
-                QStringLiteral(
-                    "\u65e0\u6cd5\u542f\u52a8\u5b57\u5e93\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002"),
-                "word",
-                errorMessage);
-}
-
-bool Widget::startSoftwareBarcodeWordDetectionWorker(
-        QString *errorMessage)
-{
-    if (!m_wordTemplateRunActive
-            || m_runningWordTemplateProfiles.empty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u4e8c\u7ef4\u7801+\u4e09\u671f\u8fd0\u884c Profile \u5feb\u7167\u672a\u51c6\u5907\u3002");
-        }
-        return false;
-    }
-    if (!m_barcodeDecoder || !m_barcodeDecoder->ensureLoaded()) {
-        if (errorMessage) {
-            *errorMessage = m_barcodeDecoder
-                    ? m_barcodeDecoder->lastError()
-                    : QStringLiteral("Barcode decoder is null");
-        }
-        return false;
-    }
-
-    std::vector<DetectionModeWorkerProfile> profiles;
-    profiles.reserve(m_runningWordTemplateProfiles.size());
-    for (const WordTemplateProfile &profile :
-         m_runningWordTemplateProfiles) {
-        DetectionModeWorkerProfile runtimeProfile;
-        runtimeProfile.templateName = profile.name.isEmpty()
-                ? QDir(profile.dirPath).dirName()
-                : profile.name;
-        runtimeProfile.targetText = profile.settings.targetText;
-        runtimeProfile.preparedTemplates =
-                profile.preparedDigitTemplates.isValid()
-                ? profile.preparedDigitTemplates
-                : CharacterTemplateMatcher::prepare(
-                    profile.digitTemplates);
-        runtimeProfile.templateTargetIndexes =
-                profile.digitTemplateTargetIndexes;
-        runtimeProfile.thresholdPercent =
-                static_cast<int>(profile.settings.imageThreshold);
-        int thresholdValue = 0;
-        bool thresholdValid = parseIntValue(
-                    QString::number(profile.settings.imageThreshold),
-                    &thresholdValue);
-        if (!thresholdValid) {
-            thresholdValid = parseIntValue(
-                        ui->lineEdit_yuzhi->text(),
-                        &thresholdValue);
-        }
-        if (thresholdValid) {
-            runtimeProfile.thresholdPercent = thresholdValue;
-        }
-        runtimeProfile.barcodeOptions =
-                profile.settings.barcodeOptions;
-        runtimeProfile.decodeStrategy.preferredStrategyId =
-                profile.preferredBarcodeStrategyId;
-        runtimeProfile.decodeStrategy.preferredOptionFlags =
-                profile.preferredBarcodeOptionFlags;
-        runtimeProfile.decodeStrategy.consecutiveFailures =
-                profile.consecutiveBarcodeFailures;
-        profiles.push_back(runtimeProfile);
-    }
-
-    IBarcodeDecoder *decoder = m_barcodeDecoder.get();
-    const std::shared_ptr<DetectionWorker> worker =
-            DetectionModeWorkerFactory::createBarcodeWordWorker(
-                profiles,
-                decoder,
-                [this](
-                    const DetectionCompletion &completion,
-                    const BarcodeWordDetectionWorkOutput &output) {
-        postSoftwareDetectionUiWork(
-                    [this, completion, output]() {
-            handleSoftwareBarcodeWordCompletion(
-                        completion,
-                        output);
-        });
-    },
-                detectionWorkerFailureConsumer());
-    return installDetectionWorker(
-                4,
-                worker,
-                QStringLiteral(
-                    "\u65e0\u6cd5\u542f\u52a8\u4e8c\u7ef4\u7801+\u4e09\u671f\u68c0\u6d4b\u5de5\u4f5c\u7ebf\u7a0b\u3002"),
-                "barcode-word",
-                errorMessage);
-}
-
 bool Widget::startDetectionWorkerForMode(
         int modeIndex,
+        const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage)
 {
+    DetectionModeWorkerRequest request;
+    request.modeIndex = modeIndex;
+    request.profiles = profileSnapshot.detectionProfiles;
+
     switch (modeIndex) {
     case 0:
-        return startSoftwareStampDetectionWorker(errorMessage);
+    {
+        bool thresholdOk = false;
+        request.stampConfiguration.thresholdPercent =
+                ui->lineEdit_yuzhi->text().toInt(&thresholdOk);
+        if (!thresholdOk || digitTemplates.empty()) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral(
+                            "\u94a2\u5370\u5b57\u7b26\u6a21\u677f\u6216"
+                            "\u56fe\u50cf\u9608\u503c\u65e0\u6548\u3002");
+            }
+            return false;
+        }
+        request.stampConfiguration.targetText = setdatetime();
+        request.stampConfiguration.preparedTemplates =
+                CharacterTemplateMatcher::prepare(digitTemplates);
+        request.stampConfiguration.templateTargetIndexes.reserve(
+                    digitTemplates.size());
+        for (int index = 0;
+             index < static_cast<int>(digitTemplates.size());
+             ++index) {
+            request.stampConfiguration.templateTargetIndexes
+                    .push_back(index);
+        }
+        const bool hasOverlapConfiguration = QFile::exists(
+                    QDir(currentTemplateDirPath)
+                    .filePath(QStringLiteral("calibrate_config.yaml")));
+        if (hasOverlapConfiguration) {
+            const std::shared_ptr<OverlapDetector> workerOverlapDetector(
+                        new OverlapDetector(overlapDetector));
+            request.stampConfiguration.detectOverlap =
+                    [workerOverlapDetector](
+                        const cv::Mat &sourceImage,
+                        const std::vector<cv::Point> &datePoly) {
+                const DetectResult overlap =
+                        workerOverlapDetector->processImage(
+                            sourceImage,
+                            datePoly);
+                StampOverlapResult result;
+                result.isOk = overlap.isOk;
+                result.finalStampPoly = overlap.finalStampPoly;
+                return result;
+            };
+        }
+        break;
+    }
     case 1:
-        return startSoftwareWordDetectionWorker(errorMessage);
+        break;
     case 2:
-        return startSoftwareOcrDetectionWorker(errorMessage);
+        request.ocrEngine = m_ocrEngine.get();
+        if (request.ocrEngine) {
+            request.targetText = setdatetime().toStdString();
+        }
+        break;
     case 3:
-        return startSoftwareTissueDetectionWorker(errorMessage);
+        request.tissueParameters = m_tissueRecipeParameters;
+        break;
     case 4:
-        return startSoftwareBarcodeWordDetectionWorker(errorMessage);
+        request.barcodeDecoder = m_barcodeDecoder.get();
+        break;
     default:
         if (errorMessage) {
             *errorMessage = QStringLiteral(
@@ -1788,6 +1557,62 @@ bool Widget::startDetectionWorkerForMode(
         }
         return false;
     }
+
+    DetectionModeWorkerConsumers consumers;
+    consumers.tissue = [this](
+            const DetectionCompletion &completion,
+            const TissueRollResult &tissueResult) {
+        postSoftwareDetectionUiWork(
+                    [this, completion, tissueResult]() {
+            handleSoftwareTissueCompletion(completion, tissueResult);
+        });
+    };
+    consumers.ocr = [this](
+            const DetectionCompletion &completion,
+            const DetectionPose &pose) {
+        postSoftwareDetectionUiWork([this, completion, pose]() {
+            handleSoftwareOcrCompletion(completion, pose);
+        });
+    };
+    consumers.stamp = [this](
+            const DetectionCompletion &completion,
+            const StampDetectionWorkOutput &output) {
+        postSoftwareDetectionUiWork([this, completion, output]() {
+            handleSoftwareStampCompletion(completion, output);
+        });
+    };
+    consumers.word = [this](
+            const DetectionCompletion &completion,
+            const WordDetectionWorkOutput &output) {
+        postSoftwareDetectionUiWork([this, completion, output]() {
+            handleSoftwareWordCompletion(completion, output);
+        });
+    };
+    consumers.barcodeWord = [this](
+            const DetectionCompletion &completion,
+            const BarcodeWordDetectionWorkOutput &output) {
+        postSoftwareDetectionUiWork([this, completion, output]() {
+            handleSoftwareBarcodeWordCompletion(completion, output);
+        });
+    };
+
+    const DetectionModeWorkerCreationResult creation =
+            DetectionModeWorkerDispatcher::create(
+                request,
+                consumers,
+                detectionWorkerFailureConsumer());
+    if (!creation.isAccepted()) {
+        if (errorMessage) {
+            *errorMessage = creation.errorMessage;
+        }
+        return false;
+    }
+    return installDetectionWorker(
+                modeIndex,
+                creation.worker,
+                creation.startFailureMessage,
+                creation.workerLogName,
+                errorMessage);
 }
 
 void Widget::submitSoftwareDetectionFrame(
@@ -3241,7 +3066,6 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
             finishInspectionStop();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
-            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
@@ -8171,32 +7995,35 @@ void Widget::refreshWordTemplateProfileDigitCache(
                 profile->digitTemplates);
 }
 
-std::vector<Widget::WordTemplateProfile>
+InspectionProfileSnapshot
 Widget::createWordTemplateRunSnapshot() const
 {
-    std::vector<WordTemplateProfile> snapshot;
-    snapshot.reserve(m_wordTemplateProfiles.size());
+    std::vector<InspectionProfileSource> sources;
+    sources.reserve(m_wordTemplateProfiles.size());
     for (const WordTemplateProfile &sourceProfile : m_wordTemplateProfiles) {
-        WordTemplateProfile runtimeProfile = sourceProfile;
-        runtimeProfile.trackingTemplate =
-                sourceProfile.trackingTemplate.clone();
-        runtimeProfile.digitTemplates.clear();
-        runtimeProfile.digitTemplates.reserve(
-                    sourceProfile.digitTemplates.size());
-        for (const cv::Mat &digitTemplate : sourceProfile.digitTemplates) {
-            runtimeProfile.digitTemplates.push_back(
-                        digitTemplate.clone());
-        }
-        refreshWordTemplateProfileDigitCache(&runtimeProfile);
-        snapshot.push_back(std::move(runtimeProfile));
+        InspectionProfileSource source;
+        source.name = sourceProfile.name;
+        source.directoryPath = sourceProfile.dirPath;
+        source.trackingTemplate = sourceProfile.trackingTemplate;
+        source.barcodePoly = sourceProfile.barcodePoly;
+        source.datePoly = sourceProfile.datePoly;
+        source.targetText = sourceProfile.settings.targetText;
+        source.imageThreshold = sourceProfile.settings.imageThreshold;
+        source.digitTemplates = sourceProfile.digitTemplates;
+        source.digitTemplateTargetIndexes =
+                sourceProfile.digitTemplateTargetIndexes;
+        source.barcodeOptions = sourceProfile.settings.barcodeOptions;
+        source.decodeStrategy.preferredStrategyId =
+                sourceProfile.preferredBarcodeStrategyId;
+        source.decodeStrategy.preferredOptionFlags =
+                sourceProfile.preferredBarcodeOptionFlags;
+        source.decodeStrategy.consecutiveFailures =
+                sourceProfile.consecutiveBarcodeFailures;
+        sources.push_back(source);
     }
-    return snapshot;
-}
-
-void Widget::clearWordTemplateRunSnapshot()
-{
-    m_wordTemplateRunActive = false;
-    m_runningWordTemplateProfiles.clear();
+    return InspectionProfileSnapshotBuilder::create(
+                sources,
+                ui->lineEdit_yuzhi->text());
 }
 
 bool Widget::applyTissueRoughnessThresholdFromUi(bool showMessage)
@@ -9220,7 +9047,6 @@ void Widget::on_cancel_clicked()
     hideTemplateGuide();
 
     m_detectionResultPresenter.clear();
-    clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
 
     first = false;
@@ -9815,7 +9641,6 @@ void Widget::closeEvent(QCloseEvent *event)
     m_applicationExitInProgress = true;
     m_operationState = OperationState::Stopping;
     m_runtimeController.requestStop();
-    clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
     isCollecting = false;
     if (m_templateCaptureAttentionTimer) {
@@ -11610,33 +11435,15 @@ void Widget::on_plcbtn_clicked()
                 resourceInput.modeKind,
                 ui->checkBox->isChecked());
 
-    std::vector<WordTrackingProfile> wordTrackingProfilesForRun;
-    std::vector<WordTemplateProfile> wordTemplateProfilesForRun;
+    InspectionProfileSnapshot profileSnapshotForRun;
     if (isWordProfileMode) {
-        wordTemplateProfilesForRun = createWordTemplateRunSnapshot();
-        const std::vector<WordTemplateProfile> &profilesForRun =
-                wordTemplateProfilesForRun;
-        for (int i = 0; i < static_cast<int>(profilesForRun.size()); ++i) {
-            const WordTemplateProfile &profile = profilesForRun[static_cast<size_t>(i)];
-            const QString profileName = profile.name.isEmpty()
-                    ? QDir(profile.dirPath).dirName()
-                    : profile.name;
-
-            WordTrackingProfile trackingProfile;
-            trackingProfile.name = profileName;
-            trackingProfile.profileIndex = i;
-            trackingProfile.trackingTemplate = profile.trackingTemplate;
-            trackingProfile.barcodePoly = profile.barcodePoly;
-            trackingProfile.datePoly = profile.datePoly;
-            wordTrackingProfilesForRun.push_back(trackingProfile);
-        }
-        if (wordTrackingProfilesForRun.empty()) {
+        profileSnapshotForRun = createWordTemplateRunSnapshot();
+        if (!profileSnapshotForRun.isValid()) {
             QMessageBox::warning(this, "提示", "没有可用的字库定位配置。");
             return;
         }
     }
 
-    clearWordTemplateRunSnapshot();
     m_barcodeWordRunActive = false;
 
     if (imageLabel) {
@@ -11728,7 +11535,6 @@ void Widget::on_plcbtn_clicked()
             m_runtimeController.waitForDetectionWorkerStop();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
-            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             finishInspectionStop();
             m_operationState = m_bOpenDevice
@@ -11743,7 +11549,7 @@ void Widget::on_plcbtn_clicked()
         InspectionWorkerConfigurator::configureHardwareWorker(
                     cameraThread,
                     runPlan,
-                    wordTrackingProfilesForRun,
+                    profileSnapshotForRun.trackingProfiles,
                     savedDatePoly,
                     savedTrackingBox,
                     m_loadedTrackingTemplate);
@@ -11775,11 +11581,9 @@ void Widget::on_plcbtn_clicked()
         emit jiancestring(ui->dateEdit->toPlainText().toStdString());
 
         if (isWordProfileMode) {
-            m_runningWordTemplateProfiles.swap(
-                        wordTemplateProfilesForRun);
-            m_wordTemplateRunActive = true;
             qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
-                     << static_cast<int>(m_runningWordTemplateProfiles.size())
+                     << static_cast<int>(
+                            profileSnapshotForRun.detectionProfiles.size())
                      << "mode:" << currentDetectModeId();
         }
         m_barcodeWordRunActive = isBarcodeWordMode;
@@ -11788,10 +11592,10 @@ void Widget::on_plcbtn_clicked()
         QString workerError;
         if (!startDetectionWorkerForMode(
                     ui->comboBox_4->currentIndex(),
+                    profileSnapshotForRun,
                     &workerError)) {
             finishInspectionStop();
             m_resultBoundDisplayActive.store(false);
-            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             QMessageBox::warning(
                         this,
@@ -11813,7 +11617,6 @@ void Widget::on_plcbtn_clicked()
             m_runtimeController.waitForDetectionWorkerStop();
             finishInspectionStop();
             m_resultBoundDisplayActive = false;
-            clearWordTemplateRunSnapshot();
             m_barcodeWordRunActive = false;
             isCollecting = false;
             m_operationState = m_bOpenDevice
@@ -11839,7 +11642,7 @@ void Widget::on_plcbtn_clicked()
         InspectionWorkerConfigurator::configureSoftwareWorker(
                     myThread,
                     runPlan,
-                    wordTrackingProfilesForRun,
+                    profileSnapshotForRun.trackingProfiles,
                     savedDatePoly,
                     savedTrackingBox,
                     m_loadedTrackingTemplate);
@@ -11875,11 +11678,9 @@ void Widget::on_plcbtn_clicked()
 
         if (!myThread->isRunning()) {
             if (isWordProfileMode) {
-                m_runningWordTemplateProfiles.swap(
-                            wordTemplateProfilesForRun);
-                m_wordTemplateRunActive = true;
                 qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
-                         << static_cast<int>(m_runningWordTemplateProfiles.size())
+                         << static_cast<int>(
+                                profileSnapshotForRun.detectionProfiles.size())
                          << "mode:" << currentDetectModeId();
             }
             m_resultBoundDisplayActive.store(true);
@@ -11890,10 +11691,10 @@ void Widget::on_plcbtn_clicked()
             QString workerError;
             if (!startDetectionWorkerForMode(
                         ui->comboBox_4->currentIndex(),
+                        profileSnapshotForRun,
                         &workerError)) {
                 finishInspectionStop();
                 m_resultBoundDisplayActive.store(false);
-                clearWordTemplateRunSnapshot();
                 m_barcodeWordRunActive = false;
                 QMessageBox::warning(
                             this,

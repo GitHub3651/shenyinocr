@@ -90,6 +90,7 @@ struct OcrDetectionResult;
 struct StampDetectionWorkOutput;
 struct WordDetectionWorkOutput;
 struct BarcodeWordDetectionWorkOutput;
+struct InspectionProfileSnapshot;
 
 /**
  * @brief 主窗口类
@@ -353,20 +354,17 @@ private:
     void connectHardwareDetectionSignals(CameraThread *thread);
     bool postSoftwareDetectionUiWork(
         const UiCompletionMailbox::Work &work);
-    bool startSoftwareTissueDetectionWorker(QString *errorMessage);
-    bool startSoftwareOcrDetectionWorker(QString *errorMessage);
-    bool startSoftwareStampDetectionWorker(QString *errorMessage);
-    bool startSoftwareWordDetectionWorker(QString *errorMessage);
-    bool startSoftwareBarcodeWordDetectionWorker(QString *errorMessage);
     DetectionWorker::FailureConsumer detectionWorkerFailureConsumer();
     bool installDetectionWorker(
         int modeIndex,
         const std::shared_ptr<DetectionWorker> &worker,
         const QString &startFailureMessage,
-        const char *workerLogName,
+        const QString &workerLogName,
         QString *errorMessage);
-    bool startDetectionWorkerForMode(int modeIndex,
-                                     QString *errorMessage);
+    bool startDetectionWorkerForMode(
+        int modeIndex,
+        const InspectionProfileSnapshot &profileSnapshot,
+        QString *errorMessage);
     void submitSoftwareDetectionFrame(const cv::Mat &image);
     void submitSoftwarePositionedDetectionFrame(
         const cv::Mat &image,
@@ -607,8 +605,6 @@ private:
     TemplateRecipeEditSession m_singleTemplateRecipeEditSession; ///< 当前已发布钢印/OCR单模板配方编辑会话
     QMap<QString, QString> m_singleTemplateResolvedAssetPathsByRole; ///< 当前单模板配方的只读运行资产
     QString m_currentTemplateDisplayName; ///< 已发布单模板使用配方显示名，避免显示内部Profile目录名
-    std::vector<WordTemplateProfile> m_runningWordTemplateProfiles; ///< 字库家族本次识别专用的只读Profile快照
-    bool m_wordTemplateRunActive = false; ///< 正式检测是否已安装字库家族运行快照
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
     std::unique_ptr<IOcrEngine> m_ocrEngine;
     std::unique_ptr<IBarcodeDecoder> m_barcodeDecoder;
@@ -645,8 +641,7 @@ private:
         QString *errorMessage);
     void refreshWordTemplateProfileDigitCache(
         WordTemplateProfile *profile) const;
-    std::vector<WordTemplateProfile> createWordTemplateRunSnapshot() const;
-    void clearWordTemplateRunSnapshot();
+    InspectionProfileSnapshot createWordTemplateRunSnapshot() const;
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
     bool saveWordTemplatePrivateSettings(

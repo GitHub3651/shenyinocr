@@ -76,6 +76,7 @@ SOURCES += \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
     runtime/detection_mode_worker_factory.cpp \
+    runtime/inspection_profile_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/detection_session.cpp \
@@ -147,6 +148,7 @@ HEADERS += \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
     runtime/detection_mode_worker_factory.h \
+    runtime/inspection_profile_snapshot.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_runtime_controller.h \
     runtime/detection_session.h \

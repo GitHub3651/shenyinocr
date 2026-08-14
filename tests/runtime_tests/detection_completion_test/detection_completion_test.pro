@@ -18,6 +18,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
     $$PROJECT_ROOT/app/runtime/detection_mode_worker_factory.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.cpp \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
@@ -40,6 +41,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
     $$PROJECT_ROOT/app/runtime/detection_worker.h \
     $$PROJECT_ROOT/app/runtime/detection_mode_worker_factory.h \
+    $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.h \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
