@@ -18,11 +18,13 @@ OperationUiSnapshot OperationUiPolicy::create(OperationUiState state)
             state == OperationUiState::TemplatePreviewing
             || state == OperationUiState::TemplateFrozen;
     snapshot.stopText =
-            state == OperationUiState::Stopping
+            state == OperationUiState::Fault
+            ? QStringLiteral("\u786e\u8ba4\u6545\u969c\u5e76\u6062\u590d")
+            : (state == OperationUiState::Stopping
             ? QStringLiteral("\u505c\u6b62\u4e2d...")
             : (templateOperation
                ? QStringLiteral("\u9000\u51fa\u6a21\u677f\u5236\u4f5c")
-               : QStringLiteral("\u505c\u6b62\u8bc6\u522b"));
+               : QStringLiteral("\u505c\u6b62\u8bc6\u522b")));
     snapshot.templateCaptureText =
             state == OperationUiState::TemplatePreviewing
             ? QStringLiteral("\u62cd\u7167\u5e76\u5f00\u59cb\u6846\u9009")
@@ -50,6 +52,11 @@ OperationUiSnapshot OperationUiPolicy::create(OperationUiState state)
     case OperationUiState::Detecting:
     case OperationUiState::Stopping:
         snapshot.stopEnabled = true;
+        break;
+    case OperationUiState::Fault:
+        snapshot.stopEnabled = true;
+        snapshot.statusText = QStringLiteral(
+                    "\u7cfb\u7edf\u6545\u969c\uff1a\u68c0\u6d4b\u5df2\u6682\u505c");
         break;
     case OperationUiState::TemplatePreviewing:
         snapshot.stopEnabled = true;

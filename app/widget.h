@@ -363,6 +363,17 @@ private:
     void submitSoftwarePositionedDetectionFrame(
         const cv::Mat &image,
         const DetectionPose &pose);
+    void submitHardwareDetectionFrame(const cv::Mat &image);
+    void submitHardwarePositionedDetectionFrame(
+        const cv::Mat &image,
+        const DetectionPose &pose);
+    void enterInspectionFault(
+        InspectionFaultReason reason,
+        const QString &diagnostic);
+    void presentInspectionFault();
+    bool confirmInspectionFaultRecovery();
+    void checkInspectionPlcHealth();
+    void restoreNormalFaultUi();
     void handleSoftwareTissueCompletion(
         const DetectionCompletion &completion,
         const TissueRollResult &tissueResult);
@@ -448,11 +459,13 @@ private:
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;
     bool m_imageSaveWarningScheduled = false;
+    bool m_faultAlarmPresented = false;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器
     QTimer *m_timer;                    ///< 定时器2
     QTimer *timer1;                     ///< 定时器3
+    QTimer *m_plcHealthTimer = nullptr; ///< 运行中PLC连接监视
     QTimer *m_templateCaptureAttentionTimer = nullptr;
     bool m_templateCaptureAttentionOn = false;
 

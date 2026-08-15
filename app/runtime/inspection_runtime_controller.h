@@ -93,6 +93,10 @@ public:
     bool submitDetectionFrame(
         const std::shared_ptr<const FrameData> &frame);
     bool submitDetectionWorkItem(const DetectionWorkItem &item);
+    DetectionWorkSubmissionResult trySubmitDetectionFrame(
+        const std::shared_ptr<const FrameData> &frame);
+    DetectionWorkSubmissionResult trySubmitDetectionWorkItem(
+        const DetectionWorkItem &item);
 
     bool submitUiCompletion(const UiCompletionMailbox::Work &work);
     bool processOneUiCompletion();

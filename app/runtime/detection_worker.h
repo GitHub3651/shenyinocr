@@ -10,6 +10,15 @@
 #include <mutex>
 #include <thread>
 
+enum class DetectionWorkSubmissionResult
+{
+    Accepted,
+    InvalidItem,
+    NotRunning,
+    Cancelled,
+    QueueFull
+};
+
 class DetectionWorker
 {
 public:
@@ -36,6 +45,10 @@ public:
     bool start();
     bool submit(const DetectionWorkItem &item);
     bool submit(const std::shared_ptr<const FrameData> &frame);
+    DetectionWorkSubmissionResult trySubmit(
+        const DetectionWorkItem &item);
+    DetectionWorkSubmissionResult trySubmit(
+        const std::shared_ptr<const FrameData> &frame);
     void requestStop();
     void wait();
 

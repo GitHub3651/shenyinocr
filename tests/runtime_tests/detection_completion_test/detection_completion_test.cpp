@@ -27,6 +27,7 @@
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
 #include "ui/presenters/detection_result_presenter.h"
+#include "ui/presenters/inspection_fault_presenter.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -411,6 +412,8 @@ private slots:
     void operationUiPolicyPreservesReadyCameraControls();
     void operationUiPolicyPreservesDetectionAndStoppingControls();
     void operationUiPolicyPreservesTemplateCaptureControls();
+    void operationUiPolicyFaultLocksOperationsUntilAcknowledged();
+    void faultPresenterWarnsThatConveyorStateIsUnknown();
     void settingsEditStateIgnoresUnknownKeys();
     void settingsEditStateDeduplicatesSharedDisplayNames();
     void settingsEditStateIncludesTemplatePrivateChanges();
@@ -484,8 +487,10 @@ private slots:
     void frameQueueWaitsForSpaceWithoutDroppingFrame();
     void frameQueueCancellationReleasesFramesAndSubmitter();
     void frameQueuePreservesPositionedDetectionWorkItem();
+    void frameQueueTrySubmitReportsFullWithoutBlocking();
     void detectionWorkerProcessesFramesSeriallyInOrder();
     void detectionWorkerReceivesPositionedDetectionWorkItem();
+    void detectionWorkerTrySubmitExposesHardTriggerOverflow();
     void runtimeControllerAcceptedFramesFlowThroughDetectionWorker();
     void runtimeControllerOwnsDetectionWorkerLifecycle();
     void runtimeControllerSerializesAndCancelsUiCompletion();
@@ -594,6 +599,52 @@ void DetectionCompletionTest::operationUiPolicyPreservesTemplateCaptureControls(
     QVERIFY(frozen.saveTemplateEnabled);
     QVERIFY(!frozen.statusText.isEmpty());
     QVERIFY(frozen.statusText != previewing.statusText);
+}
+
+void DetectionCompletionTest::operationUiPolicyFaultLocksOperationsUntilAcknowledged()
+{
+    const OperationUiSnapshot snapshot =
+            OperationUiPolicy::create(OperationUiState::Fault);
+    QVERIFY(!snapshot.enableAllOperations);
+    QVERIFY(!snapshot.settingsEnabled);
+    QVERIFY(!snapshot.openCameraEnabled);
+    QVERIFY(!snapshot.startDetectionEnabled);
+    QVERIFY(snapshot.stopEnabled);
+    QVERIFY(!snapshot.closeCameraEnabled);
+    QVERIFY(!snapshot.templateCaptureEnabled);
+    QVERIFY(!snapshot.saveTemplateEnabled);
+    QCOMPARE(snapshot.stopText,
+             QStringLiteral("\u786e\u8ba4\u6545\u969c\u5e76\u6062\u590d"));
+    QVERIFY(!snapshot.statusText.isEmpty());
+}
+
+void DetectionCompletionTest::faultPresenterWarnsThatConveyorStateIsUnknown()
+{
+    InspectionFaultSnapshot snapshot;
+    snapshot.reason = InspectionFaultReason::PlcDisconnected;
+    snapshot.diagnostic = QStringLiteral("native error 5");
+    snapshot.runId = QStringLiteral("fault-run");
+    snapshot.acceptedProductCount = 9;
+    snapshot.completedProductCount = 7;
+
+    const InspectionFaultPresentation presentation =
+            InspectionFaultPresenter::create(snapshot);
+    QVERIFY(presentation.isValid());
+    QVERIFY(presentation.statusText.contains(
+                QStringLiteral("\u68c0\u6d4b\u5df2\u6682\u505c")));
+    QVERIFY(presentation.operatorMessage.contains(
+                QStringLiteral("native error 5")));
+    QVERIFY(presentation.operatorMessage.contains(
+                QStringLiteral("\u8f93\u9001\u7ebf\u72b6\u6001\u672a\u77e5")));
+    QVERIFY(presentation.operatorMessage.contains(
+                QStringLiteral("\u9694\u79bb\u6545\u969c\u671f\u95f4\u7684\u4ea7\u54c1")));
+    QVERIFY(!presentation.operatorMessage.contains(
+                QStringLiteral("\u8f93\u9001\u7ebf\u5df2\u505c\u6b62")));
+
+    const InspectionFaultPresentation empty =
+            InspectionFaultPresenter::create(
+                InspectionFaultSnapshot());
+    QVERIFY(!empty.isValid());
 }
 
 void DetectionCompletionTest::settingsEditStateIgnoresUnknownKeys()
@@ -2458,6 +2509,28 @@ void DetectionCompletionTest::frameQueuePreservesPositionedDetectionWorkItem()
     QCOMPARE(static_cast<int>(queue.cancel()), 0);
 }
 
+void DetectionCompletionTest::frameQueueTrySubmitReportsFullWithoutBlocking()
+{
+    FrameQueue queue(1);
+    QCOMPARE(static_cast<int>(queue.trySubmit(
+                                  std::shared_ptr<const FrameData>())),
+             static_cast<int>(FrameQueueSubmitResult::InvalidItem));
+    QCOMPARE(static_cast<int>(queue.trySubmit(workerTestFrame(1))),
+             static_cast<int>(FrameQueueSubmitResult::Accepted));
+    QCOMPARE(static_cast<int>(queue.trySubmit(workerTestFrame(2))),
+             static_cast<int>(FrameQueueSubmitResult::Full));
+    QCOMPARE(static_cast<int>(queue.size()), 1);
+
+    std::shared_ptr<const FrameData> frame;
+    QVERIFY(queue.waitAndTake(&frame));
+    QCOMPARE(frame->productKey.sequence, quint64(1));
+    QCOMPARE(static_cast<int>(queue.trySubmit(workerTestFrame(2))),
+             static_cast<int>(FrameQueueSubmitResult::Accepted));
+    QCOMPARE(static_cast<int>(queue.cancel()), 1);
+    QCOMPARE(static_cast<int>(queue.trySubmit(workerTestFrame(3))),
+             static_cast<int>(FrameQueueSubmitResult::Cancelled));
+}
+
 void DetectionCompletionTest::detectionWorkerProcessesFramesSeriallyInOrder()
 {
     std::atomic<int> activeCount(0);
@@ -2573,6 +2646,91 @@ void DetectionCompletionTest::detectionWorkerReceivesPositionedDetectionWorkItem
              QStringLiteral("4:22.5"));
     QCOMPARE(worker.processedFrameCount(), quint64(1));
     QCOMPARE(worker.cancelledFrameCount(), quint64(0));
+}
+
+void DetectionCompletionTest::detectionWorkerTrySubmitExposesHardTriggerOverflow()
+{
+    std::mutex detectorMutex;
+    std::condition_variable detectorEntered;
+    std::condition_variable releaseDetector;
+    bool firstDetectorEntered = false;
+    bool detectorReleased = false;
+    std::mutex completionMutex;
+    std::condition_variable completionAvailable;
+    int completionCount = 0;
+
+    DetectionWorker worker(
+                1,
+                [&detectorMutex,
+                 &detectorEntered,
+                 &releaseDetector,
+                 &firstDetectorEntered,
+                 &detectorReleased](
+                    const std::shared_ptr<const FrameData> &) {
+        std::unique_lock<std::mutex> lock(detectorMutex);
+        if (!firstDetectorEntered) {
+            firstDetectorEntered = true;
+            detectorEntered.notify_one();
+        }
+        releaseDetector.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&detectorReleased]() {
+            return detectorReleased;
+        });
+        DetectionResult result;
+        result.status = DetectionStatus::Completed;
+        result.verdict = AlgorithmVerdict::Ok;
+        return result;
+    },
+    [&completionMutex,
+     &completionAvailable,
+     &completionCount](const DetectionCompletion &) {
+        std::lock_guard<std::mutex> lock(completionMutex);
+        ++completionCount;
+        completionAvailable.notify_one();
+    });
+
+    QVERIFY(worker.start());
+    QCOMPARE(static_cast<int>(worker.trySubmit(workerTestFrame(1))),
+             static_cast<int>(DetectionWorkSubmissionResult::Accepted));
+    {
+        std::unique_lock<std::mutex> lock(detectorMutex);
+        QVERIFY(detectorEntered.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&firstDetectorEntered]() {
+            return firstDetectorEntered;
+        }));
+    }
+
+    QCOMPARE(static_cast<int>(worker.trySubmit(workerTestFrame(2))),
+             static_cast<int>(DetectionWorkSubmissionResult::Accepted));
+    QCOMPARE(static_cast<int>(worker.trySubmit(workerTestFrame(3))),
+             static_cast<int>(DetectionWorkSubmissionResult::QueueFull));
+    QCOMPARE(static_cast<int>(worker.queuedFrameCount()), 1);
+
+    {
+        std::lock_guard<std::mutex> lock(detectorMutex);
+        detectorReleased = true;
+    }
+    releaseDetector.notify_all();
+    {
+        std::unique_lock<std::mutex> lock(completionMutex);
+        QVERIFY(completionAvailable.wait_for(
+                    lock,
+                    std::chrono::seconds(2),
+                    [&completionCount]() {
+            return completionCount == 2;
+        }));
+    }
+    worker.requestStop();
+    worker.wait();
+
+    QCOMPARE(worker.processedFrameCount(), quint64(2));
+    QCOMPARE(worker.cancelledFrameCount(), quint64(0));
+    QCOMPARE(static_cast<int>(worker.trySubmit(workerTestFrame(4))),
+             static_cast<int>(DetectionWorkSubmissionResult::NotRunning));
 }
 
 void DetectionCompletionTest::runtimeControllerAcceptedFramesFlowThroughDetectionWorker()

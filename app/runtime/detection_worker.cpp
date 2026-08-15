@@ -88,6 +88,38 @@ bool DetectionWorker::submit(
     return submit(item);
 }
 
+DetectionWorkSubmissionResult DetectionWorker::trySubmit(
+    const DetectionWorkItem &item)
+{
+    if (!item.isValid()) {
+        return DetectionWorkSubmissionResult::InvalidItem;
+    }
+    if (!m_running.load() || m_stopRequested.load()) {
+        return DetectionWorkSubmissionResult::NotRunning;
+    }
+
+    const FrameQueueSubmitResult result = m_queue.trySubmit(item);
+    switch (result) {
+    case FrameQueueSubmitResult::Accepted:
+        return DetectionWorkSubmissionResult::Accepted;
+    case FrameQueueSubmitResult::InvalidItem:
+        return DetectionWorkSubmissionResult::InvalidItem;
+    case FrameQueueSubmitResult::Cancelled:
+        return DetectionWorkSubmissionResult::Cancelled;
+    case FrameQueueSubmitResult::Full:
+        return DetectionWorkSubmissionResult::QueueFull;
+    }
+    return DetectionWorkSubmissionResult::Cancelled;
+}
+
+DetectionWorkSubmissionResult DetectionWorker::trySubmit(
+    const std::shared_ptr<const FrameData> &frame)
+{
+    DetectionWorkItem item;
+    item.frame = frame;
+    return trySubmit(item);
+}
+
 void DetectionWorker::requestStop()
 {
     m_stopRequested.store(true);

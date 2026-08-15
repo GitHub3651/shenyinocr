@@ -8,6 +8,14 @@
 #include <memory>
 #include <mutex>
 
+enum class FrameQueueSubmitResult
+{
+    Accepted,
+    InvalidItem,
+    Cancelled,
+    Full
+};
+
 class FrameQueue
 {
 public:
@@ -16,6 +24,9 @@ public:
 
     bool submit(const DetectionWorkItem &item);
     bool submit(const std::shared_ptr<const FrameData> &frame);
+    FrameQueueSubmitResult trySubmit(const DetectionWorkItem &item);
+    FrameQueueSubmitResult trySubmit(
+        const std::shared_ptr<const FrameData> &frame);
     bool waitAndTake(DetectionWorkItem *item);
     bool waitAndTake(std::shared_ptr<const FrameData> *frame);
 

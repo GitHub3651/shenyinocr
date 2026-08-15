@@ -39,6 +39,34 @@ bool FrameQueue::submit(
     return submit(item);
 }
 
+FrameQueueSubmitResult FrameQueue::trySubmit(
+    const DetectionWorkItem &item)
+{
+    if (!item.isValid()) {
+        return FrameQueueSubmitResult::InvalidItem;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_cancelled) {
+        return FrameQueueSubmitResult::Cancelled;
+    }
+    if (m_items.size() >= m_capacity) {
+        return FrameQueueSubmitResult::Full;
+    }
+
+    m_items.push_back(item);
+    m_frameAvailable.notify_one();
+    return FrameQueueSubmitResult::Accepted;
+}
+
+FrameQueueSubmitResult FrameQueue::trySubmit(
+    const std::shared_ptr<const FrameData> &frame)
+{
+    DetectionWorkItem item;
+    item.frame = frame;
+    return trySubmit(item);
+}
+
 bool FrameQueue::waitAndTake(
     DetectionWorkItem *item)
 {

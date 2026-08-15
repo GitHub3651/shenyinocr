@@ -32,6 +32,7 @@
 #include "runtime/image_save_service.h"
 #include "runtime/detection_mode_worker_factory.h"
 #include "ui/controllers/detection_completion_controller.h"
+#include "ui/presenters/inspection_fault_presenter.h"
 
 
 // Qt核心组件
@@ -900,6 +901,13 @@ Widget::Widget(QWidget *parent)
 
     // Snap7客户端生命周期和原生常量由设备适配器独占。
     m_plcDevice.reset(new Snap7PlcDevice);
+    m_plcHealthTimer = new QTimer(this);
+    m_plcHealthTimer->setInterval(500);
+    connect(m_plcHealthTimer,
+            &QTimer::timeout,
+            this,
+            &Widget::checkInspectionPlcHealth);
+    m_plcHealthTimer->start();
     // 海康单相机SDK生命周期和原生类型由设备适配器独占。
     m_cameraDevice = std::make_shared<HikvisionCameraDevice>();
 
@@ -1157,7 +1165,9 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
             &MyThread::signal_sendWholeFrameForDetection,
             this,
             [this](cv::Mat image) {
-        if (m_runtimeController.isDetectionWorkerActiveForMode(3)) {
+        if (m_runtimeController.isDetectionWorkerActiveForMode(3)
+                || m_runtimeController.state()
+                   == InspectionRuntimeState::Fault) {
             submitSoftwareDetectionFrame(image);
         }
     },
@@ -1167,7 +1177,10 @@ void Widget::connectSoftwareDetectionSignals(MyThread *thread)
             &MyThread::signal_sendForDetection,
             this,
             [this](cv::Mat image, DetectionPose pose) {
-        if (m_runtimeController.isDetectionWorkerActive()) {
+        if (m_runtimeController.state()
+                == InspectionRuntimeState::Fault) {
+            submitSoftwarePositionedDetectionFrame(image, pose);
+        } else if (m_runtimeController.isDetectionWorkerActive()) {
             const int workerMode =
                     m_runtimeController.detectionWorkerModeIndex();
             if (workerMode == 0
@@ -1193,9 +1206,7 @@ void Widget::connectHardwareDetectionSignals(CameraThread *thread)
             &CameraThread::signal_sendWholeFrameForDetection,
             this,
             [this](cv::Mat image) {
-        if (m_runtimeController.isDetectionWorkerActiveForMode(3)) {
-            submitSoftwareDetectionFrame(image);
-        }
+        submitHardwareDetectionFrame(image);
     },
     Qt::DirectConnection);
 
@@ -1203,18 +1214,7 @@ void Widget::connectHardwareDetectionSignals(CameraThread *thread)
             &CameraThread::signal_sendForDetection,
             this,
             [this](cv::Mat image, DetectionPose pose) {
-        if (!m_runtimeController.isDetectionWorkerActive()) {
-            return;
-        }
-
-        const int workerMode =
-                m_runtimeController.detectionWorkerModeIndex();
-        if (workerMode == 0
-                || workerMode == 1
-                || workerMode == 2
-                || workerMode == 4) {
-            submitSoftwarePositionedDetectionFrame(image, pose);
-        }
+        submitHardwarePositionedDetectionFrame(image, pose);
     },
     Qt::DirectConnection);
 }
@@ -1372,6 +1372,10 @@ void Widget::rightremove()
 {
     if (!m_plcDevice || !m_plcDevice->isConnected())
     {
+        enterInspectionFault(
+                    InspectionFaultReason::PlcDisconnected,
+                    QStringLiteral(
+                        "PLC OK/\u590d\u4f4d\u8f93\u51fa\u524d\u68c0\u6d4b\u5230\u8fde\u63a5\u5df2\u65ad\u5f00\u3002"));
         return;
     }
 
@@ -1384,7 +1388,15 @@ void Widget::rightremove()
                 1, 1033, 1, PlcDataWidth::Byte, remove_data);
     if (!result.isSuccess())
     {
-        QMessageBox::warning(this, "error", "设置失败");
+        const QString diagnostic = QStringLiteral(
+                    "PLC OK/\u590d\u4f4d\u8f93\u51fa\u5931\u8d25\uff0c\u9519\u8bef\u7801 %1\u3002")
+                .arg(result.nativeErrorCode);
+        if (!m_runtimeController.isRunning()) {
+            QMessageBox::warning(this, "error", diagnostic);
+        }
+        enterInspectionFault(
+                    InspectionFaultReason::PlcDisconnected,
+                    diagnostic);
     }
     timer->stop();
 }
@@ -1397,6 +1409,10 @@ void Widget::wrongremove()
 {
     if (!m_plcDevice || !m_plcDevice->isConnected())
     {
+        enterInspectionFault(
+                    InspectionFaultReason::PlcDisconnected,
+                    QStringLiteral(
+                        "PLC NG\u8f93\u51fa\u524d\u68c0\u6d4b\u5230\u8fde\u63a5\u5df2\u65ad\u5f00\u3002"));
         return;
     }
 
@@ -1409,13 +1425,133 @@ void Widget::wrongremove()
                 1, 1033, 1, PlcDataWidth::Byte, remove_data);
     if (!result.isSuccess())
     {
-        QMessageBox::warning(this, "error", "设置失败");
+        const QString diagnostic = QStringLiteral(
+                    "PLC NG\u8f93\u51fa\u5931\u8d25\uff0c\u9519\u8bef\u7801 %1\u3002")
+                .arg(result.nativeErrorCode);
+        if (!m_runtimeController.isRunning()) {
+            QMessageBox::warning(this, "error", diagnostic);
+        }
+        enterInspectionFault(
+                    InspectionFaultReason::PlcDisconnected,
+                    diagnostic);
     }
     else
     {
         // 100ms后调用rightremove恢复信号
         timer->start(100);
     }
+}
+
+void Widget::enterInspectionFault(
+        InspectionFaultReason reason,
+        const QString &diagnostic)
+{
+    if (!m_runtimeController.enterFault(reason, diagnostic)) {
+        return;
+    }
+
+    qCritical() << "[INSPECTION_FAULT] entered"
+                << static_cast<int>(reason)
+                << diagnostic;
+    QMetaObject::invokeMethod(
+                this,
+                [this]() {
+        presentInspectionFault();
+    },
+    Qt::QueuedConnection);
+}
+
+void Widget::presentInspectionFault()
+{
+    const InspectionFaultPresentation presentation =
+            InspectionFaultPresenter::create(
+                m_runtimeController.faultSnapshot());
+    if (!presentation.isValid() || !ui) {
+        return;
+    }
+
+    m_resultBoundDisplayActive.store(true);
+    m_operationState = OperationState::Fault;
+    updateOperationUiState();
+    ui->statusLabel->setText(presentation.statusText);
+    ui->statusLabel->setStyleSheet(
+                presentation.statusStyleSheet);
+    ui->resultlabel->setTextFormat(Qt::PlainText);
+    ui->resultlabel->setText(presentation.resultText);
+    ui->resultlabel->setStyleSheet(
+                presentation.resultStyleSheet);
+
+    if (!m_faultAlarmPresented) {
+        m_faultAlarmPresented = true;
+        QMessageBox::critical(
+                    this,
+                    QStringLiteral("\u7cfb\u7edf\u6545\u969c\uff0d\u68c0\u6d4b\u5df2\u6682\u505c"),
+                    presentation.operatorMessage);
+    }
+}
+
+bool Widget::confirmInspectionFaultRecovery()
+{
+    const InspectionFaultPresentation presentation =
+            InspectionFaultPresenter::create(
+                m_runtimeController.faultSnapshot());
+    if (!presentation.isValid()) {
+        return false;
+    }
+
+    QMessageBox messageBox(
+                QMessageBox::Critical,
+                QStringLiteral("\u6545\u969c\u6062\u590d\u786e\u8ba4"),
+                presentation.operatorMessage
+                + QStringLiteral(
+                    "\n\n\u6ce8\u610f\uff1a\u89e3\u9664\u8f6f\u4ef6\u9501\u5b9a\u4e0d\u4ee3\u8868\u8f93\u9001\u7ebf\u5df2\u505c\u6b62\u3002"),
+                QMessageBox::Yes | QMessageBox::Cancel,
+                this);
+    messageBox.setDefaultButton(QMessageBox::Cancel);
+    if (QAbstractButton *confirmButton =
+            messageBox.button(QMessageBox::Yes)) {
+        confirmButton->setText(
+                    QStringLiteral("\u786e\u8ba4\u73b0\u573a\u5df2\u5904\u7406\u5e76\u6062\u590d"));
+    }
+    if (QAbstractButton *cancelButton =
+            messageBox.button(QMessageBox::Cancel)) {
+        cancelButton->setText(QStringLiteral("\u7ee7\u7eed\u4fdd\u6301\u6545\u969c\u9501\u5b9a"));
+    }
+    return messageBox.exec() == QMessageBox::Yes;
+}
+
+void Widget::checkInspectionPlcHealth()
+{
+    if (!m_runtimeController.isRunning()) {
+        return;
+    }
+    if (m_plcDevice && m_plcDevice->isConnected()) {
+        return;
+    }
+
+    enterInspectionFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral(
+                    "\u8fd0\u884c\u4e2d PLC \u8fde\u63a5\u72b6\u6001\u5df2\u65ad\u5f00\u3002"));
+}
+
+void Widget::restoreNormalFaultUi()
+{
+    m_faultAlarmPresented = false;
+    m_detectionResultPresenter.clearTransientView();
+    if (!ui) {
+        return;
+    }
+    ui->statusLabel->setStyleSheet(
+                QStringLiteral(
+                    "QLabel{color:#2ecc71; font-weight:bold;}"));
+    ui->resultlabel->setStyleSheet(
+                QStringLiteral(
+                    "background-color: #eef1f6; "
+                    "border-radius: 6px; "
+                    "font-size: 36px; "
+                    "font-weight: 900; "
+                    "color: #00ff7f;"));
 }
 
 DetectionWorker::FailureConsumer
@@ -1598,8 +1734,15 @@ bool Widget::startDetectionWorkerForMode(
 void Widget::submitSoftwareDetectionFrame(
         const cv::Mat &image)
 {
-    if (!m_runtimeController.isDetectionWorkerActive()
-            || image.empty()) {
+    if (image.empty()) {
+        return;
+    }
+    if (m_runtimeController.state()
+            == InspectionRuntimeState::Fault) {
+        m_runtimeController.acceptFrame(image);
+        return;
+    }
+    if (!m_runtimeController.isDetectionWorkerActive()) {
         return;
     }
 
@@ -1620,8 +1763,15 @@ void Widget::submitSoftwarePositionedDetectionFrame(
         const cv::Mat &image,
         const DetectionPose &pose)
 {
-    if (!m_runtimeController.isDetectionWorkerActive()
-            || image.empty()) {
+    if (image.empty()) {
+        return;
+    }
+    if (m_runtimeController.state()
+            == InspectionRuntimeState::Fault) {
+        m_runtimeController.acceptFrame(image);
+        return;
+    }
+    if (!m_runtimeController.isDetectionWorkerActive()) {
         return;
     }
 
@@ -1635,6 +1785,99 @@ void Widget::submitSoftwarePositionedDetectionFrame(
             makeDetectionWorkItem(frame, pose);
     if (!m_runtimeController.submitDetectionWorkItem(item)) {
         qDebug() << "[DETECTION_WORKER] positioned frame rejected"
+                 << frame->productKey.runId
+                 << frame->productKey.sequence;
+    }
+}
+
+void Widget::submitHardwareDetectionFrame(
+        const cv::Mat &image)
+{
+    if (image.empty()) {
+        return;
+    }
+    if (m_runtimeController.state()
+            == InspectionRuntimeState::Fault) {
+        m_runtimeController.acceptFrame(image);
+        return;
+    }
+    if (!m_runtimeController.isDetectionWorkerActiveForMode(3)) {
+        return;
+    }
+
+    const std::shared_ptr<const FrameData> frame =
+            m_runtimeController.acceptFrame(image);
+    if (!frame) {
+        return;
+    }
+    const DetectionWorkSubmissionResult submission =
+            m_runtimeController.trySubmitDetectionFrame(frame);
+    if (submission == DetectionWorkSubmissionResult::QueueFull) {
+        enterInspectionFault(
+                    InspectionFaultReason::HardTriggerQueueOverflow,
+                    QStringLiteral(
+                        "\u786c\u89e6\u53d1 FIFO \u65e0\u6cd5\u63a5\u6536\u4ea7\u54c1 %1/%2\uff0c\u961f\u5217\u5bb9\u91cf %3\u3002")
+                    .arg(frame->productKey.runId)
+                    .arg(frame->productKey.sequence)
+                    .arg(static_cast<qulonglong>(
+                             m_runtimeController
+                             .detectionWorkerQueueCapacity())));
+    } else if (submission
+               != DetectionWorkSubmissionResult::Accepted) {
+        qDebug() << "[DETECTION_WORKER] hardware frame rejected"
+                 << static_cast<int>(submission)
+                 << frame->productKey.runId
+                 << frame->productKey.sequence;
+    }
+}
+
+void Widget::submitHardwarePositionedDetectionFrame(
+        const cv::Mat &image,
+        const DetectionPose &pose)
+{
+    if (image.empty()) {
+        return;
+    }
+    if (m_runtimeController.state()
+            == InspectionRuntimeState::Fault) {
+        m_runtimeController.acceptFrame(image);
+        return;
+    }
+    if (!m_runtimeController.isDetectionWorkerActive()) {
+        return;
+    }
+
+    const int workerMode =
+            m_runtimeController.detectionWorkerModeIndex();
+    if (workerMode != 0
+            && workerMode != 1
+            && workerMode != 2
+            && workerMode != 4) {
+        return;
+    }
+
+    const std::shared_ptr<const FrameData> frame =
+            m_runtimeController.acceptFrame(image);
+    if (!frame) {
+        return;
+    }
+    const DetectionWorkSubmissionResult submission =
+            m_runtimeController.trySubmitDetectionWorkItem(
+                makeDetectionWorkItem(frame, pose));
+    if (submission == DetectionWorkSubmissionResult::QueueFull) {
+        enterInspectionFault(
+                    InspectionFaultReason::HardTriggerQueueOverflow,
+                    QStringLiteral(
+                        "\u786c\u89e6\u53d1 FIFO \u65e0\u6cd5\u63a5\u6536\u4ea7\u54c1 %1/%2\uff0c\u961f\u5217\u5bb9\u91cf %3\u3002")
+                    .arg(frame->productKey.runId)
+                    .arg(frame->productKey.sequence)
+                    .arg(static_cast<qulonglong>(
+                             m_runtimeController
+                             .detectionWorkerQueueCapacity())));
+    } else if (submission
+               != DetectionWorkSubmissionResult::Accepted) {
+        qDebug() << "[DETECTION_WORKER] positioned hardware frame rejected"
+                 << static_cast<int>(submission)
                  << frame->productKey.runId
                  << frame->productKey.sequence;
     }
@@ -2585,8 +2828,13 @@ void Widget::updateOperationUiState()
         button->setEnabled(false);
     }
 
+    const OperationUiState effectiveOperationState =
+            m_runtimeController.state()
+            == InspectionRuntimeState::Fault
+            ? OperationState::Fault
+            : m_operationState;
     const OperationUiSnapshot operationUi =
-            OperationUiPolicy::create(m_operationState);
+            OperationUiPolicy::create(effectiveOperationState);
     if (operationUi.enableAllOperations) {
         for (QAbstractButton *button : operationButtons) {
             if (!button) {
@@ -8581,6 +8829,15 @@ void Widget::on_cancel_clicked()
     qDebug() << "=== on_cancel_clicked() START ===";
     m_detectionRoiWarningActive = false;
 
+    const bool recoveringInspectionFault =
+            m_runtimeController.state()
+            == InspectionRuntimeState::Fault;
+    if (recoveringInspectionFault
+            && !confirmInspectionFaultRecovery()) {
+        presentInspectionFault();
+        return;
+    }
+
     const bool templateOperation =
             m_templateCaptureState
                != TemplateCaptureState::Idle
@@ -8783,6 +9040,16 @@ void Widget::on_cancel_clicked()
     ui->statusLabel->setText("已停止");
     isCollecting = false;
     stopTransaction.commit();
+    if (recoveringInspectionFault) {
+        if (!m_runtimeController.acknowledgeFault()) {
+            m_operationState = OperationState::Fault;
+            presentInspectionFault();
+            return;
+        }
+        restoreNormalFaultUi();
+        qDebug() << "[INSPECTION_FAULT] operator acknowledged"
+                 << "software runtime unlocked";
+    }
     m_operationState = m_bOpenDevice
             ? OperationState::CameraReady
             : OperationState::CameraClosed;

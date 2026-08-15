@@ -67,6 +67,7 @@ SOURCES += \
     ui/controllers/detection_completion_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
+    ui/presenters/inspection_fault_presenter.cpp \
     ui/presenters/detection_result_presenter.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
     devices/camera/hikvision_camera_device.cpp \
@@ -148,6 +149,7 @@ HEADERS += \
     ui/controllers/detection_completion_controller.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
+    ui/presenters/inspection_fault_presenter.h \
     ui/presenters/detection_result_presenter.h \
     devices/barcode/barcode_decoder_adapter.h \
     devices/camera/camera_device.h \

@@ -35,6 +35,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/ui/controllers/detection_completion_controller.cpp \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.cpp \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.cpp \
+    $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.cpp \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/barcode_word/barcode_word_detection_pipeline.cpp \
@@ -67,6 +68,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/ui/controllers/detection_completion_controller.h \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.h \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.h \
+    $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.h \
     $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
     $$PROJECT_ROOT/app/BarcodeTypes.h \
     $$PROJECT_ROOT/app/TissueRollDetector.h \

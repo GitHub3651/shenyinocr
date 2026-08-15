@@ -469,6 +469,36 @@ bool InspectionRuntimeController::submitDetectionWorkItem(
             && worker->submit(item);
 }
 
+DetectionWorkSubmissionResult
+InspectionRuntimeController::trySubmitDetectionFrame(
+    const std::shared_ptr<const FrameData> &frame)
+{
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        worker = m_detectionWorker;
+    }
+    if (!isDetectionWorkerActive() || !worker) {
+        return DetectionWorkSubmissionResult::NotRunning;
+    }
+    return worker->trySubmit(frame);
+}
+
+DetectionWorkSubmissionResult
+InspectionRuntimeController::trySubmitDetectionWorkItem(
+    const DetectionWorkItem &item)
+{
+    std::shared_ptr<DetectionWorker> worker;
+    {
+        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
+        worker = m_detectionWorker;
+    }
+    if (!isDetectionWorkerActive() || !worker) {
+        return DetectionWorkSubmissionResult::NotRunning;
+    }
+    return worker->trySubmit(item);
+}
+
 bool InspectionRuntimeController::submitUiCompletion(
     const UiCompletionMailbox::Work &work)
 {
