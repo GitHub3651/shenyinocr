@@ -54,6 +54,7 @@ SOURCES += \
     recipes/recipe_store.cpp \
     recipes/recipe_selection.cpp \
     recipes/template_profile_assets.cpp \
+    recipes/template_mode_memory.cpp \
     recipes/template_character_asset_workspace.cpp \
     recipes/template_profile_load_plan.cpp \
     recipes/template_recipe_assembler.cpp \
@@ -64,6 +65,8 @@ SOURCES += \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     ui/controllers/detection_completion_controller.cpp \
+    ui/controllers/operation_ui_policy.cpp \
+    ui/controllers/settings_edit_state.cpp \
     ui/presenters/detection_result_presenter.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
     devices/camera/hikvision_camera_device.cpp \
@@ -130,6 +133,7 @@ HEADERS += \
     recipes/recipe_store.h \
     recipes/recipe_selection.h \
     recipes/template_profile_assets.h \
+    recipes/template_mode_memory.h \
     recipes/template_character_asset_workspace.h \
     recipes/template_profile_load_plan.h \
     recipes/template_recipe_assembler.h \
@@ -138,8 +142,11 @@ HEADERS += \
     recipes/template_recipe_workflow.h \
     recipes/template_recipe_publisher.h \
     recipes/template_profile_mapper.h \
+    recipes/template_runtime_profile.h \
     ui/dialogs/recipe_selection_dialog.h \
     ui/controllers/detection_completion_controller.h \
+    ui/controllers/operation_ui_policy.h \
+    ui/controllers/settings_edit_state.h \
     ui/presenters/detection_result_presenter.h \
     devices/barcode/barcode_decoder_adapter.h \
     devices/camera/camera_device.h \

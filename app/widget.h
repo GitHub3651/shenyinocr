@@ -63,6 +63,8 @@
 #include "appsettingsmanager.h"
 #include "recipes/product_recipe.h"
 #include "recipes/template_profile_assets.h"
+#include "recipes/template_mode_memory.h"
+#include "recipes/template_runtime_profile.h"
 #include "recipes/template_recipe_workflow.h"
 #include "devices/barcode/barcode_decoder_adapter.h"
 #include "devices/camera/camera_device.h"
@@ -71,6 +73,8 @@
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "ui/presenters/detection_result_presenter.h"
+#include "ui/controllers/operation_ui_policy.h"
+#include "ui/controllers/settings_edit_state.h"
 
 using namespace cv;
 
@@ -238,7 +242,6 @@ private:
         QLabel *label = nullptr;
         QString originalLabelText;
         bool requireApply = false;
-        bool dirty = false;
         HardwareDependency hardwareDependency = HardwareDependency::None;
     };
     struct HardwareActionBinding {
@@ -408,8 +411,7 @@ private:
     QPushButton *m_publishedRecipeButton = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
-    QMap<QString, QStringList> m_templateDirPathsByMode;
-    QMap<QString, QString> m_publishedRecipeIdsByMode;
+    TemplateModeMemory m_templateModeMemory;
     QMap<QString, GlobalSettingBinding> m_globalSettingBindings;
     QList<HardwareActionBinding> m_hardwareActionBindings;
     GlobalSettings m_appliedGlobalSettings;
@@ -417,8 +419,7 @@ private:
     bool m_globalSettingsLoaded = false;
     bool m_applyingGlobalSettings = false;
     bool m_updatingGlobalSettingsUi = false;
-    bool m_templateTargetTextDirty = false;
-    bool m_templateImageThresholdDirty = false;
+    SettingsEditState m_settingsEditState;
     QString m_templateTargetLabelText;
     QString m_templateThresholdLabelText;
 
@@ -432,14 +433,7 @@ private:
     cv::Mat m_lastTemplatePreviewFrame;
     quint64 m_templatePreviewSessionId = 0;
 
-    enum class OperationState {
-        CameraClosed,
-        CameraReady,
-        Detecting,
-        Stopping,
-        TemplatePreviewing,
-        TemplateFrozen
-    };
+    using OperationState = OperationUiState;
     OperationState m_operationState =
             OperationState::CameraClosed;
     std::atomic<bool> m_resultBoundDisplayActive{false};
@@ -571,26 +565,6 @@ private:
     vector<Mat> digitRegions;           ///< 数字区域
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
-
-    struct WordTemplateProfile {
-        QString name;
-        QString dirPath;
-        cv::Mat trackingTemplate;
-        std::vector<cv::Point2f> barcodePoly;
-        std::vector<cv::Point2f> datePoly;
-        TemplatePrivateSettings settings;
-        RecipeProfile recipeProfile;
-        TemplateProfileAssetManifest recipeAssetManifest;
-        QMap<QString, QString> resolvedAssetPathsByRole;
-        int targetCount = 0;
-        std::vector<cv::Mat> digitTemplates;
-        std::vector<int> digitTemplateTargetIndexes;
-        TemplateMatchPreparedTemplates preparedDigitTemplates;
-        mutable int preferredBarcodeStrategyId = -1;
-        mutable unsigned int preferredBarcodeOptionFlags =
-                BARCODE_DECODER_OPTION_NONE;
-        mutable int consecutiveBarcodeFailures = 0;
-    };
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
     TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession; ///< 本次新建字库配方的编辑发布会话

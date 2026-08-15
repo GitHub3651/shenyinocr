@@ -24,6 +24,8 @@
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "ui/controllers/detection_completion_controller.h"
+#include "ui/controllers/operation_ui_policy.h"
+#include "ui/controllers/settings_edit_state.h"
 #include "ui/presenters/detection_result_presenter.h"
 
 #include <chrono>
@@ -405,6 +407,14 @@ class DetectionCompletionTest : public QObject
     Q_OBJECT
 
 private slots:
+    void operationUiPolicyPreservesClosedCameraControls();
+    void operationUiPolicyPreservesReadyCameraControls();
+    void operationUiPolicyPreservesDetectionAndStoppingControls();
+    void operationUiPolicyPreservesTemplateCaptureControls();
+    void settingsEditStateIgnoresUnknownKeys();
+    void settingsEditStateDeduplicatesSharedDisplayNames();
+    void settingsEditStateIncludesTemplatePrivateChanges();
+    void settingsEditStateClearsGlobalAndTemplateScopesSeparately();
     void productKeyRequiresRunAndPositiveSequence();
     void frameFactoryOwnsIndependentImage();
     void completionRequiresFrameAndValidProductKey();
@@ -508,6 +518,129 @@ private slots:
     void writeFailureIsCountedAndReported();
     void shutdownRejectsNewTasks();
 };
+
+void DetectionCompletionTest::operationUiPolicyPreservesClosedCameraControls()
+{
+    const OperationUiSnapshot snapshot =
+            OperationUiPolicy::create(OperationUiState::CameraClosed);
+    QVERIFY(snapshot.enableAllOperations);
+    QVERIFY(snapshot.settingsEnabled);
+    QVERIFY(snapshot.openCameraEnabled);
+    QVERIFY(!snapshot.startDetectionEnabled);
+    QVERIFY(!snapshot.stopEnabled);
+    QVERIFY(!snapshot.closeCameraEnabled);
+    QVERIFY(!snapshot.templateCaptureEnabled);
+    QVERIFY(!snapshot.saveTemplateEnabled);
+    QCOMPARE(snapshot.startDetectionText,
+             QStringLiteral("\u542f\u52a8\u8bc6\u522b"));
+}
+
+void DetectionCompletionTest::operationUiPolicyPreservesReadyCameraControls()
+{
+    const OperationUiSnapshot snapshot =
+            OperationUiPolicy::create(OperationUiState::CameraReady);
+    QVERIFY(snapshot.enableAllOperations);
+    QVERIFY(!snapshot.openCameraEnabled);
+    QVERIFY(snapshot.startDetectionEnabled);
+    QVERIFY(!snapshot.stopEnabled);
+    QVERIFY(snapshot.closeCameraEnabled);
+    QVERIFY(snapshot.templateCaptureEnabled);
+    QVERIFY(!snapshot.saveTemplateEnabled);
+}
+
+void DetectionCompletionTest::operationUiPolicyPreservesDetectionAndStoppingControls()
+{
+    const OperationUiSnapshot detecting =
+            OperationUiPolicy::create(OperationUiState::Detecting);
+    QVERIFY(!detecting.enableAllOperations);
+    QVERIFY(!detecting.settingsEnabled);
+    QVERIFY(!detecting.openCameraEnabled);
+    QVERIFY(!detecting.startDetectionEnabled);
+    QVERIFY(detecting.stopEnabled);
+    QCOMPARE(detecting.startDetectionText,
+             QStringLiteral("\u91c7\u96c6\u4e2d..."));
+
+    const OperationUiSnapshot stopping =
+            OperationUiPolicy::create(OperationUiState::Stopping);
+    QVERIFY(!stopping.enableAllOperations);
+    QVERIFY(stopping.stopEnabled);
+    QCOMPARE(stopping.startDetectionText,
+             QStringLiteral("\u505c\u6b62\u4e2d..."));
+    QCOMPARE(stopping.stopText,
+             QStringLiteral("\u505c\u6b62\u4e2d..."));
+}
+
+void DetectionCompletionTest::operationUiPolicyPreservesTemplateCaptureControls()
+{
+    const OperationUiSnapshot previewing =
+            OperationUiPolicy::create(OperationUiState::TemplatePreviewing);
+    QVERIFY(!previewing.enableAllOperations);
+    QVERIFY(previewing.stopEnabled);
+    QVERIFY(previewing.templateCaptureEnabled);
+    QVERIFY(!previewing.saveTemplateEnabled);
+    QVERIFY(!previewing.statusText.isEmpty());
+
+    const OperationUiSnapshot frozen =
+            OperationUiPolicy::create(OperationUiState::TemplateFrozen);
+    QVERIFY(frozen.stopEnabled);
+    QVERIFY(frozen.templateCaptureEnabled);
+    QVERIFY(frozen.saveTemplateEnabled);
+    QVERIFY(!frozen.statusText.isEmpty());
+    QVERIFY(frozen.statusText != previewing.statusText);
+}
+
+void DetectionCompletionTest::settingsEditStateIgnoresUnknownKeys()
+{
+    SettingsEditState state;
+    state.setGlobalDirty(QStringLiteral("unknown"), true);
+    QVERIFY(!state.hasDirtySettings());
+    QVERIFY(state.dirtySettingsMessage().isEmpty());
+}
+
+void DetectionCompletionTest::settingsEditStateDeduplicatesSharedDisplayNames()
+{
+    SettingsEditState state;
+    state.registerGlobalSetting(QStringLiteral("plc.ip"),
+                                QStringLiteral("PLC\u8fde\u63a5\uff1a"));
+    state.registerGlobalSetting(QStringLiteral("plc.rack"),
+                                QStringLiteral("PLC\u8fde\u63a5\uff1a"));
+    state.setGlobalDirty(QStringLiteral("plc.ip"), true);
+    state.setGlobalDirty(QStringLiteral("plc.rack"), true);
+    QCOMPARE(state.globalDirtyNames().size(), 1);
+    QCOMPARE(state.globalDirtyNames().first(),
+             QStringLiteral("PLC\u8fde\u63a5"));
+    QVERIFY(state.dirtySettingsMessage().contains(
+                QStringLiteral("PLC\u8fde\u63a5")));
+}
+
+void DetectionCompletionTest::settingsEditStateIncludesTemplatePrivateChanges()
+{
+    SettingsEditState state;
+    state.registerGlobalSetting(QStringLiteral("camera.exposure"),
+                                QStringLiteral("\u76f8\u673a\u66dd\u5149:"));
+    state.setGlobalDirty(QStringLiteral("camera.exposure"), true);
+    state.setTemplateTargetDirty(true);
+    state.setTemplateThresholdDirty(true);
+    const QStringList names = state.dirtyNames();
+    QCOMPARE(names.size(), 3);
+    QVERIFY(names.contains(QStringLiteral("\u76ee\u6807\u5b57\u7b26\u5185\u5bb9")));
+    QVERIFY(names.contains(QStringLiteral("\u56fe\u50cf\u5408\u683c\u9608\u503c")));
+}
+
+void DetectionCompletionTest::settingsEditStateClearsGlobalAndTemplateScopesSeparately()
+{
+    SettingsEditState state;
+    state.registerGlobalSetting(QStringLiteral("camera.gain"),
+                                QStringLiteral("gain"));
+    state.setGlobalDirty(QStringLiteral("camera.gain"), true);
+    state.setTemplateTargetDirty(true);
+    state.clearAllGlobalDirty();
+    QVERIFY(!state.isGlobalDirty(QStringLiteral("camera.gain")));
+    QVERIFY(state.isTemplateTargetDirty());
+    QVERIFY(state.hasDirtySettings());
+    state.clearTemplateDirty();
+    QVERIFY(!state.hasDirtySettings());
+}
 
 void DetectionCompletionTest::productKeyRequiresRunAndPositiveSequence()
 {

@@ -2585,10 +2585,9 @@ void Widget::updateOperationUiState()
         button->setEnabled(false);
     }
 
-    const bool idleState =
-            m_operationState == OperationState::CameraClosed
-            || m_operationState == OperationState::CameraReady;
-    if (idleState) {
+    const OperationUiSnapshot operationUi =
+            OperationUiPolicy::create(m_operationState);
+    if (operationUi.enableAllOperations) {
         for (QAbstractButton *button : operationButtons) {
             if (!button) {
                 continue;
@@ -2602,76 +2601,38 @@ void Widget::updateOperationUiState()
     }
 
     if (ui->plcbtn) {
-        ui->plcbtn->setText(
-                    m_operationState == OperationState::Detecting
-                    ? "采集中..."
-                    : (m_operationState == OperationState::Stopping
-                       ? "停止中..."
-                       : "启动识别"));
+        ui->plcbtn->setText(operationUi.startDetectionText);
     }
     if (ui->cancel) {
-        const bool templateOperation =
-                m_operationState == OperationState::TemplatePreviewing
-                || m_operationState == OperationState::TemplateFrozen;
-        ui->cancel->setText(
-                    m_operationState == OperationState::Stopping
-                    ? "停止中..."
-                    : (templateOperation
-                       ? "退出模板制作"
-                       : "停止识别"));
+        ui->cancel->setText(operationUi.stopText);
     }
     if (ui->VideoShoot) {
-        if (m_operationState
-                == OperationState::TemplatePreviewing) {
-            ui->VideoShoot->setText(
-                        "拍照并开始框选");
-        } else if (m_operationState
-                   == OperationState::TemplateFrozen) {
-            ui->VideoShoot->setText("重新取景");
-        } else {
-            ui->VideoShoot->setText("制作模板");
-        }
+        ui->VideoShoot->setText(operationUi.templateCaptureText);
     }
 
-    switch (m_operationState) {
-    case OperationState::CameraClosed:
-        if (ui->cancel) ui->cancel->setEnabled(false);
-        if (ui->CloseCamera) ui->CloseCamera->setEnabled(false);
-        if (ui->plcbtn) ui->plcbtn->setEnabled(false);
-        if (ui->VideoShoot) ui->VideoShoot->setEnabled(false);
-        if (ui->pushButton_5) ui->pushButton_5->setEnabled(false);
-        break;
-    case OperationState::CameraReady:
-        if (ui->HandwareDetect) ui->HandwareDetect->setEnabled(false);
-        if (ui->cancel) ui->cancel->setEnabled(false);
-        if (ui->pushButton_5) ui->pushButton_5->setEnabled(false);
-        break;
-    case OperationState::Detecting:
-        if (ui->cancel) ui->cancel->setEnabled(true);
-        break;
-    case OperationState::Stopping:
-        if (ui->cancel) ui->cancel->setEnabled(true);
-        break;
-    case OperationState::TemplatePreviewing:
-        if (ui->VideoShoot) ui->VideoShoot->setEnabled(true);
-        if (ui->cancel) ui->cancel->setEnabled(true);
-        if (ui->statusLabel) {
-            ui->statusLabel->setText(
-                        "模板制作中：实时取景");
-        }
-        break;
-    case OperationState::TemplateFrozen:
-        if (ui->VideoShoot) ui->VideoShoot->setEnabled(true);
-        if (ui->pushButton_5) ui->pushButton_5->setEnabled(true);
-        if (ui->cancel) ui->cancel->setEnabled(true);
-        if (ui->statusLabel) {
-            ui->statusLabel->setText(
-                        "模板制作中：请完成框选并保存");
-        }
-        break;
+    if (ui->HandwareDetect) {
+        ui->HandwareDetect->setEnabled(operationUi.openCameraEnabled);
+    }
+    if (ui->plcbtn) {
+        ui->plcbtn->setEnabled(operationUi.startDetectionEnabled);
+    }
+    if (ui->cancel) {
+        ui->cancel->setEnabled(operationUi.stopEnabled);
+    }
+    if (ui->CloseCamera) {
+        ui->CloseCamera->setEnabled(operationUi.closeCameraEnabled);
+    }
+    if (ui->VideoShoot) {
+        ui->VideoShoot->setEnabled(operationUi.templateCaptureEnabled);
+    }
+    if (ui->pushButton_5) {
+        ui->pushButton_5->setEnabled(operationUi.saveTemplateEnabled);
+    }
+    if (ui->statusLabel && !operationUi.statusText.isEmpty()) {
+        ui->statusLabel->setText(operationUi.statusText);
     }
 
-    const bool normalSettingsEnabled = idleState;
+    const bool normalSettingsEnabled = operationUi.settingsEnabled;
     for (auto it = m_globalSettingBindings.constBegin();
          it != m_globalSettingBindings.constEnd();
          ++it) {
@@ -2751,7 +2712,7 @@ void Widget::updateOperationUiState()
         }
     }
 
-    if (idleState) {
+    if (operationUi.enableAllOperations) {
         updateHardwareParameterUiEnabled();
     }
 }
@@ -4188,9 +4149,11 @@ void Widget::registerGlobalSetting(const QString &key,
     binding.label = label;
     binding.originalLabelText = label ? label->text() : QString();
     binding.requireApply = requireApply;
-    binding.dirty = false;
     binding.hardwareDependency = hardwareDependency;
     m_globalSettingBindings.insert(key, binding);
+    m_settingsEditState.registerGlobalSetting(
+                key,
+                binding.originalLabelText);
 
     auto onChanged = [this, key]() {
         if (m_updatingGlobalSettingsUi || m_applyingGlobalSettings) {
@@ -4332,7 +4295,9 @@ void Widget::refreshGlobalSettingDirty(const QString &key)
         return;
     }
 
-    it.value().dirty = isGlobalSettingDirtyByValue(key);
+    m_settingsEditState.setGlobalDirty(
+                key,
+                isGlobalSettingDirtyByValue(key));
     updateGlobalSettingDirtyUi(key);
 }
 
@@ -4359,7 +4324,7 @@ void Widget::markGlobalSettingDirty(const QString &key)
         return;
     }
 
-    it.value().dirty = true;
+    m_settingsEditState.setGlobalDirty(key, true);
     updateGlobalSettingDirtyUi(key);
 }
 
@@ -4370,7 +4335,7 @@ void Widget::clearGlobalSettingDirty(const QString &key)
         return;
     }
 
-    it.value().dirty = false;
+    m_settingsEditState.setGlobalDirty(key, false);
     updateGlobalSettingDirtyUi(key);
 }
 
@@ -4383,9 +4348,7 @@ void Widget::clearGlobalSettingsDirty(const QStringList &keys)
 
 void Widget::clearAllGlobalSettingDirty()
 {
-    for (auto it = m_globalSettingBindings.begin(); it != m_globalSettingBindings.end(); ++it) {
-        it.value().dirty = false;
-    }
+    m_settingsEditState.clearAllGlobalDirty();
 
     for (auto it = m_globalSettingBindings.constBegin(); it != m_globalSettingBindings.constEnd(); ++it) {
         updateGlobalSettingDirtyUi(it.key());
@@ -4405,7 +4368,8 @@ void Widget::updateGlobalSettingDirtyUi(const QString &key)
     for (auto scan = m_globalSettingBindings.constBegin();
          scan != m_globalSettingBindings.constEnd();
          ++scan) {
-        if (scan.value().label == targetLabel && scan.value().dirty) {
+        if (scan.value().label == targetLabel
+                && m_settingsEditState.isGlobalDirty(scan.key())) {
             anyDirtyOnSameLabel = true;
             break;
         }
@@ -4454,9 +4418,9 @@ void Widget::updateAppliedGlobalSettingFromUi(const QString &key)
         m_appliedGlobalSettings.templateBaseDirPath = templateBaseDirPath;
     } else if (key == "template.history_paths") {
         storeCurrentTemplatePathsForMode(currentDetectModeId());
-        m_appliedGlobalSettings.templateDirPathsByMode = m_templateDirPathsByMode;
+        m_appliedGlobalSettings.templateDirPathsByMode = m_templateModeMemory.templatePathsByMode();
         m_appliedGlobalSettings.publishedRecipeIdsByMode =
-                m_publishedRecipeIdsByMode;
+                m_templateModeMemory.publishedRecipeIdsByMode();
     } else if (key == "camera.exposure") {
         m_appliedGlobalSettings.cameraExposure = ui->spinBox->value();
     } else if (key == "camera.gain") {
@@ -4525,70 +4489,27 @@ void Widget::syncImmediateGlobalSettingsFromUi()
 
 QStringList Widget::dirtyGlobalSettingNames() const
 {
-    QStringList names;
-    for (auto it = m_globalSettingBindings.constBegin();
-         it != m_globalSettingBindings.constEnd();
-         ++it) {
-        if (!it.value().dirty) {
-            continue;
-        }
-
-        QString name = it.value().originalLabelText.trimmed();
-        name.remove(":");
-        name.remove("：");
-        if (name.isEmpty()) {
-            name = it.key();
-        }
-        if (!names.contains(name)) {
-            names.append(name);
-        }
-    }
-    return names;
+    return m_settingsEditState.globalDirtyNames();
 }
 
 QStringList Widget::dirtyTemplateSettingNames() const
 {
-    QStringList names;
-    if (m_templateTargetTextDirty) {
-        names.append("目标字符内容");
-    }
-    if (m_templateImageThresholdDirty) {
-        names.append("图像合格阈值");
-    }
-    return names;
+    return m_settingsEditState.templateDirtyNames();
 }
 
 QStringList Widget::dirtySettingNames() const
 {
-    QStringList names = dirtyGlobalSettingNames();
-    const QStringList templateNames = dirtyTemplateSettingNames();
-    for (const QString &name : templateNames) {
-        if (!names.contains(name)) {
-            names.append(name);
-        }
-    }
-    return names;
+    return m_settingsEditState.dirtyNames();
 }
 
 bool Widget::hasDirtySettings() const
 {
-    return !dirtySettingNames().isEmpty();
+    return m_settingsEditState.hasDirtySettings();
 }
 
 QString Widget::dirtySettingsMessage() const
 {
-    const QStringList names = dirtySettingNames();
-    if (names.isEmpty()) {
-        return QString();
-    }
-
-    QStringList lines;
-    for (const QString &name : names) {
-        lines.append(QString("- %1").arg(name));
-    }
-    return QString("存在未应用参数：\n\n%1\n\n"
-                   "继续运行将放弃以上未应用修改，并使用之前已设置的参数。")
-            .arg(lines.join("\n"));
+    return m_settingsEditState.dirtySettingsMessage();
 }
 
 void Widget::restoreUnappliedSettingsFromApplied()
@@ -4722,7 +4643,7 @@ void Widget::refreshTemplateTargetTextDirty()
                    .profiles.first().targetText;
     }
 
-    m_templateTargetTextDirty = dirty;
+    m_settingsEditState.setTemplateTargetDirty(dirty);
     updateTemplatePrivateSettingDirtyUi();
 }
 
@@ -4755,7 +4676,7 @@ void Widget::refreshTemplateImageThresholdDirty()
         }
     }
 
-    m_templateImageThresholdDirty = dirty;
+    m_settingsEditState.setTemplateThresholdDirty(dirty);
     updateTemplatePrivateSettingDirtyUi();
 }
 
@@ -4767,44 +4688,43 @@ void Widget::refreshTemplatePrivateSettingDirty()
 
 void Widget::markTemplateTargetTextDirty()
 {
-    m_templateTargetTextDirty = true;
+    m_settingsEditState.setTemplateTargetDirty(true);
     updateTemplatePrivateSettingDirtyUi();
 }
 
 void Widget::markTemplateImageThresholdDirty()
 {
-    m_templateImageThresholdDirty = true;
+    m_settingsEditState.setTemplateThresholdDirty(true);
     updateTemplatePrivateSettingDirtyUi();
 }
 
 void Widget::clearTemplateTargetTextDirty()
 {
-    m_templateTargetTextDirty = false;
+    m_settingsEditState.setTemplateTargetDirty(false);
     updateTemplatePrivateSettingDirtyUi();
 }
 
 void Widget::clearTemplateImageThresholdDirty()
 {
-    m_templateImageThresholdDirty = false;
+    m_settingsEditState.setTemplateThresholdDirty(false);
     updateTemplatePrivateSettingDirtyUi();
 }
 
 void Widget::clearTemplatePrivateSettingDirty()
 {
-    m_templateTargetTextDirty = false;
-    m_templateImageThresholdDirty = false;
+    m_settingsEditState.clearTemplateDirty();
     updateTemplatePrivateSettingDirtyUi();
 }
 
 void Widget::updateTemplatePrivateSettingDirtyUi()
 {
     if (ui->label) {
-        ui->label->setText(m_templateTargetTextDirty
+        ui->label->setText(m_settingsEditState.isTemplateTargetDirty()
                            ? m_templateTargetLabelText + " *"
                            : m_templateTargetLabelText);
     }
     if (ui->label_4) {
-        ui->label_4->setText(m_templateImageThresholdDirty
+        ui->label_4->setText(m_settingsEditState.isTemplateThresholdDirty()
                              ? m_templateThresholdLabelText + " *"
                              : m_templateThresholdLabelText);
     }
@@ -5745,16 +5665,7 @@ void Widget::clearSingleTemplateRecipeState()
 
 QString Widget::detectModeIdForIndex(int index) const
 {
-    static const QStringList detectModeIds = {
-        "stamp_detection",
-        "word_detection",
-        "ocr_detection",
-        "tissue_detection",
-        BarcodeWordDetectionMode
-    };
-    return (index >= 0 && index < detectModeIds.size())
-            ? detectModeIds.at(index)
-            : QString("word_detection");
+    return TemplateModeMemory::modeIdForIndex(index);
 }
 
 QString Widget::currentDetectModeId() const
@@ -5795,7 +5706,7 @@ void Widget::storeCurrentTemplatePathsForMode(const QString &modeId)
         const QString recipeId =
                 m_wordTemplateRecipeEditSession.recipe().recipeId.trimmed();
         if (!recipeId.isEmpty()) {
-            m_publishedRecipeIdsByMode.insert(modeId, recipeId);
+            m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId, recipeId);
             return;
         }
     }
@@ -5805,18 +5716,18 @@ void Widget::storeCurrentTemplatePathsForMode(const QString &modeId)
                 m_singleTemplateRecipeEditSession.recipe()
                 .recipeId.trimmed();
         if (!recipeId.isEmpty()) {
-            m_publishedRecipeIdsByMode.insert(modeId, recipeId);
+            m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId, recipeId);
             return;
         }
     }
-    m_publishedRecipeIdsByMode.remove(modeId);
-    m_templateDirPathsByMode.insert(modeId, currentTemplatePathsForMode(modeId));
+    m_templateModeMemory.publishedRecipeIdsByMode().remove(modeId);
+    m_templateModeMemory.templatePathsByMode().insert(modeId, currentTemplatePathsForMode(modeId));
 }
 
 void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
 {
     const QString rememberedRecipeId =
-            m_publishedRecipeIdsByMode.value(modeId).trimmed();
+            m_templateModeMemory.publishedRecipeIdsByMode().value(modeId).trimmed();
     if ((isWordFamilyMode(modeId)
          || isSingleTemplateRecipeMode(modeId))
             && !rememberedRecipeId.isEmpty()) {
@@ -5854,7 +5765,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
                    << modeId
                    << rememberedRecipeId
                    << restoreError;
-        m_publishedRecipeIdsByMode.remove(modeId);
+        m_templateModeMemory.publishedRecipeIdsByMode().remove(modeId);
         m_appliedGlobalSettings.publishedRecipeIdsByMode.remove(modeId);
         QString settingsError;
         if (!AppSettingsManager::saveGlobalSettings(m_appliedGlobalSettings,
@@ -5872,7 +5783,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         }
     }
 
-    const QStringList paths = m_templateDirPathsByMode.value(modeId);
+    const QStringList paths = m_templateModeMemory.templatePathsByMode().value(modeId);
     if (paths.isEmpty()) {
         return;
     }
@@ -5936,7 +5847,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
             qDebug() << "[TEMPLATE_RESTORE] word templates restore failed:" << skippedMessages;
             clearWordMultiTemplateState();
             if (removedRecipeStorePath || !userMessages.isEmpty()) {
-                m_templateDirPathsByMode.insert(modeId, QStringList());
+                m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList());
                 saveSettings(false);
             }
             if (!userMessages.isEmpty()) {
@@ -5950,7 +5861,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         m_wordTemplateProfiles.swap(loadedProfiles);
         refreshWordTemplateRecipeAssets();
         if (removedRecipeStorePath || validPaths != paths) {
-            m_templateDirPathsByMode.insert(modeId, validPaths);
+            m_templateModeMemory.templatePathsByMode().insert(modeId, validPaths);
             saveSettings(false);
             if (!userMessages.isEmpty()) {
                 showParameterWarning("提示", userMessages.join("\n"));
@@ -5971,7 +5882,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         currentTemplateDirPath.clear();
         m_currentTemplateNameVisible = false;
         updateCurrentTemplateName();
-        m_templateDirPathsByMode.insert(modeId, QStringList());
+        m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList());
         saveSettings(false);
         showParameterWarning("提示",
                              QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
@@ -5994,7 +5905,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
     if (!m_currentTemplateNameVisible) {
         currentTemplateDirPath.clear();
         updateCurrentTemplateName();
-        m_templateDirPathsByMode.insert(modeId, QStringList());
+        m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList());
         saveSettings(false);
         showParameterWarning("提示",
                              QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
@@ -6002,7 +5913,7 @@ void Widget::restoreTemplatesForMode(const QString &modeId, bool showMessage)
         return;
     }
     if (paths.size() != 1 || paths.first() != firstPath) {
-        m_templateDirPathsByMode.insert(modeId, QStringList() << firstPath);
+        m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList() << firstPath);
         saveSettings(false);
     }
     updateCurrentTemplateName();
@@ -6245,7 +6156,8 @@ void Widget::publishCurrentWordTemplateGroup()
                         "\u65E0\u9700\u91CD\u590D\u53D1\u5E03\u6A21\u677F\u7EC4\u3002"));
         return;
     }
-    if (m_templateTargetTextDirty || m_templateImageThresholdDirty) {
+    if (m_settingsEditState.isTemplateTargetDirty()
+            || m_settingsEditState.isTemplateThresholdDirty()) {
         showParameterWarning(
                     QStringLiteral("\u63D0\u793A"),
                     QStringLiteral(
@@ -6428,7 +6340,8 @@ void Widget::publishCurrentSingleTemplateRecipe()
                         "\u52A0\u8F7D\u4E00\u4E2A\u6709\u6548\u4EA7\u54C1\u6A21\u677F\u3002"));
         return;
     }
-    if (m_templateTargetTextDirty || m_templateImageThresholdDirty) {
+    if (m_settingsEditState.isTemplateTargetDirty()
+            || m_settingsEditState.isTemplateThresholdDirty()) {
         showParameterWarning(
                     QStringLiteral("\u63D0\u793A"),
                     QStringLiteral(
@@ -6794,7 +6707,7 @@ bool Widget::activatePublishedWordRecipe(const QString &recipeId,
     m_wordTemplateRecipeEditSession = candidateEditSession;
     currentTemplateDirPath = selection.recipeDirectoryPath;
     m_currentTemplateNameVisible = false;
-    m_publishedRecipeIdsByMode.insert(modeId,
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId,
                                       selection.recipe->recipeId);
     refreshWordTemplateEditorCombo();
     clearTemplatePrivateSettingDirty();
@@ -7044,7 +6957,7 @@ bool Widget::activatePublishedSingleTemplateRecipe(
     applyTemplatePrivateSettingsToUi(privateSettings);
     emit ssim(static_cast<int>(privateSettings.imageThreshold));
     m_currentTemplateNameVisible = true;
-    m_publishedRecipeIdsByMode.insert(modeId,
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId,
                                       selection.recipe->recipeId);
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
@@ -7107,7 +7020,7 @@ bool Widget::republishSingleTemplateRecipeSettings(
 
     m_singleTemplateResolvedAssetPathsByRole =
             publishedSelection.profiles.first().assetPathsByRole;
-    m_publishedRecipeIdsByMode.insert(
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(
                 currentDetectModeId(),
                 publishedSelection.recipe->recipeId);
     saveSettings(false);
@@ -7971,10 +7884,10 @@ bool Widget::publishWordTemplateRecipeDraft(QString *errorMessage)
         return false;
     }
 
-    m_publishedRecipeIdsByMode.insert(currentDetectModeId(),
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(currentDetectModeId(),
                                       publishedSelection.recipe->recipeId);
     m_appliedGlobalSettings.publishedRecipeIdsByMode =
-            m_publishedRecipeIdsByMode;
+            m_templateModeMemory.publishedRecipeIdsByMode();
     saveSettings(false);
 
     qDebug() << "[RECIPE_PUBLISH] published word recipe:"
@@ -10683,8 +10596,8 @@ GlobalSettings Widget::collectGlobalSettingsFromUi() const
     settings.rejectTime = ui->lineEdit_8->text().toInt();
     settings.rejectPosition = ui->lineEdit_12->text().toInt();
     settings.tissueRoughnessThreshold = ui->lineEdit_tissueRoughnessThreshold->text().toDouble();
-    settings.templateDirPathsByMode = m_templateDirPathsByMode;
-    settings.publishedRecipeIdsByMode = m_publishedRecipeIdsByMode;
+    settings.templateDirPathsByMode = m_templateModeMemory.templatePathsByMode();
+    settings.publishedRecipeIdsByMode = m_templateModeMemory.publishedRecipeIdsByMode();
     if (ui->rightPanelSplitter) {
         settings.rightPanelSplitterState =
                 ui->rightPanelSplitter->saveState();
@@ -10716,8 +10629,8 @@ void Widget::applyGlobalSettingsToUi(const GlobalSettings &settings)
     const bool oldUpdatingGlobalSettingsUi = m_updatingGlobalSettingsUi;
     m_applyingGlobalSettings = true;
     m_updatingGlobalSettingsUi = true;
-    m_templateDirPathsByMode = settings.templateDirPathsByMode;
-    m_publishedRecipeIdsByMode = settings.publishedRecipeIdsByMode;
+    m_templateModeMemory.templatePathsByMode() = settings.templateDirPathsByMode;
+    m_templateModeMemory.publishedRecipeIdsByMode() = settings.publishedRecipeIdsByMode;
 
     ui->comboBox_4->setCurrentIndex(indexOf(detectModeIds, settings.detectModeId, 1));
     ui->comboBox->setCurrentIndex(indexOf(imageSaveModeIds, settings.imageSaveModeId, 0));

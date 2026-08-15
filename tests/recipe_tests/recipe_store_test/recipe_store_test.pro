@@ -16,6 +16,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_selection.cpp \
     $$PROJECT_ROOT/app/recipes/template_profile_load_plan.cpp \
+    $$PROJECT_ROOT/app/recipes/template_mode_memory.cpp \
     $$PROJECT_ROOT/app/recipes/template_profile_assets.cpp \
     $$PROJECT_ROOT/app/recipes/template_character_asset_workspace.cpp \
     $$PROJECT_ROOT/app/recipes/template_recipe_assembler.cpp \
@@ -29,6 +30,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/recipes/recipe_store.h \
     $$PROJECT_ROOT/app/recipes/recipe_selection.h \
     $$PROJECT_ROOT/app/recipes/template_profile_load_plan.h \
+    $$PROJECT_ROOT/app/recipes/template_mode_memory.h \
     $$PROJECT_ROOT/app/recipes/template_profile_assets.h \
     $$PROJECT_ROOT/app/recipes/template_character_asset_workspace.h \
     $$PROJECT_ROOT/app/recipes/template_recipe_assembler.h \

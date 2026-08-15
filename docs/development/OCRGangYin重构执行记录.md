@@ -5,9 +5,9 @@
 - 基线HEAD：`1c8d564fe42ce5717b7606513cc2b426a367ff4b`
 - 基线分支：`codex/repo-layout`
 - 当前工作分支：`codex/ocrgangyin-refactor`（从基线HEAD新建）
-- 当前阶段：Stage 3 新线程链和UI减负（按用户风险接受条件进入）
-- 当前切片：Stage 3统一运行Profile快照与五模式启动分发迁出Widget（静态门禁通过，等待Qt Creator集中验证）
-- 阶段结论：**Stage 2结构关口已通过，Stage 3进行中**。五种模式的软硬触发正式检测链均已通过门禁；外部Line触发、相机参数、算法、PLC时序和Stage 4异常策略边界保持不变。
+- 当前阶段：Stage 3 新线程链和UI减负（最终开发切片门禁通过，等待提交与结项登记）
+- 当前切片：Stage 3最终UI/设置/模板状态收口（用户Qt Creator集中门禁通过）
+- 阶段结论：**Stage 2结构关口已通过，Stage 3结构开发与约定功能门禁已完成**。固定样本、P50/P95、长时间运行和真实PLC量化证据按用户决定延期，故不宣称生产现场最终验收完成；Stage 4尚未开始。
 - 构建纪律：Agent未运行、未间接调用、也未通过GUI触发任何qmake、编译、链接、测试目标或主程序。
 
 ## Stage 0已完成范围
@@ -996,6 +996,15 @@
 - [x] `detection_completion_test`新增7项完成控制器合同测试，覆盖无效请求零副作用、到期NG在当前记录前发出、当前PLC在呈现后发出、标注后原图顺序、仅标注/仅原图组合、OCR原目录/JPG命名、缺失标注图告警以及重复完成不重复呈现/PLC；业务测试由95项增至102项，Qt Test预期汇总由`97 passed, 0 failed`增至`104 passed, 0 failed`。
 - [x] 统一检测完成控制器Agent静态检查通过：19个受影响功能ID唯一且均为迁移中，正式功能状态47/19/22/2；新头/源在主工程和运行测试工程各唯一登记1次且非ASCII字节0；运行测试声明/定义各102项；五模式控制器调用5处；Widget直接`record/consumeDueDelayedNgRequest/ImageSaveService::submit/DetectionResultPresenter::present`及8个旧桥函数引用均为0；Widget相对上一提交净减190行、成员函数定义净减8；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 统一检测完成控制器Qt Creator集中门禁通过：用户确认本轮测试、主工程构建运行及代表模式回归均无问题；五模式判定、同产品图文统计、存图组合、PLC请求顺序、停止重启保持正常。19个迁移中功能恢复为已验证，允许创建本地提交并进入Stage 3最后一轮收口。
+- [x] 统一检测完成控制器已提交为`c9c5dd7`（`refactor(ui): 统一检测完成协调`），提交后工作区干净；按用户明确限制，当前进入Stage 3最后一轮开发，不再新增后续Stage 3开发轮次。
+- [x] 开始Stage 3最终UI/设置/模板状态收口切片；影响`UI-001、SET-003..005、TPL-001、TPL-009..011、TPL-013、TPL-016、CAM-001..002、RUN-001..002`。只迁移Widget内的操作按钮状态策略、未应用参数dirty状态、运行Profile数据类型和按模式模板路径/配方UUID记忆；检测算法、设备调用、配方事务、模板制作步骤、触发与停止时序均不修改。
+- [x] 新增`ui/controllers/OperationUiPolicy`：以CameraClosed、CameraReady、Detecting、Stopping、TemplatePreviewing、TemplateFrozen六种状态生成完整按钮可用性、原按钮文字和模板制作状态文字；Widget只负责把快照应用到现有控件并保留原注意动画。
+- [x] 新增`ui/controllers/SettingsEditState`：统一登记全局设置、去重同名脏项、合并模板目标字符/阈值未应用状态，并分别支持全局与模板范围清理；启动前原确认框、继续时恢复已应用值、标签星号及提示顺序保持。
+- [x] 新增`recipes/TemplateModeMemory`和`TemplateRuntimeProfile`：五模式ID映射、旧模板路径及已发布配方UUID记忆迁出Widget，旧未知索引继续回退字库模式；字库家族运行Profile字段原样形成独立数据合同，Widget不再嵌套定义该资源结构。
+- [x] `detection_completion_test`新增8项操作UI与dirty状态合同测试，业务测试由102项增至110项，Qt Test预期汇总由`104 passed, 0 failed`增至`112 passed, 0 failed`；`recipe_store_test`新增3项模式映射与两类记忆隔离测试，业务测试由26项增至29项，Qt Test预期汇总为`31 passed, 0 failed`。
+- [x] Stage 3最终UI/设置/模板状态切片Agent静态门禁通过：主工程7个新头/源各唯一登记1次，两个测试工程登记完整；7个新文件非ASCII字节均为0；运行测试声明/定义各110项、配方测试声明/定义各29项；Widget旧两类模式Map、两项模板dirty布尔、嵌套OperationState/WordTemplateProfile和Binding内dirty均为0处，Widget头/源合计净减139行；90个正式功能状态为36/14/38/2；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序，等待用户最后一次Qt Creator集中门禁。
+- [x] Stage 3最终UI/设置/模板状态Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test`为`112 passed, 0 failed`、`recipe_store_test`为`31 passed, 0 failed`，主工程Run qmake/Rebuild/Run，以及相机操作按钮、模板制作按钮/状态、未应用参数提示、字库/钢印/二维码跨模式模板路径与已发布配方记忆、代表模式启停重启均无问题。14个迁移中功能恢复为已验证。
+- [x] Stage 3约定开发范围完成：五模式软硬触发正式帧经容量1有界队列串行检测，结果以同一`ProductKey`完整快照呈现；正常存图容量32满时反压不丢任务；Worker、结果协调、Presenter、设备适配、配方事务及本轮UI状态已迁出主窗口对应业务实现。按用户两轮上限不再追加Stage 3开发切片，等待创建本地提交与结项记录。
 
 ## 未解决事项
 
@@ -1007,7 +1016,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3统一检测完成控制器已通过用户Qt Creator集中门禁，五模式统计、存图、PLC和同产品UI快照的公共编排已迁出Widget，等待创建独立提交。
-- 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线47 / 迁移中0 / 已验证41 / 已延期2 / 已确认删除0。
-- 下一允许动作：提交统一检测完成控制器切片，然后用最后一轮集中完成模板/设置/UI剩余职责、零引用清理和Stage 3结项。
+- 当前切片：Stage 3最后一轮UI/设置/模板状态收口已通过Agent静态门禁和用户Qt Creator集中门禁，等待创建独立提交。
+- 当前阶段：Stage 2结构关口已通过，Stage 3约定结构开发和功能门禁已完成；人工固定样本、现场PLC量化、P50/P95与长时间运行证据按用户决定延期，因此生产现场最终验收仍未完成。Stage 4尚未开始。
+- 功能状态计数：待盘点0 / 已基线36 / 迁移中0 / 已验证52 / 已延期2 / 已确认删除0。
+- 下一允许动作：提交最终Stage 3开发切片，随后用文档提交登记Stage 3结项及遗留证据；未经用户授权不进入Stage 4。

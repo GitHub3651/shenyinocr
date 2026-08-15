@@ -3,6 +3,7 @@
 #include "recipe_selection.h"
 #include "recipe_store.h"
 #include "template_character_asset_workspace.h"
+#include "template_mode_memory.h"
 #include "template_profile_load_plan.h"
 #include "template_recipe_assembler.h"
 #include "template_recipe_draft_session.h"
@@ -20,6 +21,9 @@ class RecipeStoreTest : public QObject
     Q_OBJECT
 
 private slots:
+    void templateModeMemoryMapsAllFiveModes();
+    void templateModeMemoryUsesWordFallbackForUnknownIndex();
+    void templateModeMemoryKeepsLegacyPathsAndPublishedRecipesSeparate();
     void saveAndLoadCopiesRecipeJsonAndAssets();
     void successfulOverwriteReplacesWholeDirectory();
     void missingAssetSourcePreservesPreviousRecipe();
@@ -82,6 +86,47 @@ ProductRecipe recipeWithAsset(const QString &displayName,
 }
 
 } // namespace
+
+void RecipeStoreTest::templateModeMemoryMapsAllFiveModes()
+{
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(0),
+             QStringLiteral("stamp_detection"));
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(1),
+             QStringLiteral("word_detection"));
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(2),
+             QStringLiteral("ocr_detection"));
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(3),
+             QStringLiteral("tissue_detection"));
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(4),
+             QStringLiteral("barcode_word_detection"));
+}
+
+void RecipeStoreTest::templateModeMemoryUsesWordFallbackForUnknownIndex()
+{
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(-1),
+             QStringLiteral("word_detection"));
+    QCOMPARE(TemplateModeMemory::modeIdForIndex(5),
+             QStringLiteral("word_detection"));
+}
+
+void RecipeStoreTest::templateModeMemoryKeepsLegacyPathsAndPublishedRecipesSeparate()
+{
+    TemplateModeMemory memory;
+    memory.templatePathsByMode().insert(
+                QStringLiteral("word_detection"),
+                QStringList() << QStringLiteral("D:/legacy/one")
+                              << QStringLiteral("D:/legacy/two"));
+    memory.publishedRecipeIdsByMode().insert(
+                QStringLiteral("word_detection"),
+                QStringLiteral("recipe-uuid"));
+    QCOMPARE(memory.templatePathsByMode()
+             .value(QStringLiteral("word_detection")).size(), 2);
+    QCOMPARE(memory.publishedRecipeIdsByMode()
+             .value(QStringLiteral("word_detection")),
+             QStringLiteral("recipe-uuid"));
+    QVERIFY(memory.templatePathsByMode()
+            .value(QStringLiteral("stamp_detection")).isEmpty());
+}
 
 void RecipeStoreTest::saveAndLoadCopiesRecipeJsonAndAssets()
 {
