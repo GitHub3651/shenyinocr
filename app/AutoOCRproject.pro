@@ -70,7 +70,9 @@ SOURCES += \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
     runtime/inspection_run_configuration.cpp \
+    runtime/inspection_acquisition_stop_coordinator.cpp \
     runtime/inspection_camera_start_transition.cpp \
+    runtime/inspection_camera_recovery_transition.cpp \
     runtime/inspection_start_preflight.cpp \
     runtime/inspection_worker_configurator.cpp \
     runtime/detection_shadow_comparator.cpp \
@@ -81,6 +83,7 @@ SOURCES += \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/inspection_runtime_start_transaction.cpp \
+    runtime/inspection_runtime_stop_transaction.cpp \
     runtime/detection_session.cpp \
     runtime/result_handler.cpp \
     runtime/image_save_service.cpp \
@@ -144,7 +147,9 @@ HEADERS += \
     devices/plc/plc_device.h \
     devices/plc/snap7_plc_device.h \
     runtime/inspection_run_configuration.h \
+    runtime/inspection_acquisition_stop_coordinator.h \
     runtime/inspection_camera_start_transition.h \
+    runtime/inspection_camera_recovery_transition.h \
     runtime/inspection_start_preflight.h \
     runtime/inspection_worker_configurator.h \
     runtime/detection_shadow_comparator.h \
@@ -155,6 +160,7 @@ HEADERS += \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_runtime_controller.h \
     runtime/inspection_runtime_start_transaction.h \
+    runtime/inspection_runtime_stop_transaction.h \
     runtime/detection_session.h \
     runtime/result_handler.h \
     runtime/image_save_service.h \

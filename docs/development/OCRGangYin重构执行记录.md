@@ -910,6 +910,14 @@
 - [x] `detection_completion_test`新增6项合同测试，覆盖硬触发11步精确调用顺序、软触发3步精确调用顺序、曝光失败短路、事务提交、带Worker显式回滚及析构自动回滚；业务测试由82项增至88项，Qt Test预期汇总由`84 passed, 0 failed`增至`90 passed, 0 failed`。
 - [x] 当前切片Agent静态审计通过：测试声明/定义各88项；正式启动按钮内直接`beginStart/markRunning/startDetectionWorker`为0处，直接相机启动SDK调用为0处，旧三个状态包装器为0处；四个新增运行层文件在主工程和运行测试`.pro`中均各登记1次且依赖路径存在；90个正式功能ID状态为48项已基线、5项迁移中、35项已验证、2项已延期；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 软硬触发启动事务与相机时序Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test`为`90 passed, 0 failed`，主程序软触发和硬触发均能启动、停止并再次启动；`CAM-003..004、RUN-001..003`恢复已验证。
+- [x] 软硬触发启动事务与相机时序切片已提交为`0eea9ae`（`refactor(runtime): 收口检测启动事务与相机时序`），提交后工作区干净。
+- [x] 开始Stage 3“正式停止、相机恢复与采集线程生命周期迁出Widget”大切片；影响`CAM-003..005、RUN-002..003`并进入迁移中。目标是保持软/硬线程requestStop、stop、3000ms等待、stopTracking、检测Worker等待，以及close/100ms/open0/软件触发/曝光/TriggerDelay/回调/start恢复顺序不变，由runtime统一编排并返回类型化结果。
+- [x] 新增`InspectionAcquisitionStopCoordinator`：先同时请求软硬采集停止，再按旧顺序执行软件stop/3000ms等待/stopTracking与硬件断连/再次requestStop/3000ms等待/stopTracking/deleteLater；任一线程超时均返回类型化失败并保持运行状态为Stopping，不提前恢复相机或提交Idle。
+- [x] 新增`InspectionCameraRecoveryTransition`：在采集线程全部退出后按原close→100ms→open0→TriggerMode=1→TriggerSource=7→保存曝光→TriggerDelay=0→回调→start顺序恢复软件触发相机；曝光失败仍关闭相机、恢复曝光控件并显示原警告，打开失败和初始化异常继续保持旧失败语义。
+- [x] 新增独立`InspectionRuntimeStopTransaction`，正式停止、软件采集线程自然结束和硬件采集线程自然结束不再直接组合`requestStop/waitForDetectionWorkerStop/finishStop`；停止超时时事务不提交，正常结束才进入Idle。Widget保留Qt对象绑定、最后结果保留及既有提示，不修改算法、PLC、统计、存图和关闭窗口流程。
+- [x] `detection_completion_test`新增7项合同测试，覆盖软硬采集精确停止顺序、空闲软件线程跳过等待、线程超时不执行停止后动作、相机恢复精确调用顺序、打开失败、曝光失败关闭相机及停止事务Stopping→Idle提交；业务测试由88项增至95项，Qt Test预期汇总由`90 passed, 0 failed`增至`97 passed, 0 failed`。
+- [x] 当前切片Agent静态审计通过：测试声明/定义各95项；正式停止按钮及软硬线程自然结束路径直接组合控制器停止调用为0处；六个新增runtime源码均为ASCII，主工程和运行测试工程对每个新源/头各登记1次；90个正式功能ID状态为47项已基线、5项迁移中、36项已验证、2项已延期；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 正式停止、相机恢复与采集线程生命周期Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test`为`97 passed, 0 failed`，主程序软硬触发停止、相机恢复、最终结果保留和再次启动均无问题；`CAM-003..005、RUN-002..003`转为已验证。
 
 ## 本地提交记录
 
@@ -990,7 +998,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3软硬触发启动事务与相机时序迁出Widget门禁通过，待独立提交。
+- 当前切片：Stage 3正式停止、相机恢复与采集线程生命周期迁出Widget，Qt Creator门禁通过，切片完成。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线48 / 迁移中0 / 已验证40 / 已延期2 / 已确认删除0。
-- 下一允许动作：独立提交当前切片，然后开始Stage 3停止流程、相机恢复与采集线程生命周期迁出Widget。
+- 功能状态计数：待盘点0 / 已基线47 / 迁移中0 / 已验证41 / 已延期2 / 已确认删除0。
+- 下一允许动作：独立提交当前切片，然后进入Stage 3最后的大块Widget UI/运行桥拆分与阶段收口。

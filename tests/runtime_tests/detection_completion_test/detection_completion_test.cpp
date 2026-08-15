@@ -11,11 +11,14 @@
 #include "runtime/detection_session.h"
 #include "runtime/frame_queue.h"
 #include "runtime/image_save_service.h"
+#include "runtime/inspection_acquisition_stop_coordinator.h"
+#include "runtime/inspection_camera_recovery_transition.h"
 #include "runtime/inspection_camera_start_transition.h"
 #include "runtime/inspection_run_configuration.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/inspection_runtime_start_transaction.h"
+#include "runtime/inspection_runtime_stop_transaction.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "ui/presenters/detection_result_presenter.h"
@@ -203,13 +206,15 @@ public:
         return CameraOperationResult();
     }
 
-    CameraOperationResult openDevice(int) override
+    CameraOperationResult openDevice(int deviceIndex) override
     {
-        return CameraOperationResult();
+        calls.append(QStringLiteral("open:%1").arg(deviceIndex));
+        return CameraOperationResult(openErrorCode);
     }
 
     CameraOperationResult close() override
     {
+        calls.append(QStringLiteral("close"));
         return CameraOperationResult();
     }
 
@@ -313,6 +318,7 @@ public:
     }
 
     QStringList calls;
+    int openErrorCode = 0;
 };
 
 std::shared_ptr<DetectionWorker> idleDetectionWorker()
@@ -364,6 +370,13 @@ private slots:
     void runtimeStartTransactionCommitsRunningState();
     void runtimeStartTransactionRollsBackStartedWorker();
     void runtimeStartTransactionDestructorRollsBackStartingState();
+    void acquisitionStopCoordinatorPreservesSoftwareAndHardwareOrder();
+    void acquisitionStopCoordinatorSkipsIdleSoftwareWait();
+    void acquisitionStopCoordinatorReportsTimeoutWithoutAfterStop();
+    void cameraRecoveryTransitionPreservesCallOrder();
+    void cameraRecoveryTransitionReportsOpenFailure();
+    void cameraRecoveryTransitionClosesAfterExposureFailure();
+    void runtimeStopTransactionPreservesStoppingUntilCommit();
     void startAccessAcceptsIdleOpenCamera();
     void startAccessPreservesGuardOrder();
     void dirtySettingsPrecedePlcConnectivity();
@@ -1201,6 +1214,266 @@ void DetectionCompletionTest::runtimeStartTransactionDestructorRollsBackStarting
 
     QVERIFY(controller.state() == InspectionRuntimeState::Idle);
     QVERIFY(!controller.isDetectionWorkerActive());
+}
+
+void DetectionCompletionTest::acquisitionStopCoordinatorPreservesSoftwareAndHardwareOrder()
+{
+    QStringList calls;
+    InspectionAcquisitionStopRequest request;
+    request.software.isPresent = true;
+    request.software.isRunning = []() {
+        return true;
+    };
+    request.software.requestStop = [&calls]() {
+        calls.append(QStringLiteral("software-request"));
+    };
+    request.software.stopLoop = [&calls]() {
+        calls.append(QStringLiteral("software-stop"));
+    };
+    request.software.wait = [&calls](unsigned long milliseconds) {
+        calls.append(QStringLiteral("software-wait:%1").arg(
+                         static_cast<qulonglong>(milliseconds)));
+        return true;
+    };
+    request.software.afterStopped = [&calls]() {
+        calls.append(QStringLiteral("software-after"));
+    };
+    request.hardware.isPresent = true;
+    request.hardware.waitWhenPresent = true;
+    request.hardware.repeatStopRequestAfterPrepare = true;
+    request.hardware.isRunning = []() {
+        return true;
+    };
+    request.hardware.requestStop = [&calls]() {
+        calls.append(QStringLiteral("hardware-request"));
+    };
+    request.hardware.prepareForWait = [&calls]() {
+        calls.append(QStringLiteral("hardware-prepare"));
+    };
+    request.hardware.wait = [&calls](unsigned long milliseconds) {
+        calls.append(QStringLiteral("hardware-wait:%1").arg(
+                         static_cast<qulonglong>(milliseconds)));
+        return true;
+    };
+    request.hardware.afterStopped = [&calls]() {
+        calls.append(QStringLiteral("hardware-after"));
+    };
+
+    const InspectionAcquisitionStopResult result =
+            InspectionAcquisitionStopCoordinator::stop(request);
+
+    QVERIFY(result.softwareWasRunning);
+    QVERIFY(result.hardwareWasPresent);
+    QVERIFY(result.allStopped());
+    QVERIFY(result.shouldRestoreCamera());
+    QCOMPARE(
+                calls,
+                QStringList()
+                << QStringLiteral("software-request")
+                << QStringLiteral("hardware-request")
+                << QStringLiteral("software-stop")
+                << QStringLiteral("software-wait:3000")
+                << QStringLiteral("software-after")
+                << QStringLiteral("hardware-prepare")
+                << QStringLiteral("hardware-request")
+                << QStringLiteral("hardware-wait:3000")
+                << QStringLiteral("hardware-after"));
+}
+
+void DetectionCompletionTest::acquisitionStopCoordinatorSkipsIdleSoftwareWait()
+{
+    QStringList calls;
+    InspectionAcquisitionStopRequest request;
+    request.software.isPresent = true;
+    request.software.isRunning = []() {
+        return false;
+    };
+    request.software.requestStop = [&calls]() {
+        calls.append(QStringLiteral("software-request"));
+    };
+    request.software.stopLoop = [&calls]() {
+        calls.append(QStringLiteral("software-stop"));
+    };
+    request.software.wait = [&calls](unsigned long) {
+        calls.append(QStringLiteral("software-wait"));
+        return true;
+    };
+    request.software.afterStopped = [&calls]() {
+        calls.append(QStringLiteral("software-after"));
+    };
+
+    const InspectionAcquisitionStopResult result =
+            InspectionAcquisitionStopCoordinator::stop(request);
+
+    QVERIFY(!result.softwareWasRunning);
+    QVERIFY(!result.hardwareWasPresent);
+    QVERIFY(result.allStopped());
+    QVERIFY(!result.shouldRestoreCamera());
+    QCOMPARE(calls,
+             QStringList() << QStringLiteral("software-request"));
+}
+
+void DetectionCompletionTest::acquisitionStopCoordinatorReportsTimeoutWithoutAfterStop()
+{
+    QStringList calls;
+    InspectionAcquisitionStopRequest request;
+    request.hardware.isPresent = true;
+    request.hardware.waitWhenPresent = true;
+    request.hardware.requestStop = [&calls]() {
+        calls.append(QStringLiteral("hardware-request"));
+    };
+    request.hardware.wait = [&calls](unsigned long milliseconds) {
+        calls.append(QStringLiteral("hardware-wait:%1").arg(
+                         static_cast<qulonglong>(milliseconds)));
+        return false;
+    };
+    request.hardware.afterStopped = [&calls]() {
+        calls.append(QStringLiteral("hardware-after"));
+    };
+
+    const InspectionAcquisitionStopResult result =
+            InspectionAcquisitionStopCoordinator::stop(request);
+
+    QVERIFY(result.softwareStopped);
+    QVERIFY(!result.hardwareStopped);
+    QVERIFY(!result.allStopped());
+    QVERIFY(result.shouldRestoreCamera());
+    QCOMPARE(
+                calls,
+                QStringList()
+                << QStringLiteral("hardware-request")
+                << QStringLiteral("hardware-wait:3000"));
+}
+
+void DetectionCompletionTest::cameraRecoveryTransitionPreservesCallOrder()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraRecoveryRequest request;
+    request.cameraDevice = &camera;
+    request.recoveryRequired = true;
+    request.cameraWasOpen = true;
+    request.applySavedExposure = [&camera](
+            QString *adjustmentMessage,
+            QString *) {
+        camera.calls.append(QStringLiteral("exposure"));
+        *adjustmentMessage = QStringLiteral("exposure adjusted");
+        return true;
+    };
+    request.delayMilliseconds = [&camera](unsigned long milliseconds) {
+        camera.calls.append(QStringLiteral("delay:%1").arg(
+                                static_cast<qulonglong>(milliseconds)));
+    };
+
+    const InspectionCameraRecoveryResult result =
+            InspectionCameraRecoveryTransition::apply(request);
+
+    QVERIFY(result.isRecovered());
+    QVERIFY(result.recoveryAttempted);
+    QVERIFY(result.cameraOpen);
+    QCOMPARE(result.adjustmentMessage,
+             QStringLiteral("exposure adjusted"));
+    QCOMPARE(
+                camera.calls,
+                QStringList()
+                << QStringLiteral("close")
+                << QStringLiteral("delay:100")
+                << QStringLiteral("open:0")
+                << QStringLiteral("enum:TriggerMode=1")
+                << QStringLiteral("enum:TriggerSource=7")
+                << QStringLiteral("exposure")
+                << QStringLiteral("float:TriggerDelay=0.0")
+                << QStringLiteral("callback")
+                << QStringLiteral("start"));
+}
+
+void DetectionCompletionTest::cameraRecoveryTransitionReportsOpenFailure()
+{
+    StartTransitionFakeCamera camera;
+    camera.openErrorCode = -7;
+    InspectionCameraRecoveryRequest request;
+    request.cameraDevice = &camera;
+    request.recoveryRequired = true;
+    request.cameraWasOpen = true;
+    request.delayMilliseconds = [&camera](unsigned long milliseconds) {
+        camera.calls.append(QStringLiteral("delay:%1").arg(
+                                static_cast<qulonglong>(milliseconds)));
+    };
+
+    const InspectionCameraRecoveryResult result =
+            InspectionCameraRecoveryTransition::apply(request);
+
+    QVERIFY(!result.isRecovered());
+    QVERIFY(result.issue
+            == InspectionCameraRecoveryIssue::OpenFailed);
+    QVERIFY(result.recoveryAttempted);
+    QVERIFY(!result.cameraOpen);
+    QCOMPARE(
+                camera.calls,
+                QStringList()
+                << QStringLiteral("close")
+                << QStringLiteral("delay:100")
+                << QStringLiteral("open:0"));
+}
+
+void DetectionCompletionTest::cameraRecoveryTransitionClosesAfterExposureFailure()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraRecoveryRequest request;
+    request.cameraDevice = &camera;
+    request.recoveryRequired = true;
+    request.cameraWasOpen = true;
+    request.applySavedExposure = [&camera](
+            QString *,
+            QString *errorMessage) {
+        camera.calls.append(QStringLiteral("exposure"));
+        *errorMessage = QStringLiteral("exposure rejected");
+        return false;
+    };
+    request.delayMilliseconds = [&camera](unsigned long milliseconds) {
+        camera.calls.append(QStringLiteral("delay:%1").arg(
+                                static_cast<qulonglong>(milliseconds)));
+    };
+
+    const InspectionCameraRecoveryResult result =
+            InspectionCameraRecoveryTransition::apply(request);
+
+    QVERIFY(!result.isRecovered());
+    QVERIFY(result.issue
+            == InspectionCameraRecoveryIssue::ExposureRejected);
+    QVERIFY(!result.cameraOpen);
+    QCOMPARE(result.errorMessage,
+             QStringLiteral("exposure rejected"));
+    QCOMPARE(
+                camera.calls,
+                QStringList()
+                << QStringLiteral("close")
+                << QStringLiteral("delay:100")
+                << QStringLiteral("open:0")
+                << QStringLiteral("enum:TriggerMode=1")
+                << QStringLiteral("enum:TriggerSource=7")
+                << QStringLiteral("exposure")
+                << QStringLiteral("close"));
+}
+
+void DetectionCompletionTest::runtimeStopTransactionPreservesStoppingUntilCommit()
+{
+    InspectionRuntimeController controller;
+    QVERIFY(!controller.beginStart().isEmpty());
+    QVERIFY(controller.markRunning());
+
+    InspectionRuntimeStopTransaction transaction(controller);
+    transaction.begin();
+    QVERIFY(transaction.hasBegun());
+    QVERIFY(!transaction.isCommitted());
+    QVERIFY(controller.state() == InspectionRuntimeState::Stopping);
+
+    transaction.waitForDetectionWorker();
+    QVERIFY(transaction.hasWaitedForDetectionWorker());
+    QVERIFY(controller.state() == InspectionRuntimeState::Stopping);
+
+    transaction.commit();
+    QVERIFY(transaction.isCommitted());
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
 }
 
 void DetectionCompletionTest::startAccessAcceptsIdleOpenCamera()

@@ -8,8 +8,11 @@
 
 #include "widget.h"
 #include "runtime/inspection_run_configuration.h"
+#include "runtime/inspection_acquisition_stop_coordinator.h"
+#include "runtime/inspection_camera_recovery_transition.h"
 #include "runtime/inspection_camera_start_transition.h"
 #include "runtime/inspection_runtime_start_transaction.h"
+#include "runtime/inspection_runtime_stop_transaction.h"
 #include "runtime/inspection_worker_configurator.h"
 #include "ui_widget.h"
 #include "recipes/recipe_selection.h"
@@ -3046,8 +3049,10 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
 
         if (m_operationState
                 == OperationState::Detecting) {
-            m_runtimeController.requestStop();
-            m_runtimeController.finishStop();
+            InspectionRuntimeStopTransaction stopTransaction(
+                        m_runtimeController);
+            stopTransaction.begin();
+            stopTransaction.commit();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
@@ -8915,55 +8920,98 @@ void Widget::on_cancel_clicked()
     }
 
     m_operationState = OperationState::Stopping;
-    m_runtimeController.requestStop();
+    InspectionRuntimeStopTransaction stopTransaction(
+                m_runtimeController);
+    stopTransaction.begin();
     updateOperationUiState();
     m_barcodeWordRunActive = false;
 
-    // Step 2: 请求线程停止，保留当前模板状态，便于再次启动
-    if (myThread) {
-        myThread->requestStop();
-    }
-
-    if (cameraThread) {
-        cameraThread->requestStop();
-    }
-
-    // 🔥 Step 3: myThread - 保持原逻辑
-    bool myThreadWasRunning = false;
-    bool myThreadStopped = true;
-    if (myThread && myThread->isRunning()) {
-        myThreadWasRunning = true;
-        myThread->stop();
-        if (!myThread->wait(3000)) {
-            qDebug() << "WARNING: myThread did not stop";
-            myThreadStopped = false;
-        } else {
-            myThread->stopTracking();
+    MyThread *stoppingSoftwareThread = myThread;
+    CameraThread *stoppingHardwareThread = cameraThread;
+    InspectionAcquisitionStopRequest acquisitionStopRequest;
+    acquisitionStopRequest.software.isPresent =
+            stoppingSoftwareThread != nullptr;
+    acquisitionStopRequest.software.isRunning =
+            [stoppingSoftwareThread]() {
+        return stoppingSoftwareThread
+                && stoppingSoftwareThread->isRunning();
+    };
+    acquisitionStopRequest.software.requestStop =
+            [stoppingSoftwareThread]() {
+        if (stoppingSoftwareThread) {
+            stoppingSoftwareThread->requestStop();
         }
-    }
+    };
+    acquisitionStopRequest.software.stopLoop =
+            [stoppingSoftwareThread]() {
+        if (stoppingSoftwareThread) {
+            stoppingSoftwareThread->stop();
+        }
+    };
+    acquisitionStopRequest.software.wait =
+            [stoppingSoftwareThread](unsigned long milliseconds) {
+        return !stoppingSoftwareThread
+                || stoppingSoftwareThread->wait(milliseconds);
+    };
+    acquisitionStopRequest.software.afterStopped =
+            [stoppingSoftwareThread]() {
+        if (stoppingSoftwareThread) {
+            stoppingSoftwareThread->stopTracking();
+        }
+    };
 
-    // 🔥 Step 4: cameraThread - 停止逻辑
-    bool needRestartCamera = false;
-    bool cameraThreadStopped = true;
-    if (cameraThread != nullptr) {
-        needRestartCamera = true;
-        disconnect(cameraThread, nullptr, this, nullptr);
-        disconnect(this, nullptr, cameraThread, nullptr);
-
-        cameraThread->requestStop();
-        if (!cameraThread->wait(3000)) {
-            qDebug() << "WARNING: cameraThread did not stop";
-            cameraThreadStopped = false;
-        } else {
-            cameraThread->stopTracking();
-            cameraThread->deleteLater();
+    acquisitionStopRequest.hardware.isPresent =
+            stoppingHardwareThread != nullptr;
+    acquisitionStopRequest.hardware.waitWhenPresent = true;
+    acquisitionStopRequest.hardware.repeatStopRequestAfterPrepare = true;
+    acquisitionStopRequest.hardware.isRunning =
+            [stoppingHardwareThread]() {
+        return stoppingHardwareThread
+                && stoppingHardwareThread->isRunning();
+    };
+    acquisitionStopRequest.hardware.requestStop =
+            [stoppingHardwareThread]() {
+        if (stoppingHardwareThread) {
+            stoppingHardwareThread->requestStop();
+        }
+    };
+    acquisitionStopRequest.hardware.prepareForWait =
+            [this, stoppingHardwareThread]() {
+        if (!stoppingHardwareThread) {
+            return;
+        }
+        disconnect(stoppingHardwareThread, nullptr, this, nullptr);
+        disconnect(this, nullptr, stoppingHardwareThread, nullptr);
+    };
+    acquisitionStopRequest.hardware.wait =
+            [stoppingHardwareThread](unsigned long milliseconds) {
+        return !stoppingHardwareThread
+                || stoppingHardwareThread->wait(milliseconds);
+    };
+    acquisitionStopRequest.hardware.afterStopped =
+            [this, stoppingHardwareThread]() {
+        if (!stoppingHardwareThread) {
+            return;
+        }
+        stoppingHardwareThread->stopTracking();
+        stoppingHardwareThread->deleteLater();
+        if (cameraThread == stoppingHardwareThread) {
             cameraThread = nullptr;
         }
-    }
+    };
 
-    m_runtimeController.waitForDetectionWorkerStop();
+    const InspectionAcquisitionStopResult acquisitionStopResult =
+            InspectionAcquisitionStopCoordinator::stop(
+                acquisitionStopRequest);
+    stopTransaction.waitForDetectionWorker();
 
-    if (!myThreadStopped || !cameraThreadStopped) {
+    if (!acquisitionStopResult.allStopped()) {
+        if (!acquisitionStopResult.softwareStopped) {
+            qDebug() << "WARNING: myThread did not stop";
+        }
+        if (!acquisitionStopResult.hardwareStopped) {
+            qDebug() << "WARNING: cameraThread did not stop";
+        }
         ui->statusLabel->setText("停止中，请稍后再关闭相机");
         isCollecting = true;
         m_operationState = OperationState::Stopping;
@@ -8971,48 +9019,47 @@ void Widget::on_cancel_clicked()
         return;
     }
 
-    // 🔥 Step 5: 如果cameraThread运行过，重启相机
-    if ((needRestartCamera || myThreadWasRunning)
-            && m_cameraDevice) {
-        try {
-            m_cameraDevice->close();
-            m_bOpenDevice = false;
-
-            QThread::msleep(100);
-
-            const CameraOperationResult openResult =
-                    m_cameraDevice->openDevice(0);
-
-            if (openResult.isSuccess()) {
-                m_bOpenDevice = true;
-                m_cameraDevice->setEnumValue("TriggerMode", 1);
-                m_cameraDevice->setEnumValue("TriggerSource", 7);
-                QString adjustmentMessage;
-                QString exposureError;
-                if (!applySavedCameraExposure(&adjustmentMessage, &exposureError)) {
-                    m_cameraDevice->close();
-                    m_bOpenDevice = false;
-                    {
-                        QSignalBlocker blocker(ui->spinBox);
-                        ui->spinBox->setRange(0, (std::numeric_limits<int>::max)());
-                        ui->spinBox->setValue(m_appliedGlobalSettings.cameraExposure);
-                    }
-                    refreshGlobalSettingDirty("camera.exposure");
-                    QMessageBox::warning(this,
-                                         "警告",
-                                         QString("停止识别后恢复相机曝光失败：\n%1")
-                                         .arg(exposureError));
-                } else {
-                    m_cameraDevice->setFloatValue("TriggerDelay", 0);
-                    m_cameraDevice->registerImageCallback();
-                    m_cameraDevice->startGrabbing();
-                    ui->statusLabel->setText("相机已打开");
-                    if (!adjustmentMessage.isEmpty()) {
-                        QMessageBox::information(this, "提示", adjustmentMessage);
-                    }
-                }
-            }
-        } catch (...) {}
+    InspectionCameraRecoveryRequest cameraRecoveryRequest;
+    cameraRecoveryRequest.cameraDevice = m_cameraDevice.get();
+    cameraRecoveryRequest.recoveryRequired =
+            acquisitionStopResult.shouldRestoreCamera()
+            && static_cast<bool>(m_cameraDevice);
+    cameraRecoveryRequest.cameraWasOpen = m_bOpenDevice;
+    cameraRecoveryRequest.applySavedExposure =
+            [this](QString *adjustmentMessage, QString *errorMessage) {
+        return applySavedCameraExposure(
+                    adjustmentMessage,
+                    errorMessage);
+    };
+    const InspectionCameraRecoveryResult cameraRecoveryResult =
+            InspectionCameraRecoveryTransition::apply(
+                cameraRecoveryRequest);
+    m_bOpenDevice = cameraRecoveryResult.cameraOpen;
+    if (cameraRecoveryResult.issue
+            == InspectionCameraRecoveryIssue::ExposureRejected) {
+        {
+            QSignalBlocker blocker(ui->spinBox);
+            ui->spinBox->setRange(
+                        0,
+                        (std::numeric_limits<int>::max)());
+            ui->spinBox->setValue(
+                        m_appliedGlobalSettings.cameraExposure);
+        }
+        refreshGlobalSettingDirty("camera.exposure");
+        QMessageBox::warning(
+                    this,
+                    "警告",
+                    QString("停止识别后恢复相机曝光失败：\n%1")
+                    .arg(cameraRecoveryResult.errorMessage));
+    } else if (cameraRecoveryResult.isRecovered()
+               && cameraRecoveryResult.recoveryAttempted) {
+        ui->statusLabel->setText("相机已打开");
+        if (!cameraRecoveryResult.adjustmentMessage.isEmpty()) {
+            QMessageBox::information(
+                        this,
+                        "提示",
+                        cameraRecoveryResult.adjustmentMessage);
+        }
     }
 
     // Step 6: 处理事件队列
@@ -9037,7 +9084,7 @@ void Widget::on_cancel_clicked()
 
     ui->statusLabel->setText("已停止");
     isCollecting = false;
-    m_runtimeController.finishStop();
+    stopTransaction.commit();
     m_operationState = m_bOpenDevice
             ? OperationState::CameraReady
             : OperationState::CameraClosed;
@@ -11515,12 +11562,14 @@ void Widget::on_plcbtn_clicked()
                        != OperationState::Detecting) {
                 return;
             }
-            m_runtimeController.requestStop();
-            m_runtimeController.waitForDetectionWorkerStop();
+            InspectionRuntimeStopTransaction stopTransaction(
+                        m_runtimeController);
+            stopTransaction.begin();
+            stopTransaction.waitForDetectionWorker();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
-            m_runtimeController.finishStop();
+            stopTransaction.commit();
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
