@@ -89,6 +89,8 @@ class QPushButton;
 class InspectionResultCoordinator;
 class InspectionAcquisitionController;
 class InspectionRuntimeUiCoordinator;
+class InspectionStartController;
+class InspectionStopController;
 class MachineSettingsPageController;
 class TemplateEditorController;
 struct RecipeSelection;
@@ -213,6 +215,8 @@ protected:
 
 private:
     friend class TemplateEditorController;
+    friend class InspectionStartController;
+    friend class InspectionStopController;
 
     cv::Mat m_loadedTrackingTemplate;
     void showParameterInfo(const QString &title, const QString &message);

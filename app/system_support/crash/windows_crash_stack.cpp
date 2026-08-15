@@ -1,4 +1,4 @@
-﻿#include "ccrashstack.h"
+#include "system_support/crash/windows_crash_stack.h"
 #include <tlhelp32.h>
 #include <stdio.h>
 
@@ -9,12 +9,12 @@
 //#include<base/constants.h>
 #include "qdebug.h"
 
-CCrashStack::CCrashStack(PEXCEPTION_POINTERS pException)
+WindowsCrashStack::WindowsCrashStack(PEXCEPTION_POINTERS pException)
 {
     m_pException = pException;
 }
 
-QString CCrashStack::GetModuleByRetAddr(PBYTE Ret_Addr, PBYTE & Module_Addr)
+QString WindowsCrashStack::moduleByReturnAddress(PBYTE Ret_Addr, PBYTE & Module_Addr)
 {
     MODULEENTRY32   M = {sizeof(M)};
     HANDLE  hSnapshot;
@@ -43,7 +43,7 @@ QString CCrashStack::GetModuleByRetAddr(PBYTE Ret_Addr, PBYTE & Module_Addr)
     return sRet;
 }
 
-QString CCrashStack::GetCallStack(PEXCEPTION_POINTERS pException)
+QString WindowsCrashStack::callStack(PEXCEPTION_POINTERS pException)
 {
     PBYTE   Module_Addr_1;
     char buffer[256] = {0};
@@ -101,7 +101,7 @@ QString CCrashStack::GetCallStack(PEXCEPTION_POINTERS pException)
         sprintf(buffer, "\n%p  ", Ebp->Ret_Addr);
         sRet.append(buffer);
 
-        QString moduleName = this->GetModuleByRetAddr(Ebp->Ret_Addr, Module_Addr_1);
+        QString moduleName = this->moduleByReturnAddress(Ebp->Ret_Addr, Module_Addr_1);
         if (moduleName.length() > 0)
         {
             sRet.append(moduleName);
@@ -111,7 +111,7 @@ QString CCrashStack::GetCallStack(PEXCEPTION_POINTERS pException)
     return sRet;
 } // Get_Call_Stack
 
-QString CCrashStack::GetVersionStr()
+QString WindowsCrashStack::versionString()
 {
     OSVERSIONINFOEX V = {sizeof(OSVERSIONINFOEX)};  // EX for NT 5.0 and later
 
@@ -133,7 +133,7 @@ QString CCrashStack::GetVersionStr()
     return sRet;
 }
 
-QString CCrashStack::GetExceptionInfo()
+QString WindowsCrashStack::exceptionInformation()
 {
     WCHAR       Module_Name[MAX_PATH];
     PBYTE       Module_Addr;
@@ -141,7 +141,7 @@ QString CCrashStack::GetExceptionInfo()
     QString sRet;
     char buffer[512] = {0};
 
-    QString sTmp = GetVersionStr();
+    QString sTmp = versionString();
     sRet.append(sTmp);
     sRet.append("Process:  ");
 
@@ -159,7 +159,7 @@ QString CCrashStack::GetExceptionInfo()
         sprintf(buffer, "Exception Addr:  %p  ", E.ExceptionAddress);
         sRet.append(buffer);
         // If module with E.ExceptionAddress found - save its path and date.
-        QString module = GetModuleByRetAddr((PBYTE)E.ExceptionAddress, Module_Addr);
+        QString module = moduleByReturnAddress((PBYTE)E.ExceptionAddress, Module_Addr);
         if (module.length() > 0)
         {
             sRet.append(" Module: ");
@@ -217,7 +217,7 @@ QString CCrashStack::GetExceptionInfo()
     } // if (pException)
 
     sRet.append("\nCall Stack:");
-    QString sCallstack = this->GetCallStack(m_pException);
+    QString sCallstack = this->callStack(m_pException);
     sRet.append(sCallstack);
 
     return sRet;

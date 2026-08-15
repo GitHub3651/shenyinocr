@@ -1,20 +1,15 @@
 #include "widget.h"
 #include "ui_widget.h"
+#include "system_support/license/license_codec.h"
 
 #include <QCoreApplication>
-#include <QCryptographicHash>
 #include <QDate>
 #include <QDir>
-#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QMap>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSaveFile>
-#include <QStringList>
 #include <QTextEdit>
-#include <QTextStream>
 
 namespace {
 
@@ -28,122 +23,15 @@ QString hexText(const char *hex)
     return QString::fromUtf8(QByteArray::fromHex(hex));
 }
 
-QByteArray secretKey()
-{
-    return QByteArrayLiteral("AutoOCRproject.license.expire.v1.20260706");
-}
-
-QByteArray cryptData(const QByteArray &data)
-{
-    const QByteArray key = QCryptographicHash::hash(secretKey(), QCryptographicHash::Sha256);
-    QByteArray result;
-    result.reserve(data.size());
-    for (int i = 0; i < data.size(); ++i) {
-        result.append(static_cast<char>(data.at(i) ^ key.at(i % key.size())));
-    }
-    return result;
-}
-
-QString encryptedPayloadForDate(const QDate &expiresDate)
-{
-    QByteArray payload;
-    payload += "expires=";
-    payload += expiresDate.toString(QStringLiteral("yyyy-MM-dd")).toUtf8();
-    payload += "\n";
-    return QString::fromLatin1(cryptData(payload).toBase64());
-}
-
-QString decryptLicensePayload(const QString &encryptedText)
-{
-    if (encryptedText.trimmed().isEmpty()) {
-        return QString();
-    }
-
-    const QByteArray encrypted = QByteArray::fromBase64(encryptedText.trimmed().toLatin1());
-    if (encrypted.isEmpty()) {
-        return QString();
-    }
-
-    return QString::fromUtf8(cryptData(encrypted));
-}
-
-QMap<QString, QString> readKeyValueFile(const QString &filePath)
-{
-    QMap<QString, QString> values;
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return values;
-    }
-
-    QTextStream stream(&file);
-    stream.setCodec("UTF-8");
-    while (!stream.atEnd()) {
-        const QString line = stream.readLine().trimmed();
-        if (line.isEmpty() || line.startsWith(QLatin1Char('#'))
-                || line.startsWith(QLatin1Char('['))) {
-            continue;
-        }
-
-        const int pos = line.indexOf(QLatin1Char('='));
-        if (pos <= 0) {
-            continue;
-        }
-
-        values.insert(line.left(pos).trimmed(), line.mid(pos + 1).trimmed());
-    }
-
-    return values;
-}
-
-bool writeTextFile(const QString &filePath, const QString &content)
-{
-    const QFileInfo fileInfo(filePath);
-    const QDir dir = fileInfo.absoluteDir();
-    if (!dir.exists() && !QDir().mkpath(dir.absolutePath())) {
-        return false;
-    }
-
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        return false;
-    }
-
-    file.write(content.toUtf8());
-    return file.commit();
-}
-
-QDate expiresDateFromPayload(const QString &payload)
-{
-    const QStringList lines = payload.split(QLatin1Char('\n'), QString::SkipEmptyParts);
-    for (const QString &line : lines) {
-        const QString trimmed = line.trimmed();
-        if (!trimmed.startsWith(QStringLiteral("expires="))) {
-            continue;
-        }
-
-        const QString expires = trimmed.mid(QStringLiteral("expires=").size()).trimmed();
-        return QDate::fromString(expires, QStringLiteral("yyyy-MM-dd"));
-    }
-
-    return QDate();
-}
-
 bool makeLicenseFile(const QDate &expiresDate, const QString &outputPath, QString *errorMessage)
 {
-    if (!expiresDate.isValid()) {
+    const LicenseFileError error = LicenseCodec::writeFile(
+                expiresDate, outputPath);
+    if (error != LicenseFileError::None) {
         if (errorMessage) {
-            *errorMessage = hexText("E697A5E69C9FE697A0E69588E38082");
-        }
-        return false;
-    }
-
-    QString content;
-    content += QStringLiteral("[License]\n");
-    content += QStringLiteral("data=%1\n").arg(encryptedPayloadForDate(expiresDate));
-
-    if (!writeTextFile(outputPath, content)) {
-        if (errorMessage) {
-            *errorMessage = hexText("E58699E585A5E69687E4BBB6E5A4B1E8B4A5E38082");
+            *errorMessage = error == LicenseFileError::InvalidDate
+                    ? hexText("E697A5E69C9FE697A0E69588E38082")
+                    : hexText("E58699E585A5E69687E4BBB6E5A4B1E8B4A5E38082");
         }
         return false;
     }
@@ -153,30 +41,23 @@ bool makeLicenseFile(const QDate &expiresDate, const QString &outputPath, QStrin
 
 QString licenseInfoText(const QString &filePath, QString *errorMessage)
 {
-    const QMap<QString, QString> values = readKeyValueFile(filePath);
-    if (values.isEmpty()) {
+    const LicenseReadResult result = LicenseCodec::readFile(filePath);
+    if (!result.succeeded()) {
         if (errorMessage) {
-            *errorMessage = hexText("E69687E4BBB6E8AFBBE58F96E5A4B1E8B4A5E68896E58685E5AEB9E4B8BAE7A9BAE38082");
+            *errorMessage = result.error == LicenseFileError::FileReadFailed
+                    ? hexText("E69687E4BBB6E8AFBBE58F96E5A4B1E8B4A5E68896E58685E5AEB9E4B8BAE7A9BAE38082")
+                    : hexText("E69687E4BBB6E6A0BCE5BC8FE697A0E69588E38082");
         }
         return QString();
     }
 
-    const QDate expiresDate = expiresDateFromPayload(
-                decryptLicensePayload(values.value(QStringLiteral("data"))));
-    if (!expiresDate.isValid()) {
-        if (errorMessage) {
-            *errorMessage = hexText("E69687E4BBB6E6A0BCE5BC8FE697A0E69588E38082");
-        }
-        return QString();
-    }
-
-    const QString status = QDate::currentDate() <= expiresDate
+    const QString status = QDate::currentDate() <= result.expiresDate
             ? hexText("E69C89E69588")
             : hexText("E5B7B2E8B685E8BF87");
 
     QString text;
     text += hexText("E69687E4BBB6E8B7AFE5BE84EFBC9A") + QDir::toNativeSeparators(filePath) + QStringLiteral("\n");
-    text += hexText("E588B0E69C9FE697A5E69C9FEFBC9A") + expiresDate.toString(QStringLiteral("yyyy-MM-dd")) + QStringLiteral("\n");
+    text += hexText("E588B0E69C9FE697A5E69C9FEFBC9A") + result.expiresDate.toString(QStringLiteral("yyyy-MM-dd")) + QStringLiteral("\n");
     text += hexText("E697A5E69C9FE78AB6E68081EFBC9A") + status;
     return text;
 }

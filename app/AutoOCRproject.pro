@@ -67,11 +67,20 @@ SOURCES += \
     ui/controllers/detection_completion_controller.cpp \
     ui/controllers/inspection_result_coordinator.cpp \
     ui/controllers/inspection_runtime_ui_coordinator.cpp \
+    ui/controllers/inspection_start_controller.cpp \
+    ui/controllers/inspection_stop_controller.cpp \
     ui/controllers/machine_settings_page_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
     ui/controllers/template_editor_controller.cpp \
     system_support/machine_settings_policy.cpp \
+    system_support/license/license_codec.cpp \
+    system_support/logging/application_logger.cpp \
+    system_support/crash/windows_crash_stack.cpp \
+    system_support/crash/windows_crash_handler.cpp \
+    startup/runtime_guard.cpp \
+    startup/single_instance_guard.cpp \
+    startup/application_startup.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
     ui/presenters/detection_result_presenter.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
@@ -124,14 +133,12 @@ SOURCES += \
     PaddleOCR/src/preprocess_op.cpp \
     PaddleOCR/src/utility.cpp \
     TrackingPoseMatcher.cpp \
-    RuntimeGuard.cpp \
     TissueRollDetector.cpp \
     Zhuizong.cpp \
     charactertemplatecropdialog.cpp \
-    ccrashstack.cpp \
     cmvcamera.cpp \
     imagelabel.cpp \
-        main.cpp \
+    startup/main.cpp \
     multicamerawidget.cpp \
     mythread.cpp \
     snap7.cpp \
@@ -158,11 +165,20 @@ HEADERS += \
     ui/controllers/detection_completion_controller.h \
     ui/controllers/inspection_result_coordinator.h \
     ui/controllers/inspection_runtime_ui_coordinator.h \
+    ui/controllers/inspection_start_controller.h \
+    ui/controllers/inspection_stop_controller.h \
     ui/controllers/machine_settings_page_controller.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
     ui/controllers/template_editor_controller.h \
     system_support/machine_settings_policy.h \
+    system_support/license/license_codec.h \
+    system_support/logging/application_logger.h \
+    system_support/crash/windows_crash_stack.h \
+    system_support/crash/windows_crash_handler.h \
+    startup/runtime_guard.h \
+    startup/single_instance_guard.h \
+    startup/application_startup.h \
     ui/presenters/inspection_fault_presenter.h \
     ui/presenters/detection_result_presenter.h \
     devices/barcode/barcode_decoder_adapter.h \
@@ -224,11 +240,9 @@ HEADERS += \
     PaddleOCR/include/utility.h \
     TrackingPoseMatcher.h \
     TrackingTypes.h \
-    RuntimeGuard.h \
     TissueRollDetector.h \
     Zhuizong.h \
     charactertemplatecropdialog.h \
-    ccrashstack.h \
     cmvcamera.h \
     imagelabel.h \
     multicamerawidget.h \
@@ -347,7 +361,7 @@ DISTFILES +=
 # Let Qt Creator run the Release executable from its build directory.  The
 # validated dist package remains the source of runtime DLLs, models and config.
 win32:CONFIG(release, debug|release) {
-    RUNTIME_DEPLOY_SCRIPT = $$shell_path($$PROJECT_ROOT/app/deploy_runtime.ps1)
+    RUNTIME_DEPLOY_SCRIPT = $$shell_path($$PROJECT_ROOT/app/system_support/deployment/deploy_runtime.ps1)
     RUNTIME_DEPLOY_SOURCE = $$shell_path($$PROJECT_ROOT/dist/ShengYin)
     RUNTIME_DEPLOY_DESTINATION = $$shell_path($$OUT_PWD/release)
     QMAKE_POST_LINK += powershell -NoProfile -ExecutionPolicy Bypass -File $$RUNTIME_DEPLOY_SCRIPT -Source $$RUNTIME_DEPLOY_SOURCE -Destination $$RUNTIME_DEPLOY_DESTINATION

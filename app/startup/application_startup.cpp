@@ -1,0 +1,164 @@
+#include "startup/application_startup.h"
+
+#include "startup/runtime_guard.h"
+#include "startup/single_instance_guard.h"
+#include "system_support/crash/windows_crash_handler.h"
+#include "system_support/logging/application_logger.h"
+
+#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/camera/hikvision_camera_device.h"
+#include "devices/ocr/paddle_ocr_engine.h"
+#include "devices/plc/snap7_plc_device.h"
+#include "runtime/inspection_plc_controller.h"
+#include "widget.h"
+
+#include <QApplication>
+#include <QCoreApplication>
+#include <QDate>
+#include <QDebug>
+#include <QDir>
+#include <QLibraryInfo>
+#include <QMessageBox>
+#include <QThread>
+#include <QTimer>
+#include <QTranslator>
+
+#include <memory>
+#include <utility>
+
+#include <opencv2/core.hpp>
+#include <opencv2/highgui.hpp>
+
+namespace {
+
+void showRuntimeGuardExitMessage(const QString &message)
+{
+    QMessageBox messageBox(
+                QMessageBox::Critical,
+                QStringLiteral("\u63D0\u793A"),
+                message,
+                QMessageBox::NoButton);
+    messageBox.addButton(
+                QStringLiteral("\u786E\u8BA4\u9000\u51FA"),
+                QMessageBox::AcceptRole);
+    messageBox.setWindowModality(Qt::ApplicationModal);
+    messageBox.exec();
+}
+
+void installQtTranslations(QApplication *application,
+                           QTranslator *qtBaseTranslator,
+                           QTranslator *qtTranslator)
+{
+    if (!application || !qtBaseTranslator || !qtTranslator) {
+        return;
+    }
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    const QString translationPath = QLibraryInfo::path(
+                QLibraryInfo::TranslationsPath);
+#else
+    const QString translationPath = QLibraryInfo::location(
+                QLibraryInfo::TranslationsPath);
+#endif
+    if (qtBaseTranslator->load(
+                QStringLiteral("qtbase_zh_CN"), translationPath)) {
+        application->installTranslator(qtBaseTranslator);
+    }
+    if (qtTranslator->load(
+                QStringLiteral("qt_zh_CN"), translationPath)) {
+        application->installTranslator(qtTranslator);
+    }
+}
+
+} // namespace
+
+int ApplicationStartup::run(int argc, char *argv[])
+{
+    QApplication application(argc, argv);
+
+    QTranslator qtBaseTranslator;
+    QTranslator qtTranslator;
+    installQtTranslations(
+                &application, &qtBaseTranslator, &qtTranslator);
+    qRegisterMetaType<cv::Mat>("cv::Mat");
+    QApplication::setQuitOnLastWindowClosed(true);
+    QObject::connect(
+                &application,
+                &QCoreApplication::aboutToQuit,
+                []() {
+        cv::destroyAllWindows();
+        QThread::msleep(100);
+    });
+
+    if (!RuntimeGuard::check()) {
+        showRuntimeGuardExitMessage(
+                    QStringLiteral("\u7CFB\u7EDF\u521D\u59CB\u5316\u5931\u8D25\uFF0C"
+                                   "\u8BF7\u8054\u7CFB\u4F9B\u5E94\u5546\u3002"));
+        return -1;
+    }
+
+    QTimer runtimeGuardTimer;
+    QObject::connect(
+                &runtimeGuardTimer,
+                &QTimer::timeout,
+                []() {
+        if (!RuntimeGuard::check()) {
+            showRuntimeGuardExitMessage(
+                        QStringLiteral("\u7A0B\u5E8F\u51FA\u9519\uFF0C\u5373\u5C06\u9000\u51FA\uFF0C"
+                                       "\u8BF7\u8054\u7CFB\u4F9B\u5E94\u5546\u3002"));
+            QCoreApplication::quit();
+        }
+    });
+    runtimeGuardTimer.start(24 * 60 * 60 * 1000);
+
+    SingleInstanceGuard singleInstanceGuard(QStringLiteral("ecust"));
+    if (!singleInstanceGuard.acquire()) {
+        QMessageBox::warning(
+                    nullptr,
+                    QStringLiteral("Warning"),
+                    QStringLiteral("\u7A0B\u5E8F\u8FD0\u884C\u4E2D\u907F\u514D\u91CD\u590D\u6253\u5F00"));
+        return 0;
+    }
+
+    const QString applicationDirectory =
+            QCoreApplication::applicationDirPath();
+    if (ApplicationLogger::install(applicationDirectory)) {
+        qDebug() << "Logging to"
+                 << QDir(ApplicationLogger::logDirectoryPath())
+                    .filePath(QStringLiteral("app_log_%1.txt").arg(
+                        QDate::currentDate().toString(
+                            QStringLiteral("yyyy-MM-dd"))));
+    } else {
+        qWarning() << "Failed to initialize application logging";
+    }
+    WindowsCrashHandler::install();
+
+    int result = 0;
+    {
+        const std::shared_ptr<ICameraDevice> cameraDevice(
+                    new HikvisionCameraDevice);
+        std::unique_ptr<IPlcDevice> plcDevice(new Snap7PlcDevice);
+        const std::shared_ptr<InspectionPlcController> plcController(
+                    new InspectionPlcController(std::move(plcDevice)));
+        const QString ocrConfigPath = QDir(applicationDirectory).filePath(
+                    QStringLiteral("config1.txt"));
+        const Widget::OcrEngineFactory ocrEngineFactory =
+                [ocrConfigPath]() {
+            return std::shared_ptr<IOcrEngine>(
+                        new PaddleOcrEngine(ocrConfigPath));
+        };
+        const std::shared_ptr<IBarcodeDecoder> barcodeDecoder(
+                    new BarcodeDecoderAdapter);
+
+        Widget window(
+                    cameraDevice,
+                    plcController,
+                    ocrEngineFactory,
+                    barcodeDecoder);
+        window.showMaximized();
+        result = application.exec();
+    }
+
+    cv::destroyAllWindows();
+    ApplicationLogger::shutdown();
+    return result;
+}

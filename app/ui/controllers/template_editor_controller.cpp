@@ -19,13 +19,16 @@
 #include "ui/dialogs/recipe_selection_dialog.h"
 
 #include <QComboBox>
+#include <QAbstractItemView>
 #include <QDebug>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFileSystemModel>
 #include <QFontMetrics>
+#include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -33,22 +36,30 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListView>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QPixmap>
 #include <QPolygonF>
+#include <QRegularExpression>
+#include <QSet>
 #include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSortFilterProxyModel>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTextEdit>
 #include <QTimer>
+#include <QTreeView>
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
 
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
 
 #pragma execution_character_set("utf-8")
@@ -280,6 +291,231 @@ BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
     return prepared;
 }
 
+struct PolygonUIState {
+    cv::Mat displayImg;
+    cv::Mat tempImg;
+    std::string windowName;
+    std::vector<cv::Point> points;
+};
+
+// ==========================================
+// 钢印多边形描点功能 (点击画点，按回车键完成)
+// ==========================================
+static void polyMouseCallback(int event, int x, int y, int flags, void* userdata) {
+    PolygonUIState* state = reinterpret_cast<PolygonUIState*>(userdata);
+    if (event == cv::EVENT_LBUTTONDOWN) {
+        state->points.push_back(cv::Point(x, y));
+        state->tempImg = state->displayImg.clone();
+        // 绘制已有的点和线
+        for (size_t i = 0; i < state->points.size(); ++i) {
+            cv::circle(state->tempImg, state->points[i], 3, cv::Scalar(0, 0, 255), -1);
+            if (i > 0) {
+                cv::line(state->tempImg, state->points[i - 1], state->points[i], cv::Scalar(0, 255, 0), 2);
+            }
+        }
+        cv::imshow(state->windowName, state->tempImg);
+    } else if (event == cv::EVENT_MOUSEMOVE && !state->points.empty()) {
+        // 鼠标悬停时的预览辅助线
+        cv::Mat hoverImg = state->tempImg.clone();
+        cv::line(hoverImg, state->points.back(), cv::Point(x, y), cv::Scalar(255, 0, 0), 1);
+        cv::imshow(state->windowName, hoverImg);
+    }
+}
+
+
+
+
+// ==========================================
+// 快速矩形标定功能 (拖拽并松开鼠标即完成)
+// ==========================================
+struct QuickROIState {
+    cv::Mat displayImg;
+    cv::Mat tempImg;
+    std::string windowName;
+    cv::Rect roi;
+    cv::Point startPt;
+    bool isDrawing = false;
+    bool isDone = false;
+};
+
+static void quickMouseCallback(int event, int x, int y, int flags, void* userdata) {
+    QuickROIState* state = reinterpret_cast<QuickROIState*>(userdata);
+
+    if (event == cv::EVENT_LBUTTONDOWN) {
+        state->startPt = cv::Point(x, y);
+        state->isDrawing = true;
+        state->isDone = false;
+    }
+    else if (event == cv::EVENT_MOUSEMOVE && state->isDrawing) {
+        state->tempImg = state->displayImg.clone();
+        cv::rectangle(state->tempImg, state->startPt, cv::Point(x, y), cv::Scalar(0, 255, 0), 2);
+        cv::imshow(state->windowName, state->tempImg);
+    }
+    else if (event == cv::EVENT_LBUTTONUP) {
+        state->roi = cv::Rect(state->startPt, cv::Point(x, y));
+        // 处理反向拖拽的情况
+        if (state->roi.width < 0) { state->roi.x += state->roi.width; state->roi.width = std::abs(state->roi.width); }
+        if (state->roi.height < 0) { state->roi.y += state->roi.height; state->roi.height = std::abs(state->roi.height); }
+
+        state->isDrawing = false;
+        state->isDone = true; // 标记绘制完成
+    }
+}
+
+static std::vector<cv::Point> getPolygonROI(const cv::Mat& img, const std::string& windowTitle) {
+    cv::Mat displayImg = img.clone();
+    int screenHeightLimit = 800;
+    double scale = 1.0;
+    if (displayImg.rows > screenHeightLimit) {
+        scale = static_cast<double>(screenHeightLimit) / displayImg.rows;
+        cv::resize(displayImg, displayImg, cv::Size(), scale, scale);
+    }
+
+    PolygonUIState state;
+    state.displayImg = displayImg;
+    state.tempImg = displayImg.clone();
+    state.windowName = windowTitle;
+
+    cv::namedWindow(windowTitle);
+    cv::setMouseCallback(windowTitle, polyMouseCallback, &state);
+
+    while (true) {
+        cv::imshow(windowTitle, state.tempImg);
+        int key = cv::waitKey(10) & 0xFF;
+        if (key == 13) { // Enter键确认
+            if (state.points.size() >= 3) {
+                cv::line(state.tempImg, state.points.back(), state.points.front(), cv::Scalar(0, 255, 0), 2);
+                cv::imshow(windowTitle, state.tempImg);
+                cv::waitKey(300);
+            }
+            break;
+        } else if (key == 27) { // ESC键取消
+            state.points.clear();
+            break;
+        }
+    }
+    // 恢复 widget1.cpp 的简单销毁模式，不再手动注销 callback
+    cv::destroyWindow(windowTitle);
+
+    std::vector<cv::Point> finalPts;
+    for (auto& pt : state.points) {
+        finalPts.push_back(cv::Point(static_cast<int>(pt.x / scale), static_cast<int>(pt.y / scale)));
+    }
+    return finalPts;
+}
+
+static cv::Rect getQuickRectROI(const cv::Mat& img, const std::string& windowTitle) {
+    cv::Mat displayImg = img.clone();
+    int screenHeightLimit = 800;
+    double scale = 1.0;
+    if (displayImg.rows > screenHeightLimit) {
+        scale = static_cast<double>(screenHeightLimit) / displayImg.rows;
+        cv::resize(displayImg, displayImg, cv::Size(), scale, scale);
+    }
+
+    QuickROIState state;
+    state.displayImg = displayImg;
+    state.tempImg = displayImg.clone();
+    state.windowName = windowTitle;
+
+    cv::namedWindow(windowTitle);
+    cv::setMouseCallback(windowTitle, quickMouseCallback, &state);
+
+    while (!state.isDone) {
+        cv::imshow(windowTitle, state.tempImg);
+        int key = cv::waitKey(10) & 0xFF;
+        if (key == 27) break;
+    }
+
+    cv::destroyWindow(windowTitle);
+
+    cv::Rect finalRoi = state.roi;
+    finalRoi.x = static_cast<int>(finalRoi.x / scale);
+    finalRoi.y = static_cast<int>(finalRoi.y / scale);
+    finalRoi.width = static_cast<int>(finalRoi.width / scale);
+    finalRoi.height = static_cast<int>(finalRoi.height / scale);
+
+    return finalRoi;
+}
+
+class CheckableDirectoryProxyModel : public QSortFilterProxyModel
+{
+public:
+    explicit CheckableDirectoryProxyModel(QObject *parent = nullptr)
+        : QSortFilterProxyModel(parent)
+    {
+    }
+
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
+    {
+        if (role == Qt::CheckStateRole && index.column() == 0) {
+            const QString path = directoryPath(index);
+            if (!path.isEmpty()) {
+                return m_checkedPaths.contains(path) ? Qt::Checked : Qt::Unchecked;
+            }
+        }
+        return QSortFilterProxyModel::data(index, role);
+    }
+
+    bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole) override
+    {
+        if (role == Qt::CheckStateRole && index.column() == 0) {
+            const QString path = directoryPath(index);
+            if (path.isEmpty()) {
+                return false;
+            }
+
+            if (value.toInt() == Qt::Checked) {
+                m_checkedPaths.insert(path);
+            } else {
+                m_checkedPaths.remove(path);
+            }
+            emit dataChanged(index, index, QVector<int>() << Qt::CheckStateRole);
+            return true;
+        }
+        return QSortFilterProxyModel::setData(index, value, role);
+    }
+
+    Qt::ItemFlags flags(const QModelIndex &index) const override
+    {
+        Qt::ItemFlags itemFlags = QSortFilterProxyModel::flags(index);
+        if (index.column() == 0 && !directoryPath(index).isEmpty()) {
+            itemFlags |= Qt::ItemIsUserCheckable;
+        }
+        return itemFlags;
+    }
+
+    QStringList checkedDirectories() const
+    {
+        QStringList paths = m_checkedPaths.values();
+        paths.sort(Qt::CaseInsensitive);
+        return paths;
+    }
+
+private:
+    QString directoryPath(const QModelIndex &proxyIndex) const
+    {
+        const QFileSystemModel *fileSystemModel =
+                qobject_cast<const QFileSystemModel *>(sourceModel());
+        if (!fileSystemModel || !proxyIndex.isValid()) {
+            return QString();
+        }
+
+        const QModelIndex sourceIndex = mapToSource(proxyIndex);
+        if (!sourceIndex.isValid() || !fileSystemModel->isDir(sourceIndex)) {
+            return QString();
+        }
+
+        const QString fileName = fileSystemModel->fileName(sourceIndex);
+        if (fileName == "." || fileName == "..") {
+            return QString();
+        }
+        return QDir::cleanPath(fileSystemModel->filePath(sourceIndex));
+    }
+
+    QSet<QString> m_checkedPaths;
+};
+
 } // namespace
 
 TemplateEditorController::TemplateEditorController(
@@ -390,14 +626,648 @@ void TemplateEditorController::resetTemplateCaptureState()
     m_host->resetTemplateCaptureState();
 }
 
-void TemplateEditorController::on_pushButton_4_clicked()
+void TemplateEditorController::selectLegacyTemplates()
 {
-    m_host->on_pushButton_4_clicked();
+    if (m_host->m_operationState == Widget::OperationState::Detecting
+            || m_host->m_operationState == Widget::OperationState::Stopping
+            || m_host->m_templateCaptureState
+               != Widget::TemplateCaptureState::Idle) {
+        QMessageBox::warning(m_host,
+                    "提示",
+                    "请先停止识别或退出模板制作，再选择产品模板。");
+        return;
+    }
+    QString dirPath;
+    auto templateDialogStartDir = [this]() -> QString {
+        if (!m_host->templateBaseDirPath.trimmed().isEmpty() && QDir(m_host->templateBaseDirPath).exists()) {
+            return QDir(m_host->templateBaseDirPath).absolutePath();
+        }
+
+        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        if (desktopPath.trimmed().isEmpty()) {
+            desktopPath = QDir::homePath();
+        }
+        return QDir(desktopPath).absolutePath();
+    };
+
+    if (isWordFamilyMode(currentDetectModeId())) {
+        QFileDialog dialog(m_host, "选择产品模板文件夹（可勾选多个）", templateDialogStartDir());
+        dialog.setFileMode(QFileDialog::Directory);
+        dialog.setOption(QFileDialog::ShowDirsOnly, true);
+        dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+        dialog.setLabelText(QFileDialog::LookIn, "查找范围:");
+        dialog.setLabelText(QFileDialog::FileName, "文件夹:");
+        dialog.setLabelText(QFileDialog::FileType, "文件类型:");
+        dialog.setLabelText(QFileDialog::Accept, "选择");
+        dialog.setLabelText(QFileDialog::Reject, "取消");
+        dialog.setNameFilter("所有文件 (*)");
+
+        CheckableDirectoryProxyModel *checkableDirectoryModel =
+                new CheckableDirectoryProxyModel(&dialog);
+        dialog.setProxyModel(checkableDirectoryModel);
+
+        QListView *listView = dialog.findChild<QListView *>("listView");
+        if (listView) {
+            listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        }
+        QTreeView *treeView = dialog.findChild<QTreeView *>();
+        if (treeView) {
+            treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+            treeView->setHeaderHidden(true);
+            treeView->setColumnHidden(1, true);
+            treeView->setColumnHidden(2, true);
+            treeView->setColumnHidden(3, true);
+        }
+
+        if (dialog.exec() != QDialog::Accepted) return;
+
+        QStringList selectedDirs = checkableDirectoryModel->checkedDirectories();
+        const QStringList dialogSelectedDirs =
+                selectedDirs.isEmpty() ? dialog.selectedFiles() : QStringList();
+        for (const QString &selectedDirPath : dialogSelectedDirs) {
+            const QString cleanDir = QDir(selectedDirPath).absolutePath();
+            if (!cleanDir.isEmpty() && !selectedDirs.contains(cleanDir)) {
+                selectedDirs.append(cleanDir);
+            }
+        }
+
+        if (selectedDirs.isEmpty()) return;
+        resetTemplateCaptureState();
+        const QFileInfo firstSelectedDirInfo(selectedDirs.first());
+        if (firstSelectedDirInfo.dir().exists()) {
+            m_host->templateBaseDirPath = firstSelectedDirInfo.dir().absolutePath();
+        }
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+        }
+        hideTemplateGuide();
+
+        if (!selectedDirs.isEmpty()) {
+            std::vector<WordTemplateProfile> loadedProfiles;
+            QStringList skippedMessages;
+            QStringList pendingTargetMessages;
+
+            for (const QString &selectedDirPath : selectedDirs) {
+                QDir templateDir(selectedDirPath);
+                WordTemplateProfile profile;
+                QString profileMessage;
+                if (!loadWordTemplateProfileFromDir(templateDir.absolutePath(),
+                                                    &profile,
+                                                    &profileMessage)) {
+                    skippedMessages.append(QString("%1：%2")
+                                           .arg(templateDir.dirName())
+                                           .arg(profileMessage));
+                    continue;
+                }
+                if (!profileMessage.trimmed().isEmpty()) {
+                    pendingTargetMessages.append(QString("%1：%2")
+                                                 .arg(profile.name)
+                                                 .arg(profileMessage));
+                }
+                loadedProfiles.push_back(profile);
+            }
+
+            if (loadedProfiles.empty()) {
+                QString detailMessage = "所选产品模板配置全部无效，已保留当前加载的模板。";
+                if (!skippedMessages.isEmpty()) {
+                    detailMessage += "\n\n具体原因：\n" + skippedMessages.join("\n");
+                }
+                if (!pendingTargetMessages.isEmpty()) {
+                    detailMessage += "\n\n目标字符待设置：\n" + pendingTargetMessages.join("\n");
+                }
+                showParameterCritical("严重警告", detailMessage);
+                return;
+            }
+
+            wordDraftSession().reset();
+            wordEditSession().reset();
+            singleTemplateEditSession().reset();
+            singleTemplateResolvedAssets().clear();
+            setCurrentTemplateDisplayName(QString());
+            wordTemplateProfiles().swap(loadedProfiles);
+            refreshWordTemplateRecipeAssets();
+            m_host->currentTemplateDirPath = wordTemplateProfiles().front().dirPath;
+            setCurrentTemplateNameVisible(false);
+            updateCurrentTemplateName();
+            refreshWordTemplateEditorCombo();
+            saveSettings();
+
+            qDebug() << "[WORD_TEMPLATE] loaded profile count:"
+                     << static_cast<int>(wordTemplateProfiles().size());
+            if (!skippedMessages.isEmpty() || !pendingTargetMessages.isEmpty()) {
+                QString detailMessage = QString("已加载 %1 个字库模板").arg(static_cast<int>(wordTemplateProfiles().size()));
+                if (!pendingTargetMessages.isEmpty()) {
+                    detailMessage += "\n\n以下模板已加载，但目标字符待设置：\n" + pendingTargetMessages.join("\n");
+                }
+                if (!skippedMessages.isEmpty()) {
+                    detailMessage += "\n\n以下模板已跳过：\n" + skippedMessages.join("\n");
+                }
+                showParameterWarning("提示",
+                                     detailMessage);
+            } else {
+                showParameterInfo("提示",
+                                  QString("已加载 %1 个有效字库模板")
+                                  .arg(static_cast<int>(wordTemplateProfiles().size())));
+            }
+            return;
+        }
+    } else {
+        dirPath = QFileDialog::getExistingDirectory(nullptr, "选择产品模板文件夹",
+                                                    templateDialogStartDir(),
+                                                    QFileDialog::ShowDirsOnly);
+        if (dirPath.isEmpty()) return;
+        resetTemplateCaptureState();
+        const QFileInfo selectedDirInfo(dirPath);
+        if (selectedDirInfo.dir().exists()) {
+            m_host->templateBaseDirPath = selectedDirInfo.dir().absolutePath();
+        }
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+        }
+        hideTemplateGuide();
+    }
+
+    if (dirPath.isEmpty()) return;
+
+    wordDraftSession().reset();
+    wordEditSession().reset();
+    singleTemplateEditSession().reset();
+    singleTemplateResolvedAssets().clear();
+    setCurrentTemplateDisplayName(QString());
+    wordTemplateProfiles().clear();
+    m_host->currentTemplateDirPath = dirPath;
+
+    saveSettings(); // 保存路径
+    const bool templateLoaded = loadSettingsFromDir(dirPath, true);
+    setCurrentTemplateNameVisible(templateLoaded);
+    if (!templateLoaded) {
+        updateCurrentTemplateName();
+        return;
+    }
+    updateCurrentTemplateName();
+    refreshWordTemplateEditorCombo();
+    if (isWordFamilyMode(currentDetectModeId()) && imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+        imageLabel->clearGreenRects();
+        imageLabel->clearSelection();
+        hideTemplateGuide();
+        displayWordTemplateRawImage(dirPath);
+    }
+    m_host->wrongindex = ui->lineEdit_12->text().toInt();
+
+    qDebug()<<"currentTemplate"<<m_host->currentTemplateDirPath;
+
+    initOverlapDetectorFromCurrentDir();
+
+    QMessageBox::information(m_host, "提示", "模板已选择");
 }
 
-void TemplateEditorController::on_pushButton_5_clicked()
+void TemplateEditorController::saveCurrentTemplate()
 {
-    m_host->on_pushButton_5_clicked();
+    if (m_host->m_operationState == Widget::OperationState::Detecting
+            || m_host->m_operationState == Widget::OperationState::Stopping
+            || m_host->m_operationState == Widget::OperationState::TemplatePreviewing) {
+        QMessageBox::warning(m_host,
+                    "提示",
+                    "当前状态不能保存模板，请先停止识别或冻结模板画面。");
+        return;
+    }
+    const bool isBarcodeWordTemplateMode =
+            currentDetectModeId() == BarcodeWordDetectionMode;
+    const bool isWordTemplateMode =
+            isWordFamilyMode(currentDetectModeId());
+    const bool isStampTemplateMode =
+            currentDetectModeId() == QStringLiteral("stamp_detection");
+
+    if (!m_acquisitionController
+            || !m_acquisitionController->hasCurrentImage()) {
+        QMessageBox::warning(m_host, "提示", "请先点击【制作模板】拍照获取图像。");
+        return;
+    }
+    if (!imageLabel->isTemplateDrawingEnabled()) {
+        QMessageBox::warning(m_host,
+                    "提示",
+                    isBarcodeWordTemplateMode
+                        ? "请先点击【制作模板】拍照，并完成定位锚点、二维码区域和日期检测区域框选。"
+                        : "请先点击【制作模板】拍照，并完成定位区域和喷码检测区域框选。");
+        return;
+    }
+
+    // 字库匹配模式下，保存前先检查框选状态，避免输入名称后才发现无法保存。
+    QRect uiTrackRect = imageLabel->getTrackingRect();
+    QRect uiBarcodeRect = imageLabel->getBarcodeRect();
+    QPolygon uiDetectPoly = imageLabel->getDetectionPoly();
+
+    if (isWordTemplateMode) {
+        if (uiTrackRect.isNull()) {
+            QMessageBox::warning(m_host,
+                        "提示",
+                        isBarcodeWordTemplateMode
+                            ? "请先框选稳定定位锚点。"
+                            : "请先框选定位区域。");
+            return;
+        }
+        if (uiTrackRect.width() <= 5 || uiTrackRect.height() <= 5) {
+            QMessageBox::warning(m_host,
+                        "提示",
+                        isBarcodeWordTemplateMode
+                            ? "定位锚点区域太小，请重新框选。"
+                            : "定位区域太小，请重新框选。");
+            return;
+        }
+        if (isBarcodeWordTemplateMode) {
+            if (uiBarcodeRect.isNull()) {
+                QMessageBox::warning(m_host, "提示", "请先框选二维码区域。");
+                return;
+            }
+            if (uiBarcodeRect.width() <= 5 || uiBarcodeRect.height() <= 5) {
+                QMessageBox::warning(m_host, "提示", "二维码区域太小，请重新框选。");
+                return;
+            }
+            const QRect normalizedBarcodeRect =
+                    uiBarcodeRect.normalized();
+            if (!barcodeTemplateReadable()
+                    || validatedBarcodeRect()
+                       != normalizedBarcodeRect) {
+                BarcodeReadResult barcode;
+                QString failureReason;
+                if (!validateBarcodeTemplateRect(
+                            normalizedBarcodeRect,
+                            barcodeTemplateValidationOptions(),
+                            &barcode,
+                            &failureReason)) {
+                    clearBarcodeTemplateValidation();
+                    imageLabel->retryBarcodeRegion();
+                    QMessageBox::warning(m_host,
+                                "二维码扫描失败",
+                                failureReason
+                                + "\n\n定位锚点已保留。模板不能保存，"
+                                  "请重新完整框选二维码区域，扫描成功后再框选日期区域。");
+                    return;
+                }
+
+                acceptBarcodeTemplateValidation(
+                            normalizedBarcodeRect, barcode.text);
+            }
+        }
+        if (uiDetectPoly.isEmpty()) {
+            QMessageBox::warning(m_host, "提示", "请先框选喷码检测区域。");
+            return;
+        }
+        if (uiDetectPoly.size() < 3 || !imageLabel->isDetectionPolyComplete()) {
+            QMessageBox::warning(m_host, "提示", "喷码检测区域未闭合或点数不足，请重新框选。");
+            return;
+        }
+    }
+
+    if (!isWordTemplateMode
+            && (uiTrackRect.isNull()
+                || uiDetectPoly.isEmpty()
+                || uiDetectPoly.size() < 3)) {
+        QMessageBox::warning(m_host, "警告",
+                             "保存模板前，请先在图像上完成以下操作：\n\n"
+                             "1. 框选定位区域\n"
+                             "2. 框选并闭合喷码检测区域\n\n"
+                             "完成后再点击【保存模板】。");
+        return;
+    }
+
+    int thresholdValue = 0;
+    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)
+            || thresholdValue < 0
+            || thresholdValue > 100) {
+        showParameterWarning("参数错误",
+                             "图像合格阈值必须是0到100之间的整数（单位：%），模板未保存。");
+        return;
+    }
+
+    auto defaultTemplateBaseDir = [this]() -> QString {
+        if (!m_host->templateBaseDirPath.trimmed().isEmpty() && QDir(m_host->templateBaseDirPath).exists()) {
+            return QDir(m_host->templateBaseDirPath).absolutePath();
+        }
+
+        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        if (desktopPath.trimmed().isEmpty()) {
+            desktopPath = QDir::homePath();
+        }
+        return QDir(desktopPath).absolutePath();
+    };
+
+    QDialog inputDialog(m_host);
+    inputDialog.setWindowTitle("保存模板");
+    inputDialog.setWindowFlags(inputDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(&inputDialog);
+    QFormLayout *formLayout = new QFormLayout();
+
+    QLineEdit *nameEdit = new QLineEdit(&inputDialog);
+    formLayout->addRow("产品模板文件夹名称：", nameEdit);
+    QLabel *nameErrorLabel = new QLabel("模板文件夹名称不能为空", &inputDialog);
+    nameErrorLabel->setStyleSheet("color: #d93025;");
+    formLayout->addRow("", nameErrorLabel);
+
+    QLineEdit *baseDirEdit = new QLineEdit(defaultTemplateBaseDir(), &inputDialog);
+    QPushButton *browseButton = new QPushButton("浏览", &inputDialog);
+    QHBoxLayout *baseDirLayout = new QHBoxLayout();
+    baseDirLayout->addWidget(baseDirEdit);
+    baseDirLayout->addWidget(browseButton);
+    formLayout->addRow("模板文件夹保存目录：", baseDirLayout);
+
+    QLabel *hintLabel = new QLabel(
+                isBarcodeWordTemplateMode
+                    ? "保存后会记录稳定定位锚点、独立二维码区域和日期检测区域。"
+                    : "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。",
+                &inputDialog);
+    hintLabel->setWordWrap(true);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *okButton = new QPushButton("确定", &inputDialog);
+    QPushButton *cancelButton = new QPushButton("取消", &inputDialog);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+
+    mainLayout->addLayout(formLayout);
+    mainLayout->addWidget(hintLabel);
+    mainLayout->addLayout(buttonLayout);
+
+    connect(browseButton, &QPushButton::clicked, this, [this, baseDirEdit]() {
+        const QString selectedBaseDir = QFileDialog::getExistingDirectory(
+                    m_host,
+                    "选择模板文件夹保存目录",
+                    baseDirEdit->text().trimmed().isEmpty() ? QDir::homePath() : baseDirEdit->text(),
+                    QFileDialog::ShowDirsOnly);
+        if (!selectedBaseDir.isEmpty()) {
+            baseDirEdit->setText(QDir(selectedBaseDir).absolutePath());
+        }
+    });
+    auto updateNameState = [nameEdit, nameErrorLabel, okButton]() {
+        const bool isEmpty = nameEdit->text().trimmed().isEmpty();
+        okButton->setEnabled(!isEmpty);
+        nameErrorLabel->setVisible(isEmpty);
+        nameEdit->setStyleSheet(isEmpty ? "QLineEdit { border: 1px solid #d93025; }" : "");
+    };
+    connect(nameEdit, &QLineEdit::textChanged, &inputDialog, updateNameState);
+    updateNameState();
+    connect(okButton, &QPushButton::clicked, &inputDialog, &QDialog::accept);
+    connect(cancelButton, &QPushButton::clicked, &inputDialog, &QDialog::reject);
+
+    if (inputDialog.exec() != QDialog::Accepted) return;
+
+    QString newFolderName = nameEdit->text().trimmed();
+    if (newFolderName.isEmpty()) return;
+    const QRegularExpression invalidFolderNameChars(R"([\\/:*?"<>|])");
+    if (newFolderName == "."
+            || newFolderName == ".."
+            || newFolderName.contains(invalidFolderNameChars)) {
+        QMessageBox::warning(m_host,
+                    "提示",
+                    "产品模板文件夹名称不能是“.”或“..”，"
+                    "也不能包含 \\ / : * ? \" < > | 这些字符。");
+        return;
+    }
+
+    QString baseDirPath = baseDirEdit->text().trimmed();
+    if (baseDirPath.isEmpty()) {
+        QMessageBox::warning(m_host, "提示", "请选择模板文件夹保存目录。");
+        return;
+    }
+    baseDirPath = QDir(baseDirPath).absolutePath();
+
+    QString savePath = QDir::cleanPath(
+                QDir(baseDirPath).absoluteFilePath(newFolderName));
+    if (QDir(QFileInfo(savePath).absolutePath()).absolutePath()
+            .compare(baseDirPath, Qt::CaseInsensitive) != 0) {
+        QMessageBox::warning(m_host, "错误", "产品模板保存路径无效，模板未保存。");
+        return;
+    }
+
+    QDir dir(savePath);
+    if (dir.exists()) {
+        QMessageBox confirmBox(m_host);
+        confirmBox.setIcon(QMessageBox::Warning);
+        confirmBox.setWindowTitle("确认覆盖");
+        confirmBox.setText(
+                    QString("产品模板 [%1] 已存在。\n\n"
+                            "继续保存会先清空该文件夹中的全部旧文件和子文件夹，"
+                            "然后写入当前模板。\n"
+                            "清空后旧模板无法恢复。\n\n"
+                            "是否继续？")
+                    .arg(newFolderName));
+        QPushButton *overwriteButton = confirmBox.addButton("覆盖", QMessageBox::AcceptRole);
+        QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
+        confirmBox.setDefaultButton(cancelButton);
+        confirmBox.exec();
+        if (confirmBox.clickedButton() != overwriteButton) {
+            return;
+        }
+
+        const QFileInfo existingTemplateInfo(savePath);
+        if (existingTemplateInfo.isSymLink()) {
+            QMessageBox::warning(m_host,
+                                 "错误",
+                                 "同名产品模板文件夹是快捷链接，无法安全清空。");
+            return;
+        }
+        if (!dir.removeRecursively()) {
+            QMessageBox::warning(m_host,
+                        "错误",
+                        "同名产品模板文件夹清空失败。\n"
+                        "请检查其中的文件是否被其他程序占用。");
+            return;
+        }
+        dir = QDir(savePath);
+    }
+
+    if (!QDir().mkpath(savePath)) {
+        QMessageBox::warning(m_host, "错误", "产品模板文件夹创建失败，无法保存模板。");
+        return;
+    }
+    dir = QDir(savePath);
+    m_host->templateBaseDirPath = baseDirPath;
+
+    // 2. 转换坐标 (使用局部 clone 确保计算基准稳定)
+    cv::Mat calibImg = m_acquisitionController->currentImageClone();
+
+    auto toPhysicalPoint = [&](QPoint uiPt) -> cv::Point2f {
+        QSize labelSize = imageLabel->size();
+        QSize imgSize(calibImg.cols, calibImg.rows);
+        const QPixmap *displayedPixmap = imageLabel->pixmap();
+        QSize displayedSize =
+                displayedPixmap && !displayedPixmap->isNull()
+                ? displayedPixmap->size()
+                : imgSize.scaled(labelSize, Qt::KeepAspectRatio);
+        int xOff = (labelSize.width() - displayedSize.width()) / 2;
+        int yOff = (labelSize.height() - displayedSize.height()) / 2;
+        double ratioX =
+                static_cast<double>(imgSize.width()) / displayedSize.width();
+        double ratioY =
+                static_cast<double>(imgSize.height()) / displayedSize.height();
+
+        float px = static_cast<float>((uiPt.x() - xOff) * ratioX);
+        float py = static_cast<float>((uiPt.y() - yOff) * ratioY);
+        return cv::Point2f(px, py);
+    };
+
+    auto toPhysicalRect = [&](QRect uiRect) -> cv::Rect2d {
+        cv::Point2f tl = toPhysicalPoint(uiRect.topLeft());
+        cv::Point2f br = toPhysicalPoint(uiRect.bottomRight());
+        cv::Rect2d phys(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
+
+        phys.x = std::max(0.0, phys.x);
+        phys.y = std::max(0.0, phys.y);
+        if (phys.x + phys.width > calibImg.cols) phys.width = calibImg.cols - phys.x;
+        if (phys.y + phys.height > calibImg.rows) phys.height = calibImg.rows - phys.y;
+        return phys;
+    };
+
+    m_host->savedTrackingBox = toPhysicalRect(uiTrackRect);
+
+    // 计算多边形的绝对物理坐标，并存入 YAML 相对坐标 (相对于追踪框中心)
+    std::vector<cv::Point2f> absDatePoly;
+    for (const QPoint& pt : uiDetectPoly) {
+        absDatePoly.push_back(toPhysicalPoint(pt));
+    }
+
+    cv::Point2f trackCenter(m_host->savedTrackingBox.x + m_host->savedTrackingBox.width / 2.0,
+                            m_host->savedTrackingBox.y + m_host->savedTrackingBox.height / 2.0);
+
+    std::vector<cv::Point2f> relBarcodePoly;
+    if (isBarcodeWordTemplateMode) {
+        const cv::Rect2d barcodeBox =
+                toPhysicalRect(uiBarcodeRect.normalized());
+        const std::vector<cv::Point2f> absBarcodePoly = {
+            cv::Point2f(static_cast<float>(barcodeBox.x),
+                        static_cast<float>(barcodeBox.y)),
+            cv::Point2f(static_cast<float>(barcodeBox.x + barcodeBox.width),
+                        static_cast<float>(barcodeBox.y)),
+            cv::Point2f(static_cast<float>(barcodeBox.x + barcodeBox.width),
+                        static_cast<float>(barcodeBox.y + barcodeBox.height)),
+            cv::Point2f(static_cast<float>(barcodeBox.x),
+                        static_cast<float>(barcodeBox.y + barcodeBox.height))
+        };
+        relBarcodePoly.reserve(absBarcodePoly.size());
+        for (const cv::Point2f &point : absBarcodePoly) {
+            relBarcodePoly.push_back(
+                        cv::Point2f(point.x - trackCenter.x,
+                                    point.y - trackCenter.y));
+        }
+    }
+
+    std::vector<cv::Point2f> relDatePoly;
+    for (const auto& pt : absDatePoly) {
+        relDatePoly.push_back(cv::Point2f(pt.x - trackCenter.x, pt.y - trackCenter.y));
+    }
+    m_host->savedBarcodePoly = relBarcodePoly;
+    m_host->savedDatePoly = relDatePoly;
+    m_host->hasValidBoxes = true;
+
+    // 3. 物理保存
+    cv::imwrite(dir.absoluteFilePath("template_raw.png").toLocal8Bit().toStdString(), calibImg);
+    cv::Mat tplImg = calibImg(m_host->savedTrackingBox).clone();
+    cv::imwrite(dir.absoluteFilePath("tracking_template.bmp").toLocal8Bit().toStdString(), tplImg);
+    m_host->m_loadedTrackingTemplate = tplImg.clone();
+
+    m_host->currentTemplateDirPath = savePath;
+    singleTemplateEditSession().reset();
+    singleTemplateResolvedAssets().clear();
+    setCurrentTemplateDisplayName(QString());
+
+    QString yamlPath = savePath + "/calibrate_config.yaml";
+    {
+        cv::FileStorage fs(yamlPath.toLocal8Bit().toStdString(), cv::FileStorage::WRITE);
+        if (isBarcodeWordTemplateMode) {
+            fs << "barcode_poly" << relBarcodePoly;
+        }
+        fs << "date_poly" << relDatePoly;
+        fs.release();
+    }
+
+    // 4. 特征标定 (仅模式 0)
+    if (ui->comboBox_4->currentIndex() == 0) {
+        QMessageBox::information(m_host, "标定提示", "即将标定吸管口和钢印区。");
+
+        // 吸管口标定
+        cv::Rect ringRect = getQuickRectROI(calibImg, "ROI_1");
+        if (ringRect.width > 5 && ringRect.height > 5) {
+            cv::Mat ringTpl = calibImg(ringRect).clone();
+            QString ringPath = savePath + "/template_ring.bmp";
+            cv::imwrite(ringPath.toLocal8Bit().toStdString(), ringTpl);
+
+            // 计算中心点用于相对坐标转换 (仿照 widget1.cpp 逻辑)
+            cv::Point2f cRing(ringRect.x + ringRect.width / 2.0f, ringRect.y + ringRect.height / 2.0f);
+
+            // 钢印多边形标定
+            std::vector<cv::Point> stampPts = getPolygonROI(calibImg, "ROI_2");
+            if (stampPts.size() >= 3) {
+                // 转换相对坐标并使用 FileStorage 保存 (关键：确保引擎能读懂)
+                std::vector<cv::Point2f> relStamp;
+                for (const auto& pt : stampPts) {
+                    relStamp.push_back(cv::Point2f(pt.x - cRing.x, pt.y - cRing.y));
+                }
+
+                cv::FileStorage fs(yamlPath.toLocal8Bit().toStdString(), cv::FileStorage::WRITE);
+                fs << "stamp_poly" << relStamp;
+                fs << "date_poly" << relDatePoly;
+                fs.release();
+
+                // 重新初始化检测引擎
+                initOverlapDetectorFromCurrentDir();
+            }
+        }
+    }
+
+    // 5. 保存所有配置
+    if (!m_host->saveSettingsToDir(savePath)) {
+        return;
+    }
+    saveSettings();
+    if (isWordTemplateMode) {
+        WordTemplateProfile savedProfile;
+        QString profileMessage;
+        if (!loadWordTemplateProfileFromDir(savePath, &savedProfile, &profileMessage)) {
+            showParameterCritical("严重警告",
+                                  QString("产品模板文件已保存，但重新加载模板失败：\n%1")
+                                  .arg(profileMessage));
+            return;
+        }
+        wordTemplateProfiles().clear();
+        wordTemplateProfiles().push_back(savedProfile);
+        refreshWordTemplateRecipeAssets();
+        prepareWordTemplateRecipeDraft(wordTemplateProfiles().front());
+        setCurrentWordTemplateEditIndex(0);
+        refreshWordTemplateEditorCombo();
+        storeCurrentTemplatePathsForMode(currentDetectModeId());
+        saveSettings();
+    }
+    imageLabel->setTemplateDrawingEnabled(false);
+    imageLabel->clearSelection();
+    clearBarcodeTemplateValidation();
+    hideTemplateGuide();
+    resetTemplateCaptureState();
+    ui->statusLabel->setText(
+                m_host->m_bOpenDevice
+                ? "模板保存完成，相机已打开"
+                : "模板保存完成，相机已关闭");
+    setCurrentTemplateNameVisible(true);
+    updateCurrentTemplateName();
+    refreshWordTemplateEditorCombo();
+    if (isWordTemplateMode || isStampTemplateMode) {
+        QMessageBox splitMessageBox(m_host);
+        splitMessageBox.setIcon(QMessageBox::Information);
+        splitMessageBox.setWindowTitle("保存成功");
+        splitMessageBox.setText("产品模板已保存成功。\n\n是否立即切割字符模板？");
+        QPushButton *splitButton = splitMessageBox.addButton("确定", QMessageBox::AcceptRole);
+        splitMessageBox.addButton("取消", QMessageBox::RejectRole);
+        splitMessageBox.setDefaultButton(splitButton);
+        splitMessageBox.exec();
+
+        if (splitMessageBox.clickedButton() == splitButton) {
+            showManualCharacterTemplateCropDialog();
+        }
+    } else {
+        QMessageBox::information(m_host, "成功", "模板及双框配置已全部保存！");
+    }
 }
 
 void TemplateEditorController::initOverlapDetectorFromCurrentDir()
@@ -1055,7 +1925,7 @@ void TemplateEditorController::handleTemplateGuideEvent(const QString &eventName
             saveMessageBox.exec();
 
             if (saveMessageBox.clickedButton() == saveButton) {
-                on_pushButton_5_clicked();
+                saveCurrentTemplate();
             }
         });
     }

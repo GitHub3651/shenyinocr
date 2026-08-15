@@ -16,16 +16,16 @@
 
 | ID | 功能分类 | 当前入口/触发 | 前置条件和操作步骤 | 当前文件、关键函数和调用链 | 输入/设置、默认值及生效时机 | 当前正常结果和失败路径 | 副作用（磁盘/统计/PLC/线程） | 当前基线 | 目标模块/位置 | 动作 | 从原入口执行的验证方法 | 状态 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| SYS-001 | 应用启动与本地化 | 双击主程序 | 部署目录完整 | `main.cpp::main`→安装翻译→组装相机与PLC控制器→注入`Widget`→最大化显示 | Qt资源、具体设备实现和运行控制器；启动生效 | 主窗最大化、中文UI和浅蓝样式；资源缺失时对应翻译/样式不加载 | 创建QApplication、设备组合和主窗 | 启动外观、窗口状态和文本均需保持 | `startup/main`+`ui/` | 最终架构启动组装 | Release启动，核对窗口、中文按钮、禁用态样式 | 已验证 | S；U；2026-08-15用户确认主工程Run qmake、Rebuild、Run及无PLC启动均正常 |
-| SYS-002 | 授权校验 | 启动及每24小时定时器 | 可执行文件旁有`license.ini` | `main.cpp`→`RuntimeGuard::check`→XOR/SHA256解密→解析`expires` | 当前日期；固定密钥；启动和24h周期生效 | 有效则继续；缺失、格式错或过期弹模态错误并退出 | 读取授权文件；创建24h定时器 | 失败必须阻止继续运行 | `startup/runtime_guard.*` | 保留 | 分别使用有效、缺失、损坏、过期授权启动；记录提示与退出 | 已基线 | S；U |
-| SYS-003 | 单实例 | 第二次启动 | 首实例共享内存`ecust`仍存在 | `main.cpp`→`QSharedMemory::create(1)` | 固定键`ecust`；启动生效 | 首实例继续；第二实例提示“程序已经运行”并退出 | 创建进程间共享内存 | 同一用户会话只允许一个实例 | `startup/single_instance_guard.*` | 保留 | 连续启动两次，第二次提示且不出现第二主窗 | 已基线 | S；U |
-| SYS-004 | 日志写入与保留 | 启动后任意Qt日志 | 可执行目录可写 | `main.cpp::setupLogging`→`qInstallMessageHandler` | `<exe>/log/app_log_yyyy-MM-dd.txt`；保留3个月 | 写入时间、级别、文件/行；目录或文件不可写时不能落盘 | 创建日志目录/文件；删除3个月前日志 | 日志格式和保留策略纳入回归 | `system_support/logging/` | 保留 | 启动后触发一次提示，核对当日日志；放置过期测试日志后重启核对清理 | 已基线 | S；U |
-| SYS-005 | 崩溃记录 | Windows未处理异常 | 日志目录可写 | `main.cpp`→`SetUnhandledExceptionFilter`→`CCrashStack` | Windows异常上下文；进程崩溃时生效 | 尝试写崩溃信息后进程终止；写盘失败无业务恢复 | 写崩溃日志 | 保留现有诊断，不用测试性崩溃污染生产 | `system_support/crash/` | 保留 | 仅在隔离调试构建按现场批准方案验证；Stage 0记录源码链 | 已基线 | S；U |
-| SYS-006 | OCR模型初始化 | 应用启动时组装设备工厂 | `config1.txt`、模型和字典存在 | `main.cpp`提供`PaddleOcrEngine`工厂→`Widget`在原初始化位置取得`IOcrEngine`→运行Worker使用接口 | 配置相对路径以应用目录解析；启动生效 | 模型加载成功后OCR可用；配置键/模型异常保持构造期失败 | 启动组合定义具体实现；适配器独占模型原生对象 | 模型、阈值、路径解析和初始化日志顺序保持 | `startup/main`+`devices/ocr/` | 最终架构启动组装 | 有效部署启动、日志顺序2..5；实际OCR代表帧 | 已验证 | S；T；U；2026-08-15用户确认深度模型可启动检测，工厂注入后主工程正常 |
+| SYS-001 | 应用启动与本地化 | 双击主程序 | 部署目录完整 | `startup/main.cpp::main`→`ApplicationStartup::run`→安装翻译→组装相机与PLC控制器→注入`Widget`→最大化显示 | Qt资源、具体设备实现和运行控制器；启动生效 | 主窗最大化、中文UI和浅蓝样式；资源缺失时对应翻译/样式不加载 | 创建QApplication、设备组合和主窗 | 启动外观、窗口状态和文本均需保持 | `startup/`+`ui/` | 最终架构启动组装 | Release启动，核对窗口、中文按钮、禁用态样式 | 已验证 | S；U；2026-08-15用户确认主工程Run qmake、Rebuild、Run及无PLC启动均正常 |
+| SYS-002 | 授权校验 | 启动及每24小时定时器 | 可执行文件旁有`license.ini` | `ApplicationStartup::run`→`RuntimeGuard::check`→`LicenseCodec`统一XOR/SHA256解密→解析`expires` | 当前日期；固定密钥；启动和24h周期生效 | 有效则继续；缺失、格式错或过期弹模态错误并退出 | 读取授权文件；创建24h定时器 | 失败必须阻止继续运行 | `startup/runtime_guard.*` | 保留 | 分别使用有效、缺失、损坏、过期授权启动；记录提示与退出 | 已验证 | S；U |
+| SYS-003 | 单实例 | 第二次启动 | 首实例共享内存`ecust`仍存在 | `ApplicationStartup::run`→`SingleInstanceGuard::acquire`→`QSharedMemory::create(1)` | 固定键`ecust`；启动生效 | 首实例继续；第二实例提示“程序已经运行”并退出 | 创建进程间共享内存 | 同一用户会话只允许一个实例 | `startup/single_instance_guard.*` | 保留 | 连续启动两次，第二次提示且不出现第二主窗 | 已验证 | S；U |
+| SYS-004 | 日志写入与保留 | 启动后任意Qt日志 | 可执行目录可写 | `ApplicationStartup::run`→`ApplicationLogger::install`→`qInstallMessageHandler` | `<exe>/log/app_log_yyyy-MM-dd.txt`；保留3个月 | 写入时间、级别、文件/行；目录或文件不可写时不能落盘 | 创建日志目录/文件；删除3个月前日志 | 日志格式和保留策略纳入回归 | `system_support/logging/` | 保留 | 启动后触发一次提示，核对当日日志；放置过期测试日志后重启核对清理 | 已验证 | S；U |
+| SYS-005 | 崩溃记录 | Windows未处理异常 | 日志目录可写 | `ApplicationStartup::run`→`WindowsCrashHandler::install`→`WindowsCrashStack` | Windows异常上下文；进程崩溃时生效 | 尝试写崩溃信息后进程终止；写盘失败无业务恢复 | 写崩溃日志 | 保留现有诊断，不用测试性崩溃污染生产 | `system_support/crash/` | 保留 | 仅在隔离调试构建按现场批准方案验证；Stage 0记录源码链 | 已验证 | S；U |
+| SYS-006 | OCR模型初始化 | 应用启动时组装设备工厂 | `config1.txt`、模型和字典存在 | `ApplicationStartup`提供`PaddleOcrEngine`工厂→`Widget`在原初始化位置取得`IOcrEngine`→运行Worker使用接口 | 配置相对路径以应用目录解析；启动生效 | 模型加载成功后OCR可用；配置键/模型异常保持构造期失败 | 启动组合定义具体实现；适配器独占模型原生对象 | 模型、阈值、路径解析和初始化日志顺序保持 | `startup/`+`devices/ocr/` | 最终架构启动组装 | 有效部署启动、日志顺序2..5；实际OCR代表帧 | 已验证 | S；T；U；2026-08-15用户确认深度模型可启动检测，工厂注入后主工程正常 |
 | SYS-007 | 公共设置与模板恢复 | `Widget`构造 | 用户AppData可读 | `Widget::loadSettings`→`AppSettingsManager::loadGlobalSettings`→`applyGlobalSettingsToUi`→`restoreTemplatesForMode` | `AppDataLocation/settings.ini`，配置v2；无效时默认 | 恢复模式、保存、相机/PLC、模板历史和分隔条；读失败使用默认并记日志 | 读取设置和模板资源 | 详见SET/TPL功能ID | `recipes/`+`system_support/settings/` | 保留后拆分 | 修改并应用设置、退出重启，逐项核对；损坏INI核对默认回退 | 已验证 | S；U ；2026-08-15固定四轮第2轮：146项运行测试及主程序集中门禁通过 |
 | SYS-008 | 启动PLC延迟连接 | 主窗构造后1秒 | 运行控制器持有PLC控制器 | `Widget`保留原1秒定时入口→`InspectionRuntimeController::connectPlc`→类型化PLC控制器→Snap7 | 保存的IP/Rack/Slot；1秒后生效 | 成功连接并刷新硬件控件；失败仅日志/状态，不阻止主窗 | 建立PLC网络连接 | 延迟和提示保持 | `runtime/inspection_plc_controller.*`+UI命令桥 | 最终架构PLC边界收口 | 有PLC/无PLC各启动一次，记录1秒后状态和可编辑控件 | 已验证 | S；T；U；2026-08-15用户确认无PLC连接失败不影响主窗；真实PLC成功连接继续延期 |
-| SYS-009 | 正常退出与资源释放 | 关闭主窗/进程退出 | 可有运行线程、相机、PLC | `Widget::closeEvent`/析构→协作停止线程/关相机→运行控制器断PLC；`main`从事件循环正常`return`并析构启动组合 | 线程等待上限和当前设备状态 | 正常关闭；线程未及时退出仅记录警告，不调用`terminate()` | 停线程、关设备、断PLC、释放OpenCV窗和启动组合 | 必须保持协作停止、无残留线程 | `runtime/`+`startup/`+`devices/` | 最终架构设备所有权收口 | 检测中、模板预览中、空闲时分别关闭；确认进程退出和设备释放 | 已验证 | S；T；U；2026-08-15用户确认软触发停止及关闭主窗口后进程正常退出 |
-| SYS-010 | Release运行时部署校验 | Qt Creator Release链接后 | `dist/ShengYin`完整 | `AutoOCRproject.pro::QMAKE_POST_LINK`→`deploy_runtime.ps1` | 源`dist/ShengYin`、目标构建`release`；Release链接后 | 校验清单/哈希并复制DLL、模型、配置；缺失或不一致使部署脚本失败 | 写Release运行目录 | 保持部署可复现；构建只由用户执行 | `system_support/deployment/` | 保留 | Qt Creator Run qmake+Release Rebuild，核对部署结果和脚本报错 | 已基线 | S；U |
+| SYS-009 | 正常退出与资源释放 | 关闭主窗/进程退出 | 可有运行线程、相机、PLC | `Widget::closeEvent`/析构→协作停止线程/关相机→运行控制器断PLC；`ApplicationStartup`从事件循环正常返回并析构启动组合 | 线程等待上限和当前设备状态 | 正常关闭；线程未及时退出仅记录警告，不调用`terminate()` | 停线程、关设备、断PLC、释放OpenCV窗和启动组合 | 必须保持协作停止、无残留线程 | `runtime/`+`startup/`+`devices/` | 最终架构设备所有权收口 | 检测中、模板预览中、空闲时分别关闭；确认进程退出和设备释放 | 已验证 | S；T；U；2026-08-15用户确认软触发停止及关闭主窗口后进程正常退出 |
+| SYS-010 | Release运行时部署校验 | Qt Creator Release链接后 | `dist/ShengYin`完整 | `AutoOCRproject.pro::QMAKE_POST_LINK`→`system_support/deployment/deploy_runtime.ps1` | 源`dist/ShengYin`、目标构建`release`；Release链接后 | 校验清单/哈希并复制DLL、模型、配置；缺失或不一致使部署脚本失败 | 写Release运行目录 | 保持部署可复现；构建只由用户执行 | `system_support/deployment/` | 保留 | Qt Creator Run qmake+Release Rebuild，核对部署结果和脚本报错 | 已验证 | S；U |
 
 ## 2. 主界面与交互
 
@@ -141,11 +141,11 @@
 
 | ID | 功能分类 | 当前入口/触发 | 前置条件和操作步骤 | 当前文件、关键函数和调用链 | 输入/设置、默认值及生效时机 | 当前正常结果和失败路径 | 副作用（磁盘/统计/PLC/线程） | 当前基线 | 目标模块/位置 | 动作 | 从原入口执行的验证方法 | 状态 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| MC-001 | 多相机窗口入口 | 顶栏“多相机模式” | 非检测/非停止/非模板制作 | `on_MultiCameraMode_clicked`→new/show`MultiCameraWidget`；返回按钮→close | 无持久参数 | 打开独立窗口；忙碌时提示；重复点击复用现存窗口；关闭后指针清空 | 创建/销毁窗口 | 计划要求入口不被单相机重构破坏 | 原位 | 保留且延期迁移 | 空闲打开/返回/重开；检测中点击核对提示 | 已基线 | S；U；P |
+| MC-001 | 多相机窗口入口 | 顶栏“多相机模式” | 非检测/非停止/非模板制作 | `on_MultiCameraMode_clicked`→new/show`MultiCameraWidget`；返回按钮→close | 无持久参数 | 打开独立窗口；忙碌时提示；重复点击复用现存窗口；关闭后指针清空 | 创建/销毁窗口 | 计划要求入口不被单相机重构破坏 | 原位 | 保留且延期迁移 | 空闲打开/返回/重开；检测中点击核对提示 | 已验证 | S；U；P |
 | MC-002 | 多相机可见控件现状 | 多相机窗口内扫描/打开/采集/停止/触发/保存按钮 | 窗口已打开 | `multicamerawidget.ui`；`MultiCameraWidget`只初始化两行和连接“返回”，其余按钮无信号接线 | UI静态默认值 | 当前点击其余按钮无业务动作，预览/状态保持占位；不能记录为已实现功能 | 无设备/统计/PLC副作用 | 可达但未接线的真实现状 | 原位 | 计划明确延期，不在本轮补齐 | 打开窗口逐按钮点击，确认只有返回有动作并记录截图 | 已延期 | S；U；P |
 | MC-003 | 双相机底层API | 当前无UI/脚本运行入口，仅编译进主工程 | 需另行代码调用 | `MultiCameraController`→2个`MultiCameraUnit`→Hikvision；`MultiCameraSyncManager`校验shotId/frameId/时间差 | 默认2台、软件触发、最大时间差5000us、要求相同frameId | API可扫描/open/start/trigger/grab；当前窗口未实例化Controller，生产统计/PLC未接入 | 若被调用会开2相机并持有帧 | 计划明确保持源码原位，不迁移/扩建 | 原位 | 延期 | 本轮只做静态零入口核对；后续独立任务建立专用测试 | 已延期 | S；P |
-| TOOL-001 | 授权生成/读取工具 | 单独打开`tools/license_tool/LicenseTool.pro`构建的程序 | 与主程序相同Qt；输出目录可写 | 工具UI→`makeLicenseFile`/`licenseInfoText`，算法与RuntimeGuard同密钥/格式 | 到期日默认当前+1年；默认输出工具目录`license.ini` | 生成加密授权并立即读回；无效/不可写提示 | 写授权文件 | 独立工程必须保留 | `tools/license_tool`原位 | 保留 | Qt Creator构建工具；生成未来/过期授权并由主程序分别验证 | 已基线 | S；U |
-| TOOL-002 | BarcodeDecoder.dll重建与ABI | 独立构建脚本/应用启动组装 | VS2022+CMake+网络仅重建时；本轮Agent不执行 | `tools/barcode_decoder`→固定C ABI；`main.cpp`构造`BarcodeDecoderAdapter`；独立`IBarcodeDecoder`头供运行/检测依赖 | v2.1.0；DataMatrix+QR；libdmtx fallback15ms；静态CRT | DLL返回码、内容、角点和耗时保持；缺DLL预检失败 | 适配器管理DLL生命周期，Widget不包含具体适配器头 | ABI、版本日志、错误文本和调用约定保持 | `startup/main`+`devices/barcode/` | 最终架构接口/实现分离 | 适配器测试、二维码Pipeline及实际读码 | 已验证 | S；T；U；2026-08-15用户确认适配器8项、Pipeline 10项及实际二维码读码正常 |
+| TOOL-001 | 授权生成/读取工具 | 单独打开`tools/license_tool/LicenseTool.pro`构建的程序 | 与主程序相同Qt；输出目录可写 | 工具UI→`makeLicenseFile`/`licenseInfoText`→共享`LicenseCodec`，与RuntimeGuard使用同一实现 | 到期日默认当前+1年；默认输出工具目录`license.ini` | 生成加密授权并立即读回；无效/不可写提示 | 写授权文件 | 独立工程必须保留 | `tools/license_tool`原位 | 保留 | Qt Creator构建工具；生成未来/过期授权并由主程序分别验证 | 已验证 | S；U |
+| TOOL-002 | BarcodeDecoder.dll重建与ABI | 独立构建脚本/应用启动组装 | VS2022+CMake+网络仅重建时；本轮Agent不执行 | `tools/barcode_decoder`→固定C ABI；`ApplicationStartup`构造`BarcodeDecoderAdapter`；独立`IBarcodeDecoder`头供运行/检测依赖 | v2.1.0；DataMatrix+QR；libdmtx fallback15ms；静态CRT | DLL返回码、内容、角点和耗时保持；缺DLL预检失败 | 适配器管理DLL生命周期，Widget不包含具体适配器头 | ABI、版本日志、错误文本和调用约定保持 | `startup/`+`devices/barcode/` | 最终架构接口/实现分离 | 适配器测试、二维码Pipeline及实际读码 | 已验证 | S；T；U；2026-08-15用户确认适配器8项、Pipeline 10项及实际二维码读码正常 |
 
 ## 无独立可观察功能ID的源码候选
 
@@ -177,9 +177,9 @@
 | 状态 | 数量 | 功能ID/说明 |
 |---|---:|---|
 | 待盘点 | 0 | 无 |
-| 已基线 | 7 | 尚未进入固定四轮第4轮的功能ID |
+| 已基线 | 0 | 无 |
 | 迁移中 | 0 | 无 |
-| 已验证 | 81 | 已完成迁移并通过约定Qt Creator及主程序门禁的功能ID |
+| 已验证 | 88 | 已完成迁移并通过约定Qt Creator及主程序门禁的功能ID |
 | 已延期 | 2 | MC-002、MC-003；依据升级计划3.6 |
 | 已确认删除 | 0 | 无删除授权 |
 

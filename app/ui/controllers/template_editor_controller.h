@@ -87,6 +87,8 @@ public:
     void updateTemplatePrivateSettingDirtyUi();
 
     void showManualCharacterTemplateCropDialog();
+    void selectLegacyTemplates();
+    void saveCurrentTemplate();
     void showStampCharacterTemplateCropDialog();
     void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
     void setupWordTemplateEditorCombo();
@@ -229,8 +231,6 @@ private:
     void applyTemplatePrivateSettingsToUi(
         const TemplatePrivateSettings &settings);
     void resetTemplateCaptureState();
-    void on_pushButton_4_clicked();
-    void on_pushButton_5_clicked();
     void initOverlapDetectorFromCurrentDir();
 
     Widget *m_host = nullptr;
