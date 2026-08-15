@@ -8,6 +8,8 @@
 
 #include "widget.h"
 #include "runtime/inspection_run_configuration.h"
+#include "runtime/inspection_camera_start_transition.h"
+#include "runtime/inspection_runtime_start_transaction.h"
 #include "runtime/inspection_worker_configurator.h"
 #include "ui_widget.h"
 #include "recipes/recipe_selection.h"
@@ -1085,7 +1087,7 @@ Widget::~Widget()
         m_imageSaveService.reset();
     }
 
-    finishInspectionStop();
+    m_runtimeController.finishStop();
 
     delete ui;
     ui = nullptr;
@@ -1420,27 +1422,6 @@ void Widget::wrongremove()
     }
 }
 
-// 启动、运行和停止状态由运行协调器统一维护；Widget只同步界面状态。
-void Widget::beginInspectionStart()
-{
-    const QString runId = m_runtimeController.beginStart();
-    qDebug() << "[RUNTIME_CONTROLLER] starting"
-             << runId;
-}
-
-void Widget::markInspectionRunning()
-{
-    if (!m_runtimeController.markRunning()) {
-        qWarning() << "[RUNTIME_CONTROLLER] unable to enter running state from"
-                   << static_cast<int>(m_runtimeController.state());
-    }
-}
-
-void Widget::finishInspectionStop()
-{
-    m_runtimeController.finishStop();
-}
-
 DetectionWorker::FailureConsumer
 Widget::detectionWorkerFailureConsumer()
 {
@@ -1455,6 +1436,7 @@ Widget::detectionWorkerFailureConsumer()
 }
 
 bool Widget::installDetectionWorker(
+        InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
         const std::shared_ptr<DetectionWorker> &worker,
         const QString &startFailureMessage,
@@ -1462,7 +1444,7 @@ bool Widget::installDetectionWorker(
         QString *errorMessage)
 {
     if (!worker
-            || !m_runtimeController.startDetectionWorker(
+            || !startTransaction.startDetectionWorker(
                 modeIndex,
                 worker)) {
         if (errorMessage) {
@@ -1480,6 +1462,7 @@ bool Widget::installDetectionWorker(
 }
 
 bool Widget::startDetectionWorkerForMode(
+        InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
         const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage)
@@ -1608,6 +1591,7 @@ bool Widget::startDetectionWorkerForMode(
         return false;
     }
     return installDetectionWorker(
+                startTransaction,
                 modeIndex,
                 creation.worker,
                 creation.startFailureMessage,
@@ -3063,7 +3047,7 @@ void Widget::connectTemplatePreviewSignals(MyThread *thread)
         if (m_operationState
                 == OperationState::Detecting) {
             m_runtimeController.requestStop();
-            finishInspectionStop();
+            m_runtimeController.finishStop();
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
@@ -9053,7 +9037,7 @@ void Widget::on_cancel_clicked()
 
     ui->statusLabel->setText("已停止");
     isCollecting = false;
-    finishInspectionStop();
+    m_runtimeController.finishStop();
     m_operationState = m_bOpenDevice
             ? OperationState::CameraReady
             : OperationState::CameraClosed;
@@ -9702,7 +9686,7 @@ void Widget::closeEvent(QCloseEvent *event)
     } catch (...) {
     }
     saveSettings(false);
-    finishInspectionStop();
+    m_runtimeController.finishStop();
     event->accept();
 }
 
@@ -11479,32 +11463,32 @@ void Widget::on_plcbtn_clicked()
         ui->speedLabel->clear();
         m_runtimeController.resetStatistics();
 
-        // 重置相机状态
+        // 重置相机状态。具体SDK调用顺序由运行层统一维护。
         if (m_cameraDevice && m_bOpenDevice) {
-            try {
-                m_cameraDevice->stopGrabbing();
-                QThread::msleep(200);
-                m_cameraDevice->setEnumValue("TriggerMode", 1);
-                m_cameraDevice->setEnumValue("TriggerSource", 0); // 硬触发
-                QString exposureError;
-                if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
-                                              &exposureError)) {
-                    QMessageBox::warning(this,
-                                         "启动失败",
-                                         QString("切换硬触发模式后恢复相机曝光失败：\n%1")
-                                         .arg(exposureError));
-                    return;
+            InspectionCameraStartRequest cameraStartRequest;
+            cameraStartRequest.cameraDevice = m_cameraDevice.get();
+            cameraStartRequest.acquisitionKind =
+                    InspectionAcquisitionKind::HardwareTrigger;
+            cameraStartRequest.gain = gainValue;
+            cameraStartRequest.applyExposure = [this](QString *errorMessage) {
+                return applyCameraExposureValue(
+                            m_appliedGlobalSettings.cameraExposure,
+                            errorMessage);
+            };
+            const InspectionCameraStartResult cameraStartResult =
+                    InspectionCameraStartTransition::apply(
+                        cameraStartRequest);
+            if (!cameraStartResult.isAccepted()) {
+                if (cameraStartResult.issue
+                        == InspectionCameraStartIssue::ExposureRejected) {
+                    QMessageBox::warning(
+                                this,
+                                "启动失败",
+                                QString("切换硬触发模式后恢复相机曝光失败：\n%1")
+                                .arg(cameraStartResult.errorMessage));
+                } else {
+                    QMessageBox::critical(this, "错误", "相机初始化失败！");
                 }
-                m_cameraDevice->setFloatValue("Gain", gainValue); // 恢复写入增益
-                m_cameraDevice->setFloatValue("TriggerDelay", 0);
-                m_cameraDevice->registerImageCallback();
-                m_cameraDevice->startGrabbing();
-
-                m_cameraDevice->setEnumValue("LineDebouncerTime", 5000U); // 硬触发
-
-                QThread::msleep(100);
-            } catch (...) {
-                QMessageBox::critical(this, "错误", "相机初始化失败！");
                 return;
             }
         }
@@ -11536,7 +11520,7 @@ void Widget::on_plcbtn_clicked()
             isCollecting = false;
             m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
-            finishInspectionStop();
+            m_runtimeController.finishStop();
             m_operationState = m_bOpenDevice
                     ? OperationState::CameraReady
                     : OperationState::CameraClosed;
@@ -11588,13 +11572,26 @@ void Widget::on_plcbtn_clicked()
         }
         m_barcodeWordRunActive = isBarcodeWordMode;
         m_resultBoundDisplayActive.store(true);
-        beginInspectionStart();
+        InspectionRuntimeStartTransaction startTransaction(
+                    m_runtimeController);
+        if (!startTransaction.begin()) {
+            m_resultBoundDisplayActive.store(false);
+            m_barcodeWordRunActive = false;
+            QMessageBox::warning(
+                        this,
+                        QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                        QStringLiteral("\u5f53\u524d\u8fd0\u884c\u72b6\u6001\u4e0d\u5141\u8bb8\u91cd\u590d\u542f\u52a8\u3002"));
+            return;
+        }
+        qDebug() << "[RUNTIME_CONTROLLER] starting"
+                 << startTransaction.runId();
         QString workerError;
         if (!startDetectionWorkerForMode(
+                    startTransaction,
                     ui->comboBox_4->currentIndex(),
                     profileSnapshotForRun,
                     &workerError)) {
-            finishInspectionStop();
+            startTransaction.rollback();
             m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
             QMessageBox::warning(
@@ -11607,15 +11604,29 @@ void Widget::on_plcbtn_clicked()
                  << "modeIndex=" << ui->comboBox_4->currentIndex();
         cameraThread->start();
         if (!cameraThread->wait(100)) {
-            markInspectionRunning();
+            if (!startTransaction.commit()) {
+                cameraThread->requestStop();
+                cameraThread->wait(1500);
+                m_resultBoundDisplayActive.store(false);
+                m_barcodeWordRunActive = false;
+                isCollecting = false;
+                m_operationState = m_bOpenDevice
+                        ? OperationState::CameraReady
+                        : OperationState::CameraClosed;
+                updateOperationUiState();
+                QMessageBox::warning(
+                            this,
+                            QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                            QStringLiteral("\u8fd0\u884c\u72b6\u6001\u63d0\u4ea4\u5931\u8d25\u3002"));
+                return;
+            }
             isCollecting = true;
             m_operationState =
                     OperationState::Detecting;
             ui->statusLabel->setText("触发模式运行中");
             updateOperationUiState();
         } else {
-            m_runtimeController.waitForDetectionWorkerStop();
-            finishInspectionStop();
+            startTransaction.rollback();
             m_resultBoundDisplayActive = false;
             m_barcodeWordRunActive = false;
             isCollecting = false;
@@ -11662,17 +11673,31 @@ void Widget::on_plcbtn_clicked()
             return;
         }
 
-        m_cameraDevice->setEnumValue("TriggerSource", 7); // 软触发
-        QString exposureError;
-        if (!applyCameraExposureValue(m_appliedGlobalSettings.cameraExposure,
-                                      &exposureError)) {
-            QMessageBox::warning(this,
-                                 "启动失败",
-                                 QString("切换软触发模式后恢复相机曝光失败：\n%1")
-                                 .arg(exposureError));
+        InspectionCameraStartRequest cameraStartRequest;
+        cameraStartRequest.cameraDevice = m_cameraDevice.get();
+        cameraStartRequest.acquisitionKind =
+                InspectionAcquisitionKind::SoftwareTrigger;
+        cameraStartRequest.gain = gainValue;
+        cameraStartRequest.applyExposure = [this](QString *errorMessage) {
+            return applyCameraExposureValue(
+                        m_appliedGlobalSettings.cameraExposure,
+                        errorMessage);
+        };
+        const InspectionCameraStartResult cameraStartResult =
+                InspectionCameraStartTransition::apply(cameraStartRequest);
+        if (!cameraStartResult.isAccepted()) {
+            if (cameraStartResult.issue
+                    == InspectionCameraStartIssue::ExposureRejected) {
+                QMessageBox::warning(
+                            this,
+                            "启动失败",
+                            QString("切换软触发模式后恢复相机曝光失败：\n%1")
+                            .arg(cameraStartResult.errorMessage));
+            } else {
+                QMessageBox::critical(this, "错误", "相机初始化失败！");
+            }
             return;
         }
-        m_cameraDevice->setFloatValue("Gain", gainValue); // 软触发重新设置增益
         myThread->setCameraDevice(m_cameraDevice);
         myThread->getImagePtr(myImage);
 
@@ -11687,13 +11712,26 @@ void Widget::on_plcbtn_clicked()
             // Publish the selected orchestration mode before acquisition can
             // emit its first frame.
             m_barcodeWordRunActive = isBarcodeWordMode;
-            beginInspectionStart();
+            InspectionRuntimeStartTransaction startTransaction(
+                        m_runtimeController);
+            if (!startTransaction.begin()) {
+                m_resultBoundDisplayActive.store(false);
+                m_barcodeWordRunActive = false;
+                QMessageBox::warning(
+                            this,
+                            QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                            QStringLiteral("\u5f53\u524d\u8fd0\u884c\u72b6\u6001\u4e0d\u5141\u8bb8\u91cd\u590d\u542f\u52a8\u3002"));
+                return;
+            }
+            qDebug() << "[RUNTIME_CONTROLLER] starting"
+                     << startTransaction.runId();
             QString workerError;
             if (!startDetectionWorkerForMode(
+                        startTransaction,
                         ui->comboBox_4->currentIndex(),
                         profileSnapshotForRun,
                         &workerError)) {
-                finishInspectionStop();
+                startTransaction.rollback();
                 m_resultBoundDisplayActive.store(false);
                 m_barcodeWordRunActive = false;
                 QMessageBox::warning(
@@ -11703,7 +11741,22 @@ void Widget::on_plcbtn_clicked()
                 return;
             }
             myThread->start();
-            markInspectionRunning();
+            if (!startTransaction.commit()) {
+                myThread->requestStop();
+                myThread->wait(1500);
+                m_resultBoundDisplayActive.store(false);
+                m_barcodeWordRunActive = false;
+                isCollecting = false;
+                m_operationState = m_bOpenDevice
+                        ? OperationState::CameraReady
+                        : OperationState::CameraClosed;
+                updateOperationUiState();
+                QMessageBox::warning(
+                            this,
+                            QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                            QStringLiteral("\u8fd0\u884c\u72b6\u6001\u63d0\u4ea4\u5931\u8d25\u3002"));
+                return;
+            }
             isCollecting = true;
             m_operationState =
                     OperationState::Detecting;

@@ -11,9 +11,11 @@
 #include "runtime/detection_session.h"
 #include "runtime/frame_queue.h"
 #include "runtime/image_save_service.h"
+#include "runtime/inspection_camera_start_transition.h"
 #include "runtime/inspection_run_configuration.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
+#include "runtime/inspection_runtime_start_transaction.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "ui/presenters/detection_result_presenter.h"
@@ -189,6 +191,143 @@ DetectionWorkItem factoryPositionedWorkItem(
     pose.trackingElapsedMs = 2.0;
     return makeDetectionWorkItem(frame, pose);
 }
+
+class StartTransitionFakeCamera : public ICameraDevice
+{
+public:
+    CameraOperationResult enumerateDevices(int *deviceCount) override
+    {
+        if (deviceCount) {
+            *deviceCount = 1;
+        }
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult openDevice(int) override
+    {
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult close() override
+    {
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult registerImageCallback() override
+    {
+        calls.append(QStringLiteral("callback"));
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult startGrabbing() override
+    {
+        calls.append(QStringLiteral("start"));
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult stopGrabbing() override
+    {
+        calls.append(QStringLiteral("stop"));
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult setEnumValue(
+        const char *key,
+        unsigned int value) override
+    {
+        calls.append(QStringLiteral("enum:%1=%2")
+                     .arg(QString::fromLatin1(key))
+                     .arg(value));
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult setFloatValue(
+        const char *key,
+        float value) override
+    {
+        calls.append(QStringLiteral("float:%1=%2")
+                     .arg(QString::fromLatin1(key))
+                     .arg(value, 0, 'f', 1));
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult getFloatValue(
+        const char *,
+        CameraFloatValue *) override
+    {
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult getBoolValue(
+        const char *,
+        bool *) override
+    {
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult executeCommand(const char *) override
+    {
+        return CameraOperationResult();
+    }
+
+    CameraOperationResult readBuffer(cv::Mat &) override
+    {
+        return CameraOperationResult();
+    }
+
+    cv::Mat latestImage() override
+    {
+        return cv::Mat();
+    }
+
+    cv::Mat waitForImage() override
+    {
+        return cv::Mat();
+    }
+
+    bool takeImageForMainIfReady(cv::Mat &) override
+    {
+        return false;
+    }
+
+    std::uint64_t frameSequence() const override
+    {
+        return 0;
+    }
+
+    bool isImageReadyForMain() override
+    {
+        return false;
+    }
+
+    void setNonBlocking(bool) override
+    {
+    }
+
+    void deferSwitchToBlockingAfterNextFrame() override
+    {
+    }
+
+    void requestStop() override
+    {
+    }
+
+    QStringList calls;
+};
+
+std::shared_ptr<DetectionWorker> idleDetectionWorker()
+{
+    return std::shared_ptr<DetectionWorker>(
+                new DetectionWorker(
+                    1,
+                    [](const std::shared_ptr<const FrameData> &) {
+        DetectionResult result;
+        result.status = DetectionStatus::Completed;
+        return result;
+    },
+    [](const DetectionCompletion &) {
+    }));
+}
 }
 
 class DetectionCompletionTest : public QObject
@@ -219,6 +358,12 @@ private slots:
     void runtimeControllerStartsNewRunWithoutResettingStatistics();
     void runtimeControllerPreservesSeparateResetScopes();
     void runtimeControllerStopsAdmissionBeforeDrainingAcceptedFrames();
+    void cameraStartTransitionPreservesHardwareCallOrder();
+    void cameraStartTransitionPreservesSoftwareCallOrder();
+    void cameraStartTransitionStopsWhenExposureIsRejected();
+    void runtimeStartTransactionCommitsRunningState();
+    void runtimeStartTransactionRollsBackStartedWorker();
+    void runtimeStartTransactionDestructorRollsBackStartingState();
     void startAccessAcceptsIdleOpenCamera();
     void startAccessPreservesGuardOrder();
     void dirtySettingsPrecedePlcConnectivity();
@@ -910,6 +1055,152 @@ void DetectionCompletionTest::runtimeControllerStopsAdmissionBeforeDrainingAccep
 
     controller.finishStop();
     QVERIFY(!controller.complete(runningFrame, result).isValid());
+}
+
+void DetectionCompletionTest::cameraStartTransitionPreservesHardwareCallOrder()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraStartRequest request;
+    request.cameraDevice = &camera;
+    request.acquisitionKind =
+            InspectionAcquisitionKind::HardwareTrigger;
+    request.gain = 12.5f;
+    request.applyExposure = [&camera](QString *) {
+        camera.calls.append(QStringLiteral("exposure"));
+        return true;
+    };
+    request.delayMilliseconds = [&camera](unsigned long milliseconds) {
+        camera.calls.append(QStringLiteral("delay:%1").arg(
+                                static_cast<qulonglong>(milliseconds)));
+    };
+
+    const InspectionCameraStartResult result =
+            InspectionCameraStartTransition::apply(request);
+
+    QVERIFY(result.isAccepted());
+    QCOMPARE(
+                camera.calls,
+                QStringList()
+                << QStringLiteral("stop")
+                << QStringLiteral("delay:200")
+                << QStringLiteral("enum:TriggerMode=1")
+                << QStringLiteral("enum:TriggerSource=0")
+                << QStringLiteral("exposure")
+                << QStringLiteral("float:Gain=12.5")
+                << QStringLiteral("float:TriggerDelay=0.0")
+                << QStringLiteral("callback")
+                << QStringLiteral("start")
+                << QStringLiteral("enum:LineDebouncerTime=5000")
+                << QStringLiteral("delay:100"));
+}
+
+void DetectionCompletionTest::cameraStartTransitionPreservesSoftwareCallOrder()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraStartRequest request;
+    request.cameraDevice = &camera;
+    request.acquisitionKind =
+            InspectionAcquisitionKind::SoftwareTrigger;
+    request.gain = 8.0f;
+    request.applyExposure = [&camera](QString *) {
+        camera.calls.append(QStringLiteral("exposure"));
+        return true;
+    };
+
+    const InspectionCameraStartResult result =
+            InspectionCameraStartTransition::apply(request);
+
+    QVERIFY(result.isAccepted());
+    QCOMPARE(
+                camera.calls,
+                QStringList()
+                << QStringLiteral("enum:TriggerSource=7")
+                << QStringLiteral("exposure")
+                << QStringLiteral("float:Gain=8.0"));
+}
+
+void DetectionCompletionTest::cameraStartTransitionStopsWhenExposureIsRejected()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraStartRequest request;
+    request.cameraDevice = &camera;
+    request.acquisitionKind =
+            InspectionAcquisitionKind::HardwareTrigger;
+    request.applyExposure = [&camera](QString *errorMessage) {
+        camera.calls.append(QStringLiteral("exposure"));
+        *errorMessage = QStringLiteral("exposure rejected");
+        return false;
+    };
+    request.delayMilliseconds = [&camera](unsigned long milliseconds) {
+        camera.calls.append(QStringLiteral("delay:%1").arg(
+                                static_cast<qulonglong>(milliseconds)));
+    };
+
+    const InspectionCameraStartResult result =
+            InspectionCameraStartTransition::apply(request);
+
+    QVERIFY(!result.isAccepted());
+    QVERIFY(result.issue
+            == InspectionCameraStartIssue::ExposureRejected);
+    QCOMPARE(result.errorMessage, QStringLiteral("exposure rejected"));
+    QCOMPARE(
+                camera.calls,
+                QStringList()
+                << QStringLiteral("stop")
+                << QStringLiteral("delay:200")
+                << QStringLiteral("enum:TriggerMode=1")
+                << QStringLiteral("enum:TriggerSource=0")
+                << QStringLiteral("exposure"));
+}
+
+void DetectionCompletionTest::runtimeStartTransactionCommitsRunningState()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("transaction-run");
+    });
+    InspectionRuntimeStartTransaction transaction(controller);
+
+    QVERIFY(transaction.begin());
+    QCOMPARE(transaction.runId(), QStringLiteral("transaction-run"));
+    QVERIFY(transaction.hasBegun());
+    QVERIFY(transaction.commit());
+    QVERIFY(transaction.isCommitted());
+    QVERIFY(controller.state() == InspectionRuntimeState::Running);
+
+    QVERIFY(controller.requestStop());
+    controller.finishStop();
+}
+
+void DetectionCompletionTest::runtimeStartTransactionRollsBackStartedWorker()
+{
+    InspectionRuntimeController controller;
+    InspectionRuntimeStartTransaction transaction(controller);
+    const std::shared_ptr<DetectionWorker> worker =
+            idleDetectionWorker();
+
+    QVERIFY(transaction.begin());
+    QVERIFY(transaction.startDetectionWorker(3, worker));
+    QVERIFY(controller.isDetectionWorkerActiveForMode(3));
+
+    transaction.rollback();
+
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!controller.isDetectionWorkerActive());
+    QVERIFY(!worker->isRunning());
+    QVERIFY(!transaction.hasBegun());
+}
+
+void DetectionCompletionTest::runtimeStartTransactionDestructorRollsBackStartingState()
+{
+    InspectionRuntimeController controller;
+    {
+        InspectionRuntimeStartTransaction transaction(controller);
+        QVERIFY(transaction.begin());
+        QVERIFY(controller.state() == InspectionRuntimeState::Starting);
+    }
+
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!controller.isDetectionWorkerActive());
 }
 
 void DetectionCompletionTest::startAccessAcceptsIdleOpenCamera()

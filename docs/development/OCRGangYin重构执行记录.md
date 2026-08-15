@@ -902,6 +902,14 @@
 - [x] `detection_completion_test`新增5项合同测试，覆盖运行快照顺序与图像所有权、旧小数阈值回退和二维码策略、非法/缺资源请求拒绝、纸巾分发创建及条码DLL加载门禁；业务测试由77项增至82项，Qt Test预期汇总由`79 passed, 0 failed`增至`84 passed, 0 failed`。
 - [x] 当前切片Agent静态审计通过：测试声明/定义各82项；Widget直接Factory创建0处、统一Dispatcher调用1处、旧五启动函数/运行Profile成员/清理函数0处；快照Builder调用1处；主工程与运行测试`.pro`各登记新快照实现1次；90个正式功能ID状态为48项已基线、8项迁移中、32项已验证、2项已延期；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
 - [x] 统一运行Profile快照与五模式启动分发Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test`预期`84 passed, 0 failed`、主工程Run qmake/Rebuild/Run及五种模式启停、字库/二维码Profile参数与软硬触发、图文判定、耗时、统计和存图均无问题；`DET-002..006`恢复已验证，`RUN-001..003`继续进入软硬触发启动事务拆分。
+- [x] 统一运行Profile快照与五模式启动分发已提交为`f679f11`（`refactor(runtime): 统一检测启动快照与分发`），提交后工作区干净。
+- [x] 开始Stage 3“软硬触发启动事务与相机时序迁出Widget”大切片；影响`CAM-003..004、RUN-001..003`并进入迁移中。保持软触发TriggerSource=7/曝光/增益顺序，以及硬触发stop/200ms/TriggerMode/Line0/曝光/增益/TriggerDelay/回调/start/LineDebouncerTime=5000/100ms顺序不变；同时把Starting、Worker安装、Running提交和失败回滚收口为运行事务。
+- [x] 新增`InspectionCameraStartTransition`，软触发精确保留TriggerSource=7、曝光、增益三步；硬触发精确保留停止采集、200ms、TriggerMode=1、Line0、曝光、增益、TriggerDelay=0、注册回调、开始采集、LineDebouncerTime=5000、100ms顺序。相机SDK返回值继续按旧路径处理，硬触发异常仍转换为原“相机初始化失败”提示。
+- [x] 新增RAII `InspectionRuntimeStartTransaction`，统一执行Idle→Starting、容量1检测Worker安装、Starting→Running提交；Worker创建/启动失败、硬触发采集线程立即退出或未提交即离开作用域时，统一取消UI邮箱、协作停止并等待Worker后恢复Idle。
+- [x] Widget删除`beginInspectionStart`、`markInspectionRunning`、`finishInspectionStop`三个单行状态包装器；正式检测启动不再直接调用`InspectionRuntimeController::beginStart/markRunning/startDetectionWorker`，只保留界面值、模式资源、Qt采集线程信号和原提示映射。
+- [x] `detection_completion_test`新增6项合同测试，覆盖硬触发11步精确调用顺序、软触发3步精确调用顺序、曝光失败短路、事务提交、带Worker显式回滚及析构自动回滚；业务测试由82项增至88项，Qt Test预期汇总由`84 passed, 0 failed`增至`90 passed, 0 failed`。
+- [x] 当前切片Agent静态审计通过：测试声明/定义各88项；正式启动按钮内直接`beginStart/markRunning/startDetectionWorker`为0处，直接相机启动SDK调用为0处，旧三个状态包装器为0处；四个新增运行层文件在主工程和运行测试`.pro`中均各登记1次且依赖路径存在；90个正式功能ID状态为48项已基线、5项迁移中、35项已验证、2项已延期；`git diff --check`通过。Agent未运行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 软硬触发启动事务与相机时序Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test`为`90 passed, 0 failed`，主程序软触发和硬触发均能启动、停止并再次启动；`CAM-003..004、RUN-001..003`恢复已验证。
 
 ## 本地提交记录
 
@@ -970,6 +978,7 @@
 | `88b4f1c` | Stage 3完整检测结果呈现 | UI-004、UI-005、RUN-004、RES-001..005、SAVE-002 | 同一ProductKey快照一次更新图像、框、文字、统一“正确/错误”、统计、模板名和耗时 | 用户确认运行测试72项及五模式统一样式、图文绑定、组合存图和模式切换均无问题 |
 | `b95091e` | Stage 3检测Worker运行所有权 | RUN-001..003 | 活动Worker、模式索引和容量1 UI完成邮箱收口到`InspectionRuntimeController`，Widget只保留模式装配桥 | 用户确认运行测试74项及软硬触发代表模式、图文统计存图、停止重启和跨模式切换均无问题 |
 | `f6a05f2` | Stage 3五模式检测Worker装配 | RUN-001..003、DET-002..006 | 五种Pipeline构造、逐帧调用、私有状态和类型化完成结果迁入`DetectionModeWorkerFactory` | 用户确认运行测试79项及五模式软硬触发、结果、图文、耗时、统计、存图和停止重启均无问题 |
+| `f679f11` | Stage 3统一运行Profile快照与启动分发 | RUN-001..003、DET-002..006 | 同序定位/检测Profile深拷贝快照、五模式统一分发，删除Widget五个重复启动函数和运行Profile副本 | 用户确认运行测试84项、主工程五模式软硬触发、图文判定、耗时、统计、存图和停止重启均无问题 |
 
 ## 未解决事项
 
@@ -981,7 +990,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3统一运行Profile快照与五模式启动分发Qt Creator集中门禁通过，待独立提交。
+- 当前切片：Stage 3软硬触发启动事务与相机时序迁出Widget门禁通过，待独立提交。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
-- 功能状态计数：待盘点0 / 已基线48 / 迁移中3 / 已验证37 / 已延期2 / 已确认删除0。
-- 下一允许动作：独立提交当前切片，然后进入Stage 3软硬触发启动事务拆分。
+- 功能状态计数：待盘点0 / 已基线48 / 迁移中0 / 已验证40 / 已延期2 / 已确认删除0。
+- 下一允许动作：独立提交当前切片，然后开始Stage 3停止流程、相机恢复与采集线程生命周期迁出Widget。

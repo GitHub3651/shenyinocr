@@ -91,6 +91,7 @@ struct StampDetectionWorkOutput;
 struct WordDetectionWorkOutput;
 struct BarcodeWordDetectionWorkOutput;
 struct InspectionProfileSnapshot;
+class InspectionRuntimeStartTransaction;
 
 /**
  * @brief 主窗口类
@@ -356,12 +357,14 @@ private:
         const UiCompletionMailbox::Work &work);
     DetectionWorker::FailureConsumer detectionWorkerFailureConsumer();
     bool installDetectionWorker(
+        InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
         const std::shared_ptr<DetectionWorker> &worker,
         const QString &startFailureMessage,
         const QString &workerLogName,
         QString *errorMessage);
     bool startDetectionWorkerForMode(
+        InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
         const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage);
@@ -701,9 +704,6 @@ private:
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
-    void beginInspectionStart();
-    void markInspectionRunning();
-    void finishInspectionStop();
     void processDueDelayedNgRequest();
     void applyPlcResultRequest(DetectionPlcAction action);
     bool presentDetectionResult(

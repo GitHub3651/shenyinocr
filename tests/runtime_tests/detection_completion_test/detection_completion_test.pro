@@ -21,8 +21,10 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.cpp \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.cpp \
     $$PROJECT_ROOT/app/runtime/detection_session.cpp \
     $$PROJECT_ROOT/app/runtime/result_handler.cpp \
     $$PROJECT_ROOT/app/runtime/image_save_service.cpp \
@@ -44,8 +46,10 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.h \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
+    $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.h \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
+    $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.h \
     $$PROJECT_ROOT/app/runtime/detection_session.h \
     $$PROJECT_ROOT/app/runtime/result_handler.h \
     $$PROJECT_ROOT/app/runtime/image_save_service.h \
