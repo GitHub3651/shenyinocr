@@ -3,12 +3,14 @@
 #include "runtime/detection_worker.h"
 #include "runtime/detection_session.h"
 #include "runtime/inspection_fault_state.h"
+#include "runtime/inspection_product_reconciler.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
 
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <set>
 
 enum class InspectionRuntimeState {
     Idle,
@@ -31,7 +33,6 @@ public:
     bool markRunning();
     bool requestStop();
     void finishStop();
-    void markFault();
     bool enterFault(
         InspectionFaultReason reason,
         const QString &diagnostic = QString(),
@@ -67,15 +68,24 @@ public:
         const DetectionCompletion &completion,
         int imageSaveModeIndex,
         int delayedNgOffset);
-    bool consumeDueDelayedNgRequest();
+    bool consumeDueDelayedNgRequest(ProductKey *productKey = nullptr);
+
+    std::vector<InspectionFaultProductAction> faultProductActions(
+        bool plcWritable) const;
+    bool resolveFaultProduct(
+        const ProductKey &productKey,
+        InspectionFaultProductResolution resolution);
+    bool recordFaultedPlcOutput(const ProductKey &productKey);
+    int unresolvedFaultProductCount() const;
+    int faultedPlcOutputCount() const;
+    int faultFallbackNgResolutionCount() const;
+    int faultUnconfirmedProductCount() const;
 
     DetectionResultStatistics statistics() const;
     DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;
     int ngCount() const;
     int pendingDelayedNgCount() const;
-    bool recordCancelledProduct();
-    bool recordUnconfirmedProduct();
     void resetStatistics();
     void resetAbnormalStatistics();
     void resetNgCount();
@@ -107,9 +117,13 @@ private:
     InspectionRuntimeState m_state = InspectionRuntimeState::Idle;
     DetectionSession m_session;
     InspectionFaultState m_faultState;
+    InspectionProductReconciler m_productReconciler;
     DetectionResultHandler m_resultHandler;
     QString m_lastRecordedRunId;
     quint64 m_lastRecordedProductSequence = 0;
+    std::set<quint64> m_faultedPlcOutputSequences;
+    int m_faultFallbackNgResolutionCount = 0;
+    int m_faultUnconfirmedProductCount = 0;
 
     mutable std::mutex m_detectionWorkerMutex;
     std::shared_ptr<DetectionWorker> m_detectionWorker;

@@ -63,12 +63,16 @@ DetectionCompletionController::process(
         return result;
     }
 
-    if (m_runtimeController->consumeDueDelayedNgRequest()) {
+    ProductKey delayedNgProductKey;
+    if (m_runtimeController->consumeDueDelayedNgRequest(
+                &delayedNgProductKey)) {
         result.delayedNgRequested = true;
         qDebug() << "[RESULT_HANDLER] Triggering delayed NG PLC request,"
                  << "totalCount:"
                  << m_runtimeController->totalCount();
-        requestPlc(DetectionPlcAction::RequestNg);
+        requestPlc(
+                    DetectionPlcAction::RequestNg,
+                    delayedNgProductKey);
     }
 
     DetectionResultViewSnapshot snapshot;
@@ -113,7 +117,9 @@ DetectionCompletionController::process(
                    << snapshot.productKey.sequence;
     }
 
-    requestPlc(handlingOutcome.plcAction);
+    requestPlc(
+                handlingOutcome.plcAction,
+                request.completion.frame->productKey);
     return result;
 }
 
@@ -229,11 +235,13 @@ bool DetectionCompletionController::submitImageSave(
 }
 
 void DetectionCompletionController::requestPlc(
-    DetectionPlcAction action) const
+    DetectionPlcAction action,
+    const ProductKey &productKey) const
 {
     if (action == DetectionPlcAction::NoRequest
+            || !productKey.isValid()
             || !m_callbacks.requestPlc) {
         return;
     }
-    m_callbacks.requestPlc(action);
+    m_callbacks.requestPlc(action, productKey);
 }

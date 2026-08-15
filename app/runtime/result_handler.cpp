@@ -47,8 +47,11 @@ DetectionResultHandlingOutcome DetectionResultHandler::record(
         if (delayedNgOffset == 0) {
             outcome.plcAction = DetectionPlcAction::RequestNg;
         } else {
-            m_delayedNgDueCounts.push(
-                        m_statistics.totalCount + delayedNgOffset);
+            DelayedNgRequest request;
+            request.dueTotalCount =
+                    m_statistics.totalCount + delayedNgOffset;
+            request.productKey = completion.frame->productKey;
+            m_delayedNgRequests.push(request);
         }
     }
 
@@ -56,15 +59,19 @@ DetectionResultHandlingOutcome DetectionResultHandler::record(
     return outcome;
 }
 
-bool DetectionResultHandler::consumeDueDelayedNgRequest()
+bool DetectionResultHandler::consumeDueDelayedNgRequest(
+    ProductKey *productKey)
 {
-    if (m_delayedNgDueCounts.empty()
+    if (m_delayedNgRequests.empty()
             || m_statistics.totalCount
-               < m_delayedNgDueCounts.front() - 1) {
+               < m_delayedNgRequests.front().dueTotalCount - 1) {
         return false;
     }
 
-    m_delayedNgDueCounts.pop();
+    if (productKey) {
+        *productKey = m_delayedNgRequests.front().productKey;
+    }
+    m_delayedNgRequests.pop();
     return true;
 }
 
@@ -110,7 +117,7 @@ int DetectionResultHandler::ngCount() const
 
 int DetectionResultHandler::pendingDelayedNgCount() const
 {
-    return static_cast<int>(m_delayedNgDueCounts.size());
+    return static_cast<int>(m_delayedNgRequests.size());
 }
 
 void DetectionResultHandler::resetStatistics()
@@ -130,6 +137,6 @@ void DetectionResultHandler::resetNgCount()
 
 void DetectionResultHandler::clearPendingDelayedNgRequests()
 {
-    std::queue<int> empty;
-    m_delayedNgDueCounts.swap(empty);
+    std::queue<DelayedNgRequest> empty;
+    m_delayedNgRequests.swap(empty);
 }

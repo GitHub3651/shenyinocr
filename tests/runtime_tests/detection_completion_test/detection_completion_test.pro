@@ -21,6 +21,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.cpp \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_fault_state.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.cpp \
@@ -54,6 +55,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.h \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
     $$PROJECT_ROOT/app/runtime/inspection_fault_state.h \
+    $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
     $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.h \
     $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.h \

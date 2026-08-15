@@ -443,6 +443,13 @@ private slots:
     void runtimeControllerTracksAbnormalStatisticsOutsidePassRate();
     void runtimeControllerRejectsInFlightCompletionWhileFaulted();
     void runtimeControllerAcknowledgementClearsActiveFaultOnly();
+    void runtimeControllerNormalRecordLeavesNoFaultProductActions();
+    void runtimeControllerSingleAcceptedFaultPlansOneFallbackNg();
+    void runtimeControllerCompletedFaultProductIsNeverFallbackNg();
+    void runtimeControllerMultipleFaultProductsCannotUseBlindFallbackNg();
+    void runtimeControllerFaultedPlcOutputIsUnconfirmedExactlyOnce();
+    void runtimeControllerFaultResolutionReleasesFrameOwnership();
+    void runtimeControllerNewRunStartsWithEmptyReconciliation();
     void runtimeControllerOwnsCompletionAndResultHandling();
     void runtimeControllerRejectsDuplicateAndForeignCompletions();
     void runtimeControllerStartsNewRunWithoutResettingStatistics();
@@ -1050,14 +1057,20 @@ void DetectionCompletionTest::resultHandlerDelaysNgUntilConfiguredProductOffset(
 
     QVERIFY(ngOutcome.plcAction == DetectionPlcAction::NoRequest);
     QCOMPARE(handler.pendingDelayedNgCount(), 1);
-    QVERIFY(!handler.consumeDueDelayedNgRequest());
+    ProductKey delayedProductKey;
+    QVERIFY(!handler.consumeDueDelayedNgRequest(
+                &delayedProductKey));
+    QVERIFY(!delayedProductKey.isValid());
 
     const DetectionResultHandlingOutcome okOutcome = handler.record(
                 testCompletion(2, AlgorithmVerdict::Ok),
                 0,
                 2);
     QVERIFY(okOutcome.plcAction == DetectionPlcAction::RequestOk);
-    QVERIFY(handler.consumeDueDelayedNgRequest());
+    QVERIFY(handler.consumeDueDelayedNgRequest(
+                &delayedProductKey));
+    QCOMPARE(delayedProductKey.runId, QStringLiteral("test-run"));
+    QCOMPARE(delayedProductKey.sequence, quint64(1));
     QVERIFY(!handler.consumeDueDelayedNgRequest());
     QCOMPARE(handler.pendingDelayedNgCount(), 0);
 }
@@ -1154,7 +1167,9 @@ void DetectionCompletionTest::runtimeControllerRejectsConcurrentAndFaultedStarts
     QCOMPARE(controller.runId(), QStringLiteral("run-1"));
     QVERIFY(controller.markRunning());
     QVERIFY(!controller.markRunning());
-    controller.markFault();
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::RuntimeInvariantViolation,
+                QStringLiteral("test fault")));
     QVERIFY(controller.state() == InspectionRuntimeState::Fault);
     QVERIFY(controller.beginStart().isEmpty());
 
@@ -1306,21 +1321,21 @@ void DetectionCompletionTest::runtimeControllerTracksAbnormalStatisticsOutsidePa
 
     controller.beginStart();
     QVERIFY(controller.markRunning());
-    QVERIFY(!controller.recordCancelledProduct());
-    QVERIFY(!controller.recordUnconfirmedProduct());
-    const DetectionResultHandlingOutcome normalOutcome = controller.record(
-                controller.complete(
+    const DetectionCompletion normalCompletion = controller.complete(
                     cv::Mat(1, 1, CV_8UC1, cv::Scalar(3)),
-                    okResult),
+                    okResult);
+    const DetectionResultHandlingOutcome normalOutcome = controller.record(
+                normalCompletion,
                 0,
                 0);
     QVERIFY(normalOutcome.resultRecorded);
     QVERIFY(controller.enterFault(
                 InspectionFaultReason::RuntimeInvariantViolation,
                 QStringLiteral("runtime invariant")));
-    QVERIFY(controller.recordCancelledProduct());
-    QVERIFY(controller.recordUnconfirmedProduct());
-    QVERIFY(controller.recordUnconfirmedProduct());
+    QVERIFY(controller.recordFaultedPlcOutput(
+                normalCompletion.frame->productKey));
+    QVERIFY(!controller.recordFaultedPlcOutput(
+                normalCompletion.frame->productKey));
 
     DetectionResultStatistics statistics = controller.statistics();
     DetectionAbnormalStatistics abnormalStatistics =
@@ -1329,8 +1344,8 @@ void DetectionCompletionTest::runtimeControllerTracksAbnormalStatisticsOutsidePa
     QCOMPARE(statistics.ngCount, 0);
     QCOMPARE(statistics.passRatePercent(), 100.0);
     QCOMPARE(abnormalStatistics.systemFaultCount, quint64(1));
-    QCOMPARE(abnormalStatistics.cancelledProductCount, quint64(1));
-    QCOMPARE(abnormalStatistics.unconfirmedProductCount, quint64(2));
+    QCOMPARE(abnormalStatistics.cancelledProductCount, quint64(0));
+    QCOMPARE(abnormalStatistics.unconfirmedProductCount, quint64(1));
     QCOMPARE(abnormalStatistics.postFaultDroppedFrameCount, quint64(0));
 
     QVERIFY(controller.acknowledgeFault());
@@ -1343,8 +1358,8 @@ void DetectionCompletionTest::runtimeControllerTracksAbnormalStatisticsOutsidePa
     QCOMPARE(statistics.totalCount, 1);
     QCOMPARE(statistics.ngCount, 0);
     QCOMPARE(abnormalStatistics.systemFaultCount, quint64(2));
-    QCOMPARE(abnormalStatistics.cancelledProductCount, quint64(1));
-    QCOMPARE(abnormalStatistics.unconfirmedProductCount, quint64(2));
+    QCOMPARE(abnormalStatistics.cancelledProductCount, quint64(0));
+    QCOMPARE(abnormalStatistics.unconfirmedProductCount, quint64(1));
 
     controller.resetStatistics();
     QCOMPARE(controller.statistics().totalCount, 0);
@@ -1415,6 +1430,244 @@ void DetectionCompletionTest::runtimeControllerAcknowledgementClearsActiveFaultO
                 controller.abnormalStatistics().systemFaultCount,
                 quint64(1));
     QVERIFY(!controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerNormalRecordLeavesNoFaultProductActions()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("normal-close-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    const DetectionCompletion completion = controller.complete(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(7)),
+                result);
+    QVERIFY(controller.record(completion, 0, 0).resultRecorded);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("fault after normal record")));
+
+    QVERIFY(controller.faultProductActions(true).empty());
+    QCOMPARE(controller.unresolvedFaultProductCount(), 0);
+    QVERIFY(controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerSingleAcceptedFaultPlansOneFallbackNg()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("single-fallback-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    const std::shared_ptr<const FrameData> frame = controller.acceptFrame(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(8)));
+    QVERIFY(frame);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::HardTriggerQueueOverflow,
+                QStringLiteral("single unresolved product")));
+
+    const std::vector<InspectionFaultProductAction> disconnectedActions =
+            controller.faultProductActions(false);
+    QCOMPARE(static_cast<int>(disconnectedActions.size()), 1);
+    QVERIFY(disconnectedActions.front().type
+            == InspectionFaultProductActionType::RecordUnconfirmed);
+
+    const std::vector<InspectionFaultProductAction> writableActions =
+            controller.faultProductActions(true);
+    QCOMPARE(static_cast<int>(writableActions.size()), 1);
+    QCOMPARE(writableActions.front().productKey.runId,
+             QStringLiteral("single-fallback-run"));
+    QCOMPARE(writableActions.front().productKey.sequence, quint64(1));
+    QVERIFY(writableActions.front().type
+            == InspectionFaultProductActionType::RequestFallbackNg);
+    QVERIFY(!controller.acknowledgeFault());
+
+    QVERIFY(controller.resolveFaultProduct(
+                frame->productKey,
+                InspectionFaultProductResolution::FallbackNgRequested));
+    QVERIFY(!controller.resolveFaultProduct(
+                frame->productKey,
+                InspectionFaultProductResolution::FallbackNgRequested));
+    QCOMPARE(
+                controller.abnormalStatistics().cancelledProductCount,
+                quint64(1));
+    QCOMPARE(controller.faultFallbackNgResolutionCount(), 1);
+    QCOMPARE(controller.faultUnconfirmedProductCount(), 0);
+    QCOMPARE(controller.totalCount(), 0);
+    QCOMPARE(controller.ngCount(), 0);
+    QVERIFY(controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerCompletedFaultProductIsNeverFallbackNg()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("completed-fault-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+
+    const std::shared_ptr<const FrameData> frame = controller.acceptFrame(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(9)));
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+    const DetectionCompletion completion = controller.complete(frame, result);
+    QVERIFY(completion.isValid());
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("fault before result record")));
+
+    const std::vector<InspectionFaultProductAction> actions =
+            controller.faultProductActions(true);
+    QCOMPARE(static_cast<int>(actions.size()), 1);
+    QVERIFY(actions.front().type
+            == InspectionFaultProductActionType::RecordUnconfirmed);
+    QVERIFY(!controller.resolveFaultProduct(
+                frame->productKey,
+                InspectionFaultProductResolution::FallbackNgRequested));
+    QVERIFY(controller.resolveFaultProduct(
+                frame->productKey,
+                InspectionFaultProductResolution::Unconfirmed));
+    QCOMPARE(
+                controller.abnormalStatistics().unconfirmedProductCount,
+                quint64(1));
+    QCOMPARE(controller.faultUnconfirmedProductCount(), 1);
+    QCOMPARE(controller.totalCount(), 0);
+    QVERIFY(controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerMultipleFaultProductsCannotUseBlindFallbackNg()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("multiple-fault-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    const cv::Mat image(2, 2, CV_8UC1, cv::Scalar(10));
+    const std::shared_ptr<const FrameData> first =
+            controller.acceptFrame(image);
+    const std::shared_ptr<const FrameData> second =
+            controller.acceptFrame(image);
+    QVERIFY(first);
+    QVERIFY(second);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::ProductIdentityAmbiguous,
+                QStringLiteral("two products without PLC identity")));
+
+    const std::vector<InspectionFaultProductAction> actions =
+            controller.faultProductActions(true);
+    QCOMPARE(static_cast<int>(actions.size()), 2);
+    QCOMPARE(actions[0].productKey.sequence, quint64(1));
+    QCOMPARE(actions[1].productKey.sequence, quint64(2));
+    QVERIFY(actions[0].type
+            == InspectionFaultProductActionType::RecordUnconfirmed);
+    QVERIFY(actions[1].type
+            == InspectionFaultProductActionType::RecordUnconfirmed);
+    QVERIFY(!controller.resolveFaultProduct(
+                first->productKey,
+                InspectionFaultProductResolution::FallbackNgRequested));
+    QVERIFY(controller.resolveFaultProduct(
+                first->productKey,
+                InspectionFaultProductResolution::Unconfirmed));
+    QVERIFY(controller.resolveFaultProduct(
+                second->productKey,
+                InspectionFaultProductResolution::Unconfirmed));
+    QCOMPARE(
+                controller.abnormalStatistics().unconfirmedProductCount,
+                quint64(2));
+    QCOMPARE(controller.faultUnconfirmedProductCount(), 2);
+    QCOMPARE(controller.unresolvedFaultProductCount(), 0);
+    QVERIFY(controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerFaultedPlcOutputIsUnconfirmedExactlyOnce()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("plc-output-fault-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ng;
+    result.status = DetectionStatus::Completed;
+    const DetectionCompletion completion = controller.complete(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(11)),
+                result);
+    QVERIFY(controller.record(completion, 0, 0).resultRecorded);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("NG output failed")));
+
+    QVERIFY(controller.recordFaultedPlcOutput(
+                completion.frame->productKey));
+    QVERIFY(!controller.recordFaultedPlcOutput(
+                completion.frame->productKey));
+    QCOMPARE(controller.faultedPlcOutputCount(), 1);
+    QCOMPARE(controller.faultUnconfirmedProductCount(), 1);
+    QCOMPARE(controller.totalCount(), 1);
+    QCOMPARE(controller.ngCount(), 1);
+    QCOMPARE(
+                controller.abnormalStatistics().unconfirmedProductCount,
+                quint64(1));
+    QVERIFY(controller.faultProductActions(true).empty());
+    QVERIFY(controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerFaultResolutionReleasesFrameOwnership()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("frame-release-run");
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+
+    std::shared_ptr<const FrameData> frame = controller.acceptFrame(
+                cv::Mat(64, 64, CV_8UC3, cv::Scalar(1, 2, 3)));
+    QVERIFY(frame);
+    const std::weak_ptr<const FrameData> weakFrame = frame;
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::HardTriggerQueueOverflow,
+                QStringLiteral("release accepted frame")));
+    QVERIFY(controller.resolveFaultProduct(
+                frame->productKey,
+                InspectionFaultProductResolution::Unconfirmed));
+
+    frame.reset();
+    QVERIFY(weakFrame.expired());
+    QVERIFY(controller.acknowledgeFault());
+}
+
+void DetectionCompletionTest::runtimeControllerNewRunStartsWithEmptyReconciliation()
+{
+    int runNumber = 0;
+    InspectionRuntimeController controller([&runNumber]() {
+        return QStringLiteral("reconciliation-run-%1")
+                .arg(++runNumber);
+    });
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    const std::shared_ptr<const FrameData> frame = controller.acceptFrame(
+                cv::Mat(2, 2, CV_8UC1, cv::Scalar(12)));
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected));
+    QVERIFY(controller.resolveFaultProduct(
+                frame->productKey,
+                InspectionFaultProductResolution::Unconfirmed));
+    QVERIFY(controller.acknowledgeFault());
+
+    QCOMPARE(controller.beginStart(),
+             QStringLiteral("reconciliation-run-2"));
+    QVERIFY(controller.markRunning());
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::RuntimeInvariantViolation));
+    QCOMPARE(controller.unresolvedFaultProductCount(), 0);
+    QVERIFY(controller.faultProductActions(true).empty());
+    QVERIFY(controller.acknowledgeFault());
 }
 
 void DetectionCompletionTest::runtimeControllerOwnsCompletionAndResultHandling()
@@ -3831,7 +4084,9 @@ void DetectionCompletionTest::completionControllerRejectsInvalidRequestWithoutSi
     int plcRequests = 0;
     int presentationPreparations = 0;
     DetectionCompletionControllerCallbacks callbacks;
-    callbacks.requestPlc = [&plcRequests](DetectionPlcAction) {
+    callbacks.requestPlc = [&plcRequests](
+            DetectionPlcAction,
+            const ProductKey &) {
         ++plcRequests;
     };
     DetectionCompletionController controller(
@@ -3864,13 +4119,17 @@ void DetectionCompletionTest::completionControllerPreservesDelayedNgAndCurrentPl
     QVERIFY(runtimeController.markRunning());
 
     QStringList events;
+    QList<ProductKey> plcProductKeys;
     DetectionResultPresenter presenter;
     bindTestResultView(&presenter, &events);
     DetectionCompletionControllerCallbacks callbacks;
-    callbacks.requestPlc = [&events](DetectionPlcAction action) {
+    callbacks.requestPlc = [&events, &plcProductKeys](
+            DetectionPlcAction action,
+            const ProductKey &productKey) {
         events.append(action == DetectionPlcAction::RequestNg
                       ? QStringLiteral("plc-ng")
                       : QStringLiteral("plc-ok"));
+        plcProductKeys.append(productKey);
     };
     DetectionCompletionController controller(
                 &runtimeController,
@@ -3926,8 +4185,11 @@ void DetectionCompletionTest::completionControllerPreservesDelayedNgAndCurrentPl
              << QStringLiteral("plc-ng")
              << QStringLiteral("prepare-2")
              << QStringLiteral("finalize-2")
-             << QStringLiteral("present")
-             << QStringLiteral("plc-ok"));
+              << QStringLiteral("present")
+              << QStringLiteral("plc-ok"));
+    QCOMPARE(plcProductKeys.size(), 2);
+    QCOMPARE(plcProductKeys[0].sequence, quint64(1));
+    QCOMPARE(plcProductKeys[1].sequence, quint64(2));
 }
 
 void DetectionCompletionTest::completionControllerSavesAnnotatedThenRaw()
@@ -4110,7 +4372,9 @@ void DetectionCompletionTest::completionControllerWarnsForMissingAnnotatedImage(
     callbacks.warnMissingAnnotatedImage = [&warnings]() {
         ++warnings;
     };
-    callbacks.requestPlc = [&plcActions](DetectionPlcAction action) {
+    callbacks.requestPlc = [&plcActions](
+            DetectionPlcAction action,
+            const ProductKey &) {
         plcActions.append(action);
     };
     DetectionCompletionController controller(
@@ -4174,7 +4438,9 @@ void DetectionCompletionTest::completionControllerRejectsDuplicateBeforeRepeated
     presenter.bindView(bindings);
     int plcRequests = 0;
     DetectionCompletionControllerCallbacks callbacks;
-    callbacks.requestPlc = [&plcRequests](DetectionPlcAction) {
+    callbacks.requestPlc = [&plcRequests](
+            DetectionPlcAction,
+            const ProductKey &) {
         ++plcRequests;
     };
     DetectionCompletionController controller(

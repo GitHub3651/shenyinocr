@@ -38,7 +38,7 @@ struct DetectionCompletionProcessRequest
 
 struct DetectionCompletionControllerCallbacks
 {
-    std::function<void(DetectionPlcAction)> requestPlc;
+    std::function<void(DetectionPlcAction, const ProductKey &)> requestPlc;
     std::function<void()> warnMissingAnnotatedImage;
 };
 
@@ -71,7 +71,9 @@ private:
         const DetectionCompletionProcessRequest &request,
         const DetectionResultHandlingOutcome &handlingOutcome,
         const QImage &annotatedImage) const;
-    void requestPlc(DetectionPlcAction action) const;
+    void requestPlc(
+        DetectionPlcAction action,
+        const ProductKey &productKey) const;
 
     InspectionRuntimeController *m_runtimeController = nullptr;
     ImageSaveService *m_imageSaveService = nullptr;

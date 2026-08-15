@@ -93,6 +93,7 @@
 #include <QSortFilterProxyModel>
 #include <QSet>
 #include <QEvent>
+#include <QEventLoop>
 #include <QRegularExpression>
 #include <QAbstractButton>
 #include <QSplitterHandle>
@@ -122,6 +123,31 @@
 using namespace std;
 
 namespace {
+bool sameProductKey(const ProductKey &left, const ProductKey &right)
+{
+    return left.runId == right.runId
+            && left.sequence == right.sequence;
+}
+
+void appendUniqueProductKey(
+    std::vector<ProductKey> *productKeys,
+    const ProductKey &productKey)
+{
+    if (!productKeys || !productKey.isValid()) {
+        return;
+    }
+    const std::vector<ProductKey>::const_iterator existing =
+            std::find_if(
+                productKeys->cbegin(),
+                productKeys->cend(),
+                [&productKey](const ProductKey &candidate) {
+        return sameProductKey(candidate, productKey);
+    });
+    if (existing == productKeys->cend()) {
+        productKeys->push_back(productKey);
+    }
+}
+
 void setLabelTextIfChanged(QLabel *label, const QString &text)
 {
     if (label && label->text() != text) {
@@ -717,12 +743,16 @@ Widget::Widget(QWidget *parent)
     Qt::QueuedConnection);
 
     DetectionCompletionControllerCallbacks completionCallbacks;
-    completionCallbacks.requestPlc = [this](DetectionPlcAction action) {
+    completionCallbacks.requestPlc = [this](
+            DetectionPlcAction action,
+            const ProductKey &productKey) {
+        m_activePlcOutputProductKey = productKey;
         if (action == DetectionPlcAction::RequestOk) {
             rightremove();
         } else if (action == DetectionPlcAction::RequestNg) {
             wrongremove();
         }
+        m_activePlcOutputProductKey = ProductKey();
     };
     completionCallbacks.warnMissingAnnotatedImage = [this]() {
         QMessageBox::warning(
@@ -1374,8 +1404,14 @@ void Widget::rightremove()
     {
         enterInspectionFault(
                     InspectionFaultReason::PlcDisconnected,
-                    QStringLiteral(
-                        "PLC OK/\u590d\u4f4d\u8f93\u51fa\u524d\u68c0\u6d4b\u5230\u8fde\u63a5\u5df2\u65ad\u5f00\u3002"));
+                     QStringLiteral(
+                         "PLC OK/\u590d\u4f4d\u8f93\u51fa\u524d\u68c0\u6d4b\u5230\u8fde\u63a5\u5df2\u65ad\u5f00\u3002"));
+        recordFaultedPlcOutput(m_activePlcOutputProductKey);
+        for (const ProductKey &productKey
+             : m_pendingPlcResetProductKeys) {
+            recordFaultedPlcOutput(productKey);
+        }
+        timer->stop();
         return;
     }
 
@@ -1397,6 +1433,13 @@ void Widget::rightremove()
         enterInspectionFault(
                     InspectionFaultReason::PlcDisconnected,
                     diagnostic);
+        recordFaultedPlcOutput(m_activePlcOutputProductKey);
+        for (const ProductKey &productKey
+             : m_pendingPlcResetProductKeys) {
+            recordFaultedPlcOutput(productKey);
+        }
+    } else {
+        m_pendingPlcResetProductKeys.clear();
     }
     timer->stop();
 }
@@ -1434,9 +1477,13 @@ void Widget::wrongremove()
         enterInspectionFault(
                     InspectionFaultReason::PlcDisconnected,
                     diagnostic);
+        recordFaultedPlcOutput(m_activePlcOutputProductKey);
     }
     else
     {
+        appendUniqueProductKey(
+                    &m_pendingPlcResetProductKeys,
+                    m_activePlcOutputProductKey);
         // 100ms后调用rightremove恢复信号
         timer->start(100);
     }
@@ -1518,6 +1565,203 @@ bool Widget::confirmInspectionFaultRecovery()
         cancelButton->setText(QStringLiteral("\u7ee7\u7eed\u4fdd\u6301\u6545\u969c\u9501\u5b9a"));
     }
     return messageBox.exec() == QMessageBox::Yes;
+}
+
+bool Widget::writeInspectionPlcOutput(
+    std::uint8_t value,
+    QString *errorMessage)
+{
+    if (!m_plcDevice || !m_plcDevice->isConnected()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "PLC is disconnected before DB1.DBB1033 write.");
+        }
+        return false;
+    }
+
+    unsigned char data[1] = {
+        static_cast<unsigned char>(value)
+    };
+    const PlcOperationResult result = m_plcDevice->writeDbArea(
+                1,
+                1033,
+                1,
+                PlcDataWidth::Byte,
+                data);
+    if (!result.isSuccess()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "PLC DB1.DBB1033 write value %1 failed, code %2.")
+                    .arg(static_cast<int>(value))
+                    .arg(result.nativeErrorCode);
+        }
+        return false;
+    }
+    return true;
+}
+
+void Widget::recordFaultedPlcOutput(
+    const ProductKey &productKey)
+{
+    if (!productKey.isValid()
+            || !m_runtimeController.recordFaultedPlcOutput(
+                productKey)) {
+        return;
+    }
+
+    qCritical() << "[INSPECTION_FAULT] recorded PLC output as unconfirmed"
+                << productKey.runId
+                << productKey.sequence;
+}
+
+bool Widget::requestFaultFallbackNgPulse(
+    const ProductKey &productKey,
+    QString *errorMessage)
+{
+    if (!writeInspectionPlcOutput(49, errorMessage)) {
+        return false;
+    }
+
+    appendUniqueProductKey(
+                &m_pendingPlcResetProductKeys,
+                productKey);
+    QEventLoop pulseWait;
+    QTimer::singleShot(100, &pulseWait, &QEventLoop::quit);
+    pulseWait.exec(QEventLoop::ExcludeUserInputEvents);
+
+    if (!writeInspectionPlcOutput(0, errorMessage)) {
+        return false;
+    }
+    m_pendingPlcResetProductKeys.clear();
+    return true;
+}
+
+bool Widget::reconcileInspectionFaultProducts(
+    QString *summary,
+    QString *errorMessage)
+{
+    QStringList warnings;
+
+    if (timer) {
+        timer->stop();
+    }
+    if (m_plcDevice && !m_plcDevice->isConnected()) {
+        QString plcIp = m_appliedGlobalSettings.plcIp.trimmed();
+        if (plcIp.isEmpty() && ui) {
+            plcIp = ui->lineEdit->text().trimmed();
+        }
+        const QByteArray address = plcIp.toUtf8();
+        const int rack = m_appliedGlobalSettings.plcRack;
+        const int slot = m_appliedGlobalSettings.plcSlot;
+        const PlcOperationResult reconnectResult =
+                m_plcDevice->connectTo(
+                    address.constData(),
+                    rack,
+                    slot);
+        if (!reconnectResult.isSuccess()) {
+            warnings.append(QStringLiteral(
+                                "PLC reconnect failed, code %1.")
+                            .arg(reconnectResult.nativeErrorCode));
+        }
+    }
+
+    if (!m_pendingPlcResetProductKeys.empty()) {
+        QString resetError;
+        if (!writeInspectionPlcOutput(0, &resetError)) {
+            for (const ProductKey &productKey
+                 : m_pendingPlcResetProductKeys) {
+                recordFaultedPlcOutput(productKey);
+            }
+            if (errorMessage) {
+                *errorMessage = QStringLiteral(
+                            "\u6545\u969c\u6062\u590d\u524d PLC \u590d\u4f4d 0 \u5199\u5165\u5931\u8d25\uff0c"
+                            "\u7cfb\u7edf\u7ee7\u7eed\u4fdd\u6301 Fault\u3002\n%1")
+                        .arg(resetError);
+            }
+            return false;
+        }
+        m_pendingPlcResetProductKeys.clear();
+    }
+
+    const bool plcWritable = m_plcDevice
+            && m_plcDevice->isConnected();
+    const std::vector<InspectionFaultProductAction> actions =
+            m_runtimeController.faultProductActions(plcWritable);
+    for (const InspectionFaultProductAction &action : actions) {
+        if (action.type
+                == InspectionFaultProductActionType::RequestFallbackNg) {
+            QString pulseError;
+            if (requestFaultFallbackNgPulse(
+                        action.productKey,
+                        &pulseError)) {
+                if (!m_runtimeController.resolveFaultProduct(
+                            action.productKey,
+                            InspectionFaultProductResolution::FallbackNgRequested)) {
+                    if (errorMessage) {
+                        *errorMessage = QStringLiteral(
+                                    "Fault product reconciliation state changed unexpectedly.");
+                    }
+                    return false;
+                }
+                continue;
+            }
+
+            if (!m_runtimeController.resolveFaultProduct(
+                        action.productKey,
+                        InspectionFaultProductResolution::Unconfirmed)) {
+                if (errorMessage) {
+                    *errorMessage = QStringLiteral(
+                                "Fault product could not be marked unconfirmed.");
+                }
+                return false;
+            }
+            warnings.append(pulseError);
+            if (!m_pendingPlcResetProductKeys.empty()) {
+                if (errorMessage) {
+                    *errorMessage = QStringLiteral(
+                                "\u6545\u969c\u515c\u5e95 NG \u5df2\u5199\u5165 49\uff0c\u4f46\u590d\u4f4d 0 \u5931\u8d25\u3002"
+                                "\u4ea7\u54c1\u5df2\u8bb0\u4e3a\u672a\u786e\u8ba4\uff0c\u7cfb\u7edf\u7ee7\u7eed\u4fdd\u6301 Fault\u3002\n%1")
+                            .arg(pulseError);
+                }
+                return false;
+            }
+            continue;
+        }
+
+        if (!m_runtimeController.resolveFaultProduct(
+                    action.productKey,
+                    InspectionFaultProductResolution::Unconfirmed)) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral(
+                            "Fault product could not be marked unconfirmed.");
+            }
+            return false;
+        }
+    }
+
+    const int fallbackNgRequested =
+            m_runtimeController.faultFallbackNgResolutionCount();
+    const int unconfirmedProducts =
+            m_runtimeController.faultUnconfirmedProductCount();
+
+    if (summary) {
+        *summary = QStringLiteral(
+                    "\u672c\u6b21\u6545\u969c\u4ea7\u54c1\u6536\u53e3\uff1a"
+                    "\u515c\u5e95 NG \u8bf7\u6c42 %1 \u4ef6\uff0c"
+                    "\u672a\u786e\u8ba4 %2 \u4ef6\u3002\n"
+                    "\u672a\u786e\u8ba4\u4ea7\u54c1\u4e0d\u8fdb\u5165\u6b63\u5e38\u603b\u6570\u3001NG\u6570\u548c\u5408\u683c\u7387\uff0c"
+                    "\u8bf7\u6309\u73b0\u573a\u6d41\u7a0b\u9694\u79bb\u3002")
+                .arg(fallbackNgRequested)
+                .arg(unconfirmedProducts);
+        if (!warnings.isEmpty()) {
+            *summary += QStringLiteral("\n\nPLC details:\n")
+                    + warnings.join(QStringLiteral("\n"));
+        }
+    }
+    qWarning() << "[INSPECTION_FAULT] product reconciliation completed"
+               << "fallbackNgRequests=" << fallbackNgRequested
+               << "unconfirmed=" << unconfirmedProducts;
+    return true;
 }
 
 void Widget::checkInspectionPlcHealth()
@@ -9040,13 +9284,39 @@ void Widget::on_cancel_clicked()
     ui->statusLabel->setText("已停止");
     isCollecting = false;
     stopTransaction.commit();
+    if (!recoveringInspectionFault
+            && m_runtimeController.state()
+               == InspectionRuntimeState::Fault) {
+        m_operationState = OperationState::Fault;
+        presentInspectionFault();
+        return;
+    }
     if (recoveringInspectionFault) {
+        QString reconciliationSummary;
+        QString reconciliationError;
+        if (!reconcileInspectionFaultProducts(
+                    &reconciliationSummary,
+                    &reconciliationError)) {
+            m_operationState = OperationState::Fault;
+            presentInspectionFault();
+            QMessageBox::critical(
+                        this,
+                        QStringLiteral("\u6545\u969c\u4ea7\u54c1\u6536\u53e3\u5931\u8d25"),
+                        reconciliationError);
+            return;
+        }
         if (!m_runtimeController.acknowledgeFault()) {
             m_operationState = OperationState::Fault;
             presentInspectionFault();
             return;
         }
         restoreNormalFaultUi();
+        if (!reconciliationSummary.isEmpty()) {
+            QMessageBox::warning(
+                        this,
+                        QStringLiteral("\u6545\u969c\u4ea7\u54c1\u6536\u53e3\u7ed3\u679c"),
+                        reconciliationSummary);
+        }
         qDebug() << "[INSPECTION_FAULT] operator acknowledged"
                  << "software runtime unlocked";
     }

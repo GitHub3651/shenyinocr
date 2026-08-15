@@ -50,7 +50,7 @@ public:
         int imageSaveModeIndex,
         int delayedNgOffset);
 
-    bool consumeDueDelayedNgRequest();
+    bool consumeDueDelayedNgRequest(ProductKey *productKey = nullptr);
     void recordSystemFault();
     void recordCancelledProduct();
     void recordUnconfirmedProduct();
@@ -68,7 +68,12 @@ public:
     void clearPendingDelayedNgRequests();
 
 private:
+    struct DelayedNgRequest {
+        int dueTotalCount = 0;
+        ProductKey productKey;
+    };
+
     DetectionResultStatistics m_statistics;
     DetectionAbnormalStatistics m_abnormalStatistics;
-    std::queue<int> m_delayedNgDueCounts;
+    std::queue<DelayedNgRequest> m_delayedNgRequests;
 };

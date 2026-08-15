@@ -17,6 +17,7 @@
 #include "opencv2/imgproc.hpp"
 #include <chrono>
 #include <atomic>
+#include <cstdint>
 #include <iomanip>
 #include <memory>
 #include <vector>
@@ -372,6 +373,16 @@ private:
         const QString &diagnostic);
     void presentInspectionFault();
     bool confirmInspectionFaultRecovery();
+    bool reconcileInspectionFaultProducts(
+        QString *summary,
+        QString *errorMessage);
+    bool requestFaultFallbackNgPulse(
+        const ProductKey &productKey,
+        QString *errorMessage);
+    bool writeInspectionPlcOutput(
+        std::uint8_t value,
+        QString *errorMessage);
+    void recordFaultedPlcOutput(const ProductKey &productKey);
     void checkInspectionPlcHealth();
     void restoreNormalFaultUi();
     void handleSoftwareTissueCompletion(
@@ -460,6 +471,8 @@ private:
     QString m_latestImageSaveError;
     bool m_imageSaveWarningScheduled = false;
     bool m_faultAlarmPresented = false;
+    ProductKey m_activePlcOutputProductKey;
+    std::vector<ProductKey> m_pendingPlcResetProductKeys;
 
     // ========== 定时器 ==========
     QTimer *timer;                      ///< 定时器

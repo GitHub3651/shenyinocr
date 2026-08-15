@@ -25,7 +25,12 @@ QString InspectionRuntimeController::beginStart()
     m_state = InspectionRuntimeState::Starting;
     m_lastRecordedRunId.clear();
     m_lastRecordedProductSequence = 0;
-    return m_session.begin();
+    m_faultedPlcOutputSequences.clear();
+    m_faultFallbackNgResolutionCount = 0;
+    m_faultUnconfirmedProductCount = 0;
+    const QString runId = m_session.begin();
+    m_productReconciler.beginRun(runId);
+    return runId;
 }
 
 bool InspectionRuntimeController::markRunning()
@@ -65,13 +70,6 @@ void InspectionRuntimeController::finishStop()
     if (m_state != InspectionRuntimeState::Fault) {
         m_state = InspectionRuntimeState::Idle;
     }
-}
-
-void InspectionRuntimeController::markFault()
-{
-    enterFault(
-                InspectionFaultReason::RuntimeInvariantViolation,
-                QStringLiteral("Legacy runtime fault request."));
 }
 
 bool InspectionRuntimeController::enterFault(
@@ -114,6 +112,10 @@ bool InspectionRuntimeController::acknowledgeFault()
     waitForDetectionWorkerStop();
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Fault) {
+        return false;
+    }
+
+    if (m_productReconciler.hasUnresolvedProducts()) {
         return false;
     }
 
@@ -186,11 +188,15 @@ std::shared_ptr<const FrameData> InspectionRuntimeController::acceptFrame(
         return std::shared_ptr<const FrameData>();
     }
 
-    return m_session.acceptFrame(
+    const std::shared_ptr<const FrameData> frame = m_session.acceptFrame(
                 image,
                 frameNumber,
                 cameraIndex,
                 timestampUtc);
+    if (frame) {
+        m_productReconciler.noteAccepted(frame->productKey);
+    }
+    return frame;
 }
 
 DetectionCompletion InspectionRuntimeController::complete(
@@ -203,7 +209,12 @@ DetectionCompletion InspectionRuntimeController::complete(
         return DetectionCompletion();
     }
 
-    return m_session.complete(frame, result);
+    const DetectionCompletion completion = m_session.complete(frame, result);
+    if (completion.isValid()) {
+        m_productReconciler.noteAlgorithmCompleted(
+                    completion.frame->productKey);
+    }
+    return completion;
 }
 
 DetectionCompletion InspectionRuntimeController::complete(
@@ -219,12 +230,22 @@ DetectionCompletion InspectionRuntimeController::complete(
         return DetectionCompletion();
     }
 
-    return m_session.complete(
+    const std::shared_ptr<const FrameData> frame = m_session.acceptFrame(
                 image,
-                result,
                 frameNumber,
                 cameraIndex,
                 timestampUtc);
+    if (!frame
+            || !m_productReconciler.noteAccepted(
+                frame->productKey)) {
+        return DetectionCompletion();
+    }
+    const DetectionCompletion completion = m_session.complete(frame, result);
+    if (completion.isValid()) {
+        m_productReconciler.noteAlgorithmCompleted(
+                    completion.frame->productKey);
+    }
+    return completion;
 }
 
 DetectionResultHandlingOutcome InspectionRuntimeController::record(
@@ -245,7 +266,8 @@ DetectionResultHandlingOutcome InspectionRuntimeController::record(
     if (productKey.runId != m_session.runId()
             || (productKey.runId == m_lastRecordedRunId
                 && productKey.sequence
-                   <= m_lastRecordedProductSequence)) {
+                   <= m_lastRecordedProductSequence)
+            || !m_productReconciler.canRecordResult(productKey)) {
         return rejected;
     }
 
@@ -256,14 +278,91 @@ DetectionResultHandlingOutcome InspectionRuntimeController::record(
     if (outcome.resultRecorded) {
         m_lastRecordedRunId = productKey.runId;
         m_lastRecordedProductSequence = productKey.sequence;
+        m_productReconciler.noteResultRecorded(productKey);
     }
     return outcome;
 }
 
-bool InspectionRuntimeController::consumeDueDelayedNgRequest()
+bool InspectionRuntimeController::consumeDueDelayedNgRequest(
+    ProductKey *productKey)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_resultHandler.consumeDueDelayedNgRequest();
+    return m_resultHandler.consumeDueDelayedNgRequest(productKey);
+}
+
+std::vector<InspectionFaultProductAction>
+InspectionRuntimeController::faultProductActions(bool plcWritable) const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state != InspectionRuntimeState::Fault) {
+        return std::vector<InspectionFaultProductAction>();
+    }
+    return m_productReconciler.faultActions(plcWritable);
+}
+
+bool InspectionRuntimeController::resolveFaultProduct(
+    const ProductKey &productKey,
+    InspectionFaultProductResolution resolution)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state != InspectionRuntimeState::Fault
+            || !m_productReconciler.resolve(
+                productKey,
+                resolution)) {
+        return false;
+    }
+
+    if (resolution
+            == InspectionFaultProductResolution::FallbackNgRequested) {
+        m_resultHandler.recordCancelledProduct();
+        ++m_faultFallbackNgResolutionCount;
+    } else {
+        m_resultHandler.recordUnconfirmedProduct();
+        ++m_faultUnconfirmedProductCount;
+    }
+    return true;
+}
+
+bool InspectionRuntimeController::recordFaultedPlcOutput(
+    const ProductKey &productKey)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state != InspectionRuntimeState::Fault
+            || !productKey.isValid()
+            || productKey.runId != m_session.runId()
+            || productKey.sequence > m_lastRecordedProductSequence
+            || !m_faultedPlcOutputSequences.insert(
+                productKey.sequence).second) {
+        return false;
+    }
+
+    m_resultHandler.recordUnconfirmedProduct();
+    ++m_faultUnconfirmedProductCount;
+    return true;
+}
+
+int InspectionRuntimeController::unresolvedFaultProductCount() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_productReconciler.unresolvedProductCount();
+}
+
+int InspectionRuntimeController::faultedPlcOutputCount() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return static_cast<int>(m_faultedPlcOutputSequences.size());
+}
+
+int InspectionRuntimeController::faultFallbackNgResolutionCount() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_faultFallbackNgResolutionCount;
+}
+
+int InspectionRuntimeController::faultUnconfirmedProductCount() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_faultUnconfirmedProductCount;
 }
 
 DetectionResultStatistics InspectionRuntimeController::statistics() const
@@ -295,29 +394,6 @@ int InspectionRuntimeController::pendingDelayedNgCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_resultHandler.pendingDelayedNgCount();
-}
-
-bool InspectionRuntimeController::recordCancelledProduct()
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state != InspectionRuntimeState::Stopping
-            && m_state != InspectionRuntimeState::Fault) {
-        return false;
-    }
-
-    m_resultHandler.recordCancelledProduct();
-    return true;
-}
-
-bool InspectionRuntimeController::recordUnconfirmedProduct()
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state != InspectionRuntimeState::Fault) {
-        return false;
-    }
-
-    m_resultHandler.recordUnconfirmedProduct();
-    return true;
 }
 
 void InspectionRuntimeController::resetStatistics()
