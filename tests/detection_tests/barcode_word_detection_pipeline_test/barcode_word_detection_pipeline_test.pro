@@ -29,7 +29,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.h \
     $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.h \
-    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder_adapter.h
+    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

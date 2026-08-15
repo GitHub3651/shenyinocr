@@ -2,10 +2,11 @@
 #include <QColor>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QVector>
 
 #include "TrackingTypes.h"
 #include "detection/common/detection_roi_geometry.h"
-#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/barcode/barcode_decoder.h"
 #include "devices/ocr/ocr_engine.h"
 #include "runtime/detection_mode_worker_factory.h"
 #include "runtime/detection_shadow_comparator.h"
@@ -16,6 +17,7 @@
 #include "runtime/inspection_acquisition_stop_coordinator.h"
 #include "runtime/inspection_camera_recovery_transition.h"
 #include "runtime/inspection_camera_start_transition.h"
+#include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_run_configuration.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
@@ -388,6 +390,83 @@ public:
     int openErrorCode = 0;
 };
 
+struct FakePlcWrite
+{
+    int dbNumber = 0;
+    int start = 0;
+    int amount = 0;
+    PlcDataWidth dataWidth = PlcDataWidth::Byte;
+    QByteArray data;
+};
+
+class RuntimeFakePlcDevice : public IPlcDevice
+{
+public:
+    PlcOperationResult connectTo(
+        const char *address,
+        int rack,
+        int slot) override
+    {
+        ++connectCalls;
+        connectedAddress = QString::fromUtf8(address);
+        connectedRack = rack;
+        connectedSlot = slot;
+        if (connectErrorCode == 0) {
+            connected = true;
+        }
+        return PlcOperationResult(connectErrorCode);
+    }
+
+    PlcOperationResult disconnect() override
+    {
+        ++disconnectCalls;
+        if (disconnectErrorCode == 0) {
+            connected = false;
+        }
+        return PlcOperationResult(disconnectErrorCode);
+    }
+
+    bool isConnected() override
+    {
+        return connected;
+    }
+
+    PlcOperationResult writeDbArea(
+        int dbNumber,
+        int start,
+        int amount,
+        PlcDataWidth dataWidth,
+        void *data) override
+    {
+        FakePlcWrite write;
+        write.dbNumber = dbNumber;
+        write.start = start;
+        write.amount = amount;
+        write.dataWidth = dataWidth;
+        write.data = QByteArray(
+                    static_cast<const char *>(data),
+                    amount);
+        writes.push_back(write);
+        const int callNumber = writes.size();
+        return PlcOperationResult(
+                    callNumber == failWriteCall
+                    ? failWriteErrorCode
+                    : 0);
+    }
+
+    bool connected = false;
+    int connectCalls = 0;
+    int disconnectCalls = 0;
+    int connectErrorCode = 0;
+    int disconnectErrorCode = 0;
+    int failWriteCall = -1;
+    int failWriteErrorCode = 91;
+    QString connectedAddress;
+    int connectedRack = -1;
+    int connectedSlot = -1;
+    QVector<FakePlcWrite> writes;
+};
+
 std::shared_ptr<DetectionWorker> idleDetectionWorker()
 {
     return std::shared_ptr<DetectionWorker>(
@@ -414,6 +493,12 @@ private slots:
     void operationUiPolicyPreservesTemplateCaptureControls();
     void operationUiPolicyFaultLocksOperationsUntilAcknowledged();
     void faultPresenterWarnsThatConveyorStateIsUnknown();
+    void plcControllerRejectsCommandsWithoutDevice();
+    void runtimeControllerOwnsTypedPlcConnectionBoundary();
+    void plcControllerEncodesTriggerModeByte();
+    void plcControllerPreservesRunSettingOrderAndEndian();
+    void plcControllerStopsRunSettingsAtFirstFailure();
+    void plcControllerUsesFixedResultAndPhotoDistanceAddresses();
     void settingsEditStateIgnoresUnknownKeys();
     void settingsEditStateDeduplicatesSharedDisplayNames();
     void settingsEditStateIncludesTemplatePrivateChanges();
@@ -652,6 +737,126 @@ void DetectionCompletionTest::faultPresenterWarnsThatConveyorStateIsUnknown()
             InspectionFaultPresenter::create(
                 InspectionFaultSnapshot());
     QVERIFY(!empty.isValid());
+}
+
+void DetectionCompletionTest::plcControllerRejectsCommandsWithoutDevice()
+{
+    std::unique_ptr<IPlcDevice> device;
+    InspectionPlcController controller(std::move(device));
+    QVERIFY(!controller.hasDevice());
+    QVERIFY(!controller.isConnected());
+    QVERIFY(!controller.connectTo(
+                QStringLiteral("192.168.10.10"),
+                0,
+                1).isSuccess());
+    QVERIFY(!controller.disconnect().isSuccess());
+    QVERIFY(!controller.writeResultValue(0).isSuccess());
+}
+
+void DetectionCompletionTest::runtimeControllerOwnsTypedPlcConnectionBoundary()
+{
+    RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
+    std::unique_ptr<IPlcDevice> device(fake);
+    const std::shared_ptr<InspectionPlcController> plcController(
+                new InspectionPlcController(std::move(device)));
+    InspectionRuntimeController runtimeController(
+                InspectionRuntimeController::RunIdFactory(),
+                plcController);
+
+    QVERIFY(runtimeController.hasPlcController());
+    QVERIFY(!runtimeController.isPlcConnected());
+    QVERIFY(runtimeController.connectPlc(
+                QStringLiteral("10.0.0.8"),
+                2,
+                3).isSuccess());
+    QVERIFY(runtimeController.isPlcConnected());
+    QCOMPARE(fake->connectCalls, 1);
+    QCOMPARE(fake->connectedAddress, QStringLiteral("10.0.0.8"));
+    QCOMPARE(fake->connectedRack, 2);
+    QCOMPARE(fake->connectedSlot, 3);
+    QVERIFY(runtimeController.disconnectPlc().isSuccess());
+    QVERIFY(!runtimeController.isPlcConnected());
+    QCOMPARE(fake->disconnectCalls, 1);
+}
+
+void DetectionCompletionTest::plcControllerEncodesTriggerModeByte()
+{
+    RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
+    std::unique_ptr<IPlcDevice> device(fake);
+    InspectionPlcController controller(std::move(device));
+
+    QVERIFY(controller.writeTriggerMode(0).isSuccess());
+    QVERIFY(controller.writeTriggerMode(1).isSuccess());
+    QVERIFY(!controller.writeTriggerMode(2).isSuccess());
+    QCOMPARE(fake->writes.size(), 2);
+    QCOMPARE(fake->writes.at(0).dbNumber, 1);
+    QCOMPARE(fake->writes.at(0).start, 1032);
+    QCOMPARE(fake->writes.at(0).amount, 1);
+    QVERIFY(fake->writes.at(0).dataWidth == PlcDataWidth::Byte);
+    QCOMPARE(fake->writes.at(0).data.toHex(), QByteArray("00"));
+    QCOMPARE(fake->writes.at(1).data.toHex(), QByteArray("01"));
+}
+
+void DetectionCompletionTest::plcControllerPreservesRunSettingOrderAndEndian()
+{
+    RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
+    std::unique_ptr<IPlcDevice> device(fake);
+    InspectionPlcController controller(std::move(device));
+    InspectionPlcRunSettings settings;
+    settings.rejectTime = 0x1234;
+    settings.rejectDistance = 0x12345678;
+    settings.photoTime = 0xABCD;
+    settings.photoDistance = 0x89ABCDEF;
+
+    const InspectionPlcRunSettingsResult result =
+            controller.applyRunSettings(settings);
+    QVERIFY(result.isSuccess());
+    QCOMPARE(fake->writes.size(), 4);
+    QCOMPARE(fake->writes.at(0).start, 980);
+    QCOMPARE(fake->writes.at(0).data.toHex(), QByteArray("1234"));
+    QVERIFY(fake->writes.at(0).dataWidth == PlcDataWidth::Word);
+    QCOMPARE(fake->writes.at(1).start, 920);
+    QCOMPARE(fake->writes.at(1).data.toHex(), QByteArray("12345678"));
+    QVERIFY(fake->writes.at(1).dataWidth == PlcDataWidth::DWord);
+    QCOMPARE(fake->writes.at(2).start, 982);
+    QCOMPARE(fake->writes.at(2).data.toHex(), QByteArray("abcd"));
+    QCOMPARE(fake->writes.at(3).start, 924);
+    QCOMPARE(fake->writes.at(3).data.toHex(), QByteArray("89abcdef"));
+}
+
+void DetectionCompletionTest::plcControllerStopsRunSettingsAtFirstFailure()
+{
+    RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
+    fake->failWriteCall = 3;
+    std::unique_ptr<IPlcDevice> device(fake);
+    InspectionPlcController controller(std::move(device));
+    InspectionPlcRunSettings settings;
+
+    const InspectionPlcRunSettingsResult result =
+            controller.applyRunSettings(settings);
+    QVERIFY(!result.isSuccess());
+    QVERIFY(result.failedField
+            == InspectionPlcRunSettingField::PhotoTime);
+    QCOMPARE(result.operation.nativeErrorCode, 91);
+    QCOMPARE(fake->writes.size(), 3);
+}
+
+void DetectionCompletionTest::plcControllerUsesFixedResultAndPhotoDistanceAddresses()
+{
+    RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
+    std::unique_ptr<IPlcDevice> device(fake);
+    InspectionPlcController controller(std::move(device));
+
+    QVERIFY(controller.writeResultValue(49).isSuccess());
+    QVERIFY(controller.writeResultValue(0).isSuccess());
+    QVERIFY(controller.writePhotoDistance(0x01020304).isSuccess());
+    QCOMPARE(fake->writes.size(), 3);
+    QCOMPARE(fake->writes.at(0).start, 1033);
+    QCOMPARE(fake->writes.at(0).data.toHex(), QByteArray("31"));
+    QCOMPARE(fake->writes.at(1).start, 1033);
+    QCOMPARE(fake->writes.at(1).data.toHex(), QByteArray("00"));
+    QCOMPARE(fake->writes.at(2).start, 924);
+    QCOMPARE(fake->writes.at(2).data.toHex(), QByteArray("01020304"));
 }
 
 void DetectionCompletionTest::settingsEditStateIgnoresUnknownKeys()

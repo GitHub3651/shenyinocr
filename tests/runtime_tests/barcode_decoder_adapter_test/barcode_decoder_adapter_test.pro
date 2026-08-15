@@ -19,6 +19,7 @@ SOURCES += \
 
 HEADERS += \
     $$PROJECT_ROOT/app/devices/barcode/barcode_decoder_adapter.h \
+    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \
     $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
     $$PROJECT_ROOT/app/BarcodeTypes.h
 

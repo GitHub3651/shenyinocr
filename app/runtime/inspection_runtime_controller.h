@@ -3,6 +3,7 @@
 #include "runtime/detection_worker.h"
 #include "runtime/detection_session.h"
 #include "runtime/inspection_fault_state.h"
+#include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_product_reconciler.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
@@ -26,7 +27,9 @@ public:
     using RunIdFactory = DetectionSession::RunIdFactory;
 
     explicit InspectionRuntimeController(
-        const RunIdFactory &runIdFactory = RunIdFactory());
+        const RunIdFactory &runIdFactory = RunIdFactory(),
+        const std::shared_ptr<InspectionPlcController> &plcController =
+            std::shared_ptr<InspectionPlcController>());
     ~InspectionRuntimeController();
 
     QString beginStart();
@@ -46,6 +49,20 @@ public:
     QString runId() const;
     quint64 acceptedProductCount() const;
     quint64 completedProductCount() const;
+
+    bool hasPlcController() const;
+    bool isPlcConnected() const;
+    PlcOperationResult connectPlc(
+        const QString &address,
+        int rack,
+        int slot);
+    PlcOperationResult disconnectPlc();
+    PlcOperationResult writePlcTriggerMode(int modeIndex);
+    InspectionPlcRunSettingsResult applyPlcRunSettings(
+        const InspectionPlcRunSettings &settings);
+    PlcOperationResult writePlcPhotoDistance(
+        std::uint32_t photoDistance);
+    PlcOperationResult writePlcResultValue(std::uint8_t value);
 
     std::shared_ptr<const FrameData> acceptFrame(
         const cv::Mat &image,
@@ -116,6 +133,7 @@ private:
     mutable std::mutex m_mutex;
     InspectionRuntimeState m_state = InspectionRuntimeState::Idle;
     DetectionSession m_session;
+    std::shared_ptr<InspectionPlcController> m_plcController;
     InspectionFaultState m_faultState;
     InspectionProductReconciler m_productReconciler;
     DetectionResultHandler m_resultHandler;

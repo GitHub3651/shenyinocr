@@ -1,7 +1,7 @@
 #include "runtime/detection_mode_worker_factory.h"
 
 #include "detection/ocr/ocr_detection_pipeline.h"
-#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/barcode/barcode_decoder.h"
 #include "devices/ocr/ocr_engine.h"
 
 #include <chrono>

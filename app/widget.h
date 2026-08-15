@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <iomanip>
 #include <memory>
+#include <functional>
 #include <vector>
 #include <QMetaType>
 #include <QTranslator>
@@ -67,10 +68,9 @@
 #include "recipes/template_mode_memory.h"
 #include "recipes/template_runtime_profile.h"
 #include "recipes/template_recipe_workflow.h"
-#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/barcode/barcode_decoder.h"
 #include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
-#include "devices/plc/plc_device.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "ui/presenters/detection_result_presenter.h"
@@ -114,7 +114,15 @@ class Widget : public QWidget
     Q_OBJECT
 
 public:
-    explicit Widget(QWidget *parent = nullptr);
+    using OcrEngineFactory =
+        std::function<std::shared_ptr<IOcrEngine>()>;
+
+    explicit Widget(
+        const std::shared_ptr<ICameraDevice> &cameraDevice,
+        const std::shared_ptr<InspectionPlcController> &plcController,
+        const OcrEngineFactory &ocrEngineFactory,
+        const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
+        QWidget *parent = nullptr);
     ~Widget();
 
     // ========== 工具函数 ==========
@@ -520,7 +528,6 @@ private:
     int colorchannel=0;                 ///< 颜色通道
 
     // ========== PLC相关 ==========
-    std::unique_ptr<IPlcDevice> m_plcDevice; ///< PLC设备边界
     int PLCmode;                        ///< PLC模式
 
     // ========== 设置和UI ==========
@@ -599,8 +606,8 @@ private:
     QMap<QString, QString> m_singleTemplateResolvedAssetPathsByRole; ///< 当前单模板配方的只读运行资产
     QString m_currentTemplateDisplayName; ///< 已发布单模板使用配方显示名，避免显示内部Profile目录名
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
-    std::unique_ptr<IOcrEngine> m_ocrEngine;
-    std::unique_ptr<IBarcodeDecoder> m_barcodeDecoder;
+    std::shared_ptr<IOcrEngine> m_ocrEngine;
+    std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
     QString m_validatedBarcodeText;

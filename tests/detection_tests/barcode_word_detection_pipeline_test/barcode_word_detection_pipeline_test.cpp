@@ -1,7 +1,7 @@
 #include <QtTest/QtTest>
 
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
-#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/barcode/barcode_decoder.h"
 
 namespace {
 

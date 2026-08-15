@@ -21,6 +21,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.cpp \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_fault_state.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_plc_controller.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.cpp \
@@ -55,6 +56,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.h \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
     $$PROJECT_ROOT/app/runtime/inspection_fault_state.h \
+    $$PROJECT_ROOT/app/runtime/inspection_plc_controller.h \
     $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
     $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.h \
@@ -75,8 +77,9 @@ HEADERS += \
     $$PROJECT_ROOT/app/BarcodeTypes.h \
     $$PROJECT_ROOT/app/TissueRollDetector.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
-    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder_adapter.h \
+    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \
     $$PROJECT_ROOT/app/devices/ocr/ocr_engine.h \
+    $$PROJECT_ROOT/app/devices/plc/plc_device.h \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.h \
     $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.h \

@@ -10,9 +10,15 @@
 #include <QLibraryInfo>
 #include <iostream>
 #include <memory>
+#include <utility>
 #include <QFile>
 #include <QTextStream>
 #include <QDateTime>
+#include "devices/camera/hikvision_camera_device.h"
+#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/ocr/paddle_ocr_engine.h"
+#include "devices/plc/snap7_plc_device.h"
+#include "runtime/inspection_plc_controller.h"
 #include <QFileInfo>
 #include <QDir>
 #include <QLoggingCategory>
@@ -207,12 +213,30 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_WIN
     SetUnhandledExceptionFilter(callback);
 #endif
-    Widget w;
+    const std::shared_ptr<ICameraDevice> cameraDevice(
+                new HikvisionCameraDevice);
+    std::unique_ptr<IPlcDevice> plcDevice(new Snap7PlcDevice);
+    const std::shared_ptr<InspectionPlcController> plcController(
+                new InspectionPlcController(std::move(plcDevice)));
+    const QString ocrConfigPath =
+            QDir(QCoreApplication::applicationDirPath())
+            .filePath(QStringLiteral("config1.txt"));
+    const Widget::OcrEngineFactory ocrEngineFactory =
+            [ocrConfigPath]() {
+        return std::shared_ptr<IOcrEngine>(
+                    new PaddleOcrEngine(ocrConfigPath));
+    };
+    const std::shared_ptr<IBarcodeDecoder> barcodeDecoder(
+                new BarcodeDecoderAdapter);
+    Widget w(
+                cameraDevice,
+                plcController,
+                ocrEngineFactory,
+                barcodeDecoder);
     w.showMaximized();
-    //return a.exec();
-    int result = a.exec();
+    const int result = a.exec();
 
     // 确保所有资源释放
     cv::destroyAllWindows();
-    exit(result);
+    return result;
 }

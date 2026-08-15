@@ -87,6 +87,7 @@ SOURCES += \
     runtime/inspection_profile_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_fault_state.cpp \
+    runtime/inspection_plc_controller.cpp \
     runtime/inspection_product_reconciler.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/inspection_runtime_start_transaction.cpp \
@@ -153,6 +154,7 @@ HEADERS += \
     ui/presenters/inspection_fault_presenter.h \
     ui/presenters/detection_result_presenter.h \
     devices/barcode/barcode_decoder_adapter.h \
+    devices/barcode/barcode_decoder.h \
     devices/camera/camera_device.h \
     devices/camera/hikvision_camera_device.h \
     devices/ocr/ocr_engine.h \
@@ -172,6 +174,7 @@ HEADERS += \
     runtime/inspection_profile_snapshot.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_fault_state.h \
+    runtime/inspection_plc_controller.h \
     runtime/inspection_product_reconciler.h \
     runtime/inspection_runtime_controller.h \
     runtime/inspection_runtime_start_transaction.h \

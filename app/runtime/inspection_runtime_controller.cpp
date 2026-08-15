@@ -3,8 +3,10 @@
 #include <QDebug>
 
 InspectionRuntimeController::InspectionRuntimeController(
-    const RunIdFactory &runIdFactory)
+    const RunIdFactory &runIdFactory,
+    const std::shared_ptr<InspectionPlcController> &plcController)
     : m_session(runIdFactory),
+      m_plcController(plcController),
       m_detectionWorkerModeIndex(-1)
 {
 }
@@ -167,6 +169,73 @@ quint64 InspectionRuntimeController::acceptedProductCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_session.acceptedProductCount();
+}
+
+bool InspectionRuntimeController::hasPlcController() const
+{
+    return static_cast<bool>(m_plcController)
+            && m_plcController->hasDevice();
+}
+
+bool InspectionRuntimeController::isPlcConnected() const
+{
+    return m_plcController
+            && m_plcController->isConnected();
+}
+
+PlcOperationResult InspectionRuntimeController::connectPlc(
+    const QString &address,
+    int rack,
+    int slot)
+{
+    return m_plcController
+            ? m_plcController->connectTo(address, rack, slot)
+            : PlcOperationResult(-1);
+}
+
+PlcOperationResult InspectionRuntimeController::disconnectPlc()
+{
+    return m_plcController
+            ? m_plcController->disconnect()
+            : PlcOperationResult(-1);
+}
+
+PlcOperationResult InspectionRuntimeController::writePlcTriggerMode(
+    int modeIndex)
+{
+    return m_plcController
+            ? m_plcController->writeTriggerMode(modeIndex)
+            : PlcOperationResult(-1);
+}
+
+InspectionPlcRunSettingsResult
+InspectionRuntimeController::applyPlcRunSettings(
+    const InspectionPlcRunSettings &settings)
+{
+    if (m_plcController) {
+        return m_plcController->applyRunSettings(settings);
+    }
+
+    InspectionPlcRunSettingsResult result;
+    result.failedField = InspectionPlcRunSettingField::RejectTime;
+    result.operation = PlcOperationResult(-1);
+    return result;
+}
+
+PlcOperationResult InspectionRuntimeController::writePlcPhotoDistance(
+    std::uint32_t photoDistance)
+{
+    return m_plcController
+            ? m_plcController->writePhotoDistance(photoDistance)
+            : PlcOperationResult(-1);
+}
+
+PlcOperationResult InspectionRuntimeController::writePlcResultValue(
+    std::uint8_t value)
+{
+    return m_plcController
+            ? m_plcController->writeResultValue(value)
+            : PlcOperationResult(-1);
 }
 
 std::shared_ptr<const FrameData> InspectionRuntimeController::acceptFrame(
