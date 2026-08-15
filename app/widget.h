@@ -85,6 +85,7 @@ class QFrame;
 class QDialog;
 class QPushButton;
 class ImageSaveService;
+class DetectionCompletionController;
 struct RecipeSelection;
 struct OcrDetectionResult;
 struct StampDetectionWorkOutput;
@@ -124,19 +125,6 @@ public:
 
     // ========== 公共方法 ==========
     void initWidget();                  ///< 初始化界面
-    bool shouldSaveRecognitionBoxImage() const;
-    bool shouldSaveNoRecognitionBoxImage() const;
-    void saveResultImages(QString format,
-                          const QString &resultDirName,
-                          const DetectionCompletion &completion,
-                          const QImage &annotatedImage);
-    void saveWordResultImages(QString format,
-                              const QString &resultDirName,
-                              const DetectionCompletion &completion,
-                              const QImage &annotatedImage);
-    void saveImage2Async(QString format,
-                         QString savePath,
-                         const DetectionCompletion &completion); ///< 保存检测使用的原帧
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
     void display(const Mat* image);     ///< 显示图像
     bool saveSettingsToDir(const QString &dirPath);
@@ -461,6 +449,8 @@ private:
     DetectionResultPresenter m_detectionResultPresenter;
     TissueRecipeParameters m_tissueRecipeParameters;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
+    std::unique_ptr<DetectionCompletionController>
+            m_detectionCompletionController;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;
     bool m_imageSaveWarningScheduled = false;
@@ -704,16 +694,6 @@ private:
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
-    void processDueDelayedNgRequest();
-    void applyPlcResultRequest(DetectionPlcAction action);
-    bool presentDetectionResult(
-        const DetectionCompletion &completion,
-        const QImage &image,
-        DetectionVerdictViewStyle verdictStyle,
-        const QString &recognitionText,
-        bool updatesTemplateName,
-        const QString &templateName,
-        const QString &elapsedText);
     void showDetectionRoiWarningOnce();
     void clearDetectionRoiWarning();
     void scheduleImageSaveWarning();

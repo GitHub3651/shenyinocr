@@ -63,6 +63,7 @@ SOURCES += \
     recipes/template_recipe_publisher.cpp \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
+    ui/controllers/detection_completion_controller.cpp \
     ui/presenters/detection_result_presenter.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
     devices/camera/hikvision_camera_device.cpp \
@@ -138,6 +139,7 @@ HEADERS += \
     recipes/template_recipe_publisher.h \
     recipes/template_profile_mapper.h \
     ui/dialogs/recipe_selection_dialog.h \
+    ui/controllers/detection_completion_controller.h \
     ui/presenters/detection_result_presenter.h \
     devices/barcode/barcode_decoder_adapter.h \
     devices/camera/camera_device.h \

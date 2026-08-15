@@ -988,6 +988,15 @@
 | `f6a05f2` | Stage 3五模式检测Worker装配 | RUN-001..003、DET-002..006 | 五种Pipeline构造、逐帧调用、私有状态和类型化完成结果迁入`DetectionModeWorkerFactory` | 用户确认运行测试79项及五模式软硬触发、结果、图文、耗时、统计、存图和停止重启均无问题 |
 | `f679f11` | Stage 3统一运行Profile快照与启动分发 | RUN-001..003、DET-002..006 | 同序定位/检测Profile深拷贝快照、五模式统一分发，删除Widget五个重复启动函数和运行Profile副本 | 用户确认运行测试84项、主工程五模式软硬触发、图文判定、耗时、统计、存图和停止重启均无问题 |
 
+- [x] Stage 3正式停止、相机恢复与采集线程生命周期切片Qt Creator门禁由用户确认无问题，并已提交为`e45bb0c`（`refactor(runtime): 收口正式停止与相机恢复`），提交后工作区干净。
+- [x] 用户明确将Stage 3剩余开发压缩为最多两轮：本轮整体迁移检测完成后的统计、存图、PLC与UI呈现桥；最后一轮集中完成模板/设置/UI剩余职责、零引用清理和Stage 3收口，不再拆成更多开发轮次。
+- [x] 开始Stage 3统一检测完成控制器切片；受影响功能ID为`DET-002..006、UI-004..005、RUN-004、PLC-005..007、RES-001..005、SAVE-001..003`，19项由已验证转为迁移中。固定原顺序为：处理到期延迟NG→准备同产品结果图/文字→唯一记录统计和存图决策→提交存图任务→一次呈现完整快照→发出当前产品PLC请求；五模式算法、相机与触发、PLC值/100ms脉冲、存图组合/目录/命名和结果文案均不修改。
+- [x] 新增全ASCII `ui/controllers/detection_completion_controller.*`：统一执行到期延迟NG、运行层唯一记录、存图任务构造/提交、统计写入同产品快照、Presenter一次呈现和当前产品PLC请求；PLC设备写入仍由Widget两个硬件薄桥完成，值49/0和100ms复位不变。控制器显式保留四模式“标注+原图”与OCR“仅原图”的目录、时间戳和PNG/JPG差异，并保留钢印/字库/二维码对`NotEvaluated`不存图的旧分支语义。
+- [x] 五个模式收尾全部改为只准备本模式Overlay、识别文字、模板名和耗时，再提交一个`DetectionCompletionProcessRequest`；Widget删除`processDueDelayedNgRequest/applyPlcResultRequest/presentDetectionResult`以及五个旧存图辅助入口和本地路径/格式组装函数。Widget不再直接调用`record/consumeDueDelayedNgRequest/ImageSaveService::submit/DetectionResultPresenter::present`，本轮净减少190行和8个成员函数定义。
+- [x] `detection_completion_test`新增7项完成控制器合同测试，覆盖无效请求零副作用、到期NG在当前记录前发出、当前PLC在呈现后发出、标注后原图顺序、仅标注/仅原图组合、OCR原目录/JPG命名、缺失标注图告警以及重复完成不重复呈现/PLC；业务测试由95项增至102项，Qt Test预期汇总由`97 passed, 0 failed`增至`104 passed, 0 failed`。
+- [x] 统一检测完成控制器Agent静态检查通过：19个受影响功能ID唯一且均为迁移中，正式功能状态47/19/22/2；新头/源在主工程和运行测试工程各唯一登记1次且非ASCII字节0；运行测试声明/定义各102项；五模式控制器调用5处；Widget直接`record/consumeDueDelayedNgRequest/ImageSaveService::submit/DetectionResultPresenter::present`及8个旧桥函数引用均为0；Widget相对上一提交净减190行、成员函数定义净减8；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序，等待用户Qt Creator集中门禁。
+- [x] 统一检测完成控制器Qt Creator集中门禁通过：用户确认本轮测试、主工程构建运行及代表模式回归均无问题；五模式判定、同产品图文统计、存图组合、PLC请求顺序、停止重启保持正常。19个迁移中功能恢复为已验证，允许创建本地提交并进入Stage 3最后一轮收口。
+
 ## 未解决事项
 
 | 问题 | 风险 | 是否阻塞当前门禁 | 下一步/需要谁确认 |
@@ -998,7 +1007,7 @@
 
 ## 结论
 
-- 当前切片：Stage 3正式停止、相机恢复与采集线程生命周期迁出Widget，Qt Creator门禁通过，切片完成。
+- 当前切片：Stage 3统一检测完成控制器已通过用户Qt Creator集中门禁，五模式统计、存图、PLC和同产品UI快照的公共编排已迁出Widget，等待创建独立提交。
 - 当前阶段：Stage 2结构关口已通过，Stage 3进行中；人工样本与现场证据按用户明确决定延期，不声称固定图片或现场产品验收已满足。
 - 功能状态计数：待盘点0 / 已基线47 / 迁移中0 / 已验证41 / 已延期2 / 已确认删除0。
-- 下一允许动作：独立提交当前切片，然后进入Stage 3最后的大块Widget UI/运行桥拆分与阶段收口。
+- 下一允许动作：提交统一检测完成控制器切片，然后用最后一轮集中完成模板/设置/UI剩余职责、零引用清理和Stage 3结项。

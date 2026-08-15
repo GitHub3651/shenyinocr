@@ -1,5 +1,7 @@
 #include <QtTest>
 #include <QColor>
+#include <QFileInfo>
+#include <QRegularExpression>
 
 #include "TrackingTypes.h"
 #include "detection/common/detection_roi_geometry.h"
@@ -21,6 +23,7 @@
 #include "runtime/inspection_runtime_stop_transaction.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
+#include "ui/controllers/detection_completion_controller.h"
 #include "ui/presenters/detection_result_presenter.h"
 
 #include <chrono>
@@ -119,6 +122,67 @@ DetectionCompletion testCompletion(
     completion.result.verdict = verdict;
     completion.result.status = DetectionStatus::Completed;
     return completion;
+}
+
+void bindTestResultView(
+    DetectionResultPresenter *presenter,
+    QStringList *events = nullptr)
+{
+    DetectionResultViewBindings bindings;
+    bindings.showImage = [events](const QImage &) {
+        if (events) {
+            events->append(QStringLiteral("present"));
+        }
+    };
+    bindings.showVerdictStyle = [](DetectionVerdictViewStyle) {
+    };
+    bindings.showVerdictText = [](const QString &) {
+    };
+    bindings.showRecognitionText = [](const QString &) {
+    };
+    bindings.showTemplateName = [](const QString &) {
+    };
+    bindings.showTotalCount = [](int) {
+    };
+    bindings.showNgCount = [](int) {
+    };
+    bindings.showPassRate = [](double) {
+    };
+    bindings.showElapsedText = [](const QString &) {
+    };
+    presenter->bindView(bindings);
+}
+
+DetectionCompletion acceptedControllerCompletion(
+    InspectionRuntimeController *controller,
+    AlgorithmVerdict verdict)
+{
+    const std::shared_ptr<const FrameData> frame =
+            controller->acceptFrame(
+                cv::Mat(3, 4, CV_8UC3, cv::Scalar(10, 20, 30)));
+    DetectionResult result;
+    result.modeId = QStringLiteral("test");
+    result.verdict = verdict;
+    result.status = DetectionStatus::Completed;
+    return controller->complete(frame, result);
+}
+
+DetectionCompletionProcessRequest completionProcessRequest(
+    const DetectionCompletion &completion)
+{
+    DetectionCompletionProcessRequest request;
+    request.completion = completion;
+    request.preparePresentation = [completion]() {
+        DetectionResultViewSnapshot snapshot;
+        snapshot.image = QImage(4, 3, QImage::Format_RGB32);
+        snapshot.image.fill(Qt::white);
+        snapshot.verdictStyle =
+                completion.result.verdict == AlgorithmVerdict::Ok
+                ? DetectionVerdictViewStyle::Correct
+                : DetectionVerdictViewStyle::Error;
+        return snapshot;
+    };
+    return request;
 }
 
 DetectionResult shadowSampleResult()
@@ -428,6 +492,13 @@ private slots:
     void resultPresenterRendersAndClearsTissueOverlay();
     void resultPresenterAppliesWholeViewSnapshotInOrder();
     void resultPresenterPreservesPartialRefreshRules();
+    void completionControllerRejectsInvalidRequestWithoutSideEffects();
+    void completionControllerPreservesDelayedNgAndCurrentPlcOrder();
+    void completionControllerSavesAnnotatedThenRaw();
+    void completionControllerPreservesAnnotatedAndRawSelections();
+    void completionControllerPreservesOcrRawOnlyLayout();
+    void completionControllerWarnsForMissingAnnotatedImage();
+    void completionControllerRejectsDuplicateBeforeRepeatedSideEffects();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void orientedDateRoiClampsPaddingAtImageEdge();
@@ -3198,6 +3269,387 @@ void DetectionCompletionTest::resultPresenterPreservesPartialRefreshRules()
     QVERIFY(!presenter.lastPresentedProductKey().isValid());
     QVERIFY(presenter.presentFrame(QImage(3, 3, QImage::Format_RGB888)));
     QCOMPARE(imageCount, 2);
+}
+
+void DetectionCompletionTest::completionControllerRejectsInvalidRequestWithoutSideEffects()
+{
+    InspectionRuntimeController runtimeController;
+    DetectionResultPresenter presenter;
+    bindTestResultView(&presenter);
+    int plcRequests = 0;
+    int presentationPreparations = 0;
+    DetectionCompletionControllerCallbacks callbacks;
+    callbacks.requestPlc = [&plcRequests](DetectionPlcAction) {
+        ++plcRequests;
+    };
+    DetectionCompletionController controller(
+                &runtimeController,
+                nullptr,
+                &presenter,
+                callbacks);
+
+    DetectionCompletionProcessRequest request;
+    request.preparePresentation = [&presentationPreparations]() {
+        ++presentationPreparations;
+        return DetectionResultViewSnapshot();
+    };
+    const DetectionCompletionProcessOutcome outcome =
+            controller.process(request);
+
+    QVERIFY(!outcome.resultRecorded);
+    QCOMPARE(plcRequests, 0);
+    QCOMPARE(presentationPreparations, 0);
+    QCOMPARE(runtimeController.totalCount(), 0);
+}
+
+void DetectionCompletionTest::completionControllerPreservesDelayedNgAndCurrentPlcOrder()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("completion-order-run");
+    });
+    QCOMPARE(runtimeController.beginStart(),
+             QStringLiteral("completion-order-run"));
+    QVERIFY(runtimeController.markRunning());
+
+    QStringList events;
+    DetectionResultPresenter presenter;
+    bindTestResultView(&presenter, &events);
+    DetectionCompletionControllerCallbacks callbacks;
+    callbacks.requestPlc = [&events](DetectionPlcAction action) {
+        events.append(action == DetectionPlcAction::RequestNg
+                      ? QStringLiteral("plc-ng")
+                      : QStringLiteral("plc-ok"));
+    };
+    DetectionCompletionController controller(
+                &runtimeController,
+                nullptr,
+                &presenter,
+                callbacks);
+
+    DetectionCompletionProcessRequest first = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ng));
+    first.delayedNgOffset = 1;
+    first.preparePresentation = [&events]() {
+        events.append(QStringLiteral("prepare-1"));
+        DetectionResultViewSnapshot snapshot;
+        snapshot.image = QImage(2, 2, QImage::Format_RGB32);
+        snapshot.image.fill(Qt::white);
+        return snapshot;
+    };
+    const DetectionCompletionProcessOutcome firstOutcome =
+            controller.process(first);
+    QVERIFY(firstOutcome.resultRecorded);
+    QCOMPARE(events,
+             QStringList()
+             << QStringLiteral("prepare-1")
+             << QStringLiteral("present"));
+
+    events.clear();
+    DetectionCompletionProcessRequest second = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ok));
+    second.preparePresentation = [&events]() {
+        events.append(QStringLiteral("prepare-2"));
+        DetectionResultViewSnapshot snapshot;
+        snapshot.image = QImage(2, 2, QImage::Format_RGB32);
+        snapshot.image.fill(Qt::white);
+        return snapshot;
+    };
+    second.finalizePresentation = [&events](
+            DetectionResultViewSnapshot *) {
+        events.append(QStringLiteral("finalize-2"));
+    };
+    const DetectionCompletionProcessOutcome secondOutcome =
+            controller.process(second);
+
+    QVERIFY(secondOutcome.resultRecorded);
+    QVERIFY(secondOutcome.delayedNgRequested);
+    QCOMPARE(secondOutcome.statistics.totalCount, 2);
+    QCOMPARE(secondOutcome.statistics.ngCount, 1);
+    QCOMPARE(events,
+             QStringList()
+             << QStringLiteral("plc-ng")
+             << QStringLiteral("prepare-2")
+             << QStringLiteral("finalize-2")
+             << QStringLiteral("present")
+             << QStringLiteral("plc-ok"));
+}
+
+void DetectionCompletionTest::completionControllerSavesAnnotatedThenRaw()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("completion-save-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.markRunning());
+
+    std::vector<ImageSaveItem> writtenItems;
+    std::mutex writtenMutex;
+    ImageSaveService saveService(
+                4,
+                [&writtenItems, &writtenMutex](
+                    const ImageSaveItem &item,
+                    QString *) {
+        std::lock_guard<std::mutex> lock(writtenMutex);
+        writtenItems.push_back(item);
+        return true;
+    },
+    1);
+    DetectionResultPresenter presenter;
+    bindTestResultView(&presenter);
+    DetectionCompletionController controller(
+                &runtimeController,
+                &saveService,
+                &presenter);
+
+    DetectionCompletionProcessRequest request = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ok));
+    request.imageSaveModeIndex = 3;
+    request.saveOptions.rootDirectory = QStringLiteral("C:/capture");
+    request.saveOptions.format = QStringLiteral(".PNG");
+    request.saveOptions.imageContentModeIndex = 0;
+    const DetectionCompletionProcessOutcome outcome =
+            controller.process(request);
+
+    QVERIFY(outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveRequested);
+    QVERIFY(outcome.imageSaveSubmitted);
+    QTRY_VERIFY(saveService.outstandingTaskCount() == 0);
+    std::lock_guard<std::mutex> lock(writtenMutex);
+    QCOMPARE(static_cast<int>(writtenItems.size()), 2);
+    QVERIFY(!writtenItems[0].image.isNull());
+    QVERIFY(!writtenItems[0].frame);
+    QVERIFY(writtenItems[0].filePath.contains(QStringLiteral("/ok/")));
+    QVERIFY(writtenItems[0].format == QByteArrayLiteral("PNG"));
+    QVERIFY(writtenItems[1].image.isNull());
+    QVERIFY(writtenItems[1].frame);
+    QVERIFY(writtenItems[1].filePath.contains(QStringLiteral("/ok_raw/")));
+    QCOMPARE(QFileInfo(writtenItems[0].filePath).fileName(),
+             QFileInfo(writtenItems[1].filePath).fileName());
+}
+
+void DetectionCompletionTest::completionControllerPreservesAnnotatedAndRawSelections()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("completion-selection-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.markRunning());
+
+    std::vector<ImageSaveItem> writtenItems;
+    std::mutex writtenMutex;
+    ImageSaveService saveService(
+                4,
+                [&writtenItems, &writtenMutex](
+                    const ImageSaveItem &item,
+                    QString *) {
+        std::lock_guard<std::mutex> lock(writtenMutex);
+        writtenItems.push_back(item);
+        return true;
+    },
+    1);
+    DetectionResultPresenter presenter;
+    bindTestResultView(&presenter);
+    DetectionCompletionController controller(
+                &runtimeController,
+                &saveService,
+                &presenter);
+
+    DetectionCompletionProcessRequest annotated = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ok));
+    annotated.imageSaveModeIndex = 3;
+    annotated.saveOptions.rootDirectory = QStringLiteral("C:/capture");
+    annotated.saveOptions.imageContentModeIndex = 1;
+    QVERIFY(controller.process(annotated).imageSaveSubmitted);
+
+    DetectionCompletionProcessRequest raw = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ng));
+    raw.imageSaveModeIndex = 3;
+    raw.saveOptions.rootDirectory = QStringLiteral("C:/capture");
+    raw.saveOptions.imageContentModeIndex = 2;
+    QVERIFY(controller.process(raw).imageSaveSubmitted);
+
+    QTRY_VERIFY(saveService.outstandingTaskCount() == 0);
+    std::lock_guard<std::mutex> lock(writtenMutex);
+    QCOMPARE(static_cast<int>(writtenItems.size()), 2);
+    QVERIFY(!writtenItems[0].image.isNull());
+    QVERIFY(!writtenItems[0].frame);
+    QVERIFY(writtenItems[0].filePath.contains(QStringLiteral("/ok/")));
+    QVERIFY(writtenItems[1].image.isNull());
+    QVERIFY(writtenItems[1].frame);
+    QVERIFY(writtenItems[1].filePath.contains(QStringLiteral("/ng_raw/")));
+}
+
+void DetectionCompletionTest::completionControllerPreservesOcrRawOnlyLayout()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("completion-ocr-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.markRunning());
+
+    std::vector<ImageSaveItem> writtenItems;
+    std::mutex writtenMutex;
+    ImageSaveService saveService(
+                2,
+                [&writtenItems, &writtenMutex](
+                    const ImageSaveItem &item,
+                    QString *) {
+        std::lock_guard<std::mutex> lock(writtenMutex);
+        writtenItems.push_back(item);
+        return true;
+    },
+    1);
+    DetectionResultPresenter presenter;
+    bindTestResultView(&presenter);
+    DetectionCompletionController controller(
+                &runtimeController,
+                &saveService,
+                &presenter);
+
+    DetectionCompletionProcessRequest request = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ng));
+    request.imageSaveModeIndex = 3;
+    request.saveOptions.layout = DetectionCompletionSaveLayout::RawOnly;
+    request.saveOptions.rootDirectory = QStringLiteral("C:/ocr");
+    request.saveOptions.format = QStringLiteral(".JPG");
+    request.saveOptions.imageContentModeIndex = 1;
+    QVERIFY(controller.process(request).imageSaveSubmitted);
+
+    QTRY_VERIFY(saveService.outstandingTaskCount() == 0);
+    std::lock_guard<std::mutex> lock(writtenMutex);
+    QCOMPARE(static_cast<int>(writtenItems.size()), 1);
+    QVERIFY(writtenItems[0].image.isNull());
+    QVERIFY(writtenItems[0].frame);
+    QVERIFY(writtenItems[0].filePath.contains(QStringLiteral("/ng/")));
+    QVERIFY(!writtenItems[0].filePath.contains(QStringLiteral("_raw")));
+    QVERIFY(writtenItems[0].format == QByteArrayLiteral("JPG"));
+    QVERIFY(QRegularExpression(
+                QStringLiteral("\\d{8}-\\d{6}-\\d{3}\\.jpg$"))
+            .match(writtenItems[0].filePath)
+            .hasMatch());
+}
+
+void DetectionCompletionTest::completionControllerWarnsForMissingAnnotatedImage()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("completion-warning-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.markRunning());
+
+    ImageSaveService saveService(2);
+    DetectionResultPresenter presenter;
+    bindTestResultView(&presenter);
+    int warnings = 0;
+    QList<DetectionPlcAction> plcActions;
+    DetectionCompletionControllerCallbacks callbacks;
+    callbacks.warnMissingAnnotatedImage = [&warnings]() {
+        ++warnings;
+    };
+    callbacks.requestPlc = [&plcActions](DetectionPlcAction action) {
+        plcActions.append(action);
+    };
+    DetectionCompletionController controller(
+                &runtimeController,
+                &saveService,
+                &presenter,
+                callbacks);
+
+    DetectionCompletionProcessRequest request;
+    request.completion = acceptedControllerCompletion(
+                &runtimeController,
+                AlgorithmVerdict::Ok);
+    request.imageSaveModeIndex = 3;
+    request.saveOptions.rootDirectory = QStringLiteral("C:/capture");
+    request.saveOptions.imageContentModeIndex = 1;
+    request.preparePresentation = []() {
+        return DetectionResultViewSnapshot();
+    };
+    const DetectionCompletionProcessOutcome outcome =
+            controller.process(request);
+
+    QVERIFY(outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveRequested);
+    QVERIFY(!outcome.imageSaveSubmitted);
+    QVERIFY(!outcome.presentationAccepted);
+    QCOMPARE(warnings, 1);
+    QCOMPARE(plcActions.size(), 1);
+    QVERIFY(plcActions.front() == DetectionPlcAction::RequestOk);
+}
+
+void DetectionCompletionTest::completionControllerRejectsDuplicateBeforeRepeatedSideEffects()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("completion-duplicate-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.markRunning());
+
+    int presentations = 0;
+    DetectionResultViewBindings bindings;
+    bindings.showImage = [&presentations](const QImage &) {
+        ++presentations;
+    };
+    bindings.showVerdictStyle = [](DetectionVerdictViewStyle) {
+    };
+    bindings.showVerdictText = [](const QString &) {
+    };
+    bindings.showRecognitionText = [](const QString &) {
+    };
+    bindings.showTemplateName = [](const QString &) {
+    };
+    bindings.showTotalCount = [](int) {
+    };
+    bindings.showNgCount = [](int) {
+    };
+    bindings.showPassRate = [](double) {
+    };
+    bindings.showElapsedText = [](const QString &) {
+    };
+    DetectionResultPresenter presenter;
+    presenter.bindView(bindings);
+    int plcRequests = 0;
+    DetectionCompletionControllerCallbacks callbacks;
+    callbacks.requestPlc = [&plcRequests](DetectionPlcAction) {
+        ++plcRequests;
+    };
+    DetectionCompletionController controller(
+                &runtimeController,
+                nullptr,
+                &presenter,
+                callbacks);
+
+    int preparations = 0;
+    DetectionCompletionProcessRequest request = completionProcessRequest(
+                acceptedControllerCompletion(
+                    &runtimeController,
+                    AlgorithmVerdict::Ok));
+    request.preparePresentation = [&preparations]() {
+        ++preparations;
+        DetectionResultViewSnapshot snapshot;
+        snapshot.image = QImage(2, 2, QImage::Format_RGB32);
+        snapshot.image.fill(Qt::white);
+        return snapshot;
+    };
+    QVERIFY(controller.process(request).resultRecorded);
+    QVERIFY(!controller.process(request).resultRecorded);
+
+    QCOMPARE(preparations, 2);
+    QCOMPARE(presentations, 1);
+    QCOMPARE(plcRequests, 1);
+    QCOMPARE(runtimeController.totalCount(), 1);
 }
 
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()
