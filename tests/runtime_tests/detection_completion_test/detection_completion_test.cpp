@@ -26,6 +26,7 @@
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "ui/controllers/detection_completion_controller.h"
+#include "ui/controllers/inspection_result_coordinator.h"
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
 #include "ui/presenters/detection_result_presenter.h"
@@ -613,6 +614,9 @@ private slots:
     void completionControllerPreservesOcrRawOnlyLayout();
     void completionControllerWarnsForMissingAnnotatedImage();
     void completionControllerRejectsDuplicateBeforeRepeatedSideEffects();
+    void resultCoordinatorPresentsOneWholeTissueCompletion();
+    void resultCoordinatorRejectsRepeatedCompletionSideEffects();
+    void resultCoordinatorStartsConfiguredTissueWorker();
     void roiPaddingIsClampedToImageBounds();
     void outsidePolygonIsClampedToNearestImageEdge();
     void orientedDateRoiClampsPaddingAtImageEdge();
@@ -4680,6 +4684,198 @@ void DetectionCompletionTest::completionControllerRejectsDuplicateBeforeRepeated
     QCOMPARE(runtimeController.totalCount(), 1);
 }
 
+void DetectionCompletionTest::resultCoordinatorPresentsOneWholeTissueCompletion()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("result-coordinator-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.startDetectionWorker(
+                3,
+                idleDetectionWorker()));
+    QVERIFY(runtimeController.markRunning());
+
+    int plcRequests = 0;
+    DetectionPlcAction lastPlcAction = DetectionPlcAction::NoRequest;
+    int legacyClears = 0;
+    InspectionResultCoordinatorCallbacks callbacks;
+    callbacks.requestPlc = [&plcRequests, &lastPlcAction](
+            DetectionPlcAction action,
+            const ProductKey &) {
+        ++plcRequests;
+        lastPlcAction = action;
+    };
+    callbacks.clearLegacyPresentationState = [&legacyClears](bool) {
+        ++legacyClears;
+    };
+    InspectionResultCoordinator coordinator(
+                &runtimeController,
+                callbacks);
+
+    int images = 0;
+    int totalCount = -1;
+    int ngCount = -1;
+    QString verdictText;
+    QString recognitionText;
+    QString elapsedText;
+    DetectionResultViewBindings bindings;
+    bindings.showImage = [&images](const QImage &) {
+        ++images;
+    };
+    bindings.showVerdictStyle = [](DetectionVerdictViewStyle) {
+    };
+    bindings.showVerdictText = [&verdictText](const QString &text) {
+        verdictText = text;
+    };
+    bindings.showRecognitionText = [&recognitionText](
+            const QString &text) {
+        recognitionText = text;
+    };
+    bindings.showTemplateName = [](const QString &) {
+    };
+    bindings.showTotalCount = [&totalCount](int count) {
+        totalCount = count;
+    };
+    bindings.showNgCount = [&ngCount](int count) {
+        ngCount = count;
+    };
+    bindings.showPassRate = [](double) {
+    };
+    bindings.showElapsedText = [&elapsedText](const QString &text) {
+        elapsedText = text;
+    };
+    coordinator.bindView(bindings);
+    coordinator.configureRun(InspectionResultRunConfiguration());
+
+    DetectionCompletion workerCompletion;
+    workerCompletion.frame = runtimeController.acceptFrame(
+                cv::Mat(24, 32, CV_8UC3, cv::Scalar(10, 20, 30)));
+    QVERIFY(workerCompletion.frame);
+    workerCompletion.result.modeId = QStringLiteral("tissue_detection");
+    workerCompletion.result.verdict = AlgorithmVerdict::Ok;
+    workerCompletion.result.status = DetectionStatus::Completed;
+    workerCompletion.result.elapsedMs = 3.0;
+    TissueRollResult tissueResult;
+    tissueResult.isOk = true;
+    tissueResult.imageWidth = 32;
+    tissueResult.imageHeight = 24;
+    tissueResult.message = "test tissue result";
+
+    coordinator.workerConsumers().tissue(
+                workerCompletion,
+                tissueResult);
+
+    QTRY_COMPARE(runtimeController.totalCount(), 1);
+    QCOMPARE(images, 1);
+    QCOMPARE(totalCount, 1);
+    QCOMPARE(ngCount, 0);
+    QCOMPARE(verdictText, QStringLiteral("\u6b63\u786e"));
+    QCOMPARE(recognitionText, QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a--"));
+    QVERIFY(!elapsedText.isEmpty());
+    QCOMPARE(plcRequests, 0);
+    QVERIFY(lastPlcAction == DetectionPlcAction::NoRequest);
+    QCOMPARE(legacyClears, 1);
+}
+
+void DetectionCompletionTest::resultCoordinatorRejectsRepeatedCompletionSideEffects()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("result-coordinator-duplicate-run");
+    });
+    QVERIFY(!runtimeController.beginStart().isEmpty());
+    QVERIFY(runtimeController.startDetectionWorker(
+                3,
+                idleDetectionWorker()));
+    QVERIFY(runtimeController.markRunning());
+
+    int plcRequests = 0;
+    InspectionResultCoordinatorCallbacks callbacks;
+    callbacks.requestPlc = [&plcRequests](
+            DetectionPlcAction,
+            const ProductKey &) {
+        ++plcRequests;
+    };
+    InspectionResultCoordinator coordinator(
+                &runtimeController,
+                callbacks);
+    InspectionResultRunConfiguration runConfiguration;
+    runConfiguration.plcOutputEnabled = true;
+    coordinator.configureRun(runConfiguration);
+    DetectionResultViewBindings bindings;
+    int presentations = 0;
+    bindings.showImage = [&presentations](const QImage &) {
+        ++presentations;
+    };
+    bindings.showVerdictStyle = [](DetectionVerdictViewStyle) {
+    };
+    bindings.showVerdictText = [](const QString &) {
+    };
+    bindings.showRecognitionText = [](const QString &) {
+    };
+    bindings.showTemplateName = [](const QString &) {
+    };
+    bindings.showTotalCount = [](int) {
+    };
+    bindings.showNgCount = [](int) {
+    };
+    bindings.showPassRate = [](double) {
+    };
+    bindings.showElapsedText = [](const QString &) {
+    };
+    coordinator.bindView(bindings);
+
+    DetectionCompletion workerCompletion;
+    workerCompletion.frame = runtimeController.acceptFrame(
+                cv::Mat(24, 32, CV_8UC3, cv::Scalar(10, 20, 30)));
+    QVERIFY(workerCompletion.frame);
+    workerCompletion.result.modeId = QStringLiteral("tissue_detection");
+    workerCompletion.result.verdict = AlgorithmVerdict::Ng;
+    workerCompletion.result.status = DetectionStatus::Completed;
+    TissueRollResult tissueResult;
+    tissueResult.isOk = false;
+
+    const DetectionModeWorkerConsumers consumers =
+            coordinator.workerConsumers();
+    consumers.tissue(workerCompletion, tissueResult);
+    QTRY_COMPARE(runtimeController.totalCount(), 1);
+    QCOMPARE(presentations, 1);
+    QCOMPARE(plcRequests, 1);
+
+    consumers.tissue(workerCompletion, tissueResult);
+    QTest::qWait(10);
+    QCOMPARE(runtimeController.totalCount(), 1);
+    QCOMPARE(presentations, 1);
+    QCOMPARE(plcRequests, 1);
+}
+
+void DetectionCompletionTest::resultCoordinatorStartsConfiguredTissueWorker()
+{
+    InspectionRuntimeController runtimeController([]() {
+        return QStringLiteral("result-coordinator-worker-run");
+    });
+    InspectionRuntimeStartTransaction startTransaction(
+                runtimeController);
+    QVERIFY(startTransaction.begin());
+
+    InspectionResultCoordinator coordinator(&runtimeController);
+    InspectionDetectionWorkerStartConfiguration configuration;
+    configuration.modeIndex = 3;
+    configuration.tissueParameters.roughnessThreshold = 6.0;
+    QString errorMessage;
+    QVERIFY(coordinator.startDetectionWorker(
+                startTransaction,
+                configuration,
+                &errorMessage));
+    QVERIFY(errorMessage.isEmpty());
+    QVERIFY(runtimeController.isDetectionWorkerActiveForMode(3));
+    QVERIFY(startTransaction.commit());
+
+    QVERIFY(runtimeController.requestStop());
+    runtimeController.waitForDetectionWorkerStop();
+    runtimeController.finishStop();
+    QVERIFY(!runtimeController.isDetectionWorkerActive());
+}
+
 void DetectionCompletionTest::roiPaddingIsClampedToImageBounds()
 {
     const std::vector<cv::Point> polygon = {
@@ -4943,6 +5139,6 @@ void DetectionCompletionTest::shutdownRejectsNewTasks()
     QVERIFY(result.status == ImageSaveSubmitStatus::Stopping);
 }
 
-QTEST_APPLESS_MAIN(DetectionCompletionTest)
+QTEST_GUILESS_MAIN(DetectionCompletionTest)
 
 #include "detection_completion_test.moc"

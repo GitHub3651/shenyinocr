@@ -8,12 +8,9 @@
 
 #include "widget.h"
 #include "runtime/inspection_run_configuration.h"
-#include "runtime/inspection_acquisition_stop_coordinator.h"
-#include "runtime/inspection_camera_recovery_transition.h"
-#include "runtime/inspection_camera_start_transition.h"
+#include "runtime/inspection_acquisition_controller.h"
 #include "runtime/inspection_runtime_start_transaction.h"
 #include "runtime/inspection_runtime_stop_transaction.h"
-#include "runtime/inspection_worker_configurator.h"
 #include "ui_widget.h"
 #include "recipes/recipe_selection.h"
 #include "recipes/template_character_asset_workspace.h"
@@ -25,11 +22,8 @@
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
 #include "detection/common/detection_roi_geometry.h"
-#include "detection/ocr/ocr_detection_pipeline.h"
-#include "runtime/image_save_service.h"
-#include "runtime/detection_mode_worker_factory.h"
-#include "ui/controllers/detection_completion_controller.h"
-#include "ui/presenters/inspection_fault_presenter.h"
+#include "ui/controllers/inspection_result_coordinator.h"
+#include "ui/controllers/inspection_runtime_ui_coordinator.h"
 
 
 // Qt核心组件
@@ -92,9 +86,7 @@
 #include <QEvent>
 #include <QEventLoop>
 #include <QRegularExpression>
-#include <QAbstractButton>
 #include <QSplitterHandle>
-#include <QStyle>
 
 // Qt串口和SQL
 #include <QtSerialPort/QtSerialPort>
@@ -735,22 +727,8 @@ Widget::Widget(
 {
     m_barcodeDecoder = barcodeDecoder;
     ui->setupUi(this);
-    m_imageSaveService.reset(new ImageSaveService(
-                                 32,
-                                 ImageSaveService::WriteFunction(),
-                                 2));
-    connect(m_imageSaveService.get(),
-            &ImageSaveService::taskFailed,
-            this,
-            [this](quint64 totalFailed, const QString &latestError) {
-        m_imageSaveFailedCount = totalFailed;
-        m_latestImageSaveError = latestError;
-        scheduleImageSaveWarning();
-    },
-    Qt::QueuedConnection);
-
-    DetectionCompletionControllerCallbacks completionCallbacks;
-    completionCallbacks.requestPlc = [this](
+    InspectionResultCoordinatorCallbacks resultCallbacks;
+    resultCallbacks.requestPlc = [this](
             DetectionPlcAction action,
             const ProductKey &productKey) {
         m_activePlcOutputProductKey = productKey;
@@ -761,20 +739,54 @@ Widget::Widget(
         }
         m_activePlcOutputProductKey = ProductKey();
     };
-    completionCallbacks.warnMissingAnnotatedImage = [this]() {
-        QMessageBox::warning(
-                    this,
-                    QString::fromWCharArray(L"\u8b66\u544a"),
-                    QString::fromWCharArray(
-                        L"\u4fdd\u5b58\u5931\u8d25,"
-                        L"\u672a\u91c7\u96c6\u5230\u56fe\u50cf\uff01"));
+    resultCallbacks.warnMissingAnnotatedImage = [this]() {
+        if (m_runtimeUiCoordinator) {
+            m_runtimeUiCoordinator->warnMissingAnnotatedImage();
+        }
     };
-    m_detectionCompletionController.reset(
-                new DetectionCompletionController(
+    resultCallbacks.reportImageSaveFailure = [this](
+            quint64 totalFailed,
+            const QString &latestError) {
+        if (m_runtimeUiCoordinator) {
+            m_runtimeUiCoordinator->reportImageSaveFailure(
+                        totalFailed,
+                        latestError);
+        }
+    };
+    resultCallbacks.clearLegacyPresentationState = [this](
+            bool clearImageLabelRects) {
+        if (clearImageLabelRects && imageLabel) {
+            imageLabel->clearGreenRects();
+        }
+        detectedRects.clear();
+        string1.clear();
+    };
+    resultCallbacks.storeLegacyRecognitionText = [this](
+            const QString &text) {
+        allResults = text.toStdString();
+    };
+    resultCallbacks.showDetectionRoiWarning = [this]() {
+        if (m_runtimeUiCoordinator) {
+            m_runtimeUiCoordinator->showDetectionRoiWarning();
+        }
+    };
+    resultCallbacks.clearDetectionRoiWarning = [this]() {
+        if (m_runtimeUiCoordinator) {
+            m_runtimeUiCoordinator->clearDetectionRoiWarning(
+                        m_operationState == OperationState::Detecting
+                        ? (ui->checkBox->isChecked()
+                           ? QString::fromWCharArray(
+                               L"\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d")
+                           : QString::fromWCharArray(
+                               L"\u8f6f\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d"))
+                        : QString());
+        }
+    };
+    m_resultCoordinator.reset(
+                new InspectionResultCoordinator(
                     &m_runtimeController,
-                    m_imageSaveService.get(),
-                    &m_detectionResultPresenter,
-                    completionCallbacks));
+                    resultCallbacks,
+                    this));
 
     initStyle();
 
@@ -868,61 +880,57 @@ Widget::Widget(
         }
     });
 
-    // UI 文件中已经是 ImageLabel，直接使用
-    imageLabel=ui->image_undetected;
-
-    DetectionResultViewBindings resultViewBindings;
-    resultViewBindings.showImage = [this](const QImage &image) {
-        const QPixmap pixmap = QPixmap::fromImage(image);
-        ui->image_undetected->setScaledContents(false);
-        ui->image_undetected->setAlignment(Qt::AlignCenter);
-        ui->image_undetected->setAutoFitPixmap(pixmap);
-        if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
-            updateImageDisplayStatusText(
-                        QStringLiteral(
-                            "\u6b63\u5728\u663e\u793a"
-                            "\u76f8\u673a\u91c7\u96c6\u56fe\u50cf..."));
+    InspectionRuntimeUiCoordinator::Callbacks runtimeUiCallbacks;
+    runtimeUiCallbacks.setSettingsEnabled = [this](bool enabled) {
+        for (auto it = m_globalSettingBindings.constBegin();
+             it != m_globalSettingBindings.constEnd();
+             ++it) {
+            if (it.value().editor) {
+                it.value().editor->setEnabled(enabled);
+            }
+        }
+        if (ui->comboBox_4) {
+            ui->comboBox_4->setEnabled(enabled);
+        }
+        if (m_wordTemplateEditComboBox) {
+            m_wordTemplateEditComboBox->setEnabled(enabled);
+        }
+        if (m_publishTemplateGroupButton) {
+            m_publishTemplateGroupButton->setEnabled(enabled);
+        }
+        if (m_publishedRecipeButton) {
+            m_publishedRecipeButton->setEnabled(enabled);
+        }
+        if (m_manualCharacterCropButton) {
+            m_manualCharacterCropButton->setEnabled(enabled);
+        }
+        if (ui->dateEdit) {
+            ui->dateEdit->setEnabled(enabled);
+        }
+        if (ui->lineEdit_yuzhi) {
+            ui->lineEdit_yuzhi->setEnabled(enabled);
         }
     };
-    resultViewBindings.showVerdictStyle = [this](
-            DetectionVerdictViewStyle style) {
-        const QString color =
-                style == DetectionVerdictViewStyle::Correct
-                ? QStringLiteral("#00ff7f")
-                : QStringLiteral("#ff0000");
-        ui->resultlabel->setTextFormat(Qt::PlainText);
-        ui->resultlabel->setStyleSheet(
-                    QStringLiteral(
-                        "background-color: #eef1f6; "
-                        "border-radius: 6px; "
-                        "font-size: 36px; "
-                        "font-weight: 900; "
-                        "color: %1;")
-                    .arg(color));
-        ui->resultlabel->setWordWrap(true);
+    runtimeUiCallbacks.refreshHardwareSettingsEnabled = [this]() {
+        updateHardwareParameterUiEnabled();
     };
-    resultViewBindings.showVerdictText = [this](const QString &text) {
-        setLabelTextIfChanged(ui->resultlabel, text);
+    runtimeUiCallbacks.updateImageDisplayStatus = [this](
+            const QString &text) {
+        updateImageDisplayStatusText(text);
     };
-    resultViewBindings.showRecognitionText = [this](const QString &text) {
-        setLabelTextIfChanged(ui->resultlabel_7, text);
-    };
-    resultViewBindings.showTemplateName = [this](const QString &text) {
-        ui->currentTemplateName->setText(text);
-    };
-    resultViewBindings.showTotalCount = [this](int count) {
-        ui->imagenum->setText(QString::number(count));
-    };
-    resultViewBindings.showNgCount = [this](int count) {
-        ui->ngnum->setText(QString::number(count));
-    };
-    resultViewBindings.showPassRate = [this](double passRate) {
-        ui->lineBoxIndex_6->setText(QString::number(passRate, 'f', 1));
-    };
-    resultViewBindings.showElapsedText = [this](const QString &text) {
-        ui->speedLabel->setText(text);
-    };
-    m_detectionResultPresenter.bindView(resultViewBindings);
+    m_runtimeUiCoordinator.reset(
+                new InspectionRuntimeUiCoordinator(
+                    this,
+                    ui,
+                    m_multiCameraWidget,
+                    m_templateCaptureAttentionTimer,
+                    &m_templateCaptureAttentionOn,
+                    runtimeUiCallbacks));
+
+    // UI 文件中已经是 ImageLabel，直接使用
+    imageLabel=ui->image_undetected;
+    m_resultCoordinator->bindView(
+                m_runtimeUiCoordinator->resultViewBindings());
 
     // 注册Qt元类型，用于跨线程信号传递
     qRegisterMetaType<cv::Mat>("cv::Mat");
@@ -943,7 +951,123 @@ Widget::Widget(
             this,
             &Widget::checkInspectionPlcHealth);
     m_plcHealthTimer->start();
-    m_cameraDevice = cameraDevice;
+    InspectionAcquisitionCallbacks acquisitionCallbacks;
+    acquisitionCallbacks.suppressStreamingFrame = [this]() {
+        return m_resultBoundDisplayActive.load();
+    };
+    acquisitionCallbacks.presentStreamingFrame = [this](
+            const cv::Mat &image) {
+        if (image.empty() || m_resultBoundDisplayActive.load()) {
+            return;
+        }
+        cv::Mat displayFrame = image;
+        slot_displayAndDetect(&displayFrame);
+    };
+    acquisitionCallbacks.presentTrackingPose = [this](
+            const DetectionPose &pose) {
+        slot_saveBoxesFromThread(pose);
+    };
+    acquisitionCallbacks.clearResultText = [this]() {
+        slot_clearResultLabel();
+    };
+    acquisitionCallbacks.presentTemplatePreview = [this](
+            quint64 sessionId,
+            const cv::Mat &image) {
+        if (m_templateCaptureState
+                != TemplateCaptureState::Previewing
+                || sessionId != m_templatePreviewSessionId
+                || image.empty()) {
+            return;
+        }
+        m_lastTemplatePreviewFrame = image.clone();
+        slot_displayAndDetect(&m_lastTemplatePreviewFrame);
+        updateImageDisplayStatusText(
+                    "\u5b9e\u65f6\u53d6\u666f\u4e2d\uff0c\u8bf7\u8c03\u6574\u4ea7\u54c1\u4f4d\u7f6e\uff0c"
+                    "\u786e\u8ba4\u540e\u70b9\u51fb\u3010\u62cd\u7167\u5e76\u5f00\u59cb\u6846\u9009\u3011\u3002");
+    };
+    acquisitionCallbacks.reportTemplatePreviewError = [this](
+            quint64 sessionId,
+            const QString &reason) {
+        if (m_templateCaptureState
+                != TemplateCaptureState::Previewing
+                || sessionId != m_templatePreviewSessionId) {
+            return;
+        }
+        resetTemplateCaptureState();
+        if (imageLabel) {
+            imageLabel->setTemplateDrawingEnabled(false);
+        }
+        ui->statusLabel->setText(
+                    m_bOpenDevice
+                    ? "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5931\u8d25\uff0c\u76f8\u673a\u5df2\u6253\u5f00"
+                    : "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5931\u8d25\uff0c\u76f8\u673a\u5df2\u5173\u95ed");
+        updateImageDisplayStatusText(
+                    "\u5b9e\u65f6\u53d6\u666f\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u76f8\u673a\u540e\u91cd\u8bd5\u3002");
+        QMessageBox::warning(
+                    this,
+                    "\u5b9e\u65f6\u53d6\u666f\u5931\u8d25",
+                    reason);
+    };
+    acquisitionCallbacks.softwareThreadFinished = [this]() {
+        if (m_templateCaptureState
+                == TemplateCaptureState::Previewing) {
+            ++m_templatePreviewSessionId;
+            m_templateCaptureState = TemplateCaptureState::Idle;
+            m_lastTemplatePreviewFrame.release();
+            m_operationState = m_bOpenDevice
+                    ? OperationState::CameraReady
+                    : OperationState::CameraClosed;
+            ui->statusLabel->setText(
+                        m_bOpenDevice
+                        ? "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5df2\u505c\u6b62\uff0c\u76f8\u673a\u5df2\u6253\u5f00"
+                        : "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5df2\u505c\u6b62\uff0c\u76f8\u673a\u5df2\u5173\u95ed");
+            updateOperationUiState();
+            return;
+        }
+        if (m_operationState == OperationState::Detecting) {
+            InspectionRuntimeStopTransaction stopTransaction(
+                        m_runtimeController);
+            stopTransaction.begin();
+            stopTransaction.commit();
+            isCollecting = false;
+            m_resultBoundDisplayActive.store(false);
+            m_barcodeWordRunActive = false;
+            m_operationState = m_bOpenDevice
+                    ? OperationState::CameraReady
+                    : OperationState::CameraClosed;
+            ui->statusLabel->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
+            updateOperationUiState();
+        }
+    };
+    acquisitionCallbacks.hardwareThreadFinished = [this]() {
+        if (m_operationState != OperationState::Detecting) {
+            return;
+        }
+        InspectionRuntimeStopTransaction stopTransaction(
+                    m_runtimeController);
+        stopTransaction.begin();
+        stopTransaction.waitForDetectionWorker();
+        isCollecting = false;
+        m_resultBoundDisplayActive.store(false);
+        m_barcodeWordRunActive = false;
+        stopTransaction.commit();
+        m_operationState = m_bOpenDevice
+                ? OperationState::CameraReady
+                : OperationState::CameraClosed;
+        ui->statusLabel->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
+        updateOperationUiState();
+    };
+    acquisitionCallbacks.enterFault = [this](
+            InspectionFaultReason reason,
+            const QString &diagnostic) {
+        enterInspectionFault(reason, diagnostic);
+    };
+    m_acquisitionController.reset(
+                new InspectionAcquisitionController(
+                    cameraDevice,
+                    &m_runtimeController,
+                    acquisitionCallbacks,
+                    this));
 
     // 初始化窗口组件
     initWidget();
@@ -1043,58 +1167,11 @@ Widget::~Widget()
     m_runtimeController.requestStop();
     resetTemplateCaptureState();
 
-    // 先停止线程并断开信号，避免窗口销毁时 queued signal 再访问 ui。
-    bool myThreadStopped = true;
-    bool cameraThreadStopped = true;
-    if (myThread) {
-        disconnect(myThread, nullptr, this, nullptr);
-        disconnect(this, nullptr, myThread, nullptr);
-        if (myThread->isRunning()) {
-            myThread->requestStop();
-            myThread->stop();
-            if (!myThread->wait(3000)) {
-                qDebug() << "WARNING: myThread did not stop in destructor";
-                myThreadStopped = false;
-            }
-        }
-        if (myThreadStopped && !myThread->isRunning()) {
-            delete myThread;
-        } else {
-            myThread->setParent(nullptr);
-        }
-        myThread = nullptr;
+    if (m_acquisitionController) {
+        m_acquisitionController->shutdown(3000);
     }
-
-    if (cameraThread) {
-        disconnect(cameraThread, nullptr, this, nullptr);
-        disconnect(this, nullptr, cameraThread, nullptr);
-        if (cameraThread->isRunning()) {
-            cameraThread->requestStop();
-            if (!cameraThread->wait(3000)) {
-                qDebug() << "WARNING: cameraThread did not stop in destructor";
-                cameraThreadStopped = false;
-            }
-        }
-        if (cameraThreadStopped && !cameraThread->isRunning()) {
-            delete cameraThread;
-        } else {
-            cameraThread->setParent(nullptr);
-        }
-        cameraThread = nullptr;
-    }
-
     m_runtimeController.waitForDetectionWorkerStop();
-
-    // 线程退出后再关闭相机，避免工作线程仍在访问相机对象。
-    if (m_cameraDevice && m_bOpenDevice
-            && myThreadStopped && cameraThreadStopped)
-    {
-        m_cameraDevice->close();
-        m_bOpenDevice = false;
-        m_cameraDevice.reset();
-    } else if (m_cameraDevice && m_bOpenDevice) {
-        qDebug() << "WARNING: camera not released because worker thread is still running";
-    }
+    m_bOpenDevice = false;
 
     if (m_runtimeController.isPlcConnected()) {
         m_runtimeController.disconnectPlc();
@@ -1103,21 +1180,13 @@ Widget::~Widget()
     delete templatematch;
     templatematch = nullptr;
 
-    if (myThreadStopped) {
-        delete myImage;
-        myImage = nullptr;
-    } else {
-        qDebug() << "WARNING: myImage not released because myThread is still running";
-    }
-
     try {
         cv::destroyAllWindows();
     } catch (...) {}
 
-    m_detectionCompletionController.reset();
-    if (m_imageSaveService) {
-        m_imageSaveService->shutdown();
-        m_imageSaveService.reset();
+    if (m_resultCoordinator) {
+        m_resultCoordinator->shutdown();
+        m_resultCoordinator.reset();
     }
 
     m_runtimeController.finishStop();
@@ -1155,231 +1224,14 @@ void Widget::initWidget()
         }
     }
 
-    // 初始化图像指针
-    myImage = new Mat();
-
-    // 创建工作线程
-    myThread = new MyThread();
-
     // 创建模板匹配对象
     templatematch = new TemplateMatch();
-
-    // Preview frames and tracking poses are gated before entering Qt's event
-    // queue while a result-bound production run is active.
-    connectSoftwarePreviewSignals(myThread);
-
-    // Connect the software-trigger detection ingress. Migrated modes submit
-    // directly and backpressure acquisition; remaining modes use the legacy
-    // UI dispatch path until their Stage 3 slice.
-    connectSoftwareDetectionSignals(myThread);
-
-
-    // 连接其他信号槽
-    connect(myThread, SIGNAL(signal_cleanlabel()), this, SLOT(slot_clearResultLabel()));
-    connect(this, &Widget::rotate, myThread, &MyThread::receiveangle);
-    connect(this, &Widget::choosechannel,myThread,&MyThread::receivecolorchannel1);
-    connect(this, &Widget::sendDataTo, myThread, &MyThread::received);
     connect(this, &Widget::imgshibie, templatematch, &TemplateMatch::receshibie);
     connect(this, &Widget::ssim, templatematch, &TemplateMatch::ssimvalue);
-    connectTemplatePreviewSignals(myThread);
-}
-
-void Widget::connectSoftwareDetectionSignals(MyThread *thread)
-{
-    if (!thread) {
-        return;
-    }
-
-    connect(thread,
-            &MyThread::signal_sendWholeFrameForDetection,
-            this,
-            [this](cv::Mat image) {
-        if (m_runtimeController.isDetectionWorkerActiveForMode(3)
-                || m_runtimeController.state()
-                   == InspectionRuntimeState::Fault) {
-            submitSoftwareDetectionFrame(image);
-        }
-    },
-    Qt::DirectConnection);
-
-    connect(thread,
-            &MyThread::signal_sendForDetection,
-            this,
-            [this](cv::Mat image, DetectionPose pose) {
-        if (m_runtimeController.state()
-                == InspectionRuntimeState::Fault) {
-            submitSoftwarePositionedDetectionFrame(image, pose);
-        } else if (m_runtimeController.isDetectionWorkerActive()) {
-            const int workerMode =
-                    m_runtimeController.detectionWorkerModeIndex();
-            if (workerMode == 0
-                    || workerMode == 1
-                    || workerMode == 2
-                    || workerMode == 4) {
-                submitSoftwarePositionedDetectionFrame(
-                            image,
-                            pose);
-            }
-        }
-    },
-    Qt::DirectConnection);
-}
-
-void Widget::connectHardwareDetectionSignals(CameraThread *thread)
-{
-    if (!thread) {
-        return;
-    }
-
-    connect(thread,
-            &CameraThread::signal_sendWholeFrameForDetection,
-            this,
-            [this](cv::Mat image) {
-        submitHardwareDetectionFrame(image);
-    },
-    Qt::DirectConnection);
-
-    connect(thread,
-            &CameraThread::signal_sendForDetection,
-            this,
-            [this](cv::Mat image, DetectionPose pose) {
-        submitHardwarePositionedDetectionFrame(image, pose);
-    },
-    Qt::DirectConnection);
-}
-
-void Widget::connectSoftwarePreviewSignals(MyThread *thread)
-{
-    if (!thread) {
-        return;
-    }
-
-    connect(thread,
-            &MyThread::signal_messImage,
-            this,
-            [this](cv::Mat image) {
-        if (shouldSuppressStreamingFrame()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-                    this,
-                    [this, image]() {
-            handleStreamingFrame(image);
-        },
-        Qt::QueuedConnection);
-    },
-    Qt::DirectConnection);
-
-    connect(thread,
-            &MyThread::signal_boxesSelected,
-            this,
-            [this](DetectionPose pose) {
-        if (shouldSuppressStreamingFrame()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-                    this,
-                    [this, pose]() {
-            slot_saveBoxesFromThread(pose);
-        },
-        Qt::QueuedConnection);
-    },
-    Qt::DirectConnection);
-}
-
-void Widget::connectHardwarePreviewSignals(CameraThread *thread)
-{
-    if (!thread) {
-        return;
-    }
-
-    connect(thread,
-            &CameraThread::signal_messImage,
-            this,
-            [this](cv::Mat image) {
-        if (shouldSuppressStreamingFrame()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-                    this,
-                    [this, image]() {
-            handleStreamingFrame(image);
-        },
-        Qt::QueuedConnection);
-    },
-    Qt::DirectConnection);
-
-    connect(thread,
-            &CameraThread::signal_boxesSelected,
-            this,
-            [this](DetectionPose pose) {
-        if (shouldSuppressStreamingFrame()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-                    this,
-                    [this, pose]() {
-            slot_saveBoxesFromThread(pose);
-        },
-        Qt::QueuedConnection);
-    },
-    Qt::DirectConnection);
-}
-
-bool Widget::postSoftwareDetectionUiWork(
-        const UiCompletionMailbox::Work &work)
-{
-    if (!m_runtimeController.submitUiCompletion(work)) {
-        return false;
-    }
-
-    const bool posted = QMetaObject::invokeMethod(
-                this,
-                [this]() {
-        if (!m_runtimeController.processOneUiCompletion()) {
-            qDebug() << "[UI_COMPLETION] cancelled or empty UI work ignored";
-        }
-    },
-    Qt::QueuedConnection);
-    if (!posted) {
-        m_runtimeController.cancelUiCompletion();
-        qWarning() << "[UI_COMPLETION] unable to post result-bound UI work";
-        return false;
-    }
-    return true;
-}
-
-
-
-/**
- * @brief QImage转换为cv::Mat
- * @param image 输入的QImage对象
- * @return cv::Mat 转换后的OpenCV Mat对象
- */
-cv::Mat QImage2cvMat(QImage image)
-{
-    cv::Mat mat;
-    switch (image.format())
-    {
-    case QImage::Format_ARGB32:
-    case QImage::Format_RGB32:
-    case QImage::Format_ARGB32_Premultiplied:
-    {
-        cv::Mat mat_temp = cv::Mat(image.height(), image.width(), CV_8UC4,
-                                   (void *)image.constBits(), image.bytesPerLine());
-        cvtColor(mat_temp, mat, cv::COLOR_BGRA2BGR);
-        break;
-    }
-    case QImage::Format_RGB888:
-        mat = cv::Mat(image.height(), image.width(), CV_8UC3,
-                      (void *)image.constBits(), image.bytesPerLine());
-        break;
-    case QImage::Format_Indexed8:
-        mat = cv::Mat(image.height(), image.width(), CV_8UC1,
-                      (void *)image.constBits(), image.bytesPerLine());
-        break;
-    }
-    return mat;
+    connect(this,
+            &Widget::jiancestring,
+            templatematch,
+            &TemplateMatch::jianceshibiestr);
 }
 
 /**
@@ -1499,61 +1351,22 @@ void Widget::enterInspectionFault(
 
 void Widget::presentInspectionFault()
 {
-    const InspectionFaultPresentation presentation =
-            InspectionFaultPresenter::create(
-                m_runtimeController.faultSnapshot());
-    if (!presentation.isValid() || !ui) {
+    if (!m_runtimeUiCoordinator) {
         return;
     }
-
     m_resultBoundDisplayActive.store(true);
     m_operationState = OperationState::Fault;
     updateOperationUiState();
-    ui->statusLabel->setText(presentation.statusText);
-    ui->statusLabel->setStyleSheet(
-                presentation.statusStyleSheet);
-    ui->resultlabel->setTextFormat(Qt::PlainText);
-    ui->resultlabel->setText(presentation.resultText);
-    ui->resultlabel->setStyleSheet(
-                presentation.resultStyleSheet);
-
-    if (!m_faultAlarmPresented) {
-        m_faultAlarmPresented = true;
-        QMessageBox::critical(
-                    this,
-                    QStringLiteral("\u7cfb\u7edf\u6545\u969c\uff0d\u68c0\u6d4b\u5df2\u6682\u505c"),
-                    presentation.operatorMessage);
-    }
+    m_runtimeUiCoordinator->presentFault(
+                m_runtimeController.faultSnapshot(),
+                &m_faultAlarmPresented);
 }
 
 bool Widget::confirmInspectionFaultRecovery()
 {
-    const InspectionFaultPresentation presentation =
-            InspectionFaultPresenter::create(
+    return m_runtimeUiCoordinator
+            && m_runtimeUiCoordinator->confirmFaultRecovery(
                 m_runtimeController.faultSnapshot());
-    if (!presentation.isValid()) {
-        return false;
-    }
-
-    QMessageBox messageBox(
-                QMessageBox::Critical,
-                QStringLiteral("\u6545\u969c\u6062\u590d\u786e\u8ba4"),
-                presentation.operatorMessage
-                + QStringLiteral(
-                    "\n\n\u6ce8\u610f\uff1a\u89e3\u9664\u8f6f\u4ef6\u9501\u5b9a\u4e0d\u4ee3\u8868\u8f93\u9001\u7ebf\u5df2\u505c\u6b62\u3002"),
-                QMessageBox::Yes | QMessageBox::Cancel,
-                this);
-    messageBox.setDefaultButton(QMessageBox::Cancel);
-    if (QAbstractButton *confirmButton =
-            messageBox.button(QMessageBox::Yes)) {
-        confirmButton->setText(
-                    QStringLiteral("\u786e\u8ba4\u73b0\u573a\u5df2\u5904\u7406\u5e76\u6062\u590d"));
-    }
-    if (QAbstractButton *cancelButton =
-            messageBox.button(QMessageBox::Cancel)) {
-        cancelButton->setText(QStringLiteral("\u7ee7\u7eed\u4fdd\u6301\u6545\u969c\u9501\u5b9a"));
-    }
-    return messageBox.exec() == QMessageBox::Yes;
 }
 
 bool Widget::writeInspectionPlcOutput(
@@ -1750,6 +1563,10 @@ void Widget::checkInspectionPlcHealth()
     if (!m_runtimeController.isRunning()) {
         return;
     }
+    if (!m_resultCoordinator
+            || !m_resultCoordinator->requiresPlcForRun()) {
+        return;
+    }
     if (m_runtimeController.isPlcConnected()) {
         return;
     }
@@ -1763,59 +1580,12 @@ void Widget::checkInspectionPlcHealth()
 void Widget::restoreNormalFaultUi()
 {
     m_faultAlarmPresented = false;
-    m_detectionResultPresenter.clearTransientView();
-    if (!ui) {
-        return;
+    if (m_resultCoordinator) {
+        m_resultCoordinator->clearTransientView();
     }
-    ui->statusLabel->setStyleSheet(
-                QStringLiteral(
-                    "QLabel{color:#2ecc71; font-weight:bold;}"));
-    ui->resultlabel->setStyleSheet(
-                QStringLiteral(
-                    "background-color: #eef1f6; "
-                    "border-radius: 6px; "
-                    "font-size: 36px; "
-                    "font-weight: 900; "
-                    "color: #00ff7f;"));
-}
-
-DetectionWorker::FailureConsumer
-Widget::detectionWorkerFailureConsumer()
-{
-    return [this](const QString &message) {
-        QMetaObject::invokeMethod(
-                    this,
-                    [message]() {
-            qWarning() << "[DETECTION_WORKER]" << message;
-        },
-        Qt::QueuedConnection);
-    };
-}
-
-bool Widget::installDetectionWorker(
-        InspectionRuntimeStartTransaction &startTransaction,
-        int modeIndex,
-        const std::shared_ptr<DetectionWorker> &worker,
-        const QString &startFailureMessage,
-        const QString &workerLogName,
-        QString *errorMessage)
-{
-    if (!worker
-            || !startTransaction.startDetectionWorker(
-                modeIndex,
-                worker)) {
-        if (errorMessage) {
-            *errorMessage = startFailureMessage;
-        }
-        return false;
+    if (m_runtimeUiCoordinator) {
+        m_runtimeUiCoordinator->restoreNormalFaultStyle();
     }
-
-    qDebug() << "[DETECTION_WORKER]" << qPrintable(workerLogName)
-             << "worker started"
-             << "queueCapacity="
-             << static_cast<qulonglong>(
-                    m_runtimeController.detectionWorkerQueueCapacity());
-    return true;
 }
 
 bool Widget::startDetectionWorkerForMode(
@@ -1824,741 +1594,65 @@ bool Widget::startDetectionWorkerForMode(
         const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage)
 {
-    DetectionModeWorkerRequest request;
-    request.modeIndex = modeIndex;
-    request.profiles = profileSnapshot.detectionProfiles;
-
-    switch (modeIndex) {
-    case 0:
-    {
-        bool thresholdOk = false;
-        request.stampConfiguration.thresholdPercent =
-                ui->lineEdit_yuzhi->text().toInt(&thresholdOk);
-        if (!thresholdOk || digitTemplates.empty()) {
-            if (errorMessage) {
-                *errorMessage = QStringLiteral(
-                            "\u94a2\u5370\u5b57\u7b26\u6a21\u677f\u6216"
-                            "\u56fe\u50cf\u9608\u503c\u65e0\u6548\u3002");
-            }
-            return false;
-        }
-        request.stampConfiguration.targetText = setdatetime();
-        request.stampConfiguration.preparedTemplates =
-                CharacterTemplateMatcher::prepare(digitTemplates);
-        request.stampConfiguration.templateTargetIndexes.reserve(
-                    digitTemplates.size());
-        for (int index = 0;
-             index < static_cast<int>(digitTemplates.size());
-             ++index) {
-            request.stampConfiguration.templateTargetIndexes
-                    .push_back(index);
-        }
-        const bool hasOverlapConfiguration = QFile::exists(
-                    QDir(currentTemplateDirPath)
-                    .filePath(QStringLiteral("calibrate_config.yaml")));
-        if (hasOverlapConfiguration) {
-            const std::shared_ptr<OverlapDetector> workerOverlapDetector(
-                        new OverlapDetector(overlapDetector));
-            request.stampConfiguration.detectOverlap =
-                    [workerOverlapDetector](
-                        const cv::Mat &sourceImage,
-                        const std::vector<cv::Point> &datePoly) {
-                const DetectResult overlap =
-                        workerOverlapDetector->processImage(
-                            sourceImage,
-                            datePoly);
-                StampOverlapResult result;
-                result.isOk = overlap.isOk;
-                result.finalStampPoly = overlap.finalStampPoly;
-                return result;
-            };
-        }
-        break;
-    }
-    case 1:
-        break;
-    case 2:
-        request.ocrEngine = m_ocrEngine.get();
-        if (request.ocrEngine) {
-            request.targetText = setdatetime().toStdString();
-        }
-        break;
-    case 3:
-        request.tissueParameters = m_tissueRecipeParameters;
-        break;
-    case 4:
-        request.barcodeDecoder = m_barcodeDecoder.get();
-        break;
-    default:
+    if (!m_resultCoordinator) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
-                        "\u4e0d\u652f\u6301\u7684\u68c0\u6d4b"
-                        "\u6a21\u5f0f\u3002");
+                        "\u68c0\u6d4b\u7ed3\u679c\u534f\u8c03\u5668\u672a\u521d\u59cb\u5316\u3002");
         }
         return false;
     }
 
-    DetectionModeWorkerConsumers consumers;
-    consumers.tissue = [this](
-            const DetectionCompletion &completion,
-            const TissueRollResult &tissueResult) {
-        postSoftwareDetectionUiWork(
-                    [this, completion, tissueResult]() {
-            handleSoftwareTissueCompletion(completion, tissueResult);
-        });
-    };
-    consumers.ocr = [this](
-            const DetectionCompletion &completion,
-            const DetectionPose &pose) {
-        postSoftwareDetectionUiWork([this, completion, pose]() {
-            handleSoftwareOcrCompletion(completion, pose);
-        });
-    };
-    consumers.stamp = [this](
-            const DetectionCompletion &completion,
-            const StampDetectionWorkOutput &output) {
-        postSoftwareDetectionUiWork([this, completion, output]() {
-            handleSoftwareStampCompletion(completion, output);
-        });
-    };
-    consumers.word = [this](
-            const DetectionCompletion &completion,
-            const WordDetectionWorkOutput &output) {
-        postSoftwareDetectionUiWork([this, completion, output]() {
-            handleSoftwareWordCompletion(completion, output);
-        });
-    };
-    consumers.barcodeWord = [this](
-            const DetectionCompletion &completion,
-            const BarcodeWordDetectionWorkOutput &output) {
-        postSoftwareDetectionUiWork([this, completion, output]() {
-            handleSoftwareBarcodeWordCompletion(completion, output);
-        });
-    };
-
-    const DetectionModeWorkerCreationResult creation =
-            DetectionModeWorkerDispatcher::create(
-                request,
-                consumers,
-                detectionWorkerFailureConsumer());
-    if (!creation.isAccepted()) {
-        if (errorMessage) {
-            *errorMessage = creation.errorMessage;
-        }
-        return false;
+    InspectionDetectionWorkerStartConfiguration configuration;
+    configuration.modeIndex = modeIndex;
+    configuration.profiles = profileSnapshot.detectionProfiles;
+    configuration.ocrEngine = m_ocrEngine.get();
+    configuration.tissueParameters = m_tissueRecipeParameters;
+    configuration.barcodeDecoder = m_barcodeDecoder.get();
+    if (modeIndex == 0) {
+        configuration.targetText = setdatetime();
+        configuration.stampTemplates = digitTemplates;
+        configuration.stampThresholdPercent =
+                ui->lineEdit_yuzhi->text().toInt(
+                    &configuration.stampThresholdValid);
+    } else if (modeIndex == 2 && configuration.ocrEngine) {
+        configuration.targetText = setdatetime();
     }
-    return installDetectionWorker(
+    configuration.resultConfiguration.imageSaveModeIndex =
+            ui->comboBox->currentIndex();
+    configuration.resultConfiguration.plcOutputEnabled =
+            ui->checkBox->isChecked();
+    configuration.resultConfiguration.delayedNgOffset = wrongindex;
+    configuration.resultConfiguration.saveOptions.rootDirectory = selectedDir;
+    configuration.resultConfiguration.saveOptions.format =
+            QStringLiteral("jpg");
+    configuration.resultConfiguration.saveOptions.quality =
+            kDetectionImageJpegQuality;
+    configuration.resultConfiguration.saveOptions.imageContentModeIndex =
+            ui->comboBox_saveImageType->currentIndex();
+
+    if (modeIndex == 0 && QFile::exists(
+            QDir(currentTemplateDirPath)
+            .filePath(QStringLiteral("calibrate_config.yaml")))) {
+        const std::shared_ptr<OverlapDetector> workerOverlapDetector(
+                    new OverlapDetector(overlapDetector));
+        configuration.detectStampOverlap = [workerOverlapDetector](
+                const cv::Mat &sourceImage,
+                const std::vector<cv::Point> &datePoly) {
+            const DetectResult overlap =
+                    workerOverlapDetector->processImage(
+                        sourceImage,
+                        datePoly);
+            StampOverlapResult result;
+            result.isOk = overlap.isOk;
+            result.finalStampPoly = overlap.finalStampPoly;
+            return result;
+        };
+    }
+
+    return m_resultCoordinator->startDetectionWorker(
                 startTransaction,
-                modeIndex,
-                creation.worker,
-                creation.startFailureMessage,
-                creation.workerLogName,
+                configuration,
                 errorMessage);
-}
-
-void Widget::submitSoftwareDetectionFrame(
-        const cv::Mat &image)
-{
-    if (image.empty()) {
-        return;
-    }
-    if (m_runtimeController.state()
-            == InspectionRuntimeState::Fault) {
-        m_runtimeController.acceptFrame(image);
-        return;
-    }
-    if (!m_runtimeController.isDetectionWorkerActive()) {
-        return;
-    }
-
-    const std::shared_ptr<const FrameData> frame =
-            m_runtimeController.acceptFrame(image);
-    if (!frame) {
-        return;
-    }
-
-    if (!m_runtimeController.submitDetectionFrame(frame)) {
-        qDebug() << "[DETECTION_WORKER] software frame rejected"
-                 << frame->productKey.runId
-                 << frame->productKey.sequence;
-    }
-}
-
-void Widget::submitSoftwarePositionedDetectionFrame(
-        const cv::Mat &image,
-        const DetectionPose &pose)
-{
-    if (image.empty()) {
-        return;
-    }
-    if (m_runtimeController.state()
-            == InspectionRuntimeState::Fault) {
-        m_runtimeController.acceptFrame(image);
-        return;
-    }
-    if (!m_runtimeController.isDetectionWorkerActive()) {
-        return;
-    }
-
-    const std::shared_ptr<const FrameData> frame =
-            m_runtimeController.acceptFrame(image);
-    if (!frame) {
-        return;
-    }
-
-    const DetectionWorkItem item =
-            makeDetectionWorkItem(frame, pose);
-    if (!m_runtimeController.submitDetectionWorkItem(item)) {
-        qDebug() << "[DETECTION_WORKER] positioned frame rejected"
-                 << frame->productKey.runId
-                 << frame->productKey.sequence;
-    }
-}
-
-void Widget::submitHardwareDetectionFrame(
-        const cv::Mat &image)
-{
-    if (image.empty()) {
-        return;
-    }
-    if (m_runtimeController.state()
-            == InspectionRuntimeState::Fault) {
-        m_runtimeController.acceptFrame(image);
-        return;
-    }
-    if (!m_runtimeController.isDetectionWorkerActiveForMode(3)) {
-        return;
-    }
-
-    const std::shared_ptr<const FrameData> frame =
-            m_runtimeController.acceptFrame(image);
-    if (!frame) {
-        return;
-    }
-    const DetectionWorkSubmissionResult submission =
-            m_runtimeController.trySubmitDetectionFrame(frame);
-    if (submission == DetectionWorkSubmissionResult::QueueFull) {
-        enterInspectionFault(
-                    InspectionFaultReason::HardTriggerQueueOverflow,
-                    QStringLiteral(
-                        "\u786c\u89e6\u53d1 FIFO \u65e0\u6cd5\u63a5\u6536\u4ea7\u54c1 %1/%2\uff0c\u961f\u5217\u5bb9\u91cf %3\u3002")
-                    .arg(frame->productKey.runId)
-                    .arg(frame->productKey.sequence)
-                    .arg(static_cast<qulonglong>(
-                             m_runtimeController
-                             .detectionWorkerQueueCapacity())));
-    } else if (submission
-               != DetectionWorkSubmissionResult::Accepted) {
-        qDebug() << "[DETECTION_WORKER] hardware frame rejected"
-                 << static_cast<int>(submission)
-                 << frame->productKey.runId
-                 << frame->productKey.sequence;
-    }
-}
-
-void Widget::submitHardwarePositionedDetectionFrame(
-        const cv::Mat &image,
-        const DetectionPose &pose)
-{
-    if (image.empty()) {
-        return;
-    }
-    if (m_runtimeController.state()
-            == InspectionRuntimeState::Fault) {
-        m_runtimeController.acceptFrame(image);
-        return;
-    }
-    if (!m_runtimeController.isDetectionWorkerActive()) {
-        return;
-    }
-
-    const int workerMode =
-            m_runtimeController.detectionWorkerModeIndex();
-    if (workerMode != 0
-            && workerMode != 1
-            && workerMode != 2
-            && workerMode != 4) {
-        return;
-    }
-
-    const std::shared_ptr<const FrameData> frame =
-            m_runtimeController.acceptFrame(image);
-    if (!frame) {
-        return;
-    }
-    const DetectionWorkSubmissionResult submission =
-            m_runtimeController.trySubmitDetectionWorkItem(
-                makeDetectionWorkItem(frame, pose));
-    if (submission == DetectionWorkSubmissionResult::QueueFull) {
-        enterInspectionFault(
-                    InspectionFaultReason::HardTriggerQueueOverflow,
-                    QStringLiteral(
-                        "\u786c\u89e6\u53d1 FIFO \u65e0\u6cd5\u63a5\u6536\u4ea7\u54c1 %1/%2\uff0c\u961f\u5217\u5bb9\u91cf %3\u3002")
-                    .arg(frame->productKey.runId)
-                    .arg(frame->productKey.sequence)
-                    .arg(static_cast<qulonglong>(
-                             m_runtimeController
-                             .detectionWorkerQueueCapacity())));
-    } else if (submission
-               != DetectionWorkSubmissionResult::Accepted) {
-        qDebug() << "[DETECTION_WORKER] positioned hardware frame rejected"
-                 << static_cast<int>(submission)
-                 << frame->productKey.runId
-                 << frame->productKey.sequence;
-    }
-}
-
-void Widget::handleSoftwareTissueCompletion(
-        const DetectionCompletion &completion,
-        const TissueRollResult &tissueResult)
-{
-    const DetectionCompletion acceptedCompletion =
-            m_runtimeController.complete(
-                completion.frame,
-                completion.result);
-    if (!acceptedCompletion.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale tissue completion ignored";
-        return;
-    }
-
-    finalizeTissueResult(
-                tissueResult,
-                acceptedCompletion);
-}
-
-void Widget::handleSoftwareOcrCompletion(
-        const DetectionCompletion &completion,
-        const DetectionPose &pose)
-{
-    const DetectionCompletion acceptedCompletion =
-            m_runtimeController.complete(
-                completion.frame,
-                completion.result);
-    if (!acceptedCompletion.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale OCR completion ignored";
-        return;
-    }
-    if (acceptedCompletion.result.status
-            == DetectionStatus::Cancelled) {
-        qDebug() << "[OCR_ERROR] Invalid selection area!";
-        return;
-    }
-
-    OcrDetectionResult ocrResult;
-    ocrResult.recognizedText =
-            acceptedCompletion.result.recognizedText.toStdString();
-    ocrResult.isOk = acceptedCompletion.result.verdict
-            == AlgorithmVerdict::Ok;
-    finalizeOcrResult(
-                pose,
-                ocrResult,
-                acceptedCompletion,
-                resultPresentationElapsedMs(
-                    acceptedCompletion));
-}
-
-void Widget::handleSoftwareStampCompletion(
-        const DetectionCompletion &completion,
-        const StampDetectionWorkOutput &output)
-{
-    const DetectionCompletion acceptedCompletion =
-            m_runtimeController.complete(
-                completion.frame,
-                completion.result);
-    if (!acceptedCompletion.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale stamp completion ignored";
-        return;
-    }
-    if (acceptedCompletion.result.status
-            == DetectionStatus::Cancelled) {
-        showDetectionRoiWarningOnce();
-        return;
-    }
-
-    clearDetectionRoiWarning();
-    finalizeSoftwareStampResult(
-                output,
-                acceptedCompletion);
-}
-
-void Widget::handleSoftwareWordCompletion(
-        const DetectionCompletion &completion,
-        const WordDetectionWorkOutput &output)
-{
-    const DetectionCompletion acceptedCompletion =
-            m_runtimeController.complete(
-                completion.frame,
-                completion.result);
-    if (!acceptedCompletion.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale word completion ignored";
-        return;
-    }
-    if (acceptedCompletion.result.status
-            == DetectionStatus::Cancelled) {
-        qDebug() << "[WORD_DETECT] positioned work cancelled:"
-                 << acceptedCompletion.result.diagnostic;
-        return;
-    }
-
-    finalizeSoftwareWordResult(
-                output,
-                acceptedCompletion);
-}
-
-void Widget::handleSoftwareBarcodeWordCompletion(
-        const DetectionCompletion &completion,
-        const BarcodeWordDetectionWorkOutput &output)
-{
-    const DetectionCompletion acceptedCompletion =
-            m_runtimeController.complete(
-                completion.frame,
-                completion.result);
-    if (!acceptedCompletion.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale barcode-word completion ignored";
-        return;
-    }
-    if (acceptedCompletion.result.status
-            == DetectionStatus::Cancelled) {
-        qDebug() << "[BARCODE_WORD] positioned work cancelled:"
-                 << acceptedCompletion.result.diagnostic;
-        return;
-    }
-
-    finalizeSoftwareBarcodeWordResult(
-                output,
-                acceptedCompletion);
-}
-
-void Widget::finalizeSoftwareStampResult(
-        const StampDetectionWorkOutput &output,
-        const DetectionCompletion &acceptedCompletion)
-{
-    if (!acceptedCompletion.isValid()
-            || !m_detectionCompletionController) {
-        return;
-    }
-
-    DetectionCompletionProcessRequest request;
-    request.completion = acceptedCompletion;
-    request.imageSaveModeIndex = ui->comboBox->currentIndex();
-    request.delayedNgOffset = wrongindex;
-    request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("jpg");
-    request.saveOptions.quality = kDetectionImageJpegQuality;
-    request.saveOptions.imageContentModeIndex =
-            ui->comboBox_saveImageType->currentIndex();
-    request.saveOptions.saveNotEvaluatedAsNg = false;
-    request.preparePresentation =
-            [this, &acceptedCompletion, &output]() {
-        imageLabel->clearGreenRects();
-        detectedRects.clear();
-        string1.clear();
-        m_detectionResultPresenter.installDetectionResult(
-                    acceptedCompletion.result,
-                    output.pose,
-                    output.hasOverlapDetection
-                    && !output.stampResult.overlapIsOk);
-
-        DetectionResultViewSnapshot snapshot;
-        snapshot.image = m_detectionResultPresenter.renderFrame(
-                    acceptedCompletion.frame->originalImage,
-                    false);
-        snapshot.verdictStyle =
-                acceptedCompletion.result.verdict
-                == AlgorithmVerdict::Ok
-                ? DetectionVerdictViewStyle::Correct
-                : DetectionVerdictViewStyle::Error;
-        return snapshot;
-    };
-    request.finalizePresentation =
-            [this, &acceptedCompletion](
-                DetectionResultViewSnapshot *snapshot) {
-        snapshot->elapsedText = QStringLiteral(
-                    "\u68c0\u6d4b\u8017\u65f6 %1 "
-                    "\u6beb\u79d2")
-                .arg(resultPresentationElapsedMs(
-                         acceptedCompletion));
-    };
-
-    const DetectionCompletionProcessOutcome outcome =
-            m_detectionCompletionController->process(request);
-    if (!outcome.resultRecorded) {
-        qWarning() << "[RUNTIME_CONTROLLER] rejected stamp completion";
-    }
-}
-
-void Widget::finalizeSoftwareWordResult(
-        const WordDetectionWorkOutput &output,
-        const DetectionCompletion &acceptedCompletion)
-{
-    if (!acceptedCompletion.isValid()
-            || !m_detectionCompletionController) {
-        return;
-    }
-
-    bool updatesTemplateName = false;
-    QString templateName;
-    if (!output.templateName.trimmed().isEmpty()) {
-        updatesTemplateName = true;
-        templateName = output.templateName;
-    } else if (!output.pose.valid) {
-        updatesTemplateName = true;
-        templateName = QStringLiteral("--");
-    }
-
-    DetectionCompletionProcessRequest request;
-    request.completion = acceptedCompletion;
-    request.imageSaveModeIndex = ui->comboBox->currentIndex();
-    request.delayedNgOffset = wrongindex;
-    request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("jpg");
-    request.saveOptions.quality = kDetectionImageJpegQuality;
-    request.saveOptions.imageContentModeIndex =
-            ui->comboBox_saveImageType->currentIndex();
-    request.saveOptions.saveNotEvaluatedAsNg = false;
-    request.preparePresentation =
-            [this,
-             &acceptedCompletion,
-             &output,
-             updatesTemplateName,
-             templateName]() {
-        imageLabel->clearGreenRects();
-        detectedRects.clear();
-        string1.clear();
-        m_detectionResultPresenter.installDetectionResult(
-                    acceptedCompletion.result,
-                    output.pose);
-
-        DetectionResultViewSnapshot snapshot;
-        snapshot.image = m_detectionResultPresenter.renderFrame(
-                    acceptedCompletion.frame->originalImage,
-                    false);
-        snapshot.verdictStyle =
-                acceptedCompletion.result.verdict
-                == AlgorithmVerdict::Ok
-                ? DetectionVerdictViewStyle::Correct
-                : DetectionVerdictViewStyle::Error;
-        snapshot.updatesTemplateName = updatesTemplateName;
-        snapshot.templateName = templateName;
-        return snapshot;
-    };
-    request.finalizePresentation =
-            [this, &acceptedCompletion](
-                DetectionResultViewSnapshot *snapshot) {
-        snapshot->elapsedText = QStringLiteral(
-                    "\u68c0\u6d4b\u8017\u65f6 %1 "
-                    "\u6beb\u79d2")
-                .arg(resultPresentationElapsedMs(
-                         acceptedCompletion));
-    };
-
-    const DetectionCompletionProcessOutcome outcome =
-            m_detectionCompletionController->process(request);
-    if (!outcome.resultRecorded) {
-        qWarning() << "[RUNTIME_CONTROLLER] rejected word completion";
-        return;
-    }
-    qDebug().noquote()
-            << QString("[WORD_DETECT] template=%1 result=%2 reason=%3 "
-                       "targetCount=%4 detectedCount=%5 poseScore=%6")
-               .arg(output.templateName.isEmpty()
-                    ? QStringLiteral("--")
-                    : output.templateName)
-               .arg(acceptedCompletion.result.verdict
-                    == AlgorithmVerdict::Ok
-                    ? QStringLiteral("OK")
-                    : QStringLiteral("NG"))
-               .arg(acceptedCompletion.result.diagnostic)
-               .arg(output.wordResult.targetCharacterCount)
-               .arg(output.wordResult.detectedCharacterCount)
-               .arg(output.pose.score, 0, 'f', 4);
-}
-
-void Widget::finalizeSoftwareBarcodeWordResult(
-        const BarcodeWordDetectionWorkOutput &output,
-        const DetectionCompletion &acceptedCompletion)
-{
-    if (!acceptedCompletion.isValid()
-            || !m_detectionCompletionController) {
-        return;
-    }
-
-    bool updatesTemplateName = false;
-    QString templateName;
-    if (!output.templateName.trimmed().isEmpty()) {
-        updatesTemplateName = true;
-        templateName = output.templateName;
-    } else if (!output.pose.valid) {
-        updatesTemplateName = true;
-        templateName = QStringLiteral("--");
-    }
-
-    QStringList resultLines;
-    resultLines.append(
-                QStringLiteral("\u4e8c\u7ef4\u7801\uff1a%1")
-                .arg(output.barcodeState));
-    if (!output.barcode.text.isEmpty()) {
-        resultLines.append(
-                    QStringLiteral("\u4e8c\u7ef4\u7801\u5185\u5bb9\uff1a%1")
-                    .arg(output.barcode.text));
-    }
-    resultLines.append(
-                QStringLiteral("\u65e5\u671f\uff1a%1")
-                .arg(output.dateState));
-    if ((!output.barcodeWordResult.barcodeIsReadable
-         || !output.barcodeWordResult.dateDetectionExecuted)
-            && !output.reason.trimmed().isEmpty()) {
-        resultLines.append(
-                    QStringLiteral("\u539f\u56e0\uff1a%1")
-                    .arg(output.reason));
-    }
-
-    double presentationElapsedMs = 0.0;
-    DetectionCompletionProcessRequest request;
-    request.completion = acceptedCompletion;
-    request.imageSaveModeIndex = ui->comboBox->currentIndex();
-    request.delayedNgOffset = wrongindex;
-    request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("jpg");
-    request.saveOptions.quality = kDetectionImageJpegQuality;
-    request.saveOptions.imageContentModeIndex =
-            ui->comboBox_saveImageType->currentIndex();
-    request.saveOptions.saveNotEvaluatedAsNg = false;
-    request.preparePresentation =
-            [this,
-             &acceptedCompletion,
-             &output,
-             resultLines,
-             updatesTemplateName,
-             templateName]() {
-        imageLabel->clearGreenRects();
-        detectedRects.clear();
-        string1.clear();
-        m_detectionResultPresenter.installDetectionResult(
-                    acceptedCompletion.result,
-                    output.pose);
-
-        DetectionResultViewSnapshot snapshot;
-        snapshot.image = m_detectionResultPresenter.renderFrame(
-                    acceptedCompletion.frame->originalImage,
-                    false);
-        snapshot.verdictStyle =
-                acceptedCompletion.result.verdict
-                == AlgorithmVerdict::Ok
-                ? DetectionVerdictViewStyle::Correct
-                : DetectionVerdictViewStyle::Error;
-        snapshot.recognitionText = resultLines.join(
-                    QStringLiteral("\n"));
-        snapshot.updatesTemplateName = updatesTemplateName;
-        snapshot.templateName = templateName;
-        return snapshot;
-    };
-    request.finalizePresentation =
-            [this,
-             &acceptedCompletion,
-             &presentationElapsedMs](
-                DetectionResultViewSnapshot *snapshot) {
-        presentationElapsedMs = resultPresentationElapsedMs(
-                    acceptedCompletion);
-        snapshot->elapsedText = QStringLiteral(
-                    "\u68c0\u6d4b\u8017\u65f6 %1 ms")
-                .arg(presentationElapsedMs, 0, 'f', 2);
-    };
-
-    const DetectionCompletionProcessOutcome outcome =
-            m_detectionCompletionController->process(request);
-    if (!outcome.resultRecorded) {
-        qWarning() << "[RUNTIME_CONTROLLER] rejected barcode-word completion";
-        return;
-    }
-    qDebug().noquote()
-            << QString("[BARCODE_WORD] template=%1 barcode=%2 date=%3 "
-                       "final=%4 trackingMs=%5 barcodeMs=%6 totalMs=%7 "
-                       "reason=%8 decoderReason=%9")
-               .arg(output.templateName.isEmpty()
-                    ? QStringLiteral("--")
-                    : output.templateName)
-               .arg(output.barcodeState)
-               .arg(output.dateState)
-               .arg(acceptedCompletion.result.verdict
-                    == AlgorithmVerdict::Ok
-                    ? QStringLiteral("OK")
-                    : QStringLiteral("NG"))
-               .arg(output.pose.trackingElapsedMs, 0, 'f', 3)
-               .arg(output.barcode.elapsedMs, 0, 'f', 3)
-               .arg(presentationElapsedMs, 0, 'f', 3)
-               .arg(output.reason)
-               .arg(output.barcode.errorReason);
-}
-
-void Widget::showDetectionRoiWarningOnce()
-{
-    if (m_detectionRoiWarningActive) {
-        return;
-    }
-
-    m_detectionRoiWarningActive = true;
-    const QString warningText = QString::fromWCharArray(
-                L"\u8bc6\u522b\u533a\u57df\u8d85\u51fa\u539f\u56fe\u8303\u56f4\uff0c"
-                L"\u8bf7\u70b9\u51fb\u3010\u505c\u6b62\u8bc6\u522b\u3011\uff0c"
-                L"\u7136\u540e\u91cd\u65b0\u9009\u62e9\u6216\u5236\u4f5c\u6a21\u677f\u3002");
-    qWarning().noquote() << "[DETECTION_ROI]" << warningText;
-    if (ui && ui->statusLabel) {
-        ui->statusLabel->setWordWrap(true);
-        ui->statusLabel->setText(warningText);
-        ui->statusLabel->setStyleSheet(
-                    QStringLiteral(
-                        "QLabel{color:#d90000;font-weight:900;}"));
-    }
-}
-
-void Widget::clearDetectionRoiWarning()
-{
-    if (!m_detectionRoiWarningActive) {
-        return;
-    }
-
-    m_detectionRoiWarningActive = false;
-    if (ui && ui->statusLabel
-            && m_operationState == OperationState::Detecting) {
-        ui->statusLabel->setText(
-                    ui->checkBox->isChecked()
-                    ? QString::fromWCharArray(
-                        L"\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d")
-                    : QString::fromWCharArray(
-                        L"\u8f6f\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d"));
-        ui->statusLabel->setStyleSheet(
-                    QStringLiteral(
-                        "QLabel{color:#20b455;font-weight:bold;}"));
-    }
-}
-
-void Widget::scheduleImageSaveWarning()
-{
-    if (m_imageSaveWarningScheduled) {
-        return;
-    }
-    m_imageSaveWarningScheduled = true;
-    QTimer::singleShot(250, this, [this]() {
-        m_imageSaveWarningScheduled = false;
-        QString warningText = QString::fromWCharArray(
-                    L"\u5b58\u56fe\u5931\u8d25\uff1a\u7d2f\u8ba1 %1 \u4e2a\u4efb\u52a1\u3002"
-                    L"\u8bf7\u68c0\u67e5\u5b58\u56fe\u76ee\u5f55\u3001\u6743\u9650\u548c\u78c1\u76d8\u7a7a\u95f4\u3002")
-                .arg(m_imageSaveFailedCount);
-        if (!m_latestImageSaveError.trimmed().isEmpty()) {
-            warningText += QString::fromWCharArray(
-                        L"\n\u6700\u8fd1\u9519\u8bef\uff1a%1")
-                    .arg(m_latestImageSaveError);
-        }
-        qWarning().noquote() << "[IMAGE_SAVE]" << warningText;
-        if (ui && ui->statusLabel) {
-            ui->statusLabel->setWordWrap(true);
-            ui->statusLabel->setText(warningText);
-            ui->statusLabel->setStyleSheet(
-                        QStringLiteral(
-                            "QLabel{color:#d90000;font-weight:900;}"));
-        }
-    });
 }
 
 /**
@@ -2568,10 +1662,6 @@ void Widget::scheduleImageSaveWarning()
  */
 void Widget::slot_displayAndDetect(cv::Mat *image)
 {
-    if (!image || image->empty()) {
-        return;
-    }
-
     const bool tissueMode = ui->comboBox_4->currentIndex() == 3;
     const bool productionRunning =
             isCollecting
@@ -2579,81 +1669,12 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
                == OperationState::Detecting
             || m_operationState
                == OperationState::Stopping;
-    if (tissueMode && productionRunning) {
-        return;
+    if (image && m_resultCoordinator) {
+        m_resultCoordinator->presentPreviewFrame(
+                    *image, tissueMode, productionRunning);
     }
-
-    const QImage rendered = m_detectionResultPresenter.renderFrame(
-                *image,
-                tissueMode);
-    if (rendered.isNull()) {
-        return;
-    }
-
-    m_detectionResultPresenter.presentFrame(rendered);
 }
 
-
-void Widget::finalizeOcrResult(
-        const DetectionPose &pose,
-        const OcrDetectionResult &ocrResult,
-        const DetectionCompletion &acceptedCompletion,
-        double elapsedMs)
-{
-    if (!acceptedCompletion.isValid()
-            || !m_detectionCompletionController) {
-        return;
-    }
-
-    DetectionCompletionProcessRequest request;
-    request.completion = acceptedCompletion;
-    request.imageSaveModeIndex = ui->comboBox->currentIndex();
-    request.delayedNgOffset = wrongindex;
-    request.saveOptions.layout =
-            DetectionCompletionSaveLayout::RawOnly;
-    request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("jpg");
-    request.saveOptions.quality = kDetectionImageJpegQuality;
-    request.preparePresentation =
-            [this, &acceptedCompletion, &pose, &ocrResult]() {
-        detectedRects.clear();
-        string1.clear();
-
-        qDebug() << "----------------- OCR PROCESS START -----------------";
-        m_detectionResultPresenter.installDetectionResult(
-                    acceptedCompletion.result,
-                    pose);
-        allResults = ocrResult.recognizedText;
-        qDebug() << "[OCR_LOG] Final String:"
-                 << QString::fromStdString(allResults);
-
-        DetectionResultViewSnapshot snapshot;
-        snapshot.image = m_detectionResultPresenter.renderFrame(
-                    acceptedCompletion.frame->originalImage,
-                    false);
-        snapshot.verdictStyle = ocrResult.isOk
-                ? DetectionVerdictViewStyle::Correct
-                : DetectionVerdictViewStyle::Error;
-        snapshot.recognitionText = QString::fromStdString(allResults);
-        return snapshot;
-    };
-    request.finalizePresentation =
-            [elapsedMs](DetectionResultViewSnapshot *snapshot) {
-        snapshot->elapsedText = QStringLiteral(
-                    "\u68c0\u6d4b\u8017\u65f6 %1 "
-                    "\u6beb\u79d2")
-                .arg(static_cast<qint64>(elapsedMs));
-    };
-
-    const DetectionCompletionProcessOutcome outcome =
-            m_detectionCompletionController->process(request);
-    if (!outcome.resultRecorded) {
-        qWarning() << "[RUNTIME_CONTROLLER] rejected OCR completion";
-        return;
-    }
-
-    qDebug() << "----------------- OCR PROCESS END -----------------";
-}
 
 void Widget::clearBarcodeTemplateValidation()
 {
@@ -2711,7 +1732,10 @@ bool Widget::validateBarcodeTemplateRect(
         return false;
     };
 
-    if (!myImage || myImage->empty() || !imageLabel) {
+    const cv::Mat templateImage = m_acquisitionController
+            ? m_acquisitionController->currentImageClone()
+            : cv::Mat();
+    if (templateImage.empty() || !imageLabel) {
         return finishFailure(
                     BarcodeReadStatus::InvalidRoi,
                     "Template source image is unavailable");
@@ -2725,7 +1749,7 @@ bool Widget::validateBarcodeTemplateRect(
     }
 
     const QSize labelSize = imageLabel->size();
-    const QSize imageSize(myImage->cols, myImage->rows);
+    const QSize imageSize(templateImage.cols, templateImage.rows);
     const QPixmap *displayedPixmap = imageLabel->pixmap();
     const QSize displayedSize =
             displayedPixmap && !displayedPixmap->isNull()
@@ -2758,7 +1782,11 @@ bool Widget::validateBarcodeTemplateRect(
                 sourceTop,
                 sourceRight - sourceLeft,
                 sourceBottom - sourceTop);
-    sourceRect &= cv::Rect(0, 0, myImage->cols, myImage->rows);
+    sourceRect &= cv::Rect(
+                0,
+                0,
+                templateImage.cols,
+                templateImage.rows);
     if (sourceRect.width <= 5 || sourceRect.height <= 5) {
         return finishFailure(
                     BarcodeReadStatus::InvalidRoi,
@@ -2782,7 +1810,7 @@ bool Widget::validateBarcodeTemplateRect(
 
     const BarcodeWordOrientedRois prepared =
             prepareBarcodeWordOrientedRois(
-                *myImage,
+                templateImage,
                 templatePose,
                 options.roiPaddingPercent,
                 0);
@@ -2866,437 +1894,24 @@ BarcodeDecodeOptions Widget::barcodeTemplateValidationOptions() const
             .barcodeOptions;
 }
 
-void Widget::finalizeTissueResult(
-        const TissueRollResult &tissueResult,
-        const DetectionCompletion &acceptedCompletion)
-{
-    if (!acceptedCompletion.isValid()
-            || !m_detectionCompletionController) {
-        qDebug() << "[TISSUE_DETECT] Invalid input image.";
-        return;
-    }
-
-    const bool isOk = tissueResult.isOk;
-    const QString tissueRecognitionText =
-            tissueResult.rollFound
-            ? QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a%1")
-              .arg(tissueResult.roll.roughnessScore, 0, 'f', 3)
-            : QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a--");
-
-    DetectionCompletionProcessRequest request;
-    request.completion = acceptedCompletion;
-    request.imageSaveModeIndex = ui->comboBox->currentIndex();
-    request.delayedNgOffset = wrongindex;
-    request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("jpg");
-    request.saveOptions.quality = kDetectionImageJpegQuality;
-    request.saveOptions.imageContentModeIndex =
-            ui->comboBox_saveImageType->currentIndex();
-    request.preparePresentation =
-            [this,
-             &acceptedCompletion,
-             &tissueResult,
-             isOk,
-             tissueRecognitionText]() {
-        detectedRects.clear();
-        string1.clear();
-
-        TissueRollPresentation tissuePresentation;
-        if (tissueResult.rollFound) {
-            tissuePresentation.center = tissueResult.roll.center;
-            tissuePresentation.outerAxes = tissueResult.roll.outerAxes;
-            tissuePresentation.innerCenter = tissueResult.roll.innerCenter;
-            tissuePresentation.innerAxes = tissueResult.roll.innerAxes;
-        }
-        m_detectionResultPresenter.installTissueRoll(
-                    tissuePresentation,
-                    tissueResult.rollFound);
-
-        qDebug() << "[TISSUE_DETECT]"
-                 << QString::fromStdString(tissueResult.message);
-        qDebug() << "[TISSUE_DETECT_DEBUG]"
-                 << "image" << tissueResult.imageWidth
-                 << "x" << tissueResult.imageHeight
-                 << "processingTimeMs" << tissueResult.processingTimeMs
-                 << "rollFound" << tissueResult.rollFound
-                 << "overall" << (tissueResult.isOk ? "OK" : "NG");
-        if (tissueResult.rollFound) {
-            const TissueRollItem &roll = tissueResult.roll;
-            qDebug() << "[TISSUE_DETECT_DEBUG]"
-                     << (roll.isOk ? "OK" : "NG")
-                     << "reason" << QString::fromStdString(roll.rejectReason)
-                     << "rough" << roll.roughnessScore
-                     << "roughNg" << roll.roughnessNg
-                     << "ringPixels" << roll.ringPixelCount
-                     << "outerCenter" << roll.center.x << roll.center.y
-                     << "outerRadius" << roll.outerAxes.width
-                     << "outerBbox" << roll.outerBbox.x << roll.outerBbox.y
-                     << roll.outerBbox.width << roll.outerBbox.height
-                     << "innerFound" << roll.innerHoleFound
-                     << "innerCenter" << roll.innerCenter.x << roll.innerCenter.y
-                     << "innerRadius" << roll.innerAxes.width;
-        }
-
-        DetectionResultViewSnapshot snapshot;
-        snapshot.image = m_detectionResultPresenter.renderFrame(
-                    acceptedCompletion.frame->originalImage,
-                    true);
-        snapshot.verdictStyle = isOk
-                ? DetectionVerdictViewStyle::Correct
-                : DetectionVerdictViewStyle::Error;
-        snapshot.recognitionText = tissueRecognitionText;
-        return snapshot;
-    };
-    request.finalizePresentation =
-            [this, &acceptedCompletion](
-                DetectionResultViewSnapshot *snapshot) {
-        const qint64 duration = resultPresentationElapsedMs(
-                    acceptedCompletion);
-        snapshot->elapsedText = QStringLiteral(
-                    "\u68c0\u6d4b\u8017\u65f6 %1 "
-                    "\u6beb\u79d2")
-                .arg(duration);
-    };
-
-    const DetectionCompletionProcessOutcome outcome =
-            m_detectionCompletionController->process(request);
-    if (!outcome.resultRecorded) {
-        qWarning() << "[RUNTIME_CONTROLLER] rejected tissue completion";
-    }
-}
-
 bool Widget::hasRunningInspectionThread() const
 {
-    const bool softwareInspectionRunning =
-            myThread
-            && myThread->isRunning()
-            && m_templateCaptureState
-               != TemplateCaptureState::Previewing;
-    const bool hardwareInspectionRunning =
-            cameraThread
-            && cameraThread->isRunning();
-    return softwareInspectionRunning
-            || hardwareInspectionRunning;
-}
-
-void Widget::clearInspectionTransientDisplay()
-{
-    if (!ui) {
-        return;
-    }
-    m_detectionResultPresenter.clearTransientView();
-    allResults.clear();
-}
-
-bool Widget::shouldSuppressStreamingFrame() const
-{
-    return m_resultBoundDisplayActive.load();
-}
-
-qint64 Widget::resultPresentationElapsedMs(
-        const DetectionCompletion &completion) const
-{
-    qint64 elapsedMs = static_cast<qint64>(
-                completion.result.elapsedMs + 0.5);
-    if (!completion.frame
-            || !completion.frame->timestampUtc.isValid()) {
-        return elapsedMs;
-    }
-
-    const qint64 endToEndMs =
-            completion.frame->timestampUtc.msecsTo(
-                QDateTime::currentDateTimeUtc());
-    if (endToEndMs > elapsedMs) {
-        elapsedMs = endToEndMs;
-    }
-    return elapsedMs;
-}
-
-void Widget::handleStreamingFrame(const cv::Mat &image)
-{
-    if (image.empty() || shouldSuppressStreamingFrame()) {
-        return;
-    }
-
-    // cv::Mat在这里仅做浅拷贝，slot_displayAndDetect内部会创建独立显示图，
-    // 不修改相机线程传入的源图。
-    cv::Mat displayFrame = image;
-    slot_displayAndDetect(&displayFrame);
+    return m_acquisitionController
+            && m_acquisitionController->hasRunningInspectionThread(
+                m_templateCaptureState
+                == TemplateCaptureState::Previewing);
 }
 
 void Widget::updateOperationUiState()
 {
-    if (!ui) {
-        return;
+    if (m_runtimeUiCoordinator) {
+        m_runtimeUiCoordinator->setMultiCameraWidget(
+                    m_multiCameraWidget);
+        m_runtimeUiCoordinator->updateOperationState(
+                    m_operationState,
+                    m_runtimeController.state()
+                    == InspectionRuntimeState::Fault);
     }
-
-    QList<QAbstractButton *> operationButtons =
-            findChildren<QAbstractButton *>();
-    for (QAbstractButton *button : operationButtons) {
-        if (!button) {
-            continue;
-        }
-        if (m_multiCameraWidget
-                && m_multiCameraWidget->isAncestorOf(button)) {
-            continue;
-        }
-        const QString operationDisabledStyleMarker =
-                "/* operation-disabled-style */";
-        if (!button->styleSheet().contains(
-                    operationDisabledStyleMarker)) {
-            button->setStyleSheet(
-                        button->styleSheet()
-                        + "\n/* operation-disabled-style */"
-                          "QPushButton:disabled,"
-                          "QToolButton:disabled,"
-                          "QCheckBox:disabled {"
-                          "background-color: #f2f3f5;"
-                          "color: #a8abb2;"
-                          "border-color: #dcdfe6;"
-                          "}");
-        }
-        button->setEnabled(false);
-    }
-
-    const OperationUiState effectiveOperationState =
-            m_runtimeController.state()
-            == InspectionRuntimeState::Fault
-            ? OperationState::Fault
-            : m_operationState;
-    const OperationUiSnapshot operationUi =
-            OperationUiPolicy::create(effectiveOperationState);
-    if (operationUi.enableAllOperations) {
-        for (QAbstractButton *button : operationButtons) {
-            if (!button) {
-                continue;
-            }
-            if (m_multiCameraWidget
-                    && m_multiCameraWidget->isAncestorOf(button)) {
-                continue;
-            }
-            button->setEnabled(true);
-        }
-    }
-
-    if (ui->plcbtn) {
-        ui->plcbtn->setText(operationUi.startDetectionText);
-    }
-    if (ui->cancel) {
-        ui->cancel->setText(operationUi.stopText);
-    }
-    if (ui->VideoShoot) {
-        ui->VideoShoot->setText(operationUi.templateCaptureText);
-    }
-
-    if (ui->HandwareDetect) {
-        ui->HandwareDetect->setEnabled(operationUi.openCameraEnabled);
-    }
-    if (ui->plcbtn) {
-        ui->plcbtn->setEnabled(operationUi.startDetectionEnabled);
-    }
-    if (ui->cancel) {
-        ui->cancel->setEnabled(operationUi.stopEnabled);
-    }
-    if (ui->CloseCamera) {
-        ui->CloseCamera->setEnabled(operationUi.closeCameraEnabled);
-    }
-    if (ui->VideoShoot) {
-        ui->VideoShoot->setEnabled(operationUi.templateCaptureEnabled);
-    }
-    if (ui->pushButton_5) {
-        ui->pushButton_5->setEnabled(operationUi.saveTemplateEnabled);
-    }
-    if (ui->statusLabel && !operationUi.statusText.isEmpty()) {
-        ui->statusLabel->setText(operationUi.statusText);
-    }
-
-    const bool normalSettingsEnabled = operationUi.settingsEnabled;
-    for (auto it = m_globalSettingBindings.constBegin();
-         it != m_globalSettingBindings.constEnd();
-         ++it) {
-        if (it.value().editor) {
-            it.value().editor->setEnabled(
-                        normalSettingsEnabled);
-        }
-    }
-    if (ui->comboBox_4) {
-        ui->comboBox_4->setEnabled(
-                    normalSettingsEnabled);
-    }
-    if (m_wordTemplateEditComboBox) {
-        m_wordTemplateEditComboBox->setEnabled(
-                    normalSettingsEnabled);
-    }
-    if (m_publishTemplateGroupButton) {
-        m_publishTemplateGroupButton->setEnabled(
-                    normalSettingsEnabled);
-    }
-    if (m_publishedRecipeButton) {
-        m_publishedRecipeButton->setEnabled(
-                    normalSettingsEnabled);
-    }
-    if (m_manualCharacterCropButton) {
-        m_manualCharacterCropButton->setEnabled(
-                    normalSettingsEnabled);
-    }
-    if (ui->dateEdit) {
-        ui->dateEdit->setEnabled(
-                    normalSettingsEnabled);
-    }
-    if (ui->lineEdit_yuzhi) {
-        ui->lineEdit_yuzhi->setEnabled(
-                    normalSettingsEnabled);
-    }
-
-    if (m_templateCaptureAttentionTimer
-            && ui->VideoShoot) {
-        if (m_operationState
-                == OperationState::TemplatePreviewing) {
-            if (!m_templateCaptureAttentionTimer->isActive()) {
-                m_templateCaptureAttentionOn = true;
-                ui->VideoShoot->setProperty(
-                            "templateCaptureActive",
-                            true);
-                ui->VideoShoot->setProperty(
-                            "templateCaptureAttention",
-                            true);
-                ui->VideoShoot->style()->unpolish(
-                            ui->VideoShoot);
-                ui->VideoShoot->style()->polish(
-                            ui->VideoShoot);
-                ui->VideoShoot->update();
-                m_templateCaptureAttentionTimer->start();
-            }
-        } else {
-            m_templateCaptureAttentionTimer->stop();
-            if (m_templateCaptureAttentionOn
-                    || ui->VideoShoot->property(
-                        "templateCaptureActive").toBool()
-                    || ui->VideoShoot->property(
-                        "templateCaptureAttention").toBool()) {
-                m_templateCaptureAttentionOn = false;
-                ui->VideoShoot->setProperty(
-                            "templateCaptureActive",
-                            false);
-                ui->VideoShoot->setProperty(
-                            "templateCaptureAttention",
-                            false);
-                ui->VideoShoot->style()->unpolish(
-                            ui->VideoShoot);
-                ui->VideoShoot->style()->polish(
-                            ui->VideoShoot);
-                ui->VideoShoot->update();
-            }
-        }
-    }
-
-    if (operationUi.enableAllOperations) {
-        updateHardwareParameterUiEnabled();
-    }
-}
-
-void Widget::connectTemplatePreviewSignals(MyThread *thread)
-{
-    if (!thread) {
-        return;
-    }
-
-    connect(thread,
-            &MyThread::signal_templatePreviewImage,
-            this,
-            [this, thread](cv::Mat image, quint64 sessionId) {
-        if (m_templateCaptureState
-                != TemplateCaptureState::Previewing
-                || sessionId != m_templatePreviewSessionId
-                || image.empty()) {
-            thread->acknowledgeTemplatePreviewFrame(
-                        sessionId);
-            return;
-        }
-
-        m_lastTemplatePreviewFrame = image.clone();
-        slot_displayAndDetect(&m_lastTemplatePreviewFrame);
-        updateImageDisplayStatusText(
-                    "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。");
-        thread->acknowledgeTemplatePreviewFrame(
-                    sessionId);
-    },
-    Qt::QueuedConnection);
-
-    connect(thread,
-            &MyThread::signal_templatePreviewError,
-            this,
-            [this](const QString &reason, quint64 sessionId) {
-        if (m_templateCaptureState
-                != TemplateCaptureState::Previewing
-                || sessionId != m_templatePreviewSessionId) {
-            return;
-        }
-
-        resetTemplateCaptureState();
-        if (imageLabel) {
-            imageLabel->setTemplateDrawingEnabled(false);
-        }
-        ui->statusLabel->setText(
-                    m_bOpenDevice
-                    ? "模板实时取景失败，相机已打开"
-                    : "模板实时取景失败，相机已关闭");
-        updateImageDisplayStatusText("实时取景失败，请检查相机后重试。");
-        QMessageBox::warning(this, "实时取景失败", reason);
-    },
-    Qt::QueuedConnection);
-
-    connect(thread,
-            &QThread::finished,
-            this,
-            [this, thread]() {
-        if (thread != myThread) {
-            return;
-        }
-
-        if (m_templateCaptureState
-                == TemplateCaptureState::Previewing) {
-            ++m_templatePreviewSessionId;
-            m_templateCaptureState =
-                    TemplateCaptureState::Idle;
-            m_lastTemplatePreviewFrame.release();
-            m_operationState = m_bOpenDevice
-                    ? OperationState::CameraReady
-                    : OperationState::CameraClosed;
-            ui->statusLabel->setText(
-                        m_bOpenDevice
-                        ? "模板实时取景已停止，相机已打开"
-                        : "模板实时取景已停止，相机已关闭");
-            updateOperationUiState();
-            return;
-        }
-
-        if (m_operationState
-                == OperationState::Detecting) {
-            InspectionRuntimeStopTransaction stopTransaction(
-                        m_runtimeController);
-            stopTransaction.begin();
-            stopTransaction.commit();
-            isCollecting = false;
-            m_resultBoundDisplayActive.store(false);
-            m_barcodeWordRunActive = false;
-            m_operationState = m_bOpenDevice
-                    ? OperationState::CameraReady
-                    : OperationState::CameraClosed;
-            ui->statusLabel->setText(
-                        "识别线程已停止");
-            updateOperationUiState();
-        }
-    },
-    Qt::QueuedConnection);
-}
-
-bool Widget::hasTemplateDrawingSelection() const
-{
-    return imageLabel
-            && (!imageLabel->getTrackingRect().isNull()
-                || !imageLabel->getBarcodeRect().isNull()
-                || !imageLabel->getDetectionPoly().isEmpty());
 }
 
 bool Widget::stopTemplatePreview(int waitTimeMs)
@@ -3308,23 +1923,10 @@ bool Widget::stopTemplatePreview(int waitTimeMs)
 
     // 先使当前会话失效，已进入事件队列的旧帧将被直接忽略。
     ++m_templatePreviewSessionId;
-    if (!myThread) {
-        return true;
-    }
-
-    myThread->setTemplatePreviewMode(
-                false,
-                m_templatePreviewSessionId);
-    myThread->requestStop();
-    myThread->stop();
-
-    if (myThread->isRunning()
-            && !myThread->wait(waitTimeMs)) {
-        qDebug() << "[TEMPLATE_PREVIEW] Worker did not stop within"
-                 << waitTimeMs << "ms";
-        return false;
-    }
-    return true;
+    return !m_acquisitionController
+            || m_acquisitionController->stopTemplatePreview(
+                m_templatePreviewSessionId,
+                waitTimeMs);
 }
 
 void Widget::resetTemplateCaptureState()
@@ -3349,9 +1951,8 @@ void Widget::resetTemplateCaptureState()
     m_templateCaptureState = TemplateCaptureState::Idle;
     m_lastTemplatePreviewFrame.release();
 
-    if (myThread) {
-        myThread->setTemplatePreviewMode(
-                    false,
+    if (m_acquisitionController) {
+        m_acquisitionController->disableTemplatePreview(
                     m_templatePreviewSessionId);
     }
     if (wasTemplateOperation
@@ -3366,12 +1967,14 @@ void Widget::resetTemplateCaptureState()
 
 bool Widget::startTemplatePreview()
 {
-    if (!m_bOpenDevice || !m_cameraDevice) {
+    if (!m_bOpenDevice
+            || !m_acquisitionController
+            || !m_acquisitionController->hasCamera()) {
         QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
         return false;
     }
     if (isCollecting
-            || (cameraThread && cameraThread->isRunning())) {
+            || m_acquisitionController->isHardwareRunning()) {
         QMessageBox::warning(
                     this,
                     "提示",
@@ -3386,17 +1989,15 @@ bool Widget::startTemplatePreview()
                     "当前正在进行正式检测，请先点击【停止识别】。");
         return false;
     }
-    if (myThread && myThread->isRunning()) {
+    if (m_acquisitionController->isSoftwareRunning()) {
         QMessageBox::warning(
                     this,
                     "提示",
                     "相机采集线程仍在运行，请先停止当前任务。");
         return false;
     }
-    if (!myThread) {
-        reinitializeMyThread();
-    }
-    if (!myThread || !myImage) {
+    m_acquisitionController->ensureWorkersReady();
+    if (!m_acquisitionController->hasCamera()) {
         QMessageBox::warning(
                     this,
                     "提示",
@@ -3405,10 +2006,10 @@ bool Widget::startTemplatePreview()
     }
 
     try {
-        if (!m_cameraDevice->setEnumValue(
+        if (!m_acquisitionController->setEnumValue(
                 "TriggerMode",
                 1).isSuccess()
-                || !m_cameraDevice->setEnumValue(
+                || !m_acquisitionController->setEnumValue(
                 "TriggerSource",
                 7).isSuccess()) {
             QMessageBox::warning(
@@ -3448,17 +2049,23 @@ bool Widget::startTemplatePreview()
             TemplateCaptureState::Previewing;
     m_operationState =
             OperationState::TemplatePreviewing;
-    clearInspectionTransientDisplay();
+    if (m_resultCoordinator) {
+        m_resultCoordinator->clearTransientView();
+    }
+    allResults.clear();
     updateOperationUiState();
 
-    myThread->setCameraDevice(m_cameraDevice);
-    myThread->getImagePtr(myImage);
-    myThread->receiveangle(angleValue);
-    myThread->receivecolorchannel1(colorchannel);
-    myThread->setTemplatePreviewMode(
-                true,
-                m_templatePreviewSessionId);
-    myThread->start();
+    if (!m_acquisitionController->startTemplatePreview(
+                m_templatePreviewSessionId,
+                angleValue,
+                colorchannel)) {
+        QMessageBox::warning(
+                    this,
+                    "\u63d0\u793a",
+                    "\u5b9e\u65f6\u53d6\u666f\u7ebf\u7a0b\u542f\u52a8\u5931\u8d25\u3002");
+        resetTemplateCaptureState();
+        return false;
+    }
 
     updateImageDisplayStatusText(
                 "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。");
@@ -3491,8 +2098,12 @@ bool Widget::freezeTemplatePreview()
             TemplateCaptureState::Frozen;
     m_operationState =
             OperationState::TemplateFrozen;
-    *myImage = m_lastTemplatePreviewFrame.clone();
-    slot_displayAndDetect(myImage);
+    if (m_acquisitionController) {
+        m_acquisitionController->replaceCurrentImage(
+                    m_lastTemplatePreviewFrame);
+    }
+    cv::Mat frozenImage = m_lastTemplatePreviewFrame.clone();
+    slot_displayAndDetect(&frozenImage);
 
     const QString modeId = currentDetectModeId();
     const bool needsTemplateDrawing =
@@ -3542,7 +2153,10 @@ void Widget::on_VideoShoot_clicked()
 
     if (m_templateCaptureState
             == TemplateCaptureState::Frozen
-            && hasTemplateDrawingSelection()) {
+            && imageLabel
+            && (!imageLabel->getTrackingRect().isNull()
+                || !imageLabel->getBarcodeRect().isNull()
+                || !imageLabel->getDetectionPoly().isEmpty())) {
         QMessageBox confirmBox(this);
         confirmBox.setIcon(QMessageBox::Question);
         confirmBox.setWindowTitle("重新取景");
@@ -4183,7 +2797,9 @@ void Widget::restoreDefaultGlobalSettings()
 
     const GlobalSettings defaultSettings = AppSettingsManager::defaultGlobalSettings();
     GlobalSettings editableDefaults = m_appliedGlobalSettings;
-    const bool cameraOpen = (m_cameraDevice && m_bOpenDevice);
+    const bool cameraOpen = (m_acquisitionController
+                             && m_acquisitionController->hasCamera()
+                             && m_bOpenDevice);
     const bool plcConnected =
             m_runtimeController.isPlcConnected();
 
@@ -4410,7 +3026,9 @@ void Widget::setHardwareControlEnabled(QWidget *widget,
 
 void Widget::updateHardwareParameterUiEnabled()
 {
-    const bool cameraOpen = (m_cameraDevice && m_bOpenDevice);
+    const bool cameraOpen = (m_acquisitionController
+                             && m_acquisitionController->hasCamera()
+                             && m_bOpenDevice);
     const bool plcConnected =
             m_runtimeController.isPlcConnected();
     const QString cameraDisabledReason = "请先打开相机后再设置该参数。";
@@ -5353,9 +3971,7 @@ void Widget::showStampCharacterTemplateCropDialog()
                != QStringLiteral("stamp_detection")) {
         return;
     }
-    if ((myThread && myThread->isRunning())
-            || (cameraThread && cameraThread->isRunning())
-            || isCollecting) {
+    if (hasRunningInspectionThread() || isCollecting) {
         showParameterWarning(
                     QStringLiteral("\u63D0\u793A"),
                     QStringLiteral("\u8BF7\u5148\u505C\u6B62\u68C0\u6D4B\u540E\u518D\u5207\u5272\u94A2\u5370\u5B57\u7B26\u6A21\u677F\u3002"));
@@ -8441,7 +7057,8 @@ bool Widget::queryCameraExposureRange(int *minimumValue,
                                       double *currentValue,
                                       QString *errorMessage)
 {
-    if (!m_cameraDevice) {
+    if (!m_acquisitionController
+            || !m_acquisitionController->hasCamera()) {
         if (errorMessage) {
             *errorMessage = "相机未初始化，无法读取曝光范围";
         }
@@ -8450,7 +7067,7 @@ bool Widget::queryCameraExposureRange(int *minimumValue,
 
     CameraFloatValue exposureInfo;
     const CameraOperationResult result =
-            m_cameraDevice->getFloatValue(
+            m_acquisitionController->getFloatValue(
                 "ExposureTime",
                 &exposureInfo);
     if (!result.isSuccess()) {
@@ -8524,7 +7141,7 @@ bool Widget::applyCameraExposureValue(int exposureValue, QString *errorMessage)
         return false;
     }
 
-    CameraOperationResult result = m_cameraDevice->setFloatValue(
+    CameraOperationResult result = m_acquisitionController->setFloatValue(
                 "ExposureTime",
                 static_cast<float>(exposureValue));
     if (!result.isSuccess()) {
@@ -8536,7 +7153,7 @@ bool Widget::applyCameraExposureValue(int exposureValue, QString *errorMessage)
     }
 
     CameraFloatValue readBackInfo;
-    result = m_cameraDevice->getFloatValue(
+    result = m_acquisitionController->getFloatValue(
                 "ExposureTime",
                 &readBackInfo);
     if (!result.isSuccess()) {
@@ -8613,7 +7230,9 @@ bool Widget::applySavedCameraExposure(QString *adjustmentMessage,
 
 bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (!m_cameraDevice || !m_bOpenDevice) {
+    if (!m_acquisitionController
+            || !m_acquisitionController->hasCamera()
+            || !m_bOpenDevice) {
         const QString message = "未打开相机，无法设置曝光！";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("警告", message);
@@ -8640,7 +7259,9 @@ bool Widget::applyCameraExposureFromUi(QStringList *errors, bool showSuccessMess
 
 bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (!m_cameraDevice || !m_bOpenDevice) {
+    if (!m_acquisitionController
+            || !m_acquisitionController->hasCamera()
+            || !m_bOpenDevice) {
         const QString message = "相机未初始化或未打开，无法设置增益！";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
@@ -8649,7 +7270,7 @@ bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
 
     CameraFloatValue gainInfo;
     CameraOperationResult result =
-            m_cameraDevice->getFloatValue("Gain", &gainInfo);
+            m_acquisitionController->getFloatValue("Gain", &gainInfo);
     if (!result.isSuccess()) {
         const QString message =
                 QString("无法获取相机增益支持的范围！错误码：%1")
@@ -8680,7 +7301,7 @@ bool Widget::applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage)
         return false;
     }
 
-    result = m_cameraDevice->setFloatValue("Gain", gainValue);
+    result = m_acquisitionController->setFloatValue("Gain", gainValue);
     if (!result.isSuccess()) {
         const QString message =
                 QString("相机增益设置失败！错误码：%1")
@@ -8751,9 +7372,13 @@ bool Widget::applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSucc
     updateTissueRecipeParameters(tissueThreshold);
     ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(tissueThreshold, 'f', 3));
 
-    emit rotate(angleValue);
-    emit choosechannel(colorchannel);
     emit ssim(thresholdValue);
+    if (m_acquisitionController) {
+        m_acquisitionController->applyThreadSettings(
+                    angleValue,
+                    colorchannel,
+                    ui->lineEdit_4->text());
+    }
 
     if (showSuccessMessage) {
         showParameterInfo("提示", "运行参数设置成功");
@@ -8858,7 +7483,12 @@ bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMess
         return false;
     }
 
-    emit sendDataTo(ui->lineEdit_4->text());
+    if (m_acquisitionController) {
+        m_acquisitionController->applyThreadSettings(
+                    angleValue,
+                    colorchannel,
+                    ui->lineEdit_4->text());
+    }
 
     if (showSuccessMessage) {
         showParameterInfo("提示", "所有设置已经完成！");
@@ -8969,7 +7599,9 @@ void Widget::on_pushButton_8_clicked()
 void Widget::on_cancel_clicked()
 {
     qDebug() << "=== on_cancel_clicked() START ===";
-    m_detectionRoiWarningActive = false;
+    if (m_runtimeUiCoordinator) {
+        m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
+    }
 
     const bool recoveringInspectionFault =
             m_runtimeController.state()
@@ -9023,91 +7655,18 @@ void Widget::on_cancel_clicked()
     updateOperationUiState();
     m_barcodeWordRunActive = false;
 
-    MyThread *stoppingSoftwareThread = myThread;
-    CameraThread *stoppingHardwareThread = cameraThread;
-    InspectionAcquisitionStopRequest acquisitionStopRequest;
-    acquisitionStopRequest.software.isPresent =
-            stoppingSoftwareThread != nullptr;
-    acquisitionStopRequest.software.isRunning =
-            [stoppingSoftwareThread]() {
-        return stoppingSoftwareThread
-                && stoppingSoftwareThread->isRunning();
-    };
-    acquisitionStopRequest.software.requestStop =
-            [stoppingSoftwareThread]() {
-        if (stoppingSoftwareThread) {
-            stoppingSoftwareThread->requestStop();
-        }
-    };
-    acquisitionStopRequest.software.stopLoop =
-            [stoppingSoftwareThread]() {
-        if (stoppingSoftwareThread) {
-            stoppingSoftwareThread->stop();
-        }
-    };
-    acquisitionStopRequest.software.wait =
-            [stoppingSoftwareThread](unsigned long milliseconds) {
-        return !stoppingSoftwareThread
-                || stoppingSoftwareThread->wait(milliseconds);
-    };
-    acquisitionStopRequest.software.afterStopped =
-            [stoppingSoftwareThread]() {
-        if (stoppingSoftwareThread) {
-            stoppingSoftwareThread->stopTracking();
-        }
-    };
-
-    acquisitionStopRequest.hardware.isPresent =
-            stoppingHardwareThread != nullptr;
-    acquisitionStopRequest.hardware.waitWhenPresent = true;
-    acquisitionStopRequest.hardware.repeatStopRequestAfterPrepare = true;
-    acquisitionStopRequest.hardware.isRunning =
-            [stoppingHardwareThread]() {
-        return stoppingHardwareThread
-                && stoppingHardwareThread->isRunning();
-    };
-    acquisitionStopRequest.hardware.requestStop =
-            [stoppingHardwareThread]() {
-        if (stoppingHardwareThread) {
-            stoppingHardwareThread->requestStop();
-        }
-    };
-    acquisitionStopRequest.hardware.prepareForWait =
-            [this, stoppingHardwareThread]() {
-        if (!stoppingHardwareThread) {
-            return;
-        }
-        disconnect(stoppingHardwareThread, nullptr, this, nullptr);
-        disconnect(this, nullptr, stoppingHardwareThread, nullptr);
-    };
-    acquisitionStopRequest.hardware.wait =
-            [stoppingHardwareThread](unsigned long milliseconds) {
-        return !stoppingHardwareThread
-                || stoppingHardwareThread->wait(milliseconds);
-    };
-    acquisitionStopRequest.hardware.afterStopped =
-            [this, stoppingHardwareThread]() {
-        if (!stoppingHardwareThread) {
-            return;
-        }
-        stoppingHardwareThread->stopTracking();
-        stoppingHardwareThread->deleteLater();
-        if (cameraThread == stoppingHardwareThread) {
-            cameraThread = nullptr;
-        }
-    };
-
     const InspectionAcquisitionStopResult acquisitionStopResult =
-            InspectionAcquisitionStopCoordinator::stop(
-                acquisitionStopRequest);
+            m_acquisitionController
+            ? m_acquisitionController->stopInspection()
+            : InspectionAcquisitionStopResult();
     stopTransaction.waitForDetectionWorker();
 
     if (!acquisitionStopResult.allStopped()) {
         if (!acquisitionStopResult.softwareStopped) {
-            qDebug() << "WARNING: myThread did not stop";
+            qDebug() << "WARNING: software acquisition worker did not stop";
         }
         if (!acquisitionStopResult.hardwareStopped) {
-            qDebug() << "WARNING: cameraThread did not stop";
+            qDebug() << "WARNING: hardware acquisition worker did not stop";
         }
         ui->statusLabel->setText("停止中，请稍后再关闭相机");
         isCollecting = true;
@@ -9116,21 +7675,16 @@ void Widget::on_cancel_clicked()
         return;
     }
 
-    InspectionCameraRecoveryRequest cameraRecoveryRequest;
-    cameraRecoveryRequest.cameraDevice = m_cameraDevice.get();
-    cameraRecoveryRequest.recoveryRequired =
-            acquisitionStopResult.shouldRestoreCamera()
-            && static_cast<bool>(m_cameraDevice);
-    cameraRecoveryRequest.cameraWasOpen = m_bOpenDevice;
-    cameraRecoveryRequest.applySavedExposure =
-            [this](QString *adjustmentMessage, QString *errorMessage) {
+    const InspectionCameraRecoveryResult cameraRecoveryResult =
+            m_acquisitionController->recoverCamera(
+                acquisitionStopResult.shouldRestoreCamera(),
+                m_bOpenDevice,
+                [this](QString *adjustmentMessage,
+                       QString *errorMessage) {
         return applySavedCameraExposure(
                     adjustmentMessage,
                     errorMessage);
-    };
-    const InspectionCameraRecoveryResult cameraRecoveryResult =
-            InspectionCameraRecoveryTransition::apply(
-                cameraRecoveryRequest);
+    });
     m_bOpenDevice = cameraRecoveryResult.cameraOpen;
     if (cameraRecoveryResult.issue
             == InspectionCameraRecoveryIssue::ExposureRejected) {
@@ -9174,7 +7728,9 @@ void Widget::on_cancel_clicked()
     }
     hideTemplateGuide();
 
-    m_detectionResultPresenter.clear();
+    if (m_resultCoordinator) {
+        m_resultCoordinator->clear();
+    }
     m_barcodeWordRunActive = false;
 
     first = false;
@@ -9238,7 +7794,7 @@ void Widget::on_textsure_btn_clicked()
 {
     if (isWordFamilyMode(currentDetectModeId()))
     {
-        if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
+        if (hasRunningInspectionThread() || isCollecting) {
             showParameterWarning("提示", "请先停止检测后再修改模板字符");
             return;
         }
@@ -9328,9 +7884,7 @@ void Widget::on_textsure_btn_clicked()
 
     if (isSingleTemplateRecipeMode(currentDetectModeId())
             && m_singleTemplateRecipeEditSession.isActive()) {
-        if ((myThread && myThread->isRunning())
-                || (cameraThread && cameraThread->isRunning())
-                || isCollecting) {
+        if (hasRunningInspectionThread() || isCollecting) {
             showParameterWarning(
                         QStringLiteral("\u63D0\u793A"),
                         QStringLiteral("\u8BF7\u5148\u505C\u6B62\u68C0\u6D4B\u540E\u518D\u4FEE\u6539\u76EE\u6807\u5B57\u7B26\u3002"));
@@ -9449,7 +8003,7 @@ void Widget::on_batchTextsure_btn_clicked()
         return;
     }
 
-    if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
+    if (hasRunningInspectionThread() || isCollecting) {
         showParameterWarning("提示", "请先停止检测后再批量修改模板字符");
         return;
     }
@@ -9589,9 +8143,7 @@ void Widget::on_batchImageThresholdButton_clicked()
         return;
     }
 
-    if ((myThread && myThread->isRunning())
-            || (cameraThread && cameraThread->isRunning())
-            || isCollecting) {
+    if (hasRunningInspectionThread() || isCollecting) {
         showParameterWarning("提示", "请先停止检测后再批量修改模板阈值");
         return;
     }
@@ -9770,17 +8322,6 @@ Mat *Widget::QImageToMat(const QImage &image)
     return mat;
 }
 
-///**
-// * @brief 延时确定按钮点击槽函数
-// * @details 设置相机采集延时
-// */
-//void Widget::on_delayButton_clicked()
-//{
-//    QString text = ui->lineEdit_4->text();
-//    emit sendDataTo(text);
-//    QMessageBox::information(this, "提示", "相机延时设置成功");
-//}
-
 /**
  * @brief 清空结果标签槽函数
  */
@@ -9816,45 +8357,14 @@ void Widget::closeEvent(QCloseEvent *event)
     m_templateCaptureState = TemplateCaptureState::Idle;
     m_lastTemplatePreviewFrame.release();
 
-    if (myThread) {
-        disconnect(myThread, nullptr, this, nullptr);
-        disconnect(this, nullptr, myThread, nullptr);
-        myThread->setTemplatePreviewMode(
-                    false,
+    if (m_acquisitionController) {
+        m_acquisitionController->disableTemplatePreview(
                     m_templatePreviewSessionId);
-        myThread->requestStop();
-        myThread->stop();
-    }
-    if (cameraThread) {
-        disconnect(cameraThread, nullptr, this, nullptr);
-        disconnect(this, nullptr, cameraThread, nullptr);
-        cameraThread->requestStop();
-    }
-    if (m_cameraDevice) {
-        m_cameraDevice->requestStop();
-    }
-
-    // 正常情况下线程会在下一次停止检查时立即退出。
-    // 只做短暂等待，不再因为工作线程而阻止窗口关闭。
-    const bool myThreadStopped =
-            !myThread
-            || !myThread->isRunning()
-            || myThread->wait(500);
-    const bool cameraThreadStopped =
-            !cameraThread
-            || !cameraThread->isRunning()
-            || cameraThread->wait(500);
-
-    // 只有工作线程已经停止时才主动释放相机，防止线程继续访问失效句柄。
-    if (m_cameraDevice
-            && m_bOpenDevice
-            && myThreadStopped
-            && cameraThreadStopped) {
-        try {
-            m_cameraDevice->close();
-        } catch (...) {
+        m_acquisitionController->stopForApplicationExit(500);
+        if (m_bOpenDevice) {
+            m_acquisitionController->closeCamera();
+            m_bOpenDevice = false;
         }
-        m_bOpenDevice = false;
     }
 
     if (m_runtimeController.isPlcConnected()) {
@@ -9877,7 +8387,7 @@ void Widget::closeEvent(QCloseEvent *event)
 void Widget::on_pushButton_3_clicked()
 {
     if (isWordFamilyMode(currentDetectModeId())) {
-        if ((myThread && myThread->isRunning()) || (cameraThread && cameraThread->isRunning()) || isCollecting) {
+        if (hasRunningInspectionThread() || isCollecting) {
             showParameterWarning("提示", "请先停止检测后再修改模板阈值");
             return;
         }
@@ -9948,9 +8458,7 @@ void Widget::on_pushButton_3_clicked()
 
     if (isSingleTemplateRecipeMode(currentDetectModeId())
             && m_singleTemplateRecipeEditSession.isActive()) {
-        if ((myThread && myThread->isRunning())
-                || (cameraThread && cameraThread->isRunning())
-                || isCollecting) {
+        if (hasRunningInspectionThread() || isCollecting) {
             showParameterWarning(
                         QStringLiteral("\u63D0\u793A"),
                         QStringLiteral("\u8BF7\u5148\u505C\u6B62\u68C0\u6D4B\u540E\u518D\u4FEE\u6539\u6A21\u677F\u9608\u503C\u3002"));
@@ -10031,7 +8539,8 @@ void Widget::on_pushButton_5_clicked()
     const bool isStampTemplateMode =
             currentDetectModeId() == QStringLiteral("stamp_detection");
 
-    if (!myImage || myImage->empty()) {
+    if (!m_acquisitionController
+            || !m_acquisitionController->hasCurrentImage()) {
         QMessageBox::warning(this, "提示", "请先点击【制作模板】拍照获取图像。");
         return;
     }
@@ -10286,7 +8795,7 @@ void Widget::on_pushButton_5_clicked()
     templateBaseDirPath = baseDirPath;
 
     // 2. 转换坐标 (使用局部 clone 确保计算基准稳定)
-    cv::Mat calibImg = myImage->clone();
+    cv::Mat calibImg = m_acquisitionController->currentImageClone();
 
     auto toPhysicalPoint = [&](QPoint uiPt) -> cv::Point2f {
         QSize labelSize = imageLabel->size();
@@ -10821,9 +9330,11 @@ void Widget::on_pushButton_browseImageSavePath_clicked()
 void Widget::on_cut_cancelButton_2_clicked()
 {
     m_runtimeController.resetStatistics();
-    m_detectionResultPresenter.presentTotalAndNgCounts(
-                m_runtimeController.totalCount(),
-                m_runtimeController.ngCount());
+    if (m_resultCoordinator) {
+        m_resultCoordinator->presentTotalAndNgCounts(
+                    m_runtimeController.totalCount(),
+                    m_runtimeController.ngCount());
+    }
 }
 
 /**
@@ -10832,8 +9343,10 @@ void Widget::on_cut_cancelButton_2_clicked()
 void Widget::on_cut_cancelButton_3_clicked()
 {
     m_runtimeController.resetNgCount();
-    m_detectionResultPresenter.presentNgCount(
-                m_runtimeController.ngCount());
+    if (m_resultCoordinator) {
+        m_resultCoordinator->presentNgCount(
+                    m_runtimeController.ngCount());
+    }
 }
 
 /**
@@ -10858,7 +9371,12 @@ void Widget::on_pushButton_9_clicked()
         angleValue = 0;
     }
 
-    emit rotate(angleValue);
+    if (m_acquisitionController) {
+        m_acquisitionController->applyThreadSettings(
+                    angleValue,
+                    colorchannel,
+                    ui->lineEdit_4->text());
+    }
     updateAppliedGlobalSettingFromUi("image.rotation");
     refreshGlobalSettingDirty("image.rotation");
     saveSettings(false);
@@ -11302,9 +9820,11 @@ void Widget::on_CloseCamera_clicked()
         return;
     }
 
-    if (m_cameraDevice && m_bOpenDevice)
+    if (m_acquisitionController
+            && m_acquisitionController->hasCamera()
+            && m_bOpenDevice)
     {
-        m_cameraDevice->close();
+        m_acquisitionController->closeCamera();
         m_bOpenDevice = false;
     }
     // 清空文本并将文本置0
@@ -11325,7 +9845,9 @@ void Widget::on_CloseCamera_clicked()
     m_bOpenDevice = false;
     m_templateCaptureState =
             TemplateCaptureState::Idle;
-    m_detectionRoiWarningActive = false;
+    if (m_runtimeUiCoordinator) {
+        m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
+    }
     m_lastTemplatePreviewFrame.release();
     m_operationState =
             OperationState::CameraClosed;
@@ -11614,7 +10136,9 @@ void Widget::on_plcbtn_clicked()
         imageLabel->setTemplateDrawingEnabled(false);
     }
     hideTemplateGuide();
-    m_detectionRoiWarningActive = false;
+    if (m_runtimeUiCoordinator) {
+        m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
+    }
 
     // ==========================================================
     // 以下为原有启动线程逻辑，完全保留你所有的 PLC/相机 流程
@@ -11644,20 +10168,18 @@ void Widget::on_plcbtn_clicked()
         m_runtimeController.resetStatistics();
 
         // 重置相机状态。具体SDK调用顺序由运行层统一维护。
-        if (m_cameraDevice && m_bOpenDevice) {
-            InspectionCameraStartRequest cameraStartRequest;
-            cameraStartRequest.cameraDevice = m_cameraDevice.get();
-            cameraStartRequest.acquisitionKind =
-                    InspectionAcquisitionKind::HardwareTrigger;
-            cameraStartRequest.gain = gainValue;
-            cameraStartRequest.applyExposure = [this](QString *errorMessage) {
+        if (m_acquisitionController
+                && m_acquisitionController->hasCamera()
+                && m_bOpenDevice) {
+            const InspectionCameraStartResult cameraStartResult =
+                    m_acquisitionController->applyCameraStart(
+                InspectionAcquisitionKind::HardwareTrigger,
+                gainValue,
+                [this](QString *errorMessage) {
                 return applyCameraExposureValue(
                             m_appliedGlobalSettings.cameraExposure,
                             errorMessage);
-            };
-            const InspectionCameraStartResult cameraStartResult =
-                    InspectionCameraStartTransition::apply(
-                        cameraStartRequest);
+            });
             if (!cameraStartResult.isAccepted()) {
                 if (cameraStartResult.issue
                         == InspectionCameraStartIssue::ExposureRejected) {
@@ -11673,60 +10195,12 @@ void Widget::on_plcbtn_clicked()
             }
         }
 
-        // 清理并新建硬触发线程
-        if (cameraThread) {
-            if (cameraThread->isRunning()) {
-                cameraThread->requestStop();
-                cameraThread->wait(1500);
-            }
-            disconnect(cameraThread, nullptr, this, nullptr);
-            delete cameraThread;
-        }
-
-        cameraThread = new CameraThread(this, m_cameraDevice);
-        CameraThread *startedCameraThread =
-                cameraThread;
-        connect(cameraThread,
-                &QThread::finished,
-                this,
-                [this, startedCameraThread]() {
-            if (cameraThread != startedCameraThread
-                    || m_operationState
-                       != OperationState::Detecting) {
-                return;
-            }
-            InspectionRuntimeStopTransaction stopTransaction(
-                        m_runtimeController);
-            stopTransaction.begin();
-            stopTransaction.waitForDetectionWorker();
-            isCollecting = false;
-            m_resultBoundDisplayActive.store(false);
-            m_barcodeWordRunActive = false;
-            stopTransaction.commit();
-            m_operationState = m_bOpenDevice
-                    ? OperationState::CameraReady
-                    : OperationState::CameraClosed;
-            ui->statusLabel->setText(
-                        "识别线程已停止");
-            updateOperationUiState();
-        },
-        Qt::QueuedConnection);
-
-        InspectionWorkerConfigurator::configureHardwareWorker(
-                    cameraThread,
+        m_acquisitionController->configureHardwareWorker(
                     runPlan,
                     profileSnapshotForRun.trackingProfiles,
                     savedDatePoly,
                     savedTrackingBox,
                     m_loadedTrackingTemplate);
-
-        // 连接所有功能信号
-        connect(this, &Widget::rotate, cameraThread, &CameraThread::receiveangle1);
-        connect(this, &Widget::choosechannel,cameraThread,&CameraThread::receivecolorchannel);
-        connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
-        connect(cameraThread, &CameraThread::signal_cleanlabel, this, &Widget::slot_clearResultLabel, Qt::QueuedConnection);
-        connectHardwarePreviewSignals(cameraThread);
-        connectHardwareDetectionSignals(cameraThread);
 
         applyErrors.clear();
         if (!applyRuntimeThreadSettingsFromUi(&applyErrors, false)) {
@@ -11784,11 +10258,10 @@ void Widget::on_plcbtn_clicked()
         }
         qDebug() << "[DETECTION_WORKER] hard-trigger ingress enabled"
                  << "modeIndex=" << ui->comboBox_4->currentIndex();
-        cameraThread->start();
-        if (!cameraThread->wait(100)) {
+        if (m_acquisitionController->startHardwareWorker()) {
             if (!startTransaction.commit()) {
-                cameraThread->requestStop();
-                cameraThread->wait(1500);
+                m_acquisitionController->requestHardwareStop();
+                m_acquisitionController->waitForHardware(1500);
                 m_resultBoundDisplayActive.store(false);
                 m_barcodeWordRunActive = false;
                 isCollecting = false;
@@ -11829,11 +10302,8 @@ void Widget::on_plcbtn_clicked()
         }
         const float gainValue = ui->lineEdit_14->text().toFloat();
 
-        ensureThreadsReady();
-        if (!myThread) reinitializeMyThread();
-
-        InspectionWorkerConfigurator::configureSoftwareWorker(
-                    myThread,
+        m_acquisitionController->ensureWorkersReady();
+        m_acquisitionController->configureSoftwareWorker(
                     runPlan,
                     profileSnapshotForRun.trackingProfiles,
                     savedDatePoly,
@@ -11855,18 +10325,15 @@ void Widget::on_plcbtn_clicked()
             return;
         }
 
-        InspectionCameraStartRequest cameraStartRequest;
-        cameraStartRequest.cameraDevice = m_cameraDevice.get();
-        cameraStartRequest.acquisitionKind =
-                InspectionAcquisitionKind::SoftwareTrigger;
-        cameraStartRequest.gain = gainValue;
-        cameraStartRequest.applyExposure = [this](QString *errorMessage) {
+        const InspectionCameraStartResult cameraStartResult =
+                m_acquisitionController->applyCameraStart(
+            InspectionAcquisitionKind::SoftwareTrigger,
+            gainValue,
+            [this](QString *errorMessage) {
             return applyCameraExposureValue(
                         m_appliedGlobalSettings.cameraExposure,
                         errorMessage);
-        };
-        const InspectionCameraStartResult cameraStartResult =
-                InspectionCameraStartTransition::apply(cameraStartRequest);
+        });
         if (!cameraStartResult.isAccepted()) {
             if (cameraStartResult.issue
                     == InspectionCameraStartIssue::ExposureRejected) {
@@ -11880,10 +10347,7 @@ void Widget::on_plcbtn_clicked()
             }
             return;
         }
-        myThread->setCameraDevice(m_cameraDevice);
-        myThread->getImagePtr(myImage);
-
-        if (!myThread->isRunning()) {
+        if (!m_acquisitionController->isSoftwareRunning()) {
             if (isWordProfileMode) {
                 qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
                          << static_cast<int>(
@@ -11922,10 +10386,19 @@ void Widget::on_plcbtn_clicked()
                             workerError);
                 return;
             }
-            myThread->start();
+            if (!m_acquisitionController->startSoftwareWorker()) {
+                startTransaction.rollback();
+                m_resultBoundDisplayActive.store(false);
+                m_barcodeWordRunActive = false;
+                QMessageBox::warning(
+                            this,
+                            QStringLiteral("\u542f\u52a8\u5931\u8d25"),
+                            QStringLiteral("\u8f6f\u89e6\u53d1\u91c7\u96c6\u7ebf\u7a0b\u542f\u52a8\u5931\u8d25\u3002"));
+                return;
+            }
             if (!startTransaction.commit()) {
-                myThread->requestStop();
-                myThread->wait(1500);
+                m_acquisitionController->requestSoftwareStop();
+                m_acquisitionController->waitForSoftware(1500);
                 m_resultBoundDisplayActive.store(false);
                 m_barcodeWordRunActive = false;
                 isCollecting = false;
@@ -11974,7 +10447,7 @@ void Widget::on_HandwareDetect_clicked()
     // 查找设备。SDK枚举类型由相机适配器内部持有。
     int deviceCount = 0;
     const CameraOperationResult enumerateResult =
-            m_cameraDevice->enumerateDevices(&deviceCount);
+            m_acquisitionController->enumerateDevices(&deviceCount);
     if (!enumerateResult.isSuccess() || deviceCount == 0)
     {
         QMessageBox::warning(this, "警告", "未找到相机设备！");
@@ -12001,7 +10474,7 @@ void Widget::on_HandwareDetect_clicked()
 
     // 假设只有一个相机，直接打开第一个设备
     const CameraOperationResult openResult =
-            m_cameraDevice->openDevice(0);
+            m_acquisitionController->openDevice(0);
     if (!openResult.isSuccess())
     {
         QMessageBox::warning(this, "警告", "打开设备失败！");
@@ -12010,14 +10483,14 @@ void Widget::on_HandwareDetect_clicked()
 
     m_bOpenDevice = true;
     // 设置为触发模式
-    m_cameraDevice->setEnumValue("TriggerMode", 1);
+    m_acquisitionController->setEnumValue("TriggerMode", 1);
     // 设置触发源为编码器触发
-    m_cameraDevice->setEnumValue("TriggerSource", 0);
+    m_acquisitionController->setEnumValue("TriggerSource", 0);
 
     QString exposureAdjustmentMessage;
     QString exposureError;
     if (!applySavedCameraExposure(&exposureAdjustmentMessage, &exposureError)) {
-        m_cameraDevice->close();
+        m_acquisitionController->closeCamera();
         m_bOpenDevice = false;
         {
             QSignalBlocker blocker(ui->spinBox);
@@ -12035,14 +10508,11 @@ void Widget::on_HandwareDetect_clicked()
         return;
     }
 
-    m_cameraDevice->setFloatValue("TriggerDelay", 0);
+    m_acquisitionController->setFloatValue("TriggerDelay", 0);
     // 开启相机采集
-    m_cameraDevice->registerImageCallback();
-    m_cameraDevice->startGrabbing();
-    //        connect(cameraThread,&CameraThread::threaderror,this,&Widget::onthreaderrormessage);
-
-    myThread->setCameraDevice(m_cameraDevice);
-    myThread->getImagePtr(myImage);
+    m_acquisitionController->registerImageCallback();
+    m_acquisitionController->startGrabbing();
+    m_acquisitionController->ensureWorkersReady();
 
     ui->statusLabel->setText("相机已打开");
     ui->statusLabel->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
@@ -12077,176 +10547,18 @@ void Widget::on_pushButton_10_clicked()
 }
 
 /**
- * @brief 重新初始化 myThread
- * @details 完全清理旧的 myThread 并创建新实例，重新连接所有信号槽
- */
-void Widget::reinitializeMyThread()
-{
-    qDebug() << "=== Reinitializing myThread ===";
-
-    // 步骤1: 如果旧线程还存在，先安全清理
-    if (myThread) {
-        qDebug() << "Cleaning up old myThread...";
-
-        // 停止线程
-        if (myThread->isRunning()) {
-            myThread->requestStop();
-            myThread->stop();
-
-            // 等待线程完全停止
-            if (!myThread->wait(2000)) {
-                qDebug() << "WARNING: Old myThread did not stop within 2 seconds";
-            }
-        }
-
-        // 断开所有信号连接
-        disconnect(myThread, nullptr, this, nullptr);
-
-        // 删除旧对象
-        delete myThread;
-        myThread = nullptr;
-        qDebug() << "✓ Old myThread cleaned up";
-    }
-
-    // 步骤2: 创建新线程
-    qDebug() << "Creating new myThread...";
-    myThread = new MyThread();
-
-    // Connect bounded preview ingress once for this thread instance.
-    connectSoftwarePreviewSignals(myThread);
-    // 连接信号槽 - 清除标签
-    connect(myThread, &MyThread::signal_cleanlabel,
-            this, &Widget::slot_clearResultLabel);
-
-    // Connect software-trigger detection routing for all current migrated modes.
-    connectSoftwareDetectionSignals(myThread);
-
-    // 步骤6: 连接其他控制信号
-    connect(this, &Widget::rotate, myThread, &MyThread::receiveangle);
-    connect(this, &Widget::choosechannel,myThread,&MyThread::receivecolorchannel1);
-    connect(this, &Widget::sendDataTo, myThread, &MyThread::received);
-    connectTemplatePreviewSignals(myThread);
-
-    // 步骤7: 如果相机已打开，传递相机指针
-    if (m_cameraDevice && m_bOpenDevice) {
-        myThread->setCameraDevice(m_cameraDevice);
-        myThread->getImagePtr(myImage);
-        qDebug() << "✓ Camera pointers passed to myThread";
-    }
-
-    qDebug() << "✓ myThread reinitialized successfully";
-}
-
-/**
- * @brief 重新初始化 cameraThread
- * @details 完全清理旧的 cameraThread 并创建新实例，重新连接所有信号槽
- */
-void Widget::reinitializeCameraThread()
-{
-    qDebug() << "=== Reinitializing cameraThread ===";
-
-    // 步骤1: 如果旧线程还存在，先安全清理
-    if (cameraThread) {
-        qDebug() << "Cleaning up old cameraThread...";
-
-        // 停止线程
-        if (cameraThread->isRunning()) {
-            cameraThread->requestStop();
-            cameraThread->stopTracking();
-
-            // 关闭OpenCV窗口
-            try {
-                cv::destroyAllWindows();
-            } catch (...) {
-                qDebug() << "Exception destroying windows";
-            }
-
-            // 等待线程完全停止
-            if (!cameraThread->wait(3000)) {
-                qDebug() << "WARNING: Old cameraThread did not stop within 3 seconds";
-            }
-        }
-
-        // 断开所有信号连接
-        disconnect(cameraThread, nullptr, this, nullptr);
-
-        // 删除旧对象
-        delete cameraThread;
-        cameraThread = nullptr;
-        qDebug() << "✓ Old cameraThread cleaned up";
-    }
-
-    // 步骤2: 检查相机是否可用
-    if (!m_cameraDevice || !m_bOpenDevice) {
-        qDebug() << "ERROR: Cannot reinitialize cameraThread - camera is null";
-        return;
-    }
-
-    // 步骤3: 创建新线程
-    qDebug() << "Creating new cameraThread...";
-    cameraThread = new CameraThread(this, m_cameraDevice);
-
-    // 步骤4: 连接信号槽 - 旋转角度 图像颜色通道
-    connect(this, &Widget::rotate, cameraThread, &CameraThread::receiveangle1);
-    connect(this, &Widget::choosechannel,cameraThread,&CameraThread::receivecolorchannel);
-
-    // 步骤5: 连接信号槽 - 清除标签
-    connect(cameraThread, &CameraThread::signal_cleanlabel,
-            this, &Widget::slot_clearResultLabel);
-
-    // Step 6: gate preview ingress before it can accumulate in the UI queue.
-    connectHardwarePreviewSignals(cameraThread);
-
-    // 步骤7: 连接统一检测Worker入口。
-    connectHardwareDetectionSignals(cameraThread);
-
-    // 步骤8: 连接模板匹配相关信号
-    connect(this, &Widget::jiancestring, templatematch, &TemplateMatch::jianceshibiestr);
-    connect(this, &Widget::sendDataTo, cameraThread, &CameraThread::received);
-
-    qDebug() << "✓ cameraThread reinitialized successfully";
-}
-
-/**
- * @brief 确保线程已就绪
- * @details 在启动线程前调用此函数，检查并重新初始化必要的线程
- *          这是防止崩溃的关键函数
- */
-void Widget::ensureThreadsReady()
-{
-    qDebug() << "=== Ensuring threads are ready ===";
-
-    // 检查 myThread
-    if (!myThread) {
-        qDebug() << "myThread is null, reinitializing...";
-        reinitializeMyThread();
-    } else if (myThread->isRunning()) {
-        qDebug() << "myThread is already running, stopping and reinitializing...";
-        reinitializeMyThread();
-    } else {
-        qDebug() << "✓ myThread is ready";
-    }
-
-    // 检查 cameraThread（只在需要时）
-    // 注意：cameraThread 通常在 on_plcbtn_clicked 中创建，这里不检查
-
-    // 处理事件队列，确保清理完成
-    QCoreApplication::processEvents();
-
-    qDebug() << "✓ Threads readiness check completed";
-}
-
-/**
- * @brief 接收线程发射的框坐标信号并保存
+ * @brief 接收运行时姿态并更新非结果绑定预览
  */
 void Widget::slot_saveBoxesFromThread(DetectionPose pose)
 {
     // 字库家族生产检测显示“最后一次完整检测结果帧”。
     // 实时追踪位姿不能再移动上一张检测结果的字符框，否则画面、框和OK/NG会来自不同帧。
-    if (shouldSuppressStreamingFrame()) {
+    if (m_resultBoundDisplayActive.load()) {
         return;
     }
-    m_detectionResultPresenter.updatePose(pose);
+    if (m_resultCoordinator) {
+        m_resultCoordinator->updatePose(pose);
+    }
 }
 
 //加载UI样式表模板
@@ -12309,7 +10621,12 @@ void Widget::on_pushButton_7_clicked()
         colorchannel = 0;
     }
 
-    emit choosechannel(colorchannel);
+    if (m_acquisitionController) {
+        m_acquisitionController->applyThreadSettings(
+                    angleValue,
+                    colorchannel,
+                    ui->lineEdit_4->text());
+    }
     updateAppliedGlobalSettingFromUi("image.color_channel");
     refreshGlobalSettingDirty("image.color_channel");
     saveSettings(false);

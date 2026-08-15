@@ -42,8 +42,6 @@
 #include <QImage>
 #include <QThread>
 #include <QtWidgets/QMainWindow>
-#include "mythread.h"
-#include "CameraThread.h"
 #include "TissueRollDetector.h"
 #include <QImage>
 #include "imagelabel.h"
@@ -73,7 +71,6 @@
 #include "devices/ocr/ocr_engine.h"
 #include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
-#include "ui/presenters/detection_result_presenter.h"
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
 
@@ -89,13 +86,10 @@ class QComboBox;
 class QFrame;
 class QDialog;
 class QPushButton;
-class ImageSaveService;
-class DetectionCompletionController;
+class InspectionResultCoordinator;
+class InspectionAcquisitionController;
+class InspectionRuntimeUiCoordinator;
 struct RecipeSelection;
-struct OcrDetectionResult;
-struct StampDetectionWorkOutput;
-struct WordDetectionWorkOutput;
-struct BarcodeWordDetectionWorkOutput;
 struct InspectionProfileSnapshot;
 class InspectionRuntimeStartTransaction;
 
@@ -146,13 +140,10 @@ public:
 signals:
     // ========== 信号定义 ==========
     void captureFrame(Mat image);       ///< 捕获帧信号
-    void sendDataTo(QString);           ///< 发送数据信号
     void pipei();                       ///< 匹配信号
     void imgshibie(Mat *img);           ///< 识别图像信号
     void jiancestring(String targetstring1);  ///< 检测字符串信号
     void ssim(int s);                   ///< SSIM信号
-    void rotate(int angle);             ///< 旋转角度信号
-    void choosechannel(int color);      ///< 颜色通道信号
 
 private slots:
     // ========== 界面相关槽函数 ==========
@@ -336,46 +327,17 @@ private:
                                                const QString &modeId,
                                                bool showErrorMessage,
                                                QString *errorMessage);
-    void connectTemplatePreviewSignals(MyThread *thread);
     bool startTemplatePreview();
     bool freezeTemplatePreview();
     bool stopTemplatePreview(int waitTimeMs = 1500);
     void resetTemplateCaptureState();
-    bool hasTemplateDrawingSelection() const;
     void updateOperationUiState();
-    void clearInspectionTransientDisplay();
     bool hasRunningInspectionThread() const;
-    void handleStreamingFrame(const cv::Mat &image);
-    bool shouldSuppressStreamingFrame() const;
-    qint64 resultPresentationElapsedMs(
-        const DetectionCompletion &completion) const;
-    void connectSoftwarePreviewSignals(MyThread *thread);
-    void connectHardwarePreviewSignals(CameraThread *thread);
-    void connectSoftwareDetectionSignals(MyThread *thread);
-    void connectHardwareDetectionSignals(CameraThread *thread);
-    bool postSoftwareDetectionUiWork(
-        const UiCompletionMailbox::Work &work);
-    DetectionWorker::FailureConsumer detectionWorkerFailureConsumer();
-    bool installDetectionWorker(
-        InspectionRuntimeStartTransaction &startTransaction,
-        int modeIndex,
-        const std::shared_ptr<DetectionWorker> &worker,
-        const QString &startFailureMessage,
-        const QString &workerLogName,
-        QString *errorMessage);
     bool startDetectionWorkerForMode(
         InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
         const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage);
-    void submitSoftwareDetectionFrame(const cv::Mat &image);
-    void submitSoftwarePositionedDetectionFrame(
-        const cv::Mat &image,
-        const DetectionPose &pose);
-    void submitHardwareDetectionFrame(const cv::Mat &image);
-    void submitHardwarePositionedDetectionFrame(
-        const cv::Mat &image,
-        const DetectionPose &pose);
     void enterInspectionFault(
         InspectionFaultReason reason,
         const QString &diagnostic);
@@ -393,38 +355,6 @@ private:
     void recordFaultedPlcOutput(const ProductKey &productKey);
     void checkInspectionPlcHealth();
     void restoreNormalFaultUi();
-    void handleSoftwareTissueCompletion(
-        const DetectionCompletion &completion,
-        const TissueRollResult &tissueResult);
-    void handleSoftwareOcrCompletion(
-        const DetectionCompletion &completion,
-        const DetectionPose &pose);
-    void handleSoftwareStampCompletion(
-        const DetectionCompletion &completion,
-        const StampDetectionWorkOutput &output);
-    void handleSoftwareWordCompletion(
-        const DetectionCompletion &completion,
-        const WordDetectionWorkOutput &output);
-    void handleSoftwareBarcodeWordCompletion(
-        const DetectionCompletion &completion,
-        const BarcodeWordDetectionWorkOutput &output);
-    void finalizeOcrResult(
-        const DetectionPose &pose,
-        const OcrDetectionResult &ocrResult,
-        const DetectionCompletion &acceptedCompletion,
-        double elapsedMs);
-    void finalizeTissueResult(
-        const TissueRollResult &tissueResult,
-        const DetectionCompletion &acceptedCompletion);
-    void finalizeSoftwareStampResult(
-        const StampDetectionWorkOutput &output,
-        const DetectionCompletion &acceptedCompletion);
-    void finalizeSoftwareWordResult(
-        const WordDetectionWorkOutput &output,
-        const DetectionCompletion &acceptedCompletion);
-    void finalizeSoftwareBarcodeWordResult(
-        const BarcodeWordDetectionWorkOutput &output,
-        const DetectionCompletion &acceptedCompletion);
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
@@ -468,16 +398,13 @@ private:
             OperationState::CameraClosed;
     std::atomic<bool> m_resultBoundDisplayActive{false};
     bool m_applicationExitInProgress = false;
-    bool m_detectionRoiWarningActive = false;
     InspectionRuntimeController m_runtimeController;
-    DetectionResultPresenter m_detectionResultPresenter;
+    std::unique_ptr<InspectionAcquisitionController>
+            m_acquisitionController;
+    std::unique_ptr<InspectionResultCoordinator> m_resultCoordinator;
+    std::unique_ptr<InspectionRuntimeUiCoordinator>
+            m_runtimeUiCoordinator;
     TissueRecipeParameters m_tissueRecipeParameters;
-    std::unique_ptr<ImageSaveService> m_imageSaveService;
-    std::unique_ptr<DetectionCompletionController>
-            m_detectionCompletionController;
-    quint64 m_imageSaveFailedCount = 0;
-    QString m_latestImageSaveError;
-    bool m_imageSaveWarningScheduled = false;
     bool m_faultAlarmPresented = false;
     ProductKey m_activePlcOutputProductKey;
     std::vector<ProductKey> m_pendingPlcResetProductKeys;
@@ -505,13 +432,7 @@ private:
     bool isCollecting;                  ///< 是否正在采集
     bool m_bOpenDevice;                 ///< 设备是否打开
 
-    // ========== 相机和线程对象 ==========
-    std::shared_ptr<ICameraDevice> m_cameraDevice; ///< 单相机设备边界
-    MyThread *myThread = NULL;          ///< 软件触发线程
-    CameraThread *cameraThread = NULL;         ///< 硬件触发线程
-
     // ========== 图像对象 ==========
-    Mat *myImage = NULL;                ///< 原始图像
     Mat *processedImage = NULL;         ///< 处理后图像
     Mat *rotatedImage = NULL;           ///< 旋转后图像
     Mat *muban;                         ///< 模板图像
@@ -701,29 +622,9 @@ private:
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
-    void showDetectionRoiWarningOnce();
-    void clearDetectionRoiWarning();
-    void scheduleImageSaveWarning();
     QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生
     QString templateBaseDirPath;          // 产品模板父目录
     void initStyle();  // 声明后才能在 cpp 中实现和调用
-    /**
-         * @brief 重新初始化 myThread（软触发线程）
-         * @details 安全地清理旧线程，创建新线程并连接信号槽
-         */
-    void reinitializeMyThread();
-
-    /**
-         * @brief 重新初始化 cameraThread（硬件触发线程）
-         * @details 安全地清理旧线程，创建新线程并连接信号槽
-         */
-    void reinitializeCameraThread();
-
-    /**
-         * @brief 确保线程已就绪
-         * @details 在启动线程前调用，检查并重新初始化必要的线程
-         */
-    void ensureThreadsReady();
 };
 
 #endif // WIDGET_H

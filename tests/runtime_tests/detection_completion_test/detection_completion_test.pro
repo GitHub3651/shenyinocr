@@ -35,6 +35,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/result_handler.cpp \
     $$PROJECT_ROOT/app/runtime/image_save_service.cpp \
     $$PROJECT_ROOT/app/ui/controllers/detection_completion_controller.cpp \
+    $$PROJECT_ROOT/app/ui/controllers/inspection_result_coordinator.cpp \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.cpp \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.cpp \
     $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.cpp \
@@ -70,6 +71,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/result_handler.h \
     $$PROJECT_ROOT/app/runtime/image_save_service.h \
     $$PROJECT_ROOT/app/ui/controllers/detection_completion_controller.h \
+    $$PROJECT_ROOT/app/ui/controllers/inspection_result_coordinator.h \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.h \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.h \
     $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.h \

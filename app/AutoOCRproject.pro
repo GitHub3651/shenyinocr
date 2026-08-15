@@ -65,6 +65,8 @@ SOURCES += \
     recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     ui/controllers/detection_completion_controller.cpp \
+    ui/controllers/inspection_result_coordinator.cpp \
+    ui/controllers/inspection_runtime_ui_coordinator.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
@@ -75,6 +77,7 @@ SOURCES += \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
     runtime/inspection_run_configuration.cpp \
+    runtime/inspection_acquisition_controller.cpp \
     runtime/inspection_acquisition_stop_coordinator.cpp \
     runtime/inspection_camera_start_transition.cpp \
     runtime/inspection_camera_recovery_transition.cpp \
@@ -149,6 +152,8 @@ HEADERS += \
     recipes/template_runtime_profile.h \
     ui/dialogs/recipe_selection_dialog.h \
     ui/controllers/detection_completion_controller.h \
+    ui/controllers/inspection_result_coordinator.h \
+    ui/controllers/inspection_runtime_ui_coordinator.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
     ui/presenters/inspection_fault_presenter.h \
@@ -162,6 +167,7 @@ HEADERS += \
     devices/plc/plc_device.h \
     devices/plc/snap7_plc_device.h \
     runtime/inspection_run_configuration.h \
+    runtime/inspection_acquisition_controller.h \
     runtime/inspection_acquisition_stop_coordinator.h \
     runtime/inspection_camera_start_transition.h \
     runtime/inspection_camera_recovery_transition.h \
