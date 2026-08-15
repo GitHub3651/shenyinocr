@@ -70,6 +70,7 @@ SOURCES += \
     ui/controllers/machine_settings_page_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
+    ui/controllers/template_editor_controller.cpp \
     system_support/machine_settings_policy.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
     ui/presenters/detection_result_presenter.cpp \
@@ -160,6 +161,7 @@ HEADERS += \
     ui/controllers/machine_settings_page_controller.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
+    ui/controllers/template_editor_controller.h \
     system_support/machine_settings_policy.h \
     ui/presenters/inspection_fault_presenter.h \
     ui/presenters/detection_result_presenter.h \

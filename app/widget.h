@@ -90,6 +90,7 @@ class InspectionResultCoordinator;
 class InspectionAcquisitionController;
 class InspectionRuntimeUiCoordinator;
 class MachineSettingsPageController;
+class TemplateEditorController;
 struct RecipeSelection;
 struct InspectionProfileSnapshot;
 class InspectionRuntimeStartTransaction;
@@ -211,6 +212,8 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    friend class TemplateEditorController;
+
     cv::Mat m_loadedTrackingTemplate;
     void showParameterInfo(const QString &title, const QString &message);
     void showParameterInfoWithRedWarning(const QString &title,
@@ -307,27 +310,14 @@ private:
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
     MultiCameraWidget *m_multiCameraWidget = nullptr;
-    bool m_currentTemplateNameVisible = false;
-    QWidget *m_wordTemplateEditWidget = nullptr;
-    QLabel *m_wordTemplateEditLabel = nullptr;
-    QComboBox *m_wordTemplateEditComboBox = nullptr;
-    QPushButton *m_publishTemplateGroupButton = nullptr;
-    QFrame *m_templateGuideFrame = nullptr;
-    QLabel *m_templateGuideTitleLabel = nullptr;
-    QLabel *m_templateGuideBodyLabel = nullptr;
-    QPushButton *m_manualCharacterCropButton = nullptr;
-    QPushButton *m_publishedRecipeButton = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
-    int m_currentWordTemplateEditIndex = -1;
-    TemplateModeMemory m_templateModeMemory;
     GlobalSettings m_appliedGlobalSettings;
     QString m_currentDetectModeId = "word_detection";
     bool m_applyingGlobalSettings = false;
     bool m_updatingGlobalSettingsUi = false;
     SettingsEditState m_settingsEditState;
     std::unique_ptr<MachineSettingsPageController> m_settingsPageController;
-    QString m_templateTargetLabelText;
-    QString m_templateThresholdLabelText;
+    std::unique_ptr<TemplateEditorController> m_templateEditorController;
 
     enum class TemplateCaptureState {
         Idle,
@@ -466,18 +456,9 @@ private:
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
 
-    std::vector<WordTemplateProfile> m_wordTemplateProfiles; ///< 字库多模板配置缓存
-    TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession; ///< 本次新建字库配方的编辑发布会话
-    TemplateRecipeEditSession m_wordTemplateRecipeEditSession; ///< 当前已发布字库配方的参数编辑会话
-    TemplateRecipeEditSession m_singleTemplateRecipeEditSession; ///< 当前已发布钢印/OCR单模板配方编辑会话
-    QMap<QString, QString> m_singleTemplateResolvedAssetPathsByRole; ///< 当前单模板配方的只读运行资产
-    QString m_currentTemplateDisplayName; ///< 已发布单模板使用配方显示名，避免显示内部Profile目录名
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
     std::shared_ptr<IOcrEngine> m_ocrEngine;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
-    bool m_barcodeTemplateReadable = false;
-    QRect m_validatedBarcodeRect;
-    QString m_validatedBarcodeText;
     QStringList wordTemplateImagePathsForKey(const QDir &directory,
                                              const QString &searchKey,
                                              bool includeVariants = true) const;

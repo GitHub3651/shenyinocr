@@ -1,4 +1,4 @@
-#ifndef IMAGELABEL_H
+﻿#ifndef IMAGELABEL_H
 #define IMAGELABEL_H
 
 #include <QLabel>
@@ -59,7 +59,7 @@ signals:
     void mouseMoved(QMouseEvent *event);
     void mouseReleased(QMouseEvent *event);
 
-    // 🔥 新增：发送文本提示信号给 Widget
+    // 新增：发送文本提示信号给 Widget
     void signal_hintMessage(QString msg);
     void signal_templateGuideEvent(QString eventName, int pointCount);
 
