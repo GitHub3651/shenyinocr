@@ -171,7 +171,10 @@ bool ImageSaveService::writeImage(
         }
         return false;
     }
-    if (!image.save(item.filePath, item.format.constData())) {
+    if (!image.save(
+            item.filePath,
+            item.format.constData(),
+            item.quality)) {
         if (errorMessage) {
             *errorMessage = QString::fromWCharArray(
                         L"\u56fe\u50cf\u5199\u5165\u5931\u8d25\uff1a%1")

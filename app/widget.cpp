@@ -123,6 +123,8 @@
 using namespace std;
 
 namespace {
+const int kDetectionImageJpegQuality = 92;
+
 bool sameProductKey(const ProductKey &left, const ProductKey &right)
 {
     return left.runId == right.runId
@@ -2262,7 +2264,8 @@ void Widget::finalizeSoftwareStampResult(
     request.imageSaveModeIndex = ui->comboBox->currentIndex();
     request.delayedNgOffset = wrongindex;
     request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("png");
+    request.saveOptions.format = QStringLiteral("jpg");
+    request.saveOptions.quality = kDetectionImageJpegQuality;
     request.saveOptions.imageContentModeIndex =
             ui->comboBox_saveImageType->currentIndex();
     request.saveOptions.saveNotEvaluatedAsNg = false;
@@ -2329,7 +2332,8 @@ void Widget::finalizeSoftwareWordResult(
     request.imageSaveModeIndex = ui->comboBox->currentIndex();
     request.delayedNgOffset = wrongindex;
     request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("png");
+    request.saveOptions.format = QStringLiteral("jpg");
+    request.saveOptions.quality = kDetectionImageJpegQuality;
     request.saveOptions.imageContentModeIndex =
             ui->comboBox_saveImageType->currentIndex();
     request.saveOptions.saveNotEvaluatedAsNg = false;
@@ -2436,7 +2440,8 @@ void Widget::finalizeSoftwareBarcodeWordResult(
     request.imageSaveModeIndex = ui->comboBox->currentIndex();
     request.delayedNgOffset = wrongindex;
     request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("png");
+    request.saveOptions.format = QStringLiteral("jpg");
+    request.saveOptions.quality = kDetectionImageJpegQuality;
     request.saveOptions.imageContentModeIndex =
             ui->comboBox_saveImageType->currentIndex();
     request.saveOptions.saveNotEvaluatedAsNg = false;
@@ -2629,6 +2634,7 @@ void Widget::finalizeOcrResult(
             DetectionCompletionSaveLayout::RawOnly;
     request.saveOptions.rootDirectory = selectedDir;
     request.saveOptions.format = QStringLiteral("jpg");
+    request.saveOptions.quality = kDetectionImageJpegQuality;
     request.preparePresentation =
             [this, &acceptedCompletion, &pose, &ocrResult]() {
         detectedRects.clear();
@@ -2903,7 +2909,8 @@ void Widget::finalizeTissueResult(
     request.imageSaveModeIndex = ui->comboBox->currentIndex();
     request.delayedNgOffset = wrongindex;
     request.saveOptions.rootDirectory = selectedDir;
-    request.saveOptions.format = QStringLiteral("png");
+    request.saveOptions.format = QStringLiteral("jpg");
+    request.saveOptions.quality = kDetectionImageJpegQuality;
     request.saveOptions.imageContentModeIndex =
             ui->comboBox_saveImageType->currentIndex();
     request.preparePresentation =

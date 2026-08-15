@@ -4226,6 +4226,7 @@ void DetectionCompletionTest::completionControllerSavesAnnotatedThenRaw()
     request.imageSaveModeIndex = 3;
     request.saveOptions.rootDirectory = QStringLiteral("C:/capture");
     request.saveOptions.format = QStringLiteral(".PNG");
+    request.saveOptions.quality = 93;
     request.saveOptions.imageContentModeIndex = 0;
     const DetectionCompletionProcessOutcome outcome =
             controller.process(request);
@@ -4240,9 +4241,11 @@ void DetectionCompletionTest::completionControllerSavesAnnotatedThenRaw()
     QVERIFY(!writtenItems[0].frame);
     QVERIFY(writtenItems[0].filePath.contains(QStringLiteral("/ok/")));
     QVERIFY(writtenItems[0].format == QByteArrayLiteral("PNG"));
+    QCOMPARE(writtenItems[0].quality, 93);
     QVERIFY(writtenItems[1].image.isNull());
     QVERIFY(writtenItems[1].frame);
     QVERIFY(writtenItems[1].filePath.contains(QStringLiteral("/ok_raw/")));
+    QCOMPARE(writtenItems[1].quality, 93);
     QCOMPARE(QFileInfo(writtenItems[0].filePath).fileName(),
              QFileInfo(writtenItems[1].filePath).fileName());
 }
@@ -4338,6 +4341,7 @@ void DetectionCompletionTest::completionControllerPreservesOcrRawOnlyLayout()
     request.saveOptions.layout = DetectionCompletionSaveLayout::RawOnly;
     request.saveOptions.rootDirectory = QStringLiteral("C:/ocr");
     request.saveOptions.format = QStringLiteral(".JPG");
+    request.saveOptions.quality = 92;
     request.saveOptions.imageContentModeIndex = 1;
     QVERIFY(controller.process(request).imageSaveSubmitted);
 
@@ -4349,6 +4353,7 @@ void DetectionCompletionTest::completionControllerPreservesOcrRawOnlyLayout()
     QVERIFY(writtenItems[0].filePath.contains(QStringLiteral("/ng/")));
     QVERIFY(!writtenItems[0].filePath.contains(QStringLiteral("_raw")));
     QVERIFY(writtenItems[0].format == QByteArrayLiteral("JPG"));
+    QCOMPARE(writtenItems[0].quality, 92);
     QVERIFY(QRegularExpression(
                 QStringLiteral("\\d{8}-\\d{6}-\\d{3}\\.jpg$"))
             .match(writtenItems[0].filePath)

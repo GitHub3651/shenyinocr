@@ -22,13 +22,16 @@ struct ImageSaveItem {
     std::shared_ptr<const FrameData> frame;
     QString filePath;
     QByteArray format;
+    int quality = -1;
 
     bool isValid() const
     {
         return (!image.isNull()
                 || (frame && !frame->originalImage.empty()))
                 && !filePath.trimmed().isEmpty()
-                && !format.trimmed().isEmpty();
+                && !format.trimmed().isEmpty()
+                && quality >= -1
+                && quality <= 100;
     }
 };
 

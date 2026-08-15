@@ -21,7 +21,8 @@ ImageSaveItem saveItem(
     const std::shared_ptr<const FrameData> &frame,
     const QString &directoryPath,
     const QString &baseName,
-    const QString &format)
+    const QString &format,
+    int quality)
 {
     ImageSaveItem item;
     item.image = image;
@@ -29,6 +30,7 @@ ImageSaveItem saveItem(
     item.filePath = QDir(directoryPath).filePath(
                 baseName + QStringLiteral(".") + format);
     item.format = format.toUpper().toLatin1();
+    item.quality = quality;
     return item;
 }
 
@@ -169,7 +171,8 @@ bool DetectionCompletionController::submitImageSave(
                                  directoryPath,
                                  QDateTime::currentDateTime().toString(
                                      QStringLiteral("yyyyMMdd-hhmmss-zzz")),
-                                 format));
+                                 format,
+                                 options.quality));
     } else {
         const QString baseName =
                 QDateTime::currentDateTime().toString(
@@ -195,7 +198,8 @@ bool DetectionCompletionController::submitImageSave(
                                          + resultName
                                          + QStringLiteral("/"),
                                          baseName,
-                                         format));
+                                         format,
+                                         options.quality));
             }
         }
         if (saveRaw) {
@@ -207,7 +211,8 @@ bool DetectionCompletionController::submitImageSave(
                                      + resultName
                                      + QStringLiteral("_raw/"),
                                      baseName,
-                                     format));
+                                     format,
+                                     options.quality));
         }
     }
 
