@@ -2,6 +2,7 @@
 
 #include "runtime/detection_worker.h"
 #include "runtime/detection_session.h"
+#include "runtime/inspection_fault_state.h"
 #include "runtime/result_handler.h"
 #include "runtime/result_presentation_mailbox.h"
 
@@ -31,9 +32,14 @@ public:
     bool requestStop();
     void finishStop();
     void markFault();
-    void acknowledgeFault();
+    bool enterFault(
+        InspectionFaultReason reason,
+        const QString &diagnostic = QString(),
+        const QDateTime &occurredAtUtc = QDateTime());
+    bool acknowledgeFault();
 
     InspectionRuntimeState state() const;
+    InspectionFaultSnapshot faultSnapshot() const;
     bool isBusy() const;
     bool isRunning() const;
     QString runId() const;
@@ -64,10 +70,14 @@ public:
     bool consumeDueDelayedNgRequest();
 
     DetectionResultStatistics statistics() const;
+    DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;
     int ngCount() const;
     int pendingDelayedNgCount() const;
+    bool recordCancelledProduct();
+    bool recordUnconfirmedProduct();
     void resetStatistics();
+    void resetAbnormalStatistics();
     void resetNgCount();
     void clearPendingDelayedNgRequests();
 
@@ -92,6 +102,7 @@ private:
     mutable std::mutex m_mutex;
     InspectionRuntimeState m_state = InspectionRuntimeState::Idle;
     DetectionSession m_session;
+    InspectionFaultState m_faultState;
     DetectionResultHandler m_resultHandler;
     QString m_lastRecordedRunId;
     quint64 m_lastRecordedProductSequence = 0;

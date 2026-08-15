@@ -23,6 +23,13 @@ struct DetectionResultStatistics {
     double passRatePercent() const;
 };
 
+struct DetectionAbnormalStatistics {
+    quint64 systemFaultCount = 0;
+    quint64 cancelledProductCount = 0;
+    quint64 unconfirmedProductCount = 0;
+    quint64 postFaultDroppedFrameCount = 0;
+};
+
 struct DetectionResultHandlingOutcome {
     bool resultRecorded = false;
     DetectionResultSaveAction imageSaveAction =
@@ -44,17 +51,24 @@ public:
         int delayedNgOffset);
 
     bool consumeDueDelayedNgRequest();
+    void recordSystemFault();
+    void recordCancelledProduct();
+    void recordUnconfirmedProduct();
+    void recordPostFaultDroppedFrame();
 
     DetectionResultStatistics statistics() const;
+    DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;
     int ngCount() const;
     int pendingDelayedNgCount() const;
 
     void resetStatistics();
+    void resetAbnormalStatistics();
     void resetNgCount();
     void clearPendingDelayedNgRequests();
 
 private:
     DetectionResultStatistics m_statistics;
+    DetectionAbnormalStatistics m_abnormalStatistics;
     std::queue<int> m_delayedNgDueCounts;
 };

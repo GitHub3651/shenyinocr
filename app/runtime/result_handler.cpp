@@ -68,9 +68,34 @@ bool DetectionResultHandler::consumeDueDelayedNgRequest()
     return true;
 }
 
+void DetectionResultHandler::recordSystemFault()
+{
+    ++m_abnormalStatistics.systemFaultCount;
+}
+
+void DetectionResultHandler::recordCancelledProduct()
+{
+    ++m_abnormalStatistics.cancelledProductCount;
+}
+
+void DetectionResultHandler::recordUnconfirmedProduct()
+{
+    ++m_abnormalStatistics.unconfirmedProductCount;
+}
+
+void DetectionResultHandler::recordPostFaultDroppedFrame()
+{
+    ++m_abnormalStatistics.postFaultDroppedFrameCount;
+}
+
 DetectionResultStatistics DetectionResultHandler::statistics() const
 {
     return m_statistics;
+}
+
+DetectionAbnormalStatistics DetectionResultHandler::abnormalStatistics() const
+{
+    return m_abnormalStatistics;
 }
 
 int DetectionResultHandler::totalCount() const
@@ -91,6 +116,11 @@ int DetectionResultHandler::pendingDelayedNgCount() const
 void DetectionResultHandler::resetStatistics()
 {
     m_statistics = DetectionResultStatistics();
+}
+
+void DetectionResultHandler::resetAbnormalStatistics()
+{
+    m_abnormalStatistics = DetectionAbnormalStatistics();
 }
 
 void DetectionResultHandler::resetNgCount()

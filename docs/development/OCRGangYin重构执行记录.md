@@ -1029,7 +1029,17 @@
 
 ## 结论
 
-- 当前切片：Stage 3最终UI/设置/模板状态收口已通过Agent静态门禁和用户Qt Creator集中门禁，并提交为`9adc05d`。
-- 当前阶段：Stage 2结构关口已通过，Stage 3约定结构开发和功能门禁已完成并结项；人工固定样本、现场PLC量化、P50/P95与长时间运行证据按用户决定延期，因此生产现场最终验收仍未完成。Stage 4尚未开始。
+- 当前切片：Stage 4第一轮Fault状态合同、异常统计和故障后帧拒收已通过Agent静态门禁及用户Qt Creator集中门禁，等待创建本地提交。
+- 当前阶段：Stage 2结构关口已通过，Stage 3约定结构开发和功能门禁已完成并结项；Stage 4第一轮只建立后续两轮共用的运行时合同，真实PLC断线、硬触发溢出、产品异常收尾和UI恢复入口尚未接入。
 - 功能状态计数：待盘点0 / 已基线36 / 迁移中0 / 已验证52 / 已延期2 / 已确认删除0。
-- 下一允许动作：等待用户决定是否授权进入Stage 4异常策略设计与开发；未获授权前不修改PLC断线、硬触发溢出、Fault或系统故障行为。
+- 下一允许动作：提交Stage 4第一轮后进入第二轮，接入真实故障源和持续报警/人工恢复门禁；Fault前已受理产品的一次性NG/未确认收尾留到第三轮。
+
+## Stage 4第一轮：Fault状态合同与异常统计
+
+- [x] 用户明确授权开始Stage 4第一轮；影响功能限定为`DET-008、RUN-001..004、RES-001..003`，八项由已验证转为迁移中。第一轮不接真实PLC、硬触发溢出信号、异常产品PLC收尾或UI人工恢复。
+- [x] 新增全ASCII `runtime/inspection_fault_state.*`，定义PLC断线、硬触发FIFO溢出、产品身份无法保证和运行不变量破坏四类原因；故障快照固定首个原因、诊断、运行ID、受理/完成产品数、发生时间和Fault后拒收帧数，重复故障不能覆盖首因。
+- [x] `InspectionRuntimeController`只允许`Starting/Running/Stopping`进入Fault；进入时关闭活动Worker和容量1 UI邮箱，Fault状态禁止重新启动、拒绝新的正式帧且不创建`ProductKey`，正常停止事务的`finishStop`不能把Fault覆盖为Idle；人工确认会等待Worker退出后回到Idle并清除当前故障快照。
+- [x] `DetectionResultHandler`新增独立`DetectionAbnormalStatistics`，分别统计系统故障、取消产品、未确认产品和Fault后拒收帧；现有产品总数、NG和合格率公式保持原结构，普通统计清零与异常统计清零互不影响。
+- [x] `detection_completion_test`新增7项合同测试，覆盖首因快照、空闲态拒绝进入Fault、Fault后新帧不分配产品身份、Worker取消与停止提交不覆盖Fault、异常统计不进入产品合格率、Fault中禁止完成副作用、人工确认只清活动故障；业务测试由110项增至117项，Qt Test预期汇总为`119 passed, 0 failed`。
+- [x] 本轮Agent静态门禁通过：改动文件全部限于运行时Fault合同、运行测试、两处工程清单和三份治理文档；新头/源在主工程与运行测试工程各唯一登记1次且非ASCII字节0；运行测试声明/定义各117项，Qt Test预期`119 passed, 0 failed`；真实生产代码中无`enterFault`调用，确认本轮未接PLC、硬触发或UI故障源；八项受影响功能唯一且均为迁移中，状态计数36/8/44/2；`git diff --check`通过。Agent未执行qmake、构建、链接、测试或主程序。
+- [x] Stage 4第一轮Qt Creator集中门禁通过：2026-08-15用户确认`detection_completion_test` 119项、主工程Run qmake/Rebuild/Run、模板匹配软触发、二维码+三期硬触发、正常判定/统计/存图/PLC、停止重启以及总数/NG清零均无问题；八项功能恢复为已验证，允许创建本地提交并进入第二轮。

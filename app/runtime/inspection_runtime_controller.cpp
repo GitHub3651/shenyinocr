@@ -62,21 +62,64 @@ bool InspectionRuntimeController::requestStop()
 void InspectionRuntimeController::finishStop()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_state = InspectionRuntimeState::Idle;
+    if (m_state != InspectionRuntimeState::Fault) {
+        m_state = InspectionRuntimeState::Idle;
+    }
 }
 
 void InspectionRuntimeController::markFault()
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_state = InspectionRuntimeState::Fault;
+    enterFault(
+                InspectionFaultReason::RuntimeInvariantViolation,
+                QStringLiteral("Legacy runtime fault request."));
 }
 
-void InspectionRuntimeController::acknowledgeFault()
+bool InspectionRuntimeController::enterFault(
+    InspectionFaultReason reason,
+    const QString &diagnostic,
+    const QDateTime &occurredAtUtc)
 {
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state == InspectionRuntimeState::Fault) {
-        m_state = InspectionRuntimeState::Idle;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if ((m_state != InspectionRuntimeState::Starting
+             && m_state != InspectionRuntimeState::Running
+             && m_state != InspectionRuntimeState::Stopping)
+                || !m_faultState.enter(
+                    reason,
+                    diagnostic,
+                    m_session.runId(),
+                    m_session.acceptedProductCount(),
+                    m_session.completedProductCount(),
+                    occurredAtUtc)) {
+            return false;
+        }
+
+        m_resultHandler.recordSystemFault();
+        m_state = InspectionRuntimeState::Fault;
     }
+
+    requestDetectionWorkerStop();
+    return true;
+}
+
+bool InspectionRuntimeController::acknowledgeFault()
+{
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != InspectionRuntimeState::Fault) {
+            return false;
+        }
+    }
+
+    waitForDetectionWorkerStop();
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state != InspectionRuntimeState::Fault) {
+        return false;
+    }
+
+    m_faultState.clear();
+    m_state = InspectionRuntimeState::Idle;
+    return true;
 }
 
 InspectionRuntimeState InspectionRuntimeController::state() const
@@ -85,12 +128,19 @@ InspectionRuntimeState InspectionRuntimeController::state() const
     return m_state;
 }
 
+InspectionFaultSnapshot InspectionRuntimeController::faultSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_faultState.snapshot();
+}
+
 bool InspectionRuntimeController::isBusy() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_state == InspectionRuntimeState::Starting
             || m_state == InspectionRuntimeState::Running
-            || m_state == InspectionRuntimeState::Stopping;
+            || m_state == InspectionRuntimeState::Stopping
+            || m_state == InspectionRuntimeState::Fault;
 }
 
 bool InspectionRuntimeController::isRunning() const
@@ -124,6 +174,13 @@ std::shared_ptr<const FrameData> InspectionRuntimeController::acceptFrame(
     const QDateTime &timestampUtc)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state == InspectionRuntimeState::Fault) {
+        if (!image.empty()
+                && m_faultState.notePostFaultDroppedFrame()) {
+            m_resultHandler.recordPostFaultDroppedFrame();
+        }
+        return std::shared_ptr<const FrameData>();
+    }
     if (m_state != InspectionRuntimeState::Starting
             && m_state != InspectionRuntimeState::Running) {
         return std::shared_ptr<const FrameData>();
@@ -215,6 +272,13 @@ DetectionResultStatistics InspectionRuntimeController::statistics() const
     return m_resultHandler.statistics();
 }
 
+DetectionAbnormalStatistics
+InspectionRuntimeController::abnormalStatistics() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_resultHandler.abnormalStatistics();
+}
+
 int InspectionRuntimeController::totalCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -233,10 +297,39 @@ int InspectionRuntimeController::pendingDelayedNgCount() const
     return m_resultHandler.pendingDelayedNgCount();
 }
 
+bool InspectionRuntimeController::recordCancelledProduct()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state != InspectionRuntimeState::Stopping
+            && m_state != InspectionRuntimeState::Fault) {
+        return false;
+    }
+
+    m_resultHandler.recordCancelledProduct();
+    return true;
+}
+
+bool InspectionRuntimeController::recordUnconfirmedProduct()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_state != InspectionRuntimeState::Fault) {
+        return false;
+    }
+
+    m_resultHandler.recordUnconfirmedProduct();
+    return true;
+}
+
 void InspectionRuntimeController::resetStatistics()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_resultHandler.resetStatistics();
+}
+
+void InspectionRuntimeController::resetAbnormalStatistics()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_resultHandler.resetAbnormalStatistics();
 }
 
 void InspectionRuntimeController::resetNgCount()

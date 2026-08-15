@@ -85,6 +85,7 @@ SOURCES += \
     runtime/detection_mode_worker_factory.cpp \
     runtime/inspection_profile_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
+    runtime/inspection_fault_state.cpp \
     runtime/inspection_runtime_controller.cpp \
     runtime/inspection_runtime_start_transaction.cpp \
     runtime/inspection_runtime_stop_transaction.cpp \
@@ -167,6 +168,7 @@ HEADERS += \
     runtime/detection_mode_worker_factory.h \
     runtime/inspection_profile_snapshot.h \
     runtime/result_presentation_mailbox.h \
+    runtime/inspection_fault_state.h \
     runtime/inspection_runtime_controller.h \
     runtime/inspection_runtime_start_transaction.h \
     runtime/inspection_runtime_stop_transaction.h \

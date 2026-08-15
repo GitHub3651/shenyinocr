@@ -433,6 +433,13 @@ private slots:
     void resultHandlerResetsStatisticsAndPendingOutputsSeparately();
     void runtimeControllerTransitionsFromStartToStop();
     void runtimeControllerRejectsConcurrentAndFaultedStarts();
+    void faultStatePreservesFirstCauseAndSnapshot();
+    void runtimeControllerRejectsFaultEntryOutsideActiveRun();
+    void runtimeControllerFaultRejectsNewFramesWithoutProductKey();
+    void runtimeControllerFaultStopsWorkerAndSurvivesStopCommit();
+    void runtimeControllerTracksAbnormalStatisticsOutsidePassRate();
+    void runtimeControllerRejectsInFlightCompletionWhileFaulted();
+    void runtimeControllerAcknowledgementClearsActiveFaultOnly();
     void runtimeControllerOwnsCompletionAndResultHandling();
     void runtimeControllerRejectsDuplicateAndForeignCompletions();
     void runtimeControllerStartsNewRunWithoutResettingStatistics();
@@ -1103,6 +1110,260 @@ void DetectionCompletionTest::runtimeControllerRejectsConcurrentAndFaultedStarts
     controller.acknowledgeFault();
     QVERIFY(controller.state() == InspectionRuntimeState::Idle);
     QCOMPARE(controller.beginStart(), QStringLiteral("run-2"));
+}
+
+void DetectionCompletionTest::faultStatePreservesFirstCauseAndSnapshot()
+{
+    InspectionFaultState state;
+    const QDateTime occurredAtUtc = QDateTime::fromMSecsSinceEpoch(
+                123456,
+                Qt::UTC);
+
+    QVERIFY(!state.enter(
+                InspectionFaultReason::None,
+                QStringLiteral("ignored"),
+                QStringLiteral("run-1"),
+                2,
+                1,
+                occurredAtUtc));
+    QVERIFY(state.enter(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("  plc link lost  "),
+                QStringLiteral("run-1"),
+                2,
+                1,
+                occurredAtUtc));
+    QVERIFY(state.isActive());
+    QVERIFY(!state.enter(
+                InspectionFaultReason::HardTriggerQueueOverflow,
+                QStringLiteral("must not replace first fault"),
+                QStringLiteral("run-2"),
+                9,
+                8));
+    QVERIFY(state.notePostFaultDroppedFrame());
+    QVERIFY(state.notePostFaultDroppedFrame());
+
+    const InspectionFaultSnapshot snapshot = state.snapshot();
+    QVERIFY(snapshot.reason
+            == InspectionFaultReason::PlcDisconnected);
+    QCOMPARE(snapshot.diagnostic, QStringLiteral("plc link lost"));
+    QCOMPARE(snapshot.runId, QStringLiteral("run-1"));
+    QCOMPARE(snapshot.acceptedProductCount, quint64(2));
+    QCOMPARE(snapshot.completedProductCount, quint64(1));
+    QCOMPARE(snapshot.postFaultDroppedFrameCount, quint64(2));
+    QCOMPARE(snapshot.occurredAtUtc, occurredAtUtc);
+
+    QVERIFY(state.clear());
+    QVERIFY(!state.isActive());
+    QVERIFY(!state.notePostFaultDroppedFrame());
+    QVERIFY(!state.clear());
+}
+
+void DetectionCompletionTest::runtimeControllerRejectsFaultEntryOutsideActiveRun()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("fault-entry-run");
+    });
+
+    QVERIFY(!controller.enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("idle disconnect")));
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!controller.faultSnapshot().isActive());
+
+    QCOMPARE(controller.beginStart(), QStringLiteral("fault-entry-run"));
+    QVERIFY(!controller.enterFault(InspectionFaultReason::None));
+    QVERIFY(controller.state() == InspectionRuntimeState::Starting);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("runtime disconnect")));
+    QVERIFY(controller.state() == InspectionRuntimeState::Fault);
+    QVERIFY(controller.isBusy());
+    QVERIFY(controller.beginStart().isEmpty());
+    QVERIFY(!controller.enterFault(
+                InspectionFaultReason::HardTriggerQueueOverflow,
+                QStringLiteral("later fault")));
+
+    controller.finishStop();
+    QVERIFY(controller.state() == InspectionRuntimeState::Fault);
+}
+
+void DetectionCompletionTest::runtimeControllerFaultRejectsNewFramesWithoutProductKey()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("fault-admission-run");
+    });
+    const cv::Mat image(2, 2, CV_8UC1, cv::Scalar(17));
+
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    const std::shared_ptr<const FrameData> accepted =
+            controller.acceptFrame(image);
+    QVERIFY(accepted);
+    QCOMPARE(accepted->productKey.sequence, quint64(1));
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::HardTriggerQueueOverflow,
+                QStringLiteral("queue full")));
+
+    QVERIFY(!controller.acceptFrame(cv::Mat()));
+    QVERIFY(!controller.acceptFrame(image));
+    QVERIFY(!controller.acceptFrame(image));
+    QCOMPARE(controller.acceptedProductCount(), quint64(1));
+
+    const InspectionFaultSnapshot snapshot = controller.faultSnapshot();
+    QCOMPARE(snapshot.runId, QStringLiteral("fault-admission-run"));
+    QCOMPARE(snapshot.acceptedProductCount, quint64(1));
+    QCOMPARE(snapshot.completedProductCount, quint64(0));
+    QCOMPARE(snapshot.postFaultDroppedFrameCount, quint64(2));
+    QCOMPARE(
+                controller.abnormalStatistics()
+                .postFaultDroppedFrameCount,
+                quint64(2));
+}
+
+void DetectionCompletionTest::runtimeControllerFaultStopsWorkerAndSurvivesStopCommit()
+{
+    InspectionRuntimeController controller;
+    const std::shared_ptr<DetectionWorker> worker =
+            idleDetectionWorker();
+
+    QVERIFY(!controller.beginStart().isEmpty());
+    QVERIFY(controller.startDetectionWorker(2, worker));
+    QVERIFY(controller.markRunning());
+    QVERIFY(controller.isDetectionWorkerActiveForMode(2));
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::ProductIdentityAmbiguous,
+                QStringLiteral("identity cannot be guaranteed")));
+    QVERIFY(!controller.isDetectionWorkerActive());
+
+    controller.finishStop();
+    QVERIFY(controller.state() == InspectionRuntimeState::Fault);
+    QVERIFY(controller.acknowledgeFault());
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!worker->isRunning());
+}
+
+void DetectionCompletionTest::runtimeControllerTracksAbnormalStatisticsOutsidePassRate()
+{
+    int runNumber = 0;
+    InspectionRuntimeController controller([&runNumber]() {
+        return QStringLiteral("statistics-run-%1").arg(++runNumber);
+    });
+    DetectionResult okResult;
+    okResult.verdict = AlgorithmVerdict::Ok;
+    okResult.status = DetectionStatus::Completed;
+
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    QVERIFY(!controller.recordCancelledProduct());
+    QVERIFY(!controller.recordUnconfirmedProduct());
+    const DetectionResultHandlingOutcome normalOutcome = controller.record(
+                controller.complete(
+                    cv::Mat(1, 1, CV_8UC1, cv::Scalar(3)),
+                    okResult),
+                0,
+                0);
+    QVERIFY(normalOutcome.resultRecorded);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::RuntimeInvariantViolation,
+                QStringLiteral("runtime invariant")));
+    QVERIFY(controller.recordCancelledProduct());
+    QVERIFY(controller.recordUnconfirmedProduct());
+    QVERIFY(controller.recordUnconfirmedProduct());
+
+    DetectionResultStatistics statistics = controller.statistics();
+    DetectionAbnormalStatistics abnormalStatistics =
+            controller.abnormalStatistics();
+    QCOMPARE(statistics.totalCount, 1);
+    QCOMPARE(statistics.ngCount, 0);
+    QCOMPARE(statistics.passRatePercent(), 100.0);
+    QCOMPARE(abnormalStatistics.systemFaultCount, quint64(1));
+    QCOMPARE(abnormalStatistics.cancelledProductCount, quint64(1));
+    QCOMPARE(abnormalStatistics.unconfirmedProductCount, quint64(2));
+    QCOMPARE(abnormalStatistics.postFaultDroppedFrameCount, quint64(0));
+
+    QVERIFY(controller.acknowledgeFault());
+    QCOMPARE(controller.beginStart(), QStringLiteral("statistics-run-2"));
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("second run fault")));
+    statistics = controller.statistics();
+    abnormalStatistics = controller.abnormalStatistics();
+    QCOMPARE(statistics.totalCount, 1);
+    QCOMPARE(statistics.ngCount, 0);
+    QCOMPARE(abnormalStatistics.systemFaultCount, quint64(2));
+    QCOMPARE(abnormalStatistics.cancelledProductCount, quint64(1));
+    QCOMPARE(abnormalStatistics.unconfirmedProductCount, quint64(2));
+
+    controller.resetStatistics();
+    QCOMPARE(controller.statistics().totalCount, 0);
+    QCOMPARE(
+                controller.abnormalStatistics().systemFaultCount,
+                quint64(2));
+    controller.resetAbnormalStatistics();
+    QCOMPARE(
+                controller.abnormalStatistics().systemFaultCount,
+                quint64(0));
+    QCOMPARE(controller.statistics().totalCount, 0);
+}
+
+void DetectionCompletionTest::runtimeControllerRejectsInFlightCompletionWhileFaulted()
+{
+    InspectionRuntimeController controller;
+    const cv::Mat image(1, 1, CV_8UC1, cv::Scalar(11));
+    DetectionResult result;
+    result.verdict = AlgorithmVerdict::Ok;
+    result.status = DetectionStatus::Completed;
+
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    const std::shared_ptr<const FrameData> frame =
+            controller.acceptFrame(image);
+    QVERIFY(frame);
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::PlcDisconnected));
+
+    const DetectionCompletion completion =
+            controller.complete(frame, result);
+    QVERIFY(!completion.isValid());
+    const DetectionResultHandlingOutcome outcome =
+            controller.record(completion, 3, 0);
+    QVERIFY(!outcome.resultRecorded);
+    QVERIFY(outcome.imageSaveAction
+            == DetectionResultSaveAction::DoNotSave);
+    QVERIFY(outcome.plcAction == DetectionPlcAction::NoRequest);
+    QCOMPARE(controller.totalCount(), 0);
+    QCOMPARE(controller.ngCount(), 0);
+    QCOMPARE(
+                controller.abnormalStatistics().systemFaultCount,
+                quint64(1));
+}
+
+void DetectionCompletionTest::runtimeControllerAcknowledgementClearsActiveFaultOnly()
+{
+    InspectionRuntimeController controller([]() {
+        return QStringLiteral("fault-ack-run");
+    });
+
+    QVERIFY(!controller.acknowledgeFault());
+    controller.beginStart();
+    QVERIFY(controller.markRunning());
+    QVERIFY(controller.enterFault(
+                InspectionFaultReason::HardTriggerQueueOverflow,
+                QStringLiteral("overflow")));
+    QVERIFY(controller.faultSnapshot().isActive());
+    QCOMPARE(
+                controller.abnormalStatistics().systemFaultCount,
+                quint64(1));
+
+    QVERIFY(controller.acknowledgeFault());
+    QVERIFY(controller.state() == InspectionRuntimeState::Idle);
+    QVERIFY(!controller.faultSnapshot().isActive());
+    QVERIFY(controller.faultSnapshot().diagnostic.isEmpty());
+    QCOMPARE(
+                controller.abnormalStatistics().systemFaultCount,
+                quint64(1));
+    QVERIFY(!controller.acknowledgeFault());
 }
 
 void DetectionCompletionTest::runtimeControllerOwnsCompletionAndResultHandling()
