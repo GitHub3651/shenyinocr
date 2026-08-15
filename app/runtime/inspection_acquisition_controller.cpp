@@ -14,6 +14,7 @@ InspectionAcquisitionController::InspectionAcquisitionController(
     QObject *parent)
     : QObject(parent),
       m_cameraDevice(cameraDevice),
+      m_cameraOperations(cameraDevice.get()),
       m_runtimeController(runtimeController),
       m_callbacks(callbacks),
       m_imageBuffer(new cv::Mat)
@@ -118,6 +119,52 @@ void InspectionAcquisitionController::requestCameraStop()
     if (m_cameraDevice) {
         m_cameraDevice->requestStop();
     }
+}
+
+InspectionCameraParameterResult
+InspectionAcquisitionController::queryExposureRange()
+{
+    return m_cameraOperations.queryExposureRange();
+}
+
+InspectionCameraParameterResult
+InspectionAcquisitionController::applyExposure(int exposureValue)
+{
+    return m_cameraOperations.applyExposure(exposureValue);
+}
+
+InspectionCameraParameterResult
+InspectionAcquisitionController::queryGainRange()
+{
+    return m_cameraOperations.queryGainRange();
+}
+
+InspectionCameraParameterResult
+InspectionAcquisitionController::applyGain(int gainValue)
+{
+    return m_cameraOperations.applyGain(gainValue);
+}
+
+InspectionCameraParameterResult
+InspectionAcquisitionController::applySavedExposure(
+    int savedExposure,
+    const std::function<bool(int, QString *)> &persistAdjustedExposure)
+{
+    return m_cameraOperations.applySavedExposure(
+        savedExposure, persistAdjustedExposure);
+}
+
+InspectionCameraOpenResult
+InspectionAcquisitionController::openFirstCamera(
+    int savedExposure,
+    const std::function<bool(int, QString *)> &persistAdjustedExposure,
+    int knownDeviceCount)
+{
+    return m_cameraOperations.openFirstCamera(
+        savedExposure,
+        persistAdjustedExposure,
+        [this]() { ensureWorkersReady(); },
+        knownDeviceCount);
 }
 
 InspectionCameraStartResult
@@ -442,6 +489,7 @@ void InspectionAcquisitionController::shutdown(unsigned long waitTimeMs)
     }
     if (softwareStopped && hardwareStopped && m_cameraDevice) {
         m_cameraDevice->close();
+        m_cameraOperations.setCameraDevice(nullptr);
         m_cameraDevice.reset();
     }
     if (softwareStopped) {

@@ -89,6 +89,7 @@ class QPushButton;
 class InspectionResultCoordinator;
 class InspectionAcquisitionController;
 class InspectionRuntimeUiCoordinator;
+class MachineSettingsPageController;
 struct RecipeSelection;
 struct InspectionProfileSnapshot;
 class InspectionRuntimeStartTransaction;
@@ -218,10 +219,6 @@ private:
     void showParameterInfoAsError(const QString &title, const QString &message);
     void showParameterWarning(const QString &title, const QString &message);
     void showParameterCritical(const QString &title, const QString &message);
-    bool queryCameraExposureRange(int *minimumValue,
-                                  int *maximumValue,
-                                  double *currentValue,
-                                  QString *errorMessage);
     bool applyCameraExposureValue(int exposureValue, QString *errorMessage);
     bool applySavedCameraExposure(QString *adjustmentMessage, QString *errorMessage);
     bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
@@ -230,48 +227,6 @@ private:
     bool applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
-    enum class HardwareDependency {
-        None,
-        Camera,
-        PlcConnection,
-        PlcRuntime
-    };
-    struct GlobalSettingBinding {
-        QString key;
-        QWidget *editor = nullptr;
-        QLabel *label = nullptr;
-        QString originalLabelText;
-        bool requireApply = false;
-        HardwareDependency hardwareDependency = HardwareDependency::None;
-    };
-    struct HardwareActionBinding {
-        QWidget *control = nullptr;
-        HardwareDependency hardwareDependency = HardwareDependency::None;
-    };
-    void setupGlobalSettingBindings();
-    void registerGlobalSetting(const QString &key,
-                               QWidget *editor,
-                               QLabel *label,
-                               bool requireApply,
-                               HardwareDependency hardwareDependency = HardwareDependency::None);
-    void registerHardwareAction(QWidget *control,
-                                HardwareDependency hardwareDependency);
-    void setupNumericInputValidators();
-    bool isGlobalSettingDirtyByValue(const QString &key) const;
-    void refreshGlobalSettingDirty(const QString &key);
-    void refreshGlobalSettingsDirty(const QStringList &keys);
-    void refreshAllGlobalSettingDirty();
-    void markGlobalSettingDirty(const QString &key);
-    void clearGlobalSettingDirty(const QString &key);
-    void clearGlobalSettingsDirty(const QStringList &keys);
-    void clearAllGlobalSettingDirty();
-    void updateGlobalSettingDirtyUi(const QString &key);
-    void updateAppliedGlobalSettingFromUi(const QString &key);
-    void updateAppliedGlobalSettingsFromUi(const QStringList &keys);
-    void syncImmediateGlobalSettingsFromUi();
-    QStringList dirtyGlobalSettingNames() const;
-    QStringList dirtyTemplateSettingNames() const;
-    QStringList dirtySettingNames() const;
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
@@ -285,13 +240,6 @@ private:
     void clearTemplateImageThresholdDirty();
     void clearTemplatePrivateSettingDirty();
     void updateTemplatePrivateSettingDirtyUi();
-    void restoreCameraHardwareUiFromApplied();
-    void restorePlcRunUiFromApplied();
-    QString hardwareDisabledStyle(QWidget *widget) const;
-    void setHardwareControlEnabled(QWidget *widget,
-                                   bool enabled,
-                                   const QString &disabledReason,
-                                   bool showDisabledReason = true);
     void updateHardwareParameterUiEnabled();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
@@ -372,14 +320,12 @@ private:
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     TemplateModeMemory m_templateModeMemory;
-    QMap<QString, GlobalSettingBinding> m_globalSettingBindings;
-    QList<HardwareActionBinding> m_hardwareActionBindings;
     GlobalSettings m_appliedGlobalSettings;
     QString m_currentDetectModeId = "word_detection";
-    bool m_globalSettingsLoaded = false;
     bool m_applyingGlobalSettings = false;
     bool m_updatingGlobalSettingsUi = false;
     SettingsEditState m_settingsEditState;
+    std::unique_ptr<MachineSettingsPageController> m_settingsPageController;
     QString m_templateTargetLabelText;
     QString m_templateThresholdLabelText;
 
@@ -618,7 +564,6 @@ private:
     // ========== 设置相关函数 ==========
     void loadSettings();                ///< 加载设置
     bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
-    GlobalSettings collectGlobalSettingsFromUi() const;
     void applyGlobalSettingsToUi(const GlobalSettings &settings);
     void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值

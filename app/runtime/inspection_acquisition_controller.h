@@ -3,6 +3,7 @@
 #include "TrackingTypes.h"
 #include "devices/camera/camera_device.h"
 #include "runtime/inspection_acquisition_stop_coordinator.h"
+#include "runtime/inspection_camera_operations.h"
 #include "runtime/inspection_camera_recovery_transition.h"
 #include "runtime/inspection_camera_start_transition.h"
 #include "runtime/inspection_run_configuration.h"
@@ -29,6 +30,7 @@ struct InspectionAcquisitionCallbacks
     std::function<void()> hardwareThreadFinished;
     std::function<void(InspectionFaultReason, const QString &)> enterFault;
 };
+
 class InspectionAcquisitionController : public QObject
 {
     Q_OBJECT
@@ -58,6 +60,18 @@ public:
     CameraOperationResult registerImageCallback();
     CameraOperationResult startGrabbing();
     void requestCameraStop();
+
+    InspectionCameraParameterResult queryExposureRange();
+    InspectionCameraParameterResult queryGainRange();
+    InspectionCameraParameterResult applyExposure(int exposureValue);
+    InspectionCameraParameterResult applyGain(int gainValue);
+    InspectionCameraParameterResult applySavedExposure(
+        int savedExposure,
+        const std::function<bool(int, QString *)> &persistAdjustedExposure);
+    InspectionCameraOpenResult openFirstCamera(
+        int savedExposure,
+        const std::function<bool(int, QString *)> &persistAdjustedExposure,
+        int knownDeviceCount = -1);
 
     InspectionCameraStartResult applyCameraStart(
         InspectionAcquisitionKind acquisitionKind,
@@ -132,6 +146,7 @@ private:
         const std::shared_ptr<const FrameData> &frame) const;
 
     std::shared_ptr<ICameraDevice> m_cameraDevice;
+    InspectionCameraOperations m_cameraOperations;
     InspectionRuntimeController *m_runtimeController = nullptr;
     InspectionAcquisitionCallbacks m_callbacks;
     MyThread *m_softwareWorker = nullptr;

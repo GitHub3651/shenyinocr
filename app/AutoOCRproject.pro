@@ -67,8 +67,10 @@ SOURCES += \
     ui/controllers/detection_completion_controller.cpp \
     ui/controllers/inspection_result_coordinator.cpp \
     ui/controllers/inspection_runtime_ui_coordinator.cpp \
+    ui/controllers/machine_settings_page_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
+    system_support/machine_settings_policy.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
     ui/presenters/detection_result_presenter.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
@@ -78,6 +80,7 @@ SOURCES += \
     devices/plc/snap7_plc_device.cpp \
     runtime/inspection_run_configuration.cpp \
     runtime/inspection_acquisition_controller.cpp \
+    runtime/inspection_camera_operations.cpp \
     runtime/inspection_acquisition_stop_coordinator.cpp \
     runtime/inspection_camera_start_transition.cpp \
     runtime/inspection_camera_recovery_transition.cpp \
@@ -154,8 +157,10 @@ HEADERS += \
     ui/controllers/detection_completion_controller.h \
     ui/controllers/inspection_result_coordinator.h \
     ui/controllers/inspection_runtime_ui_coordinator.h \
+    ui/controllers/machine_settings_page_controller.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
+    system_support/machine_settings_policy.h \
     ui/presenters/inspection_fault_presenter.h \
     ui/presenters/detection_result_presenter.h \
     devices/barcode/barcode_decoder_adapter.h \
@@ -168,6 +173,7 @@ HEADERS += \
     devices/plc/snap7_plc_device.h \
     runtime/inspection_run_configuration.h \
     runtime/inspection_acquisition_controller.h \
+    runtime/inspection_camera_operations.h \
     runtime/inspection_acquisition_stop_coordinator.h \
     runtime/inspection_camera_start_transition.h \
     runtime/inspection_camera_recovery_transition.h \

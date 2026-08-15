@@ -27,6 +27,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_camera_recovery_transition.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_camera_operations.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.cpp \
@@ -38,6 +39,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/ui/controllers/inspection_result_coordinator.cpp \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.cpp \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.cpp \
+    $$PROJECT_ROOT/app/system_support/machine_settings_policy.cpp \
     $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.cpp \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.cpp \
@@ -63,6 +65,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.h \
     $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.h \
     $$PROJECT_ROOT/app/runtime/inspection_camera_recovery_transition.h \
+    $$PROJECT_ROOT/app/runtime/inspection_camera_operations.h \
     $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.h \
@@ -74,6 +77,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/ui/controllers/inspection_result_coordinator.h \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.h \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.h \
+    $$PROJECT_ROOT/app/system_support/machine_settings_policy.h \
     $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.h \
     $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
     $$PROJECT_ROOT/app/BarcodeTypes.h \

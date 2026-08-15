@@ -16,6 +16,7 @@
 #include "runtime/image_save_service.h"
 #include "runtime/inspection_acquisition_stop_coordinator.h"
 #include "runtime/inspection_camera_recovery_transition.h"
+#include "runtime/inspection_camera_operations.h"
 #include "runtime/inspection_camera_start_transition.h"
 #include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_run_configuration.h"
@@ -31,6 +32,7 @@
 #include "ui/controllers/settings_edit_state.h"
 #include "ui/presenters/detection_result_presenter.h"
 #include "ui/presenters/inspection_fault_presenter.h"
+#include "system_support/machine_settings_policy.h"
 
 #include <chrono>
 #include <condition_variable>
@@ -268,12 +270,23 @@ DetectionWorkItem factoryPositionedWorkItem(
 class StartTransitionFakeCamera : public ICameraDevice
 {
 public:
+    StartTransitionFakeCamera()
+    {
+        exposure.currentValue = 800.0f;
+        exposure.minimumValue = 100.2f;
+        exposure.maximumValue = 999.8f;
+        gain.currentValue = 1.0f;
+        gain.minimumValue = 0.0f;
+        gain.maximumValue = 24.0f;
+    }
+
     CameraOperationResult enumerateDevices(int *deviceCount) override
     {
         if (deviceCount) {
-            *deviceCount = 1;
+            *deviceCount = enumeratedDeviceCount;
         }
-        return CameraOperationResult();
+        calls.append(QStringLiteral("enumerate"));
+        return CameraOperationResult(enumerateErrorCode);
     }
 
     CameraOperationResult openDevice(int deviceIndex) override
@@ -323,13 +336,37 @@ public:
         calls.append(QStringLiteral("float:%1=%2")
                      .arg(QString::fromLatin1(key))
                      .arg(value, 0, 'f', 1));
-        return CameraOperationResult();
+        if (QString::fromLatin1(key) == QStringLiteral("ExposureTime")
+                && setExposureErrorCode == 0) {
+            exposure.currentValue = value;
+        } else if (QString::fromLatin1(key) == QStringLiteral("Gain")
+                   && setGainErrorCode == 0) {
+            gain.currentValue = value;
+        }
+        return CameraOperationResult(
+            QString::fromLatin1(key) == QStringLiteral("ExposureTime")
+                ? setExposureErrorCode
+                : (QString::fromLatin1(key) == QStringLiteral("Gain")
+                   ? setGainErrorCode : 0));
     }
 
     CameraOperationResult getFloatValue(
-        const char *,
-        CameraFloatValue *) override
+        const char *key,
+        CameraFloatValue *value) override
     {
+        const QString name = QString::fromLatin1(key);
+        if (name == QStringLiteral("ExposureTime")) {
+            if (value) {
+                *value = exposure;
+            }
+            return CameraOperationResult(getExposureErrorCode);
+        }
+        if (name == QStringLiteral("Gain")) {
+            if (value) {
+                *value = gain;
+            }
+            return CameraOperationResult(getGainErrorCode);
+        }
         return CameraOperationResult();
     }
 
@@ -388,7 +425,15 @@ public:
     }
 
     QStringList calls;
+    CameraFloatValue exposure;
+    CameraFloatValue gain;
+    int enumeratedDeviceCount = 1;
+    int enumerateErrorCode = 0;
     int openErrorCode = 0;
+    int getExposureErrorCode = 0;
+    int setExposureErrorCode = 0;
+    int getGainErrorCode = 0;
+    int setGainErrorCode = 0;
 };
 
 struct FakePlcWrite
@@ -544,6 +589,13 @@ private slots:
     void cameraStartTransitionPreservesHardwareCallOrder();
     void cameraStartTransitionPreservesSoftwareCallOrder();
     void cameraStartTransitionStopsWhenExposureIsRejected();
+    void cameraOperationsExposeIntegerParameterRanges();
+    void cameraOperationsRejectOutOfRangeExposureAndGain();
+    void cameraOperationsVerifyExposureReadBack();
+    void cameraOperationsOpenFirstCameraAndPersistClampedExposure();
+    void cameraOperationsCloseCameraWhenExposureFails();
+    void machineSettingsDefaultsRespectDisconnectedHardware();
+    void machineSettingsDefaultsRespectConnectedHardware();
     void runtimeStartTransactionCommitsRunningState();
     void runtimeStartTransactionRollsBackStartedWorker();
     void runtimeStartTransactionDestructorRollsBackStartingState();
@@ -2142,6 +2194,186 @@ void DetectionCompletionTest::cameraStartTransitionStopsWhenExposureIsRejected()
                 << QStringLiteral("enum:TriggerMode=1")
                 << QStringLiteral("enum:TriggerSource=0")
                 << QStringLiteral("exposure"));
+}
+
+void DetectionCompletionTest::cameraOperationsExposeIntegerParameterRanges()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraOperations operations(&camera);
+
+    const InspectionCameraParameterResult exposure =
+            operations.queryExposureRange();
+    const InspectionCameraParameterResult gain =
+            operations.queryGainRange();
+
+    QVERIFY(exposure.success);
+    QCOMPARE(exposure.minimumValue, 101);
+    QCOMPARE(exposure.maximumValue, 999);
+    QCOMPARE(exposure.actualValue, 800.0);
+    QVERIFY(gain.success);
+    QCOMPARE(gain.minimumValue, 0);
+    QCOMPARE(gain.maximumValue, 24);
+    QCOMPARE(gain.actualValue, 1.0);
+}
+
+void DetectionCompletionTest::cameraOperationsRejectOutOfRangeExposureAndGain()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraOperations operations(&camera);
+
+    const InspectionCameraParameterResult exposure =
+            operations.applyExposure(100);
+    const InspectionCameraParameterResult gain =
+            operations.applyGain(25);
+
+    QVERIFY(!exposure.success);
+    QVERIFY(!gain.success);
+    QVERIFY(!camera.calls.contains(QStringLiteral("float:ExposureTime=100.0")));
+    QVERIFY(!camera.calls.contains(QStringLiteral("float:Gain=25.0")));
+}
+
+void DetectionCompletionTest::cameraOperationsVerifyExposureReadBack()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraOperations operations(&camera);
+
+    const InspectionCameraParameterResult result =
+            operations.applyExposure(500);
+
+    QVERIFY(result.success);
+    QCOMPARE(result.actualValue, 500.0);
+    QCOMPARE(camera.exposure.currentValue, 500.0f);
+    QVERIFY(camera.calls.contains(
+                QStringLiteral("float:ExposureTime=500.0")));
+}
+
+void DetectionCompletionTest::cameraOperationsOpenFirstCameraAndPersistClampedExposure()
+{
+    StartTransitionFakeCamera camera;
+    InspectionCameraOperations operations(&camera);
+    int persistedExposure = 0;
+    int ensureWorkerCalls = 0;
+
+    const InspectionCameraOpenResult result = operations.openFirstCamera(
+        50,
+        [&persistedExposure](int exposure, QString *) {
+            persistedExposure = exposure;
+            return true;
+        },
+        [&ensureWorkerCalls]() { ++ensureWorkerCalls; },
+        1);
+
+    QVERIFY(result.isSuccess());
+    QVERIFY(result.exposureAdjusted);
+    QCOMPARE(result.appliedExposure, 101);
+    QCOMPARE(result.exposureMinimum, 101);
+    QCOMPARE(result.exposureMaximum, 999);
+    QCOMPARE(persistedExposure, 101);
+    QCOMPARE(ensureWorkerCalls, 1);
+    QCOMPARE(
+        camera.calls,
+        QStringList()
+        << QStringLiteral("open:0")
+        << QStringLiteral("enum:TriggerMode=1")
+        << QStringLiteral("enum:TriggerSource=0")
+        << QStringLiteral("float:ExposureTime=101.0")
+        << QStringLiteral("float:TriggerDelay=0.0")
+        << QStringLiteral("callback")
+        << QStringLiteral("start"));
+}
+
+void DetectionCompletionTest::cameraOperationsCloseCameraWhenExposureFails()
+{
+    StartTransitionFakeCamera camera;
+    camera.getExposureErrorCode = -9;
+    InspectionCameraOperations operations(&camera);
+
+    const InspectionCameraOpenResult result = operations.openFirstCamera(
+        800,
+        std::function<bool(int, QString *)>(),
+        std::function<void()>(),
+        1);
+
+    QVERIFY(!result.isSuccess());
+    QVERIFY(result.issue == InspectionCameraOpenIssue::ExposureFailed);
+    QCOMPARE(camera.calls.last(), QStringLiteral("close"));
+}
+
+void DetectionCompletionTest::machineSettingsDefaultsRespectDisconnectedHardware()
+{
+    GlobalSettings applied;
+    applied.detectModeId = QStringLiteral("old_mode");
+    applied.cameraExposure = 456;
+    applied.cameraGain = 7.0;
+    applied.plcIp = QStringLiteral("old_ip");
+    applied.plcRack = 7;
+    applied.plcSlot = 8;
+    applied.triggerModeId = QStringLiteral("old_trigger");
+    applied.photoDistance = 777;
+    applied.templateDirPathsByMode.insert(
+        QStringLiteral("old_mode"), QStringList() << QStringLiteral("old"));
+    applied.publishedRecipeIdsByMode.insert(
+        QStringLiteral("old_mode"), QStringLiteral("uuid"));
+
+    GlobalSettings defaults;
+    defaults.detectModeId = QStringLiteral("default_mode");
+    defaults.cameraExposure = 800;
+    defaults.cameraGain = 1.0;
+    defaults.plcIp = QStringLiteral("default_ip");
+    defaults.plcRack = 0;
+    defaults.plcSlot = 1;
+    defaults.triggerModeId = QStringLiteral("default_trigger");
+    defaults.photoDistance = 50;
+
+    const GlobalSettings result =
+        MachineSettingsPolicy::defaultsForHardwareState(
+            applied, defaults, false, false);
+
+    QCOMPARE(result.detectModeId, defaults.detectModeId);
+    QCOMPARE(result.cameraExposure, applied.cameraExposure);
+    QCOMPARE(result.cameraGain, applied.cameraGain);
+    QCOMPARE(result.plcIp, defaults.plcIp);
+    QCOMPARE(result.plcRack, defaults.plcRack);
+    QCOMPARE(result.plcSlot, defaults.plcSlot);
+    QCOMPARE(result.triggerModeId, applied.triggerModeId);
+    QCOMPARE(result.photoDistance, applied.photoDistance);
+    QVERIFY(result.templateDirPathsByMode.isEmpty());
+    QVERIFY(result.publishedRecipeIdsByMode.isEmpty());
+}
+
+void DetectionCompletionTest::machineSettingsDefaultsRespectConnectedHardware()
+{
+    GlobalSettings applied;
+    applied.cameraExposure = 456;
+    applied.cameraGain = 7.0;
+    applied.plcIp = QStringLiteral("connected_ip");
+    applied.plcRack = 7;
+    applied.plcSlot = 8;
+    applied.triggerModeId = QStringLiteral("old_trigger");
+    applied.photoDistance = 777;
+
+    GlobalSettings defaults;
+    defaults.cameraExposure = 800;
+    defaults.cameraGain = 1.0;
+    defaults.plcIp = QStringLiteral("default_ip");
+    defaults.plcRack = 0;
+    defaults.plcSlot = 1;
+    defaults.triggerModeId = QStringLiteral("default_trigger");
+    defaults.plcModeId = defaults.triggerModeId;
+    defaults.photoDistance = 50;
+
+    const GlobalSettings result =
+        MachineSettingsPolicy::defaultsForHardwareState(
+            applied, defaults, true, true);
+
+    QCOMPARE(result.cameraExposure, defaults.cameraExposure);
+    QCOMPARE(result.cameraGain, defaults.cameraGain);
+    QCOMPARE(result.plcIp, applied.plcIp);
+    QCOMPARE(result.plcRack, applied.plcRack);
+    QCOMPARE(result.plcSlot, applied.plcSlot);
+    QCOMPARE(result.triggerModeId, defaults.triggerModeId);
+    QCOMPARE(result.plcModeId, defaults.plcModeId);
+    QCOMPARE(result.photoDistance, defaults.photoDistance);
 }
 
 void DetectionCompletionTest::runtimeStartTransactionCommitsRunningState()
