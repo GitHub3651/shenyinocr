@@ -1,27 +1,6 @@
 #include "runtime/inspection_profile_snapshot.h"
 
-#include <QDir>
-
 namespace {
-
-int resolvedThresholdPercent(
-        double profileThreshold,
-        const QString &fallbackThresholdText)
-{
-    int thresholdPercent = static_cast<int>(profileThreshold);
-    bool thresholdValid = false;
-    const int profileValue = QString::number(profileThreshold)
-            .trimmed()
-            .toInt(&thresholdValid);
-    if (thresholdValid) {
-        return profileValue;
-    }
-
-    const int fallbackValue = fallbackThresholdText
-            .trimmed()
-            .toInt(&thresholdValid);
-    return thresholdValid ? fallbackValue : thresholdPercent;
-}
 
 std::vector<cv::Mat> cloneImages(
         const std::vector<cv::Mat> &images)
@@ -37,8 +16,7 @@ std::vector<cv::Mat> cloneImages(
 } // namespace
 
 InspectionProfileSnapshot InspectionProfileSnapshotBuilder::create(
-        const std::vector<InspectionProfileSource> &sources,
-        const QString &fallbackThresholdText)
+        const std::vector<InspectionProfileSource> &sources)
 {
     InspectionProfileSnapshot snapshot;
     snapshot.trackingProfiles.reserve(sources.size());
@@ -49,9 +27,7 @@ InspectionProfileSnapshot InspectionProfileSnapshotBuilder::create(
          ++index) {
         const InspectionProfileSource &source =
                 sources[static_cast<std::size_t>(index)];
-        const QString templateName = source.name.isEmpty()
-                ? QDir(source.directoryPath).dirName()
-                : source.name;
+        const QString templateName = source.name;
 
         WordTrackingProfile trackingProfile;
         trackingProfile.name = templateName;
@@ -70,10 +46,7 @@ InspectionProfileSnapshot InspectionProfileSnapshotBuilder::create(
                     cloneImages(source.digitTemplates));
         detectionProfile.templateTargetIndexes =
                 source.digitTemplateTargetIndexes;
-        detectionProfile.thresholdPercent =
-                resolvedThresholdPercent(
-                    source.imageThreshold,
-                    fallbackThresholdText);
+        detectionProfile.thresholdPercent = source.imageThreshold;
         detectionProfile.barcodeOptions = source.barcodeOptions;
         detectionProfile.decodeStrategy = source.decodeStrategy;
         snapshot.detectionProfiles.push_back(detectionProfile);

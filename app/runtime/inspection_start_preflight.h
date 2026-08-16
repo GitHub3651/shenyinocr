@@ -18,6 +18,7 @@ enum class InspectionStartIssue {
     CameraClosed,
     DirtySettingsConfirmationRequired,
     PlcDisconnected,
+    PreparedRecipeMissing,
     WordProfilesMissing,
     BarcodeResourcesInvalid,
     ProductTemplateIncomplete,
@@ -49,9 +50,13 @@ struct InspectionStartResourceInput
 {
     InspectionStartModeKind modeKind =
             InspectionStartModeKind::SingleTemplate;
-    bool productTemplateDirectorySelected = false;
+    bool preparedRecipeReady = false;
     bool trackingTemplateReady = false;
     bool dateRegionReady = false;
+    bool targetTextRequired = false;
+    bool targetTextReady = false;
+    bool characterTemplatesRequired = false;
+    bool characterTemplatesReady = false;
     bool barcodeDecoderReady = true;
     QString barcodeDecoderError;
     QVector<InspectionStartProfileReadiness> profiles;

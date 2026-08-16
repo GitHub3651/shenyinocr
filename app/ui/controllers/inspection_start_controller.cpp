@@ -5,6 +5,7 @@
 
 #include "DetectionModes.h"
 #include "runtime/inspection_acquisition_controller.h"
+#include "runtime/inspection_profile_snapshot.h"
 #include "runtime/inspection_run_configuration.h"
 #include "runtime/inspection_runtime_start_transaction.h"
 #include "runtime/inspection_start_preflight.h"
@@ -13,13 +14,69 @@
 #include "ui/controllers/template_editor_controller.h"
 
 #include <QDebug>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QMessageBox>
 #include <QPushButton>
 
 #pragma execution_character_set("utf-8")
+
+namespace {
+
+InspectionProfileSnapshot profileSnapshotFromPreparedRecipe(
+        const PreparedRecipe &prepared)
+{
+    std::vector<InspectionProfileSource> sources;
+    sources.reserve(static_cast<std::size_t>(prepared.profiles.size()));
+    for (const PreparedRecipeProfile &profile : prepared.profiles) {
+        InspectionProfileSource source;
+        source.name = profile.definition.name;
+        source.trackingTemplate = profile.trackingTemplate;
+        source.barcodePoly = profile.barcodePolygon;
+        source.datePoly = profile.datePolygon;
+        source.targetText = profile.definition.targetText;
+        source.imageThreshold =
+                profile.definition.imageThresholdPercent;
+        source.digitTemplates = profile.characterTemplates;
+        source.digitTemplateTargetIndexes =
+                profile.characterTemplateTargetIndexes;
+        source.barcodeOptions.formatMask =
+                profile.definition.barcodeParameters.formatMask;
+        source.barcodeOptions.roiPaddingPercent =
+                profile.definition.barcodeParameters.roiPaddingPercent;
+        source.barcodeOptions.maxDecodeTimeMs =
+                profile.definition.barcodeParameters.maxDecodeTimeMs;
+        source.barcodeOptions.enableFallback =
+                profile.definition.barcodeParameters.enableFallback;
+        sources.push_back(source);
+    }
+    return InspectionProfileSnapshotBuilder::create(sources);
+}
+
+bool hasCompleteCharacterTemplates(
+        const PreparedRecipeProfile &profile)
+{
+    const int targetCount = preparedRecipeTargetUnits(
+                profile.definition.targetText).size();
+    if (targetCount <= 0
+            || profile.characterTemplates.empty()
+            || profile.characterTemplates.size()
+               != profile.characterTemplateTargetIndexes.size()) {
+        return false;
+    }
+    QVector<bool> found(targetCount, false);
+    for (const int index : profile.characterTemplateTargetIndexes) {
+        if (index >= 0 && index < targetCount) {
+            found[index] = true;
+        }
+    }
+    for (const bool value : found) {
+        if (!value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 InspectionStartController::InspectionStartController(Widget *host)
     : m_host(host)
@@ -71,12 +128,13 @@ void InspectionStartController::startInspection()
 
     m_host->updateHardwareParameterUiEnabled();
     m_host->m_settingsPageController->refreshAllDirty();
-    m_host->refreshTemplatePrivateSettingDirty();
+    m_host->refreshRecipeProfileDirty();
 
     startAccess = InspectionStartAccessInput();
     startAccess.cameraOpen = true;
     startAccess.dirtySettings = m_host->hasDirtySettings();
-    startAccess.plcTriggerEnabled = m_host->ui->checkBox->isChecked();
+    startAccess.plcTriggerEnabled =
+            m_host->m_appliedMachineSettings.triggerEnabled;
     startAccess.plcConnected =
             m_host->m_runtimeController.isPlcConnected();
     accessResult = InspectionStartPreflight::evaluateAccess(startAccess);
@@ -100,7 +158,8 @@ void InspectionStartController::startInspection()
 
         m_host->restoreUnappliedSettingsFromApplied();
         startAccess.dirtySettings = false;
-        startAccess.plcTriggerEnabled = m_host->ui->checkBox->isChecked();
+        startAccess.plcTriggerEnabled =
+                m_host->m_appliedMachineSettings.triggerEnabled;
         startAccess.plcConnected =
                 m_host->m_runtimeController.isPlcConnected();
         accessResult =
@@ -113,35 +172,79 @@ void InspectionStartController::startInspection()
     }
 
     m_host->updateCurrentTemplateName();
-    const bool isWordMode = isWordFamilyMode(m_host->currentDetectModeId());
+    DetectionMode detectionMode;
+    const QString modeId =
+            m_host->m_appliedMachineSettings.detectModeId;
+    const bool modeValid =
+            detectionModeFromUiId(modeId, &detectionMode);
+    const int modeIndex =
+            machineSettingsDetectionModeIds().indexOf(modeId);
+    const PreparedRecipeSnapshot prepared =
+            m_host->m_templateEditorController
+            ->activePreparedRecipe();
+    const bool preparedForMode =
+            modeValid
+            && prepared
+            && prepared->recipe
+            && prepared->recipe->detectionMode
+               == detectionMode;
+
+    const bool isWordMode =
+            modeValid
+            && (detectionMode == DetectionMode::Word
+                || detectionMode
+                   == DetectionMode::BarcodeWord);
     const bool isBarcodeWordMode =
-            m_host->currentDetectModeId() == BarcodeWordDetectionMode;
-    const bool isTissueMode = (m_host->ui->comboBox_4->currentIndex() == 3);
+            modeValid
+            && detectionMode == DetectionMode::BarcodeWord;
+    const bool isTissueMode =
+            modeValid
+            && detectionMode == DetectionMode::Tissue;
     const bool isWordProfileMode =
-            isWordMode && !m_host->m_templateEditorController->wordTemplateProfiles().empty();
+            isWordMode
+            && preparedForMode
+            && !prepared->profiles.isEmpty();
 
     InspectionStartResourceInput resourceInput;
     if (isTissueMode) {
-        resourceInput.modeKind = InspectionStartModeKind::Tissue;
+        resourceInput.modeKind =
+                InspectionStartModeKind::Tissue;
     } else if (isBarcodeWordMode) {
         resourceInput.modeKind =
                 InspectionStartModeKind::BarcodeWordProfiles;
     } else if (isWordMode) {
-        resourceInput.modeKind = InspectionStartModeKind::WordProfiles;
+        resourceInput.modeKind =
+                InspectionStartModeKind::WordProfiles;
     } else {
         resourceInput.modeKind =
                 InspectionStartModeKind::SingleTemplate;
     }
-    resourceInput.productTemplateDirectorySelected =
-            !m_host->currentTemplateDirPath.trimmed().isEmpty();
-    resourceInput.trackingTemplateReady =
-            !m_host->m_loadedTrackingTemplate.empty();
-    resourceInput.dateRegionReady = !m_host->savedDatePoly.empty();
+    resourceInput.preparedRecipeReady = preparedForMode;
 
-    if (isWordMode) {
-        resourceInput.barcodeDecoderReady = !isBarcodeWordMode;
-        if (isBarcodeWordMode
-                && !m_host->m_templateEditorController->wordTemplateProfiles().empty()) {
+    if (preparedForMode
+            && !prepared->profiles.isEmpty()) {
+        const PreparedRecipeProfile &firstProfile =
+                prepared->profiles.first();
+        resourceInput.trackingTemplateReady =
+                !firstProfile.trackingTemplate.empty();
+        resourceInput.dateRegionReady =
+                firstProfile.datePolygon.size() >= 3;
+        resourceInput.targetTextRequired =
+                detectionMode == DetectionMode::Stamp
+                || detectionMode == DetectionMode::Ocr;
+        resourceInput.targetTextReady =
+                !firstProfile.definition.targetText
+                .trimmed().isEmpty();
+        resourceInput.characterTemplatesRequired =
+                detectionMode == DetectionMode::Stamp;
+        resourceInput.characterTemplatesReady =
+                hasCompleteCharacterTemplates(firstProfile);
+    }
+
+    if (isWordMode && preparedForMode) {
+        resourceInput.barcodeDecoderReady =
+                !isBarcodeWordMode;
+        if (isBarcodeWordMode) {
             resourceInput.barcodeDecoderReady =
                     m_host->m_barcodeDecoder->ensureLoaded();
             if (!resourceInput.barcodeDecoderReady) {
@@ -150,75 +253,25 @@ void InspectionStartController::startInspection()
             }
         }
 
-        for (const WordTemplateProfile &profile
-             : m_host->m_templateEditorController->wordTemplateProfiles()) {
-            const QString profileName = profile.name.isEmpty()
-                    ? QDir(profile.dirPath).dirName()
-                    : profile.name;
+        for (const PreparedRecipeProfile &profile
+             : prepared->profiles) {
             InspectionStartProfileReadiness readiness;
-            readiness.displayName = profileName;
+            readiness.displayName =
+                    profile.definition.name;
+            readiness.trackingTemplateReady =
+                    !profile.trackingTemplate.empty();
+            readiness.calibrationReady =
+                    profile.datePolygon.size() >= 3;
+            readiness.barcodeRegionReady =
+                    !isBarcodeWordMode
+                    || profile.barcodePolygon.size() == 4;
+            readiness.dateRegionReady =
+                    profile.datePolygon.size() >= 3;
             readiness.targetTextReady =
-                    !profile.settings.targetText.trimmed().isEmpty();
+                    !profile.definition.targetText
+                    .trimmed().isEmpty();
             readiness.characterTemplatesReady =
-                    !profile.digitTemplates.empty();
-
-            if (isBarcodeWordMode) {
-                const QString trackingPath =
-                        m_host->wordTemplateProfileAssetPath(
-                            profile,
-                            QStringLiteral("trackingTemplate"),
-                            QStringLiteral("tracking_template.bmp"));
-                QFile trackingFile(trackingPath);
-                cv::Mat diskTrackingTemplate;
-                if (trackingFile.open(QIODevice::ReadOnly)) {
-                    const QByteArray bytes = trackingFile.readAll();
-                    if (!bytes.isEmpty()) {
-                        try {
-                            const std::vector<uchar> buffer(
-                                        bytes.begin(),
-                                        bytes.end());
-                            diskTrackingTemplate =
-                                    cv::imdecode(
-                                        buffer,
-                                        cv::IMREAD_COLOR);
-                        } catch (...) {
-                            diskTrackingTemplate.release();
-                        }
-                    }
-                }
-                readiness.trackingTemplateReady =
-                        !profile.trackingTemplate.empty()
-                        && !diskTrackingTemplate.empty();
-
-                CalibrationData diskCalibration;
-                const QString calibrationPath =
-                        m_host->wordTemplateProfileAssetPath(
-                            profile,
-                            QStringLiteral("calibration"),
-                            QStringLiteral("calibrate_config.yaml"));
-                readiness.calibrationReady =
-                        QFileInfo::exists(calibrationPath)
-                        && diskCalibration.load(
-                            calibrationPath
-                            .toLocal8Bit()
-                            .toStdString());
-                if (readiness.calibrationReady) {
-                    readiness.barcodeRegionReady =
-                            diskCalibration.barcode_poly.size() == 4
-                            && profile.barcodePoly.size() == 4;
-                    readiness.dateRegionReady =
-                            diskCalibration.date_poly.size() >= 3
-                            && profile.datePoly.size() >= 3;
-                }
-
-                readiness.targetTextReady =
-                        readiness.targetTextReady
-                        && profile.targetCount > 0;
-                readiness.characterTemplatesReady =
-                        readiness.characterTemplatesReady
-                        && profile.digitTemplates.size()
-                           == profile.digitTemplateTargetIndexes.size();
-            }
+                    hasCompleteCharacterTemplates(profile);
             resourceInput.profiles.push_back(readiness);
         }
     }
@@ -226,11 +279,20 @@ void InspectionStartController::startInspection()
     const InspectionStartPreflightResult resourceResult =
             InspectionStartPreflight::evaluateResources(resourceInput);
     if (resourceResult.issue
+            == InspectionStartIssue::PreparedRecipeMissing) {
+        QMessageBox::warning(
+                    m_host,
+                    QStringLiteral("启动资源预检失败"),
+                    QStringLiteral(
+                        "当前模式没有已完整准备的产品配方，请先创建或加载新格式配方。"));
+        return;
+    }
+    if (resourceResult.issue
             == InspectionStartIssue::WordProfilesMissing) {
         QMessageBox::warning(
                     m_host,
                     "提示",
-                    "当前没有加载产品模板，请重新选择产品模板文件夹。");
+                    "当前配方没有可用的Profile，请重新创建或加载产品配方。");
         return;
     }
     if (resourceResult.issue
@@ -247,10 +309,7 @@ void InspectionStartController::startInspection()
         QMessageBox::warning(m_host, "操作规范",
                              QString("缺少可用产品模板，无法启动检测。\n\n"
                                      "具体原因：\n%1\n\n"
-                                     "如果是新产品：\n"
-                                     "请先【拍照】，框选定位区域和喷码检测区域，然后点击【保存模板】。\n\n"
-                                     "如果是已有产品：\n"
-                                     "请点击【选择模板】，选择对应产品模板文件夹。")
+                             "请重新创建配方，或从【已发布配方】加载完整的新格式配方。")
                              .arg(resourceResult.details.join("\n")));
         return;
     }
@@ -267,15 +326,32 @@ void InspectionStartController::startInspection()
     const InspectionRunPlan runPlan =
             InspectionRunConfiguration::createPlan(
                 resourceInput.modeKind,
-                m_host->ui->checkBox->isChecked());
+                m_host->m_appliedMachineSettings.triggerEnabled);
 
     InspectionProfileSnapshot profileSnapshotForRun;
     if (isWordProfileMode) {
-        profileSnapshotForRun = m_host->createWordTemplateRunSnapshot();
+        profileSnapshotForRun =
+                profileSnapshotFromPreparedRecipe(*prepared);
         if (!profileSnapshotForRun.isValid()) {
             QMessageBox::warning(m_host, "提示", "没有可用的字库定位配置。");
             return;
         }
+    }
+
+    std::vector<cv::Point2f> singleDatePolygon;
+    cv::Rect2d singleTrackingBox;
+    cv::Mat singleTrackingTemplate;
+    if (preparedForMode && !prepared->profiles.isEmpty()) {
+        const PreparedRecipeProfile &profile =
+                prepared->profiles.first();
+        singleDatePolygon = profile.datePolygon;
+        singleTrackingBox = cv::Rect2d(
+                    profile.definition.trackingRoi.x(),
+                    profile.definition.trackingRoi.y(),
+                    profile.definition.trackingRoi.width(),
+                    profile.definition.trackingRoi.height());
+        singleTrackingTemplate =
+                profile.trackingTemplate.clone();
     }
 
     m_host->m_barcodeWordRunActive = false;
@@ -301,12 +377,13 @@ void InspectionStartController::startInspection()
         }
 
         QStringList applyErrors;
-        if (!m_host->applyCameraHardwareSettingsFromUi(&applyErrors, false)) {
+        if (!m_host->applyCameraHardwareSettingsForRun(&applyErrors)) {
             QMessageBox::warning(m_host, "启动失败",
                                  QString("启动识别前相机参数应用失败：\n") + applyErrors.join("\n"));
             return;
         }
-        const float gainValue = m_host->ui->lineEdit_14->text().toFloat();
+        const float gainValue = static_cast<float>(
+                    m_host->m_appliedMachineSettings.cameraGain);
 
         m_host->ui->image_undetected->clear();
         m_host->ui->imagenum->clear();
@@ -325,7 +402,7 @@ void InspectionStartController::startInspection()
                 gainValue,
                 [this](QString *errorMessage) {
                 return m_host->applyCameraExposureValue(
-                            m_host->m_appliedGlobalSettings.cameraExposure,
+                            m_host->m_appliedMachineSettings.cameraExposure,
                             errorMessage);
             });
             if (!cameraStartResult.isAccepted()) {
@@ -346,33 +423,31 @@ void InspectionStartController::startInspection()
         m_host->m_acquisitionController->configureHardwareWorker(
                     runPlan,
                     profileSnapshotForRun.trackingProfiles,
-                    m_host->savedDatePoly,
-                    m_host->savedTrackingBox,
-                    m_host->m_loadedTrackingTemplate);
+                    singleDatePolygon,
+                    singleTrackingBox,
+                    singleTrackingTemplate);
 
         applyErrors.clear();
-        if (!m_host->applyRuntimeThreadSettingsFromUi(&applyErrors, false)) {
+        if (!m_host->applyRuntimeThreadSettingsForRun(
+                    prepared, &applyErrors)) {
             QMessageBox::warning(m_host, "启动失败",
                                  QString("启动识别前运行参数应用失败：\n") + applyErrors.join("\n"));
             return;
         }
 
         applyErrors.clear();
-        if (!m_host->applyPlcTriggerModeFromUi(&applyErrors, false)
-                || !m_host->applyPlcRunSettingsFromUi(&applyErrors, false)) {
+        if (!m_host->applyPlcTriggerModeForRun(&applyErrors)
+                || !m_host->applyPlcRunSettingsForRun(&applyErrors)) {
             QMessageBox::warning(m_host, "启动失败",
                                  QString("启动识别前 PLC 参数下发失败：\n") + applyErrors.join("\n"));
             return;
         }
 
-        // 发送模板匹配相关参数
-        emit m_host->jiancestring(m_host->ui->dateEdit->toPlainText().toStdString());
-
         if (isWordProfileMode) {
             qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
                      << static_cast<int>(
                             profileSnapshotForRun.detectionProfiles.size())
-                     << "mode:" << m_host->currentDetectModeId();
+                     << "mode:" << modeId;
         }
         m_host->m_barcodeWordRunActive = isBarcodeWordMode;
         m_host->m_resultBoundDisplayActive.store(true);
@@ -392,7 +467,8 @@ void InspectionStartController::startInspection()
         QString workerError;
         if (!m_host->startDetectionWorkerForMode(
                     startTransaction,
-                    m_host->ui->comboBox_4->currentIndex(),
+                    modeIndex,
+                    prepared,
                     profileSnapshotForRun,
                     &workerError)) {
             startTransaction.rollback();
@@ -405,7 +481,7 @@ void InspectionStartController::startInspection()
             return;
         }
         qDebug() << "[DETECTION_WORKER] hard-trigger ingress enabled"
-                 << "modeIndex=" << m_host->ui->comboBox_4->currentIndex();
+                 << "modeIndex=" << modeIndex;
         if (m_host->m_acquisitionController->startHardwareWorker()) {
             if (!startTransaction.commit()) {
                 m_host->m_acquisitionController->requestHardwareStop();
@@ -443,31 +519,33 @@ void InspectionStartController::startInspection()
     {
         // 软触发/连续模式逻辑
         QStringList applyErrors;
-        if (!m_host->applyCameraHardwareSettingsFromUi(&applyErrors, false)) {
+        if (!m_host->applyCameraHardwareSettingsForRun(&applyErrors)) {
             QMessageBox::warning(m_host, "启动失败",
                                  QString("启动识别前相机参数应用失败：\n") + applyErrors.join("\n"));
             return;
         }
-        const float gainValue = m_host->ui->lineEdit_14->text().toFloat();
+        const float gainValue = static_cast<float>(
+                    m_host->m_appliedMachineSettings.cameraGain);
 
         m_host->m_acquisitionController->ensureWorkersReady();
         m_host->m_acquisitionController->configureSoftwareWorker(
                     runPlan,
                     profileSnapshotForRun.trackingProfiles,
-                    m_host->savedDatePoly,
-                    m_host->savedTrackingBox,
-                    m_host->m_loadedTrackingTemplate);
+                    singleDatePolygon,
+                    singleTrackingBox,
+                    singleTrackingTemplate);
 
         applyErrors.clear();
-        if (!m_host->applyRuntimeThreadSettingsFromUi(&applyErrors, false)) {
+        if (!m_host->applyRuntimeThreadSettingsForRun(
+                    prepared, &applyErrors)) {
             QMessageBox::warning(m_host, "启动失败",
                                  QString("启动识别前运行参数应用失败：\n") + applyErrors.join("\n"));
             return;
         }
 
         applyErrors.clear();
-        if (!m_host->applyPlcTriggerModeFromUi(&applyErrors, false)
-                || !m_host->applyPlcRunSettingsFromUi(&applyErrors, false)) {
+        if (!m_host->applyPlcTriggerModeForRun(&applyErrors)
+                || !m_host->applyPlcRunSettingsForRun(&applyErrors)) {
             QMessageBox::warning(m_host, "启动失败",
                                  QString("启动识别前 PLC 参数下发失败：\n") + applyErrors.join("\n"));
             return;
@@ -479,7 +557,7 @@ void InspectionStartController::startInspection()
             gainValue,
             [this](QString *errorMessage) {
             return m_host->applyCameraExposureValue(
-                        m_host->m_appliedGlobalSettings.cameraExposure,
+                        m_host->m_appliedMachineSettings.cameraExposure,
                         errorMessage);
         });
         if (!cameraStartResult.isAccepted()) {
@@ -500,7 +578,7 @@ void InspectionStartController::startInspection()
                 qDebug() << "[WORD_TEMPLATE_PROFILE] Runtime profile snapshot ready:"
                          << static_cast<int>(
                                 profileSnapshotForRun.detectionProfiles.size())
-                         << "mode:" << m_host->currentDetectModeId();
+                         << "mode:" << modeId;
             }
             m_host->m_resultBoundDisplayActive.store(true);
             // Publish the selected orchestration mode before acquisition can
@@ -522,7 +600,8 @@ void InspectionStartController::startInspection()
             QString workerError;
             if (!m_host->startDetectionWorkerForMode(
                         startTransaction,
-                        m_host->ui->comboBox_4->currentIndex(),
+                        modeIndex,
+                        prepared,
                         profileSnapshotForRun,
                         &workerError)) {
                 startTransaction.rollback();

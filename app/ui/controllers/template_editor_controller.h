@@ -2,12 +2,10 @@
 
 #include "BarcodeTypes.h"
 #include "Detector.h"
-#include "recipes/recipe_selection.h"
+#include "recipes/prepared_recipe.h"
+#include "recipes/recipe_editor_session.h"
 #include "recipes/template_mode_memory.h"
-#include "recipes/template_recipe_draft_session.h"
-#include "recipes/template_recipe_edit_session.h"
-#include "recipes/template_runtime_profile.h"
-#include "runtime/inspection_profile_snapshot.h"
+#include "runtime/template_runtime_profile.h"
 
 #include <QMap>
 #include <QObject>
@@ -24,7 +22,6 @@ class ImageLabel;
 class InspectionAcquisitionController;
 class MachineSettingsPageController;
 class QComboBox;
-class QDir;
 class QFrame;
 class QLabel;
 class QPushButton;
@@ -75,19 +72,19 @@ public:
                                   int pointCount);
     void setupManualCharacterCropUi();
 
-    void setupTemplatePrivateSettingDirtyTracking();
+    void setupRecipeProfileDirtyTracking();
     void refreshTemplateTargetTextDirty();
     void refreshTemplateImageThresholdDirty();
-    void refreshTemplatePrivateSettingDirty();
+    void refreshRecipeProfileDirty();
     void markTemplateTargetTextDirty();
     void markTemplateImageThresholdDirty();
     void clearTemplateTargetTextDirty();
     void clearTemplateImageThresholdDirty();
-    void clearTemplatePrivateSettingDirty();
-    void updateTemplatePrivateSettingDirtyUi();
+    void clearRecipeProfileDirty();
+    void updateRecipeProfileDirtyUi();
 
     void showManualCharacterTemplateCropDialog();
-    void selectLegacyTemplates();
+    void selectPublishedRecipeForCurrentMode();
     void saveCurrentTemplate();
     void showStampCharacterTemplateCropDialog();
     void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
@@ -97,8 +94,6 @@ public:
     void clearSingleTemplateRecipeState();
     QString detectModeIdForIndex(int index) const;
     QString currentDetectModeId() const;
-    QStringList currentTemplatePathsForMode(const QString &modeId) const;
-    void storeCurrentTemplatePathsForMode(const QString &modeId);
     void restoreTemplatesForMode(const QString &modeId, bool showMessage);
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
@@ -112,74 +107,28 @@ public:
         bool showErrorMessage,
         QStringList *pendingMessages,
         QString *errorMessage);
-    bool loadSingleTemplateCharacterAssets(
-        const QMap<QString, QString> &assetPathsByRole,
-        const QStringList &targetUnits,
-        std::vector<cv::Mat> *templates,
-        std::vector<int> *templateTargetIndexes,
-        QString *errorMessage) const;
     bool activatePublishedSingleTemplateRecipe(
         const QString &recipeId,
         const QString &modeId,
         bool showErrorMessage,
         QString *errorMessage);
     bool republishSingleTemplateRecipeSettings(
-        const TemplatePrivateSettings &settings,
+        const RecipeProfile &settings,
         QString *errorMessage);
     int currentWordTemplateProfileIndex() const;
-    QString wordTemplateProfileAssetPath(
-        const WordTemplateProfile &profile,
-        const QString &role,
-        const QString &legacyFileName) const;
     void displayWordTemplateRawImage(const WordTemplateProfile &profile);
-    void displayWordTemplateRawImage(const QString &dirPath);
-    void displayWordTemplateRawImageFile(
-        const QString &rawImagePath,
-        const QString &templateName);
-    QStringList wordTemplateImagePathsForKey(
-        const QDir &directory,
-        const QString &searchKey,
-        bool includeVariants = true) const;
-    bool loadWordDigitTemplatesFromDir(
-        const QString &dirPath,
-        const QStringList &baseNames,
-        std::vector<cv::Mat> *templates,
-        std::vector<int> *templateTargetIndexes,
-        QString *errorMessage,
-        bool includeVariants = true) const;
     bool loadWordDigitTemplatesFromProfile(
         const WordTemplateProfile &profile,
         const QStringList &baseNames,
         std::vector<cv::Mat> *templates,
         std::vector<int> *templateTargetIndexes,
         QString *errorMessage) const;
-    bool loadWordTemplateProfileFromDir(
-        const QString &dirPath,
-        WordTemplateProfile *profile,
-        QString *errorMessage);
-    bool loadWordTemplateProfileFromRecipeSelection(
-        const RecipeSelection &selection,
-        int profileIndex,
-        WordTemplateProfile *profile,
-        QString *errorMessage);
-    bool loadWordTemplateProfilesFromRecipeSelection(
-        const RecipeSelection &selection,
-        std::vector<WordTemplateProfile> *profiles,
-        QStringList *pendingMessages,
-        QString *errorMessage);
-    void refreshWordTemplateProfileDigitCache(
-        WordTemplateProfile *profile) const;
-    InspectionProfileSnapshot createWordTemplateRunSnapshot() const;
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
-    bool saveWordTemplatePrivateSettings(
+    bool saveWordRecipeProfile(
         int profileIndex,
-        const TemplatePrivateSettings &settings,
+        const RecipeProfile &settings,
         QString *errorMessage);
-    void refreshWordTemplateRecipeAssets();
-    void prepareWordTemplateRecipeDraft(
-        const WordTemplateProfile &profile);
-    bool publishWordTemplateRecipeDraft(QString *errorMessage);
     bool publishWordTemplateRecipeEdit(
         int profileIndex,
         QString *errorMessage);
@@ -189,6 +138,7 @@ public:
 
     void applyCurrentTargetText();
     void applyCurrentImageThreshold();
+    void applyCurrentTissueThreshold();
     void applyBatchTargetText();
     void applyBatchImageThreshold();
 
@@ -196,11 +146,7 @@ public:
     const TemplateModeMemory &modeMemory() const;
     std::vector<WordTemplateProfile> &wordTemplateProfiles();
     const std::vector<WordTemplateProfile> &wordTemplateProfiles() const;
-    TemplateRecipeDraftSession &wordDraftSession();
-    TemplateRecipeEditSession &wordEditSession();
-    TemplateRecipeEditSession &singleTemplateEditSession();
-    QMap<QString, QString> &singleTemplateResolvedAssets();
-    const QMap<QString, QString> &singleTemplateResolvedAssets() const;
+    PreparedRecipeSnapshot activePreparedRecipe() const;
     QString currentTemplateDisplayName() const;
     void setCurrentTemplateDisplayName(const QString &displayName);
     void setCurrentTemplateNameVisible(bool visible);
@@ -226,12 +172,15 @@ private:
     void showParameterCritical(const QString &title,
                                const QString &message);
     bool saveSettings(bool showErrorMessage = true);
-    bool loadSettingsFromDir(const QString &dirPath,
-                             bool showErrorMessage);
-    void applyTemplatePrivateSettingsToUi(
-        const TemplatePrivateSettings &settings);
+    void applyRecipeProfileToUi(
+        const RecipeProfile &settings);
     void resetTemplateCaptureState();
-    void initOverlapDetectorFromCurrentDir();
+    void editActiveRecipeCharacterAssets(int profileIndex);
+    void publishCurrentRecipeSession();
+    bool activatePublishedTissueRecipe(
+        const QString &recipeId,
+        bool showErrorMessage,
+        QString *errorMessage);
 
     Widget *m_host = nullptr;
     Ui::Widget *ui = nullptr;
@@ -252,14 +201,12 @@ private:
     QPushButton *m_publishedRecipeButton = nullptr;
     int m_currentWordTemplateEditIndex = -1;
     TemplateModeMemory m_templateModeMemory;
+    RecipeEditorSession m_recipeEditorSession;
+    PreparedRecipeSnapshot m_activePreparedRecipe;
     QString m_templateTargetLabelText;
     QString m_templateThresholdLabelText;
 
     std::vector<WordTemplateProfile> m_wordTemplateProfiles;
-    TemplateRecipeDraftSession m_wordTemplateRecipeDraftSession;
-    TemplateRecipeEditSession m_wordTemplateRecipeEditSession;
-    TemplateRecipeEditSession m_singleTemplateRecipeEditSession;
-    QMap<QString, QString> m_singleTemplateResolvedAssetPathsByRole;
     QString m_currentTemplateDisplayName;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;

@@ -1,4 +1,4 @@
-#include "startup/application_startup.h"
+﻿#include "startup/application_startup.h"
 
 #include "startup/runtime_guard.h"
 #include "startup/single_instance_guard.h"
@@ -10,6 +10,8 @@
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
 #include "runtime/inspection_plc_controller.h"
+#include "recipes/recipe_store.h"
+#include "system_support/settings/machine_settings_store.h"
 #include "widget.h"
 
 #include <QApplication>
@@ -19,6 +21,7 @@
 #include <QDir>
 #include <QLibraryInfo>
 #include <QMessageBox>
+#include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
 #include <QTranslator>
@@ -134,11 +137,56 @@ int ApplicationStartup::run(int argc, char *argv[])
 
     int result = 0;
     {
+        const QString applicationDataRoot =
+                QStandardPaths::writableLocation(
+                    QStandardPaths::AppDataLocation);
+        if (applicationDataRoot.trimmed().isEmpty()) {
+            QMessageBox::critical(
+                        nullptr,
+                        QStringLiteral("设置错误"),
+                        QStringLiteral("无法确定当前用户的应用数据目录。"));
+            return -1;
+        }
+        const std::shared_ptr<MachineSettingsStore> settingsStore(
+                    new MachineSettingsStore(applicationDataRoot));
+        MachineSettings startupSettings;
+        MachineSettingsLoadStatus settingsStatus =
+                MachineSettingsLoadStatus::FirstRun;
+        MachineSettingsStoreError settingsError;
+        if (!settingsStore->load(&startupSettings,
+                                 &settingsStatus,
+                                 &settingsError)) {
+            QMessageBox::critical(
+                        nullptr,
+                        QStringLiteral("设置文件损坏"),
+                        settingsError.userMessage
+                        + QStringLiteral("\n\n")
+                        + settingsError.code);
+            return -1;
+        }
+        const std::shared_ptr<RecipeStore> recipeStore(
+                    new RecipeStore(settingsStore->recipesRootPath()));
+
         const std::shared_ptr<ICameraDevice> cameraDevice(
                     new HikvisionCameraDevice);
         std::unique_ptr<IPlcDevice> plcDevice(new Snap7PlcDevice);
+        InspectionPlcAddressMap plcAddresses;
+        plcAddresses.triggerModeDb = startupSettings.plcTriggerModeDb;
+        plcAddresses.triggerModeOffset =
+                startupSettings.plcTriggerModeOffset;
+        plcAddresses.resultDb = startupSettings.plcResultDb;
+        plcAddresses.resultOffset = startupSettings.plcResultOffset;
+        plcAddresses.rejectTimeOffset =
+                startupSettings.plcRejectTimeOffset;
+        plcAddresses.rejectDistanceOffset =
+                startupSettings.plcRejectDistanceOffset;
+        plcAddresses.photoTimeOffset =
+                startupSettings.plcPhotoTimeOffset;
+        plcAddresses.photoDistanceOffset =
+                startupSettings.plcPhotoDistanceOffset;
         const std::shared_ptr<InspectionPlcController> plcController(
-                    new InspectionPlcController(std::move(plcDevice)));
+                    new InspectionPlcController(
+                        std::move(plcDevice), plcAddresses));
         const QString ocrConfigPath = QDir(applicationDirectory).filePath(
                     QStringLiteral("config1.txt"));
         const Widget::OcrEngineFactory ocrEngineFactory =
@@ -153,7 +201,10 @@ int ApplicationStartup::run(int argc, char *argv[])
                     cameraDevice,
                     plcController,
                     ocrEngineFactory,
-                    barcodeDecoder);
+                    barcodeDecoder,
+                    startupSettings,
+                    settingsStore,
+                    recipeStore);
         window.showMaximized();
         result = application.exec();
     }

@@ -1,5 +1,4 @@
 #include "charactertemplatecropdialog.h"
-#include "appsettingsmanager.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -247,11 +246,11 @@ private:
 };
 
 CharacterTemplateCropDialog::CharacterTemplateCropDialog(const QImage &sourceImage,
-                                                         const QString &templateDirPath,
+                                                         const RecipeProfile &initialProfile,
                                                          QWidget *parent)
     : QDialog(parent),
       m_sourceImage(sourceImage),
-      m_templateDirPath(templateDirPath)
+      m_resultProfile(initialProfile)
 {
     loadSavedCharacterBoxes();
     buildUi();
@@ -260,6 +259,16 @@ CharacterTemplateCropDialog::CharacterTemplateCropDialog(const QImage &sourceIma
 int CharacterTemplateCropDialog::savedCount() const
 {
     return m_savedCount;
+}
+
+RecipeProfile CharacterTemplateCropDialog::resultProfile() const
+{
+    return m_resultProfile;
+}
+
+QMap<QString, QImage> CharacterTemplateCropDialog::characterImages() const
+{
+    return m_characterImages;
 }
 
 void CharacterTemplateCropDialog::buildUi()
@@ -496,16 +505,8 @@ void CharacterTemplateCropDialog::loadSavedCharacterBoxes()
 {
     m_initialBoxes.clear();
 
-    TemplatePrivateSettings privateSettings;
-    QString errorMessage;
-    if (!AppSettingsManager::loadTemplatePrivateSettings(m_templateDirPath,
-                                                         &privateSettings,
-                                                         &errorMessage)) {
-        return;
-    }
-
     const QRect imageBounds(0, 0, m_sourceImage.width(), m_sourceImage.height());
-    for (const CharacterTemplateBox &savedBox : privateSettings.characterBoxes) {
+    for (const RecipeCharacterBox &savedBox : m_resultProfile.characterBoxes) {
         CharacterBox item;
         item.name = savedBox.name;
         item.rect = savedBox.rect.normalized().intersected(imageBounds);
@@ -638,140 +639,67 @@ void CharacterTemplateCropDialog::refreshSaveNamePreviews()
 
 bool CharacterTemplateCropDialog::saveTemplates()
 {
-    if (m_sortedBoxes.isEmpty() || m_nameEdits.size() != m_sortedBoxes.size()) {
-        QMessageBox::warning(this,
-                             QStringLiteral("\u63D0\u793A"),
-                             QStringLiteral("\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684\u5B57\u7B26\u6A21\u677F\u3002"));
+    if (m_sortedBoxes.isEmpty()
+            || m_nameEdits.size() != m_sortedBoxes.size()) {
+        QMessageBox::warning(
+                    this,
+                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684\u5B57\u7B26\u6A21\u677F\u3002"));
         return false;
     }
 
-    bool hasInvalidName = false;
-    const QRegularExpression invalidFileNameChars(R"([\\/:*?"<>|])");
-    for (int i = 0; i < m_nameEdits.size(); ++i) {
-        QLineEdit *edit = m_nameEdits.at(i);
-        QLabel *errorLabel = (i < m_nameErrorLabels.size()) ? m_nameErrorLabels.at(i) : nullptr;
+    const QRegularExpression invalidFileNameChars(
+                R"([\\/:*?"<>|])");
+    for (int index = 0; index < m_nameEdits.size(); ++index) {
+        QLineEdit *edit = m_nameEdits.at(index);
+        QLabel *errorLabel = index < m_nameErrorLabels.size()
+                ? m_nameErrorLabels.at(index) : nullptr;
         const QString name = edit->text().trimmed();
-        if (name.isEmpty()) {
-            hasInvalidName = true;
-            edit->setStyleSheet("QLineEdit { border: 1px solid #d93025; }");
-            if (errorLabel) errorLabel->setVisible(true);
-            continue;
+        const bool invalid = name.isEmpty()
+                || name.contains(invalidFileNameChars)
+                || name == QLatin1String(".")
+                || name == QLatin1String("..");
+        edit->setStyleSheet(
+                    invalid
+                    ? QStringLiteral("QLineEdit { border: 1px solid #d93025; }")
+                    : QString());
+        if (errorLabel) {
+            errorLabel->setVisible(invalid);
         }
-        if (name.contains(invalidFileNameChars) || name == "." || name == "..") {
-            hasInvalidName = true;
-            edit->setStyleSheet("QLineEdit { border: 1px solid #d93025; }");
-            QMessageBox::warning(this,
-                                 QStringLiteral("\u63D0\u793A"),
-                                 QStringLiteral("\u5B57\u7B26\u540D\u79F0\u4E0D\u80FD\u5305\u542B \\ / : * ? \" < > | \u8FD9\u4E9B\u5B57\u7B26\u3002"));
-            break;
-        }
-    }
-
-    if (hasInvalidName) {
-        return false;
-    }
-
-    for (int i = 0; i < m_sortedBoxes.size(); ++i) {
-        m_sortedBoxes[i].name = m_nameEdits.at(i)->text().trimmed();
-    }
-
-    QDir targetDir(m_templateDirPath);
-    if (!targetDir.exists()) {
-        QMessageBox::warning(this,
-                             QStringLiteral("\u63D0\u793A"),
-                             QStringLiteral("\u4EA7\u54C1\u6A21\u677F\u6587\u4EF6\u5939\u4E0D\u5B58\u5728\uFF0C\u65E0\u6CD5\u4FDD\u5B58\u5B57\u7B26\u6A21\u677F\u3002"));
-        return false;
-    }
-
-    QString settingsSaveError;
-    if (!saveCharacterBoxesToSettings(m_sortedBoxes, &settingsSaveError)) {
-        QMessageBox::warning(this,
-                             QStringLiteral("\u63D0\u793A"),
-                             QStringLiteral("\u5B57\u7B26\u6846\u5750\u6807\u4FDD\u5B58\u5931\u8D25\uFF1A\n%1")
-                             .arg(settingsSaveError));
-        return false;
-    }
-
-    if (!removeOldCharacterTemplateImages()) {
-        QMessageBox::warning(this,
-                             QStringLiteral("\u63D0\u793A"),
-                             QStringLiteral("\u65E7\u5B57\u7B26\u6A21\u677F\u56FE\u7247\u6E05\u7406\u5931\u8D25\uFF0C\u8BF7\u68C0\u67E5\u6587\u4EF6\u662F\u5426\u88AB\u5360\u7528\u3002"));
-        return false;
-    }
-
-    int saved = 0;
-    QStringList reservedFileNames;
-    for (int i = 0; i < m_sortedBoxes.size(); ++i) {
-        const QString baseName = m_sortedBoxes.at(i).name.trimmed();
-        const QString fileName = nextAvailableFileName(baseName, reservedFileNames);
-        reservedFileNames.append(fileName);
-        const QString savePath = targetDir.filePath(fileName);
-        const QRect rect = m_sortedBoxes.at(i).rect.intersected(QRect(0, 0, m_sourceImage.width(), m_sourceImage.height()));
-        if (rect.width() <= 0 || rect.height() <= 0) {
-            continue;
-        }
-
-        if (!m_sourceImage.copy(rect).save(savePath, "PNG")) {
-            QMessageBox::warning(this,
-                                 QStringLiteral("\u63D0\u793A"),
-                                 QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FDD\u5B58\u5931\u8D25\uFF1A%1")
-                                 .arg(QFileInfo(savePath).fileName()));
+        if (invalid) {
+            QMessageBox::warning(
+                        this,
+                        QStringLiteral("\u63D0\u793A"),
+                        QStringLiteral("\u5B57\u7B26\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A\u6216\u5305\u542B \\ / : * ? \" < > |\u3002"));
             return false;
         }
-        ++saved;
     }
 
-    m_savedCount = saved;
+    m_resultProfile.characterBoxes.clear();
+    m_resultProfile.characterSourceSize = m_sourceImage.size();
+    m_characterImages.clear();
+    QStringList reservedFileNames;
+    for (int index = 0; index < m_sortedBoxes.size(); ++index) {
+        const QString name = m_nameEdits.at(index)->text().trimmed();
+        const QString fileName =
+                nextAvailableFileName(name, reservedFileNames);
+        reservedFileNames.append(fileName);
+        const QRect rect = m_sortedBoxes.at(index).rect
+                .normalized()
+                .intersected(QRect(QPoint(0, 0), m_sourceImage.size()));
+        if (rect.width() <= 0 || rect.height() <= 0) {
+            return false;
+        }
+        m_sortedBoxes[index].name = name;
+        RecipeCharacterBox box;
+        box.name = name;
+        box.rect = rect;
+        m_resultProfile.characterBoxes.append(box);
+        m_characterImages.insert(fileName, m_sourceImage.copy(rect));
+    }
+
+    m_savedCount = m_characterImages.size();
     m_cropLabel->setItems(m_sortedBoxes);
     refreshCharacterPreviewList();
-    return true;
-}
-
-bool CharacterTemplateCropDialog::saveCharacterBoxesToSettings(const QList<CharacterBox> &boxes,
-                                                                QString *errorMessage) const
-{
-    TemplatePrivateSettings privateSettings;
-    QString managerError;
-    if (!AppSettingsManager::loadTemplatePrivateSettings(m_templateDirPath,
-                                                         &privateSettings,
-                                                         &managerError)) {
-        if (errorMessage) *errorMessage = managerError;
-        return false;
-    }
-
-    privateSettings.characterBoxes.clear();
-    privateSettings.characterSourceImageSize = QSize(m_sourceImage.width(), m_sourceImage.height());
-    for (int i = 0; i < boxes.size(); ++i) {
-        const CharacterBox box = boxes.at(i);
-        const QRect rect = box.rect.normalized().intersected(QRect(0, 0, m_sourceImage.width(), m_sourceImage.height()));
-        CharacterTemplateBox savedBox;
-        savedBox.name = box.name;
-        savedBox.rect = rect;
-        privateSettings.characterBoxes.append(savedBox);
-    }
-    return AppSettingsManager::saveTemplatePrivateSettings(m_templateDirPath,
-                                                           privateSettings,
-                                                           errorMessage);
-}
-
-bool CharacterTemplateCropDialog::removeOldCharacterTemplateImages() const
-{
-    QDir targetDir(m_templateDirPath);
-    if (!targetDir.exists()) {
-        return false;
-    }
-
-    const QStringList filters = {"*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff"};
-    const QFileInfoList fileList = targetDir.entryInfoList(filters,
-                                                           QDir::Files | QDir::NoDotAndDotDot,
-                                                           QDir::Name | QDir::IgnoreCase);
-    for (const QFileInfo &fileInfo : fileList) {
-        if (isSystemTemplateFile(fileInfo.fileName())) {
-            continue;
-        }
-        if (!targetDir.remove(fileInfo.fileName())) {
-            return false;
-        }
-    }
-    return true;
+    return m_savedCount > 0;
 }

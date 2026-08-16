@@ -1,21 +1,5 @@
 #include "runtime/inspection_run_configuration.h"
 
-namespace {
-int legacySelectionCode(int index)
-{
-    switch (index) {
-    case 1:
-        return 1;
-    case 2:
-        return 2;
-    case 3:
-        return 3;
-    default:
-        return 0;
-    }
-}
-}
-
 InspectionRunPlan InspectionRunConfiguration::createPlan(
     InspectionStartModeKind modeKind,
     bool hardwareTriggerEnabled)
@@ -42,39 +26,4 @@ InspectionRunPlan InspectionRunConfiguration::createPlan(
     plan.barcodeWordHardTriggerMode =
             modeKind == InspectionStartModeKind::BarcodeWordProfiles;
     return plan;
-}
-
-InspectionRuntimeSettingsResult InspectionRunConfiguration::parseSettings(
-    const InspectionRuntimeSettingsInput &input)
-{
-    InspectionRuntimeSettingsResult result;
-
-    bool imageThresholdOk = false;
-    const int imageThreshold =
-            input.imageThresholdText.trimmed().toInt(&imageThresholdOk);
-    if (!imageThresholdOk
-            || imageThreshold < 0
-            || imageThreshold > 100) {
-        result.issue =
-                InspectionRuntimeSettingsIssue::InvalidImageThreshold;
-        return result;
-    }
-
-    bool tissueThresholdOk = false;
-    const double tissueThreshold =
-            input.tissueThresholdText.trimmed().toDouble(
-                &tissueThresholdOk);
-    if (!tissueThresholdOk || tissueThreshold <= 0.0) {
-        result.issue =
-                InspectionRuntimeSettingsIssue::InvalidTissueThreshold;
-        return result;
-    }
-
-    result.settings.imageThreshold = imageThreshold;
-    result.settings.tissueThreshold = tissueThreshold;
-    result.settings.rotationCode =
-            legacySelectionCode(input.rotationIndex);
-    result.settings.colorChannelCode =
-            legacySelectionCode(input.colorChannelIndex);
-    return result;
 }

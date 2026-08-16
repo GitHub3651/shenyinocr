@@ -1,6 +1,5 @@
 ﻿#pragma once
 #include <opencv2/opencv.hpp>
-#include <string>
 #include <vector>
 
 /**
@@ -17,8 +16,6 @@ struct CalibrationData {
     // 顺序固定为：左上、右上、右下、左下
     std::vector<cv::Point2f> barcode_poly;
 
-    // 从本地 YAML 配置文件中反序列化加载这些数据
-    bool load(const std::string& yamlPath);
 };
 
 /**
@@ -45,13 +42,9 @@ class OverlapDetector {
 public:
     OverlapDetector();
 
-    /**
-     * @brief 初始化检测器
-     * @param templateRingPath 拉环模板图像路径
-     * @param configPath 几何位置参数 yaml 文件路径
-     * @return true表示初始化成功
-     */
-    bool init(const std::string& templateRingPath, const std::string& configPath);
+    // 运行时只接受 PreparedRecipe 已解码的快照资产。
+    bool init(const cv::Mat& ringTemplate,
+              const CalibrationData& calibration);
 
     /**
      * @brief 执行核心视觉检测、匹配及碰撞判断

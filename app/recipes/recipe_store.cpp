@@ -15,7 +15,10 @@ namespace {
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
-        *errorMessage = message;
+        *errorMessage = message.startsWith(QLatin1String("RECIPE_"))
+                ? message
+                : QStringLiteral("RECIPE_CONSTRAINT_VIOLATION: %1")
+                  .arg(message);
     }
 }
 
@@ -53,20 +56,21 @@ bool removeDirectoryIfExists(const QString &directoryPath,
 bool ensureRecipesRoot(const QString &rootPath, QString *errorMessage)
 {
     if (rootPath.trimmed().isEmpty()) {
-        setError(errorMessage, QStringLiteral("Recipe root path is empty."));
+        setError(errorMessage,
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: recipe root path is empty."));
         return false;
     }
 
     const QFileInfo rootInfo(rootPath);
     if (rootInfo.exists() && (rootInfo.isSymLink() || !rootInfo.isDir())) {
         setError(errorMessage,
-                 QStringLiteral("Recipe root is not a regular directory: %1")
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: recipe root is not a regular directory: %1")
                  .arg(rootPath));
         return false;
     }
     if (!rootInfo.exists() && !QDir().mkpath(rootPath)) {
         setError(errorMessage,
-                 QStringLiteral("Unable to create recipe root directory: %1")
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: unable to create recipe root directory: %1")
                  .arg(rootPath));
         return false;
     }
@@ -82,7 +86,7 @@ bool writeRecipeJson(const QString &directoryPath,
     QFile file(jsonPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         setError(errorMessage,
-                 QStringLiteral("Unable to write recipe.json: %1")
+                 QStringLiteral("RECIPE_VERIFY_FAILED: unable to write recipe.json: %1")
                  .arg(jsonPath));
         return false;
     }
@@ -91,7 +95,7 @@ bool writeRecipeJson(const QString &directoryPath,
             .toJson(QJsonDocument::Indented);
     if (file.write(bytes) != bytes.size() || !file.flush()) {
         setError(errorMessage,
-                 QStringLiteral("Unable to complete recipe.json: %1")
+                 QStringLiteral("RECIPE_VERIFY_FAILED: unable to complete recipe.json: %1")
                  .arg(jsonPath));
         file.close();
         return false;
@@ -107,7 +111,7 @@ bool copyRecipeAssets(const QString &directoryPath,
 {
     if (assetSourcePaths.size() != recipe.assets.size()) {
         setError(errorMessage,
-                 QStringLiteral("Asset source keys do not match recipe assets."));
+                 QStringLiteral("RECIPE_ASSET_MISSING: asset source keys do not match recipe assets."));
         return false;
     }
 
@@ -115,7 +119,7 @@ bool copyRecipeAssets(const QString &directoryPath,
     for (auto it = recipe.assets.constBegin(); it != recipe.assets.constEnd(); ++it) {
         if (!assetSourcePaths.contains(it.key())) {
             setError(errorMessage,
-                     QStringLiteral("Missing asset source for key: %1")
+                     QStringLiteral("RECIPE_ASSET_MISSING: missing asset source for key: %1")
                      .arg(it.key()));
             return false;
         }
@@ -138,7 +142,7 @@ bool copyRecipeAssets(const QString &directoryPath,
                 || !sourceInfo.isFile()
                 || sourceInfo.size() <= 0) {
             setError(errorMessage,
-                     QStringLiteral("Recipe asset source is missing or invalid: %1")
+                     QStringLiteral("RECIPE_ASSET_MISSING: recipe asset source is missing or invalid: %1")
                      .arg(sourcePath));
             return false;
         }
@@ -148,7 +152,7 @@ bool copyRecipeAssets(const QString &directoryPath,
         if (!QDir().mkpath(destinationParent)
                 || !QFile::copy(sourceInfo.absoluteFilePath(), destinationPath)) {
             setError(errorMessage,
-                     QStringLiteral("Unable to copy recipe asset %1 to %2")
+                     QStringLiteral("RECIPE_VERIFY_FAILED: unable to copy recipe asset %1 to %2")
                      .arg(sourceInfo.absoluteFilePath(), destinationPath));
             return false;
         }
@@ -159,12 +163,10 @@ bool copyRecipeAssets(const QString &directoryPath,
 } // namespace
 
 RecipeStore::RecipeStore(const QString &recipesRootPath,
-                         const AssetValidator &assetValidator,
                          const DirectoryRenameFunction &directoryRenameFunction)
     : m_recipesRootPath(recipesRootPath.trimmed().isEmpty()
                         ? QString()
                         : QDir(recipesRootPath).absolutePath()),
-      m_assetValidator(assetValidator),
       m_directoryRenameFunction(directoryRenameFunction)
 {
 }
@@ -193,16 +195,57 @@ bool RecipeStore::loadRecipe(const QString &recipeId,
         setError(errorMessage, QStringLiteral("ProductRecipe output is null."));
         return false;
     }
+    if (m_recipesRootPath.isEmpty()) {
+        setError(errorMessage,
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: recipe root path is empty."));
+        return false;
+    }
 
     const QString directoryPath = recipeDirectoryPath(recipeId);
     if (directoryPath.isEmpty()) {
-        setError(errorMessage, QStringLiteral("Recipe ID is invalid."));
+        const QString candidate = recipeId.trimmed();
+        const bool simpleDirectoryName = !candidate.isEmpty()
+                && candidate != QLatin1String(".")
+                && candidate != QLatin1String("..")
+                && !candidate.contains(QLatin1Char(':'))
+                && QFileInfo(candidate).fileName() == candidate;
+        const bool legacyDirectoryExists = simpleDirectoryName
+                && QFileInfo(QDir(m_recipesRootPath)
+                             .filePath(candidate)).isDir();
+        setError(errorMessage,
+                 legacyDirectoryExists
+                 ? QStringLiteral(
+                     "RECIPE_LEGACY_FORMAT_REJECTED: legacy recipe directories are not supported.")
+                 : QStringLiteral("RECIPE_ID_INVALID: recipe ID is invalid."));
         return false;
     }
     return loadRecipeFromDirectory(directoryPath,
                                    recipeId.trimmed().toLower(),
                                    recipe,
                                    errorMessage);
+}
+
+bool RecipeStore::loadPreparedRecipe(
+        const QString &recipeId,
+        PreparedRecipeSnapshot *preparedRecipe,
+        QString *errorMessage) const
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    if (!preparedRecipe) {
+        setError(errorMessage,
+                 QStringLiteral("PreparedRecipe output is null."));
+        return false;
+    }
+    ProductRecipe recipe;
+    if (!loadRecipe(recipeId, &recipe, errorMessage)) {
+        return false;
+    }
+    return prepareRecipe(recipe,
+                         recipeDirectoryPath(recipe.recipeId),
+                         preparedRecipe,
+                         errorMessage);
 }
 
 bool RecipeStore::listRecipes(RecipeCatalog *catalog,
@@ -216,14 +259,15 @@ bool RecipeStore::listRecipes(RecipeCatalog *catalog,
         return false;
     }
     if (m_recipesRootPath.isEmpty()) {
-        setError(errorMessage, QStringLiteral("Recipe root path is empty."));
+        setError(errorMessage,
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: recipe root path is empty."));
         return false;
     }
 
     const QFileInfo rootInfo(m_recipesRootPath);
     if (rootInfo.isSymLink()) {
         setError(errorMessage,
-                 QStringLiteral("Recipe root is not a readable regular directory: %1")
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: recipe root is not a readable regular directory: %1")
                  .arg(m_recipesRootPath));
         return false;
     }
@@ -233,7 +277,7 @@ bool RecipeStore::listRecipes(RecipeCatalog *catalog,
     }
     if (!rootInfo.isDir() || !rootInfo.isReadable()) {
         setError(errorMessage,
-                 QStringLiteral("Recipe root is not a readable regular directory: %1")
+                 QStringLiteral("RECIPE_ROOT_UNAVAILABLE: recipe root is not a readable regular directory: %1")
                  .arg(m_recipesRootPath));
         return false;
     }
@@ -302,13 +346,14 @@ bool RecipeStore::saveRecipe(
 
     const QString targetPath = recipeDirectoryPath(recipe.recipeId);
     if (targetPath.isEmpty()) {
-        setError(errorMessage, QStringLiteral("Recipe target path is invalid."));
+        setError(errorMessage,
+                 QStringLiteral("RECIPE_ID_INVALID: recipe target path is invalid."));
         return false;
     }
     const QFileInfo targetInfo(targetPath);
     if (targetInfo.exists() && (targetInfo.isSymLink() || !targetInfo.isDir())) {
         setError(errorMessage,
-                 QStringLiteral("Recipe target is not a regular directory: %1")
+                 QStringLiteral("RECIPE_DIRECTORY_MISMATCH: recipe target is not a regular directory: %1")
                  .arg(targetPath));
         return false;
     }
@@ -327,7 +372,7 @@ bool RecipeStore::saveRecipe(
             || !QDir().mkpath(tempPath)) {
         if (errorMessage && errorMessage->isEmpty()) {
             setError(errorMessage,
-                     QStringLiteral("Unable to create recipe transaction directory: %1")
+                     QStringLiteral("RECIPE_VERIFY_FAILED: unable to create recipe transaction directory: %1")
                      .arg(tempPath));
         }
         return false;
@@ -338,7 +383,7 @@ bool RecipeStore::saveRecipe(
     bool prepared = QDir().mkpath(assetsDirectoryPath);
     if (!prepared) {
         setError(errorMessage,
-                 QStringLiteral("Unable to create recipe assets directory: %1")
+                 QStringLiteral("RECIPE_VERIFY_FAILED: unable to create recipe assets directory: %1")
                  .arg(assetsDirectoryPath));
     }
     prepared = prepared
@@ -357,7 +402,7 @@ bool RecipeStore::saveRecipe(
                 == productRecipeToJson(recipe);
         if (!prepared && errorMessage && errorMessage->isEmpty()) {
             setError(errorMessage,
-                     QStringLiteral("Reloaded recipe does not match the saved recipe."));
+                     QStringLiteral("RECIPE_VERIFY_FAILED: reloaded recipe does not match the saved recipe."));
         }
     }
     if (!prepared) {
@@ -372,7 +417,7 @@ bool RecipeStore::saveRecipe(
         removeDirectoryIfExists(tempPath, &cleanupError);
         setError(errorMessage,
                  QStringLiteral(
-                     "Unable to back up existing recipe directory: %1.\n"
+                     "RECIPE_BACKUP_FAILED: unable to back up existing recipe directory: %1.\n"
                      "\u8BF7\u5173\u95ED\u6B63\u5728\u6D4F\u89C8\u8BE5\u914D\u65B9"
                      "\u76EE\u5F55\u6216\u5176\u5B50\u76EE\u5F55\u7684\u6587\u4EF6"
                      "\u8D44\u6E90\u7BA1\u7406\u5668\u7A97\u53E3\u53CA\u5176\u4ED6"
@@ -388,8 +433,8 @@ bool RecipeStore::saveRecipe(
         removeDirectoryIfExists(tempPath, &cleanupError);
         setError(errorMessage,
                  restored
-                 ? QStringLiteral("Unable to commit recipe; the previous recipe was restored.")
-                 : QStringLiteral("Unable to commit recipe and restore the previous recipe."));
+                 ? QStringLiteral("RECIPE_COMMIT_FAILED: unable to commit recipe; the previous recipe was restored.")
+                 : QStringLiteral("RECIPE_ROLLBACK_FAILED: unable to commit recipe and restore the previous recipe."));
         return false;
     }
 
@@ -422,7 +467,7 @@ bool RecipeStore::loadRecipeFromDirectory(
             || directoryInfo.isSymLink()
             || !directoryInfo.isDir()) {
         setError(errorMessage,
-                 QStringLiteral("Recipe directory is missing or invalid: %1")
+                 QStringLiteral("RECIPE_JSON_MISSING: recipe directory is missing or invalid: %1")
                  .arg(directoryPath));
         return false;
     }
@@ -432,7 +477,7 @@ bool RecipeStore::loadRecipeFromDirectory(
     QFile file(jsonPath);
     if (!file.open(QIODevice::ReadOnly)) {
         setError(errorMessage,
-                 QStringLiteral("Unable to read recipe.json: %1")
+                 QStringLiteral("RECIPE_JSON_MISSING: unable to read recipe.json: %1")
                  .arg(jsonPath));
         return false;
     }
@@ -442,7 +487,7 @@ bool RecipeStore::loadRecipeFromDirectory(
                                                             &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
         setError(errorMessage,
-                 QStringLiteral("recipe.json is invalid: %1")
+                 QStringLiteral("RECIPE_JSON_MALFORMED: recipe.json is invalid: %1")
                  .arg(parseError.errorString()));
         return false;
     }
@@ -454,7 +499,7 @@ bool RecipeStore::loadRecipeFromDirectory(
     if (!expectedRecipeId.isEmpty()
             && candidate.recipeId != expectedRecipeId.trimmed().toLower()) {
         setError(errorMessage,
-                 QStringLiteral("Recipe ID does not match the requested directory."));
+                 QStringLiteral("RECIPE_DIRECTORY_MISMATCH: recipe ID does not match the requested directory."));
         return false;
     }
 
@@ -467,24 +512,16 @@ bool RecipeStore::loadRecipeFromDirectory(
                 || !assetInfo.isFile()
                 || assetInfo.size() <= 0) {
             setError(errorMessage,
-                     QStringLiteral("Recipe asset is missing or invalid: %1")
+                     QStringLiteral("RECIPE_ASSET_MISSING: recipe asset is missing or invalid: %1")
                      .arg(it.value()));
             return false;
         }
-        if (m_assetValidator) {
-            QString validatorError;
-            if (!m_assetValidator(candidate,
-                                  it.key(),
-                                  assetInfo.absoluteFilePath(),
-                                  &validatorError)) {
-                setError(errorMessage,
-                         validatorError.isEmpty()
-                         ? QStringLiteral("Recipe asset validation failed: %1")
-                           .arg(it.key())
-                         : validatorError);
-                return false;
-            }
-        }
+    }
+
+    PreparedRecipeSnapshot prepared;
+    if (!prepareRecipe(candidate, directoryPath,
+                       &prepared, errorMessage)) {
+        return false;
     }
 
     *recipe = candidate;

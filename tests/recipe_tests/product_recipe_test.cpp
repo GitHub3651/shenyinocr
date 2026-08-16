@@ -1,532 +1,318 @@
-#include <QtTest/QtTest>
+﻿#include <QtTest>
 
-#include "appsettingsmanager.h"
-#include "product_recipe.h"
-#include "template_profile_assets.h"
-#include "template_profile_mapper.h"
-#include "template_recipe_assembler.h"
+#include "recipes/product_recipe.h"
+#include "system_support/settings/machine_settings_store.h"
 
 #include <QDir>
-#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
-#include <QJsonObject>
-#include <QStandardPaths>
+#include <QJsonDocument>
 #include <QTemporaryDir>
 #include <QUuid>
 
-#include <type_traits>
+namespace {
 
-static_assert(std::is_const<ProductRecipeSnapshot::element_type>::value,
-              "Runtime product recipes must be immutable.");
+QString uuid()
+{
+    return QUuid::createUuid().toString(QUuid::WithoutBraces);
+}
+
+void addAsset(ProductRecipe *recipe,
+              RecipeProfile *profile,
+              const QString &prefix,
+              const QString &role,
+              const QString &relativePath)
+{
+    const QString key = prefix + QLatin1Char('.') + role;
+    recipe->assets.insert(key, relativePath);
+    profile->assetKeys.insert(role, key);
+}
+
+RecipeProfile createProfile(ProductRecipe *recipe,
+                            const QString &name,
+                            int index)
+{
+    RecipeProfile profile;
+    profile.name = name;
+    profile.targetText = QStringLiteral("1");
+    profile.trackingRoi = QRectF(10, 10, 20, 20);
+    const QString prefix = QStringLiteral("profile%1").arg(index);
+    const QString root = QStringLiteral("assets/profiles/%1/").arg(index);
+    addAsset(recipe, &profile, prefix, QStringLiteral("rawImage"),
+             root + QStringLiteral("template_raw.png"));
+    addAsset(recipe, &profile, prefix, QStringLiteral("trackingTemplate"),
+             root + QStringLiteral("tracking_template.bmp"));
+    addAsset(recipe, &profile, prefix, QStringLiteral("calibration"),
+             root + QStringLiteral("calibrate_config.yaml"));
+
+    const DetectionMode mode = recipe->detectionMode;
+    if (mode == DetectionMode::Stamp) {
+        addAsset(recipe, &profile, prefix, QStringLiteral("stampRing"),
+                 root + QStringLiteral("template_ring.bmp"));
+    }
+    if (mode == DetectionMode::Stamp
+            || mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord) {
+        profile.imageThresholdPercent = 70;
+        profile.characterSourceSize = QSize(30, 20);
+        RecipeCharacterBox box;
+        box.name = QStringLiteral("1");
+        box.rect = QRect(1, 1, 6, 8);
+        profile.characterBoxes.append(box);
+        addAsset(recipe, &profile, prefix,
+                 QStringLiteral("character/1.png"),
+                 root + QStringLiteral("character_templates/1.png"));
+    }
+    return profile;
+}
+
+ProductRecipe createRecipe(DetectionMode mode, int profileCount = 1)
+{
+    ProductRecipe recipe = createProductRecipe(
+                QStringLiteral("产品配方"), mode);
+    if (mode == DetectionMode::Tissue) {
+        recipe.tissueParameters.roughnessThreshold = 6.25;
+        return recipe;
+    }
+    for (int i = 0; i < profileCount; ++i) {
+        recipe.profiles.append(createProfile(
+            &recipe, QStringLiteral("Profile-%1").arg(i + 1), i));
+    }
+    return recipe;
+}
+
+} // namespace
 
 class ProductRecipeTest : public QObject
 {
     Q_OBJECT
 
 private slots:
-    void newTissueRecipeUsesCanonicalIdentityAndSixPointZeroDefault();
-    void jsonRoundTripRetainsModeParametersAndAssets();
-    void invalidFieldsAndEscapingAssetAreRejected();
-    void runtimeSnapshotIsIndependentFromEditableRecipe();
-    void globalSettingsRetainPublishedRecipeIdsPerMode();
-    void templatePrivateSettingsMappingRetainsProfileFields();
-    void templateProfileAssetManifestPreservesVariantsAndNamespaces();
-    void templateRecipeAssemblyMergesProfilesAndRejectsInvalidManifests();
+    void machineSettingsFirstStartSaveReload();
+    void machineSettingsRestoreDefaultsAndClear();
+    void machineSettingsCorruptionAndLegacyAreRejected();
+    void fiveDetectionModesRoundTrip();
+    void singleAndMultipleProfilesRoundTrip();
+    void tissueRecipeHasNoTemplateAssets();
+    void oldRecipeShapeIsRejected();
 };
 
-namespace {
-
-RecipeProfile validProfile(const QString &name)
+void ProductRecipeTest::machineSettingsFirstStartSaveReload()
 {
-    RecipeProfile profile;
-    profile.name = name;
-    profile.targetText = QStringLiteral("A1");
-    profile.imageThreshold = 70.0;
-    profile.trackingBox = QRectF(10.0, 20.0, 120.0, 80.0);
-    profile.hasValidBoxes = true;
-    return profile;
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    MachineSettingsStore store(directory.path());
+
+    MachineSettings loaded;
+    MachineSettingsLoadStatus status =
+            MachineSettingsLoadStatus::Loaded;
+    MachineSettingsStoreError error;
+    QVERIFY2(store.load(&loaded, &status, &error),
+             qPrintable(error.userMessage));
+    QVERIFY(status == MachineSettingsLoadStatus::FirstRun);
+    QVERIFY(loaded == MachineSettings::defaults());
+    QVERIFY(!QFile::exists(store.settingsFilePath()));
+
+    MachineSettings saved = loaded;
+    saved.cameraExposure = 1234;
+    saved.cameraGain = 7;
+    saved.detectModeId = QStringLiteral("barcode_word_detection");
+    saved.imageSaveModeId = QStringLiteral("save_all");
+    saved.imageSavePath = QDir(directory.path())
+            .filePath(QStringLiteral("images"));
+    saved.publishedRecipeIdsByMode.insert(
+                saved.detectModeId, uuid());
+    QVERIFY2(store.save(saved, &error),
+             qPrintable(error.userMessage));
+    QFile settingsJson(store.settingsFilePath());
+    QVERIFY(settingsJson.open(QIODevice::ReadOnly));
+    const QByteArray persistedJson = settingsJson.readAll();
+    QVERIFY(persistedJson.contains("\"barcodeWord\""));
+    QVERIFY(persistedJson.contains("\"all\""));
+    QVERIFY(!persistedJson.contains("barcode_word_detection"));
+    QVERIFY(!persistedJson.contains("save_all"));
+    settingsJson.close();
+
+    MachineSettings reloaded;
+    QVERIFY2(store.load(&reloaded, &status, &error),
+             qPrintable(error.userMessage));
+    QVERIFY(status == MachineSettingsLoadStatus::Loaded);
+    QVERIFY(reloaded == saved);
 }
 
-class ScopedSettingsTestLocation
+void ProductRecipeTest::machineSettingsRestoreDefaultsAndClear()
 {
-public:
-    ScopedSettingsTestLocation()
-        : m_originalOrganizationName(QCoreApplication::organizationName()),
-          m_originalApplicationName(QCoreApplication::applicationName()),
-          m_testApplicationName(QStringLiteral("product_recipe_settings_")
-                                + QUuid::createUuid().toString(QUuid::WithoutBraces))
-    {
-        QStandardPaths::setTestModeEnabled(true);
-        QCoreApplication::setOrganizationName(QStringLiteral("OCRGangYinTests"));
-        QCoreApplication::setApplicationName(m_testApplicationName);
-        m_dataDirectoryPath = AppSettingsManager::globalDataDirPath();
-    }
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    MachineSettingsStore store(directory.path());
+    MachineSettings settings = MachineSettings::defaults();
+    settings.cameraExposure = 2345;
+    MachineSettingsStoreError error;
+    QVERIFY(store.save(settings, &error));
 
-    ~ScopedSettingsTestLocation()
-    {
-        if (QFileInfo(m_dataDirectoryPath).fileName() == m_testApplicationName) {
-            QDir(m_dataDirectoryPath).removeRecursively();
-        }
-        QCoreApplication::setOrganizationName(m_originalOrganizationName);
-        QCoreApplication::setApplicationName(m_originalApplicationName);
-        QStandardPaths::setTestModeEnabled(false);
-    }
+    MachineSettings restored;
+    QVERIFY2(store.restoreDefaults(&restored, &error),
+             qPrintable(error.userMessage));
+    QVERIFY(restored == MachineSettings::defaults());
 
-    bool isIsolated() const
-    {
-        return QFileInfo(m_dataDirectoryPath).fileName()
-                == m_testApplicationName;
-    }
+    MachineSettingsLoadStatus status;
+    MachineSettings loaded;
+    QVERIFY(store.load(&loaded, &status, &error));
+    QVERIFY(loaded == MachineSettings::defaults());
+    QVERIFY(status == MachineSettingsLoadStatus::Loaded);
 
-private:
-    QString m_originalOrganizationName;
-    QString m_originalApplicationName;
-    QString m_testApplicationName;
-    QString m_dataDirectoryPath;
-};
-
-} // namespace
-
-void ProductRecipeTest::newTissueRecipeUsesCanonicalIdentityAndSixPointZeroDefault()
-{
-    const ProductRecipe recipe =
-            createProductRecipe(QStringLiteral("  \u7eb8\u5dfe\u4ea7\u54c1  "),
-                                DetectionMode::Tissue);
-
-    QCOMPARE(recipe.schemaVersion, ProductRecipe::CurrentSchemaVersion);
-    QCOMPARE(recipe.displayName, QStringLiteral("\u7eb8\u5dfe\u4ea7\u54c1"));
-    QCOMPARE(detectionModeId(DetectionMode::Stamp), QStringLiteral("stamp_detection"));
-    QCOMPARE(detectionModeId(DetectionMode::Word), QStringLiteral("word_detection"));
-    QCOMPARE(detectionModeId(DetectionMode::Ocr), QStringLiteral("ocr_detection"));
-    QCOMPARE(detectionModeId(recipe.detectionMode), QStringLiteral("tissue_detection"));
-    QCOMPARE(detectionModeId(DetectionMode::BarcodeWord),
-             QStringLiteral("barcode_word_detection"));
-    QCOMPARE(recipe.tissueParameters.roughnessThreshold, 6.0);
-    QCOMPARE(QUuid(recipe.recipeId).toString(QUuid::WithoutBraces), recipe.recipeId);
-
-    QString errorMessage;
-    QVERIFY2(validateProductRecipe(recipe, &errorMessage), qPrintable(errorMessage));
+    QVERIFY2(store.clear(&error), qPrintable(error.userMessage));
+    QVERIFY(store.load(&loaded, &status, &error));
+    QVERIFY(status == MachineSettingsLoadStatus::FirstRun);
+    QVERIFY(loaded == MachineSettings::defaults());
 }
 
-void ProductRecipeTest::jsonRoundTripRetainsModeParametersAndAssets()
+void ProductRecipeTest::machineSettingsCorruptionAndLegacyAreRejected()
 {
-    ProductRecipe original =
-            createProductRecipe(QStringLiteral("\u4e8c\u7ef4\u7801\u4ea7\u54c1"),
-                                DetectionMode::BarcodeWord);
-    original.assets.insert(QStringLiteral("trackingTemplate"),
-                           QStringLiteral("assets/tracking_template.bmp"));
-    original.assets.insert(QStringLiteral("calibration"),
-                           QStringLiteral("assets/calibrate_config.yaml"));
-    original.assets.insert(QStringLiteral("characterA"),
-                           QStringLiteral("assets/character_templates/A.bmp"));
-    RecipeProfile profile = validProfile(QStringLiteral("profile-1"));
-    profile.characterSourceImageSize = QSize(200, 100);
-    RecipeCharacterBox characterBox;
-    characterBox.name = QStringLiteral("A");
-    characterBox.rect = QRect(5, 6, 20, 30);
-    profile.characterBoxes.append(characterBox);
-    profile.barcodeParameters.formatMask = 3u;
-    profile.barcodeParameters.roiPaddingPercent = 12;
-    profile.barcodeParameters.maxDecodeTimeMs = 75;
-    profile.barcodeParameters.enableFallback = false;
-    profile.assetKeys.insert(QStringLiteral("trackingTemplate"),
-                             QStringLiteral("trackingTemplate"));
-    profile.assetKeys.insert(QStringLiteral("calibration"),
-                             QStringLiteral("calibration"));
-    profile.assetKeys.insert(QStringLiteral("character/A"),
-                             QStringLiteral("characterA"));
-    original.profiles.append(profile);
+    QTemporaryDir legacyDirectory;
+    QVERIFY(legacyDirectory.isValid());
+    QFile legacy(QDir(legacyDirectory.path())
+                 .filePath(QStringLiteral("settings.ini")));
+    QVERIFY(legacy.open(QIODevice::WriteOnly));
+    legacy.write("[Global]\nexposure=800\n");
+    legacy.close();
 
-    ProductRecipe loaded;
-    QString errorMessage;
-    QVERIFY2(productRecipeFromJson(productRecipeToJson(original),
-                                   &loaded,
-                                   &errorMessage),
-             qPrintable(errorMessage));
+    MachineSettingsStore legacyStore(legacyDirectory.path());
+    MachineSettings settings;
+    MachineSettingsLoadStatus status;
+    MachineSettingsStoreError error;
+    QVERIFY(legacyStore.load(&settings, &status, &error));
+    QVERIFY(status == MachineSettingsLoadStatus::FirstRun);
 
-    QCOMPARE(loaded.schemaVersion, original.schemaVersion);
-    QCOMPARE(loaded.recipeId, original.recipeId);
-    QCOMPARE(loaded.displayName, original.displayName);
-    QCOMPARE(detectionModeId(loaded.detectionMode),
-             QStringLiteral("barcode_word_detection"));
-    QVERIFY(loaded.assets == original.assets);
-    QCOMPARE(loaded.profiles.size(), 1);
-    const RecipeProfile loadedProfile = loaded.profiles.first();
-    QCOMPARE(loadedProfile.name, profile.name);
-    QCOMPARE(loadedProfile.targetText, profile.targetText);
-    QCOMPARE(loadedProfile.imageThreshold, profile.imageThreshold);
-    QCOMPARE(loadedProfile.trackingBox, profile.trackingBox);
-    QCOMPARE(loadedProfile.hasValidBoxes, true);
-    QCOMPARE(loadedProfile.characterSourceImageSize,
-             profile.characterSourceImageSize);
-    QCOMPARE(loadedProfile.characterBoxes.size(), 1);
-    QCOMPARE(loadedProfile.characterBoxes.first().name,
-             characterBox.name);
-    QCOMPARE(loadedProfile.characterBoxes.first().rect,
-             characterBox.rect);
-    QCOMPARE(loadedProfile.barcodeParameters.formatMask, 3u);
-    QCOMPARE(loadedProfile.barcodeParameters.roiPaddingPercent, 12);
-    QCOMPARE(loadedProfile.barcodeParameters.maxDecodeTimeMs, 75);
-    QCOMPARE(loadedProfile.barcodeParameters.enableFallback, false);
-    QVERIFY(loadedProfile.assetKeys == profile.assetKeys);
+    QTemporaryDir corruptDirectory;
+    QVERIFY(corruptDirectory.isValid());
+    MachineSettingsStore corruptStore(corruptDirectory.path());
+    QVERIFY(QDir().mkpath(
+                QFileInfo(corruptStore.settingsFilePath())
+                .absolutePath()));
+    QFile corrupt(corruptStore.settingsFilePath());
+    QVERIFY(corrupt.open(QIODevice::WriteOnly));
+    corrupt.write("[Global]\nexposure=800\n");
+    corrupt.close();
+    QVERIFY(!corruptStore.load(&settings, &status, &error));
+    QVERIFY(!error.code.isEmpty());
+
+    QTemporaryDir oldIdDirectory;
+    QVERIFY(oldIdDirectory.isValid());
+    MachineSettingsStore oldIdStore(oldIdDirectory.path());
+    QVERIFY(oldIdStore.save(MachineSettings::defaults(), &error));
+    QFile oldIdJson(oldIdStore.settingsFilePath());
+    QVERIFY(oldIdJson.open(QIODevice::ReadOnly));
+    QByteArray oldIdBytes = oldIdJson.readAll();
+    oldIdJson.close();
+    oldIdBytes.replace("\"word\"", "\"word_detection\"");
+    QVERIFY(oldIdJson.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    QCOMPARE(oldIdJson.write(oldIdBytes), oldIdBytes.size());
+    oldIdJson.close();
+    QVERIFY(!oldIdStore.load(&settings, &status, &error));
+    QCOMPARE(error.code,
+             QStringLiteral("SETTINGS_FIELD_RANGE_INVALID"));
+
+    MachineSettingsStore invalidRoot(QStringLiteral(""));
+    QVERIFY(!invalidRoot.load(&settings, &status, &error));
+    QCOMPARE(error.code, QStringLiteral("DATA_ROOT_UNAVAILABLE"));
 }
 
-void ProductRecipeTest::invalidFieldsAndEscapingAssetAreRejected()
+void ProductRecipeTest::fiveDetectionModesRoundTrip()
 {
-    QString errorMessage;
-    ProductRecipe invalid =
-            createProductRecipe(QStringLiteral("\u975e\u6cd5\u7eb8\u5dfe\u4ea7\u54c1"),
-                                DetectionMode::Tissue);
-    invalid.tissueParameters.roughnessThreshold = 0.0;
-    QVERIFY(!validateProductRecipe(invalid, &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("roughnessThreshold")));
-
-    invalid.tissueParameters.roughnessThreshold = 6.0;
-    invalid.assets.insert(QStringLiteral("trackingTemplate"),
-                          QStringLiteral("../outside.bmp"));
-    QVERIFY(!validateProductRecipe(invalid, &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("assets/")));
-
-    ProductRecipe invalidProfileRecipe =
-            createProductRecipe(QStringLiteral("invalid-profile"),
-                                DetectionMode::Word);
-    invalidProfileRecipe.assets.insert(
-                QStringLiteral("trackingTemplate"),
-                QStringLiteral("assets/tracking_template.bmp"));
-    RecipeProfile invalidProfile = validProfile(QStringLiteral("profile"));
-    QCOMPARE(invalidProfile.characterSourceImageSize, QSize(0, 0));
-    invalidProfile.assetKeys.insert(QStringLiteral("calibration"),
-                                    QStringLiteral("missingAsset"));
-    invalidProfileRecipe.profiles.append(invalidProfile);
-    QVERIFY(!validateProductRecipe(invalidProfileRecipe, &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("asset reference")));
-
-    invalidProfileRecipe.profiles[0].assetKeys.clear();
-    invalidProfileRecipe.profiles[0].hasValidBoxes = false;
-    QVERIFY(!validateProductRecipe(invalidProfileRecipe, &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("trackingBox")));
-
-    ProductRecipe unchanged =
-            createProductRecipe(QStringLiteral("\u4fdd\u7559\u5bf9\u8c61"),
-                                DetectionMode::Stamp);
-    const QString unchangedId = unchanged.recipeId;
-    QJsonObject unknownMode = productRecipeToJson(unchanged);
-    unknownMode.insert(QStringLiteral("detectionMode"), QStringLiteral("unknown"));
-    QVERIFY(!productRecipeFromJson(unknownMode, &unchanged, &errorMessage));
-    QCOMPARE(unchanged.recipeId, unchangedId);
-}
-
-void ProductRecipeTest::runtimeSnapshotIsIndependentFromEditableRecipe()
-{
-    ProductRecipe editable =
-            createProductRecipe(QStringLiteral("\u7eb8\u5dfeA"), DetectionMode::Tissue);
-    QString errorMessage;
-    const ProductRecipeSnapshot snapshot =
-            makeProductRecipeSnapshot(editable, &errorMessage);
-    QVERIFY2(static_cast<bool>(snapshot), qPrintable(errorMessage));
-
-    editable.displayName = QStringLiteral("\u7eb8\u5dfeB");
-    editable.tissueParameters.roughnessThreshold = 9.0;
-
-    QCOMPARE(snapshot->displayName, QStringLiteral("\u7eb8\u5dfeA"));
-    QCOMPARE(snapshot->tissueParameters.roughnessThreshold, 6.0);
-}
-
-void ProductRecipeTest::globalSettingsRetainPublishedRecipeIdsPerMode()
-{
-    ScopedSettingsTestLocation testLocation;
-    QVERIFY(testLocation.isIsolated());
-
-    GlobalSettings settings = AppSettingsManager::defaultGlobalSettings();
-    const QString wordRecipeId =
-            QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString barcodeRecipeId =
-            QUuid::createUuid().toString(QUuid::WithoutBraces);
-    settings.publishedRecipeIdsByMode.insert(
-                QStringLiteral("word_detection"),
-                QStringLiteral("  ") + wordRecipeId + QStringLiteral("  "));
-    settings.publishedRecipeIdsByMode.insert(
-                QStringLiteral("barcode_word_detection"),
-                barcodeRecipeId);
-    settings.publishedRecipeIdsByMode.insert(
-                QStringLiteral("unsupported_mode"),
-                QUuid::createUuid().toString(QUuid::WithoutBraces));
-    settings.templateDirPathsByMode.insert(
-                QStringLiteral("word_detection"),
-                QStringList() << QStringLiteral("D:/legacy/word-profile"));
-
-    QString errorMessage;
-    QVERIFY2(AppSettingsManager::saveGlobalSettings(settings, &errorMessage),
-             qPrintable(errorMessage));
-
-    GlobalSettings loaded;
-    QVERIFY2(AppSettingsManager::loadGlobalSettings(&loaded, &errorMessage),
-             qPrintable(errorMessage));
-    QCOMPARE(loaded.publishedRecipeIdsByMode.value(
-                 QStringLiteral("word_detection")),
-             wordRecipeId);
-    QCOMPARE(loaded.publishedRecipeIdsByMode.value(
-                 QStringLiteral("barcode_word_detection")),
-             barcodeRecipeId);
-    QVERIFY(!loaded.publishedRecipeIdsByMode.contains(
-                QStringLiteral("unsupported_mode")));
-    QCOMPARE(loaded.templateDirPathsByMode.value(
-                 QStringLiteral("word_detection")),
-             QStringList() << QStringLiteral("D:/legacy/word-profile"));
-}
-
-void ProductRecipeTest::templatePrivateSettingsMappingRetainsProfileFields()
-{
-    TemplatePrivateSettings source;
-    source.targetText = QStringLiteral("A1");
-    source.imageThreshold = 63.0;
-    source.trackingBox = cv::Rect2d(10.5, 20.25, 120.0, 80.0);
-    source.hasValidBoxes = true;
-    source.characterSourceImageSize = QSize(200, 100);
-    CharacterTemplateBox characterBox;
-    characterBox.name = QStringLiteral("A");
-    characterBox.rect = QRect(5, 6, 20, 30);
-    source.characterBoxes.append(characterBox);
-    source.barcodeOptions.formatMask = 3u;
-    source.barcodeOptions.roiPaddingPercent = 12;
-    source.barcodeOptions.maxDecodeTimeMs = 75;
-    source.barcodeOptions.enableFallback = false;
-
-    QMap<QString, QString> assetKeys;
-    assetKeys.insert(QStringLiteral("trackingTemplate"),
-                     QStringLiteral("profileTracking"));
-    assetKeys.insert(QStringLiteral("calibration"),
-                     QStringLiteral("profileCalibration"));
-    const RecipeProfile profile =
-            recipeProfileFromTemplatePrivateSettings(
-                QStringLiteral("profile-1"), source, assetKeys);
-
-    QCOMPARE(profile.name, QStringLiteral("profile-1"));
-    QCOMPARE(profile.targetText, source.targetText);
-    QCOMPARE(profile.imageThreshold, source.imageThreshold);
-    QCOMPARE(profile.trackingBox,
-             QRectF(source.trackingBox.x,
-                    source.trackingBox.y,
-                    source.trackingBox.width,
-                    source.trackingBox.height));
-    QCOMPARE(profile.hasValidBoxes, source.hasValidBoxes);
-    QCOMPARE(profile.characterSourceImageSize,
-             source.characterSourceImageSize);
-    QCOMPARE(profile.characterBoxes.size(), 1);
-    QCOMPARE(profile.characterBoxes.first().name, characterBox.name);
-    QCOMPARE(profile.characterBoxes.first().rect, characterBox.rect);
-    QCOMPARE(profile.barcodeParameters.formatMask, 3u);
-    QCOMPARE(profile.barcodeParameters.roiPaddingPercent, 12);
-    QCOMPARE(profile.barcodeParameters.maxDecodeTimeMs, 75);
-    QCOMPARE(profile.barcodeParameters.enableFallback, false);
-    QVERIFY(profile.assetKeys == assetKeys);
-
-    const TemplatePrivateSettings restored =
-            templatePrivateSettingsFromRecipeProfile(profile);
-    QCOMPARE(restored.configVersion, source.configVersion);
-    QCOMPARE(restored.targetText, source.targetText);
-    QCOMPARE(restored.imageThreshold, source.imageThreshold);
-    QCOMPARE(restored.trackingBox.x, source.trackingBox.x);
-    QCOMPARE(restored.trackingBox.y, source.trackingBox.y);
-    QCOMPARE(restored.trackingBox.width, source.trackingBox.width);
-    QCOMPARE(restored.trackingBox.height, source.trackingBox.height);
-    QCOMPARE(restored.hasValidBoxes, source.hasValidBoxes);
-    QCOMPARE(restored.characterSourceImageSize,
-             source.characterSourceImageSize);
-    QCOMPARE(restored.characterBoxes.size(), 1);
-    QCOMPARE(restored.characterBoxes.first().name, characterBox.name);
-    QCOMPARE(restored.characterBoxes.first().rect, characterBox.rect);
-    QCOMPARE(restored.barcodeOptions.formatMask,
-             source.barcodeOptions.formatMask);
-    QCOMPARE(restored.barcodeOptions.roiPaddingPercent,
-             source.barcodeOptions.roiPaddingPercent);
-    QCOMPARE(restored.barcodeOptions.maxDecodeTimeMs,
-             source.barcodeOptions.maxDecodeTimeMs);
-    QCOMPARE(restored.barcodeOptions.enableFallback,
-             source.barcodeOptions.enableFallback);
-}
-
-void ProductRecipeTest::templateProfileAssetManifestPreservesVariantsAndNamespaces()
-{
-    QTemporaryDir temporaryDirectory;
-    QVERIFY(temporaryDirectory.isValid());
-
-    auto writeAsset = [&temporaryDirectory](const QString &fileName) {
-        QFile file(temporaryDirectory.filePath(fileName));
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            return false;
-        }
-        return file.write("asset") == 5;
+    const DetectionMode modes[] = {
+        DetectionMode::Stamp,
+        DetectionMode::Word,
+        DetectionMode::Ocr,
+        DetectionMode::Tissue,
+        DetectionMode::BarcodeWord
     };
-    QVERIFY(writeAsset(QStringLiteral("tracking_template.bmp")));
-    QVERIFY(writeAsset(QStringLiteral("calibrate_config.yaml")));
-    QVERIFY(writeAsset(QStringLiteral("template_raw.png")));
-    QVERIFY(writeAsset(QStringLiteral("template_ring.bmp")));
-    QVERIFY(writeAsset(QStringLiteral("A.png")));
-    QVERIFY(writeAsset(QStringLiteral("A(1).png")));
-    QVERIFY(writeAsset(QStringLiteral("A_2.JPG")));
-    QVERIFY(writeAsset(QStringLiteral("app_settings.appset")));
-
-    const TemplateProfileAssetManifest first =
-            buildTemplateProfileAssetManifest(temporaryDirectory.path(), 2);
-    QCOMPARE(first.recipeAssets.size(), 7);
-    QCOMPARE(first.assetSourcePaths.size(), first.recipeAssets.size());
-    QCOMPARE(first.profileAssetKeys.size(), first.recipeAssets.size());
-    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("trackingTemplate")),
-             QStringLiteral("profile2.trackingTemplate"));
-    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("calibration")),
-             QStringLiteral("profile2.calibration"));
-    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("rawImage")),
-             QStringLiteral("profile2.rawImage"));
-    QCOMPARE(first.profileAssetKeys.value(QStringLiteral("stampRing")),
-             QStringLiteral("profile2.stampRing"));
-    QCOMPARE(first.recipeAssets.value(QStringLiteral("profile2.stampRing")),
-             QStringLiteral("assets/profiles/2/template_ring.bmp"));
-    QCOMPARE(first.assetSourcePaths.value(
-                 QStringLiteral("profile2.stampRing")),
-             QFileInfo(temporaryDirectory.filePath(
-                           QStringLiteral("template_ring.bmp")))
-             .absoluteFilePath());
-
-    const QStringList characterFileNames = {
-        QStringLiteral("A.png"),
-        QStringLiteral("A(1).png"),
-        QStringLiteral("A_2.JPG")
-    };
-    for (const QString &fileName : characterFileNames) {
-        const QString role = QStringLiteral("character/") + fileName;
-        const QString assetKey = first.profileAssetKeys.value(role);
-        QVERIFY(!assetKey.isEmpty());
-        QCOMPARE(first.recipeAssets.value(assetKey),
-                 QStringLiteral("assets/profiles/2/character_templates/")
-                 + fileName);
-        QCOMPARE(first.assetSourcePaths.value(assetKey),
-                 QFileInfo(temporaryDirectory.filePath(fileName))
-                 .absoluteFilePath());
-    }
-    const TemplateProfileAssetManifest second =
-            buildTemplateProfileAssetManifest(temporaryDirectory.path(), 3);
-    for (auto it = first.recipeAssets.constBegin();
-         it != first.recipeAssets.constEnd();
-         ++it) {
-        QVERIFY(!second.recipeAssets.contains(it.key()));
-        QVERIFY(!second.recipeAssets.values().contains(it.value()));
+    for (DetectionMode mode : modes) {
+        const ProductRecipe source = createRecipe(mode);
+        QString validationError;
+        QVERIFY2(validateProductRecipe(source, &validationError),
+                 qPrintable(validationError));
+        ProductRecipe restored;
+        QVERIFY2(productRecipeFromJson(
+                    productRecipeToJson(source),
+                    &restored,
+                    &validationError),
+                 qPrintable(validationError));
+        QCOMPARE(productRecipeToJson(restored),
+                 productRecipeToJson(source));
+        QVERIFY(!detectionModeUiId(mode).isEmpty());
     }
 }
 
-void ProductRecipeTest::templateRecipeAssemblyMergesProfilesAndRejectsInvalidManifests()
+void ProductRecipeTest::singleAndMultipleProfilesRoundTrip()
 {
-    QTemporaryDir temporaryDirectory;
-    QVERIFY(temporaryDirectory.isValid());
+    ProductRecipe single = createRecipe(DetectionMode::Stamp);
+    QCOMPARE(single.profiles.size(), 1);
+    QVERIFY(validateProductRecipe(single));
 
-    auto createProfileDirectory = [&temporaryDirectory](
-            const QString &directoryName,
-            const QString &characterFileName) {
-        const QString directoryPath =
-                temporaryDirectory.filePath(directoryName);
-        if (!QDir().mkpath(directoryPath)) {
-            return QString();
+    ProductRecipe multiple = createRecipe(DetectionMode::Word, 2);
+    QCOMPARE(multiple.profiles.size(), 2);
+    QVERIFY(validateProductRecipe(multiple));
+    ProductRecipe restored;
+    QString error;
+    QVERIFY2(productRecipeFromJson(
+                productRecipeToJson(multiple),
+                &restored,
+                &error), qPrintable(error));
+    QCOMPARE(restored.profiles.size(), 2);
+
+    ProductRecipe geometryOnly = createRecipe(DetectionMode::Word);
+    RecipeProfile &profile = geometryOnly.profiles[0];
+    profile.targetText.clear();
+    profile.characterSourceSize = QSize(0, 0);
+    profile.characterBoxes.clear();
+    const QStringList roles = profile.assetKeys.keys();
+    for (const QString &role : roles) {
+        if (role.startsWith(QLatin1String("character/"))) {
+            geometryOnly.assets.remove(profile.assetKeys.take(role));
         }
-        const QStringList fileNames = {
-            QStringLiteral("tracking_template.bmp"),
-            QStringLiteral("calibrate_config.yaml"),
-            characterFileName
-        };
-        for (const QString &fileName : fileNames) {
-            QFile file(QDir(directoryPath).filePath(fileName));
-            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
-                    || file.write("asset") != 5) {
-                return QString();
-            }
-        }
-        return directoryPath;
-    };
-
-    const QString firstDirectory = createProfileDirectory(
-                QStringLiteral("profile-a"), QStringLiteral("A.png"));
-    const QString secondDirectory = createProfileDirectory(
-                QStringLiteral("profile-b"), QStringLiteral("B.png"));
-    QVERIFY(!firstDirectory.isEmpty());
-    QVERIFY(!secondDirectory.isEmpty());
-
-    TemplateRecipeProfileSource firstSource;
-    firstSource.profile = validProfile(QStringLiteral("profile-a"));
-    firstSource.assetManifest =
-            buildTemplateProfileAssetManifest(firstDirectory, 0);
-    TemplateRecipeProfileSource secondSource;
-    secondSource.profile = validProfile(QStringLiteral("profile-b"));
-    secondSource.profile.imageThreshold = 63.0;
-    secondSource.assetManifest =
-            buildTemplateProfileAssetManifest(secondDirectory, 1);
-
-    const ProductRecipe recipeHeader =
-            createProductRecipe(QStringLiteral("assembled-product"),
-                                DetectionMode::BarcodeWord);
-    const QVector<TemplateRecipeProfileSource> profileSources = {
-        firstSource,
-        secondSource
-    };
-    TemplateRecipeAssembly assembly;
-    QString errorMessage;
-    QVERIFY2(assembleTemplateProductRecipe(recipeHeader,
-                                           profileSources,
-                                           &assembly,
-                                           &errorMessage),
-             qPrintable(errorMessage));
-
-    QCOMPARE(assembly.recipe.recipeId, recipeHeader.recipeId);
-    QCOMPARE(assembly.recipe.displayName, recipeHeader.displayName);
-    QCOMPARE(assembly.recipe.profiles.size(), 2);
-    QCOMPARE(assembly.recipe.profiles.at(0).name,
-             QStringLiteral("profile-a"));
-    QCOMPARE(assembly.recipe.profiles.at(1).name,
-             QStringLiteral("profile-b"));
-    QCOMPARE(assembly.recipe.profiles.at(1).imageThreshold, 63.0);
-    QVERIFY(assembly.recipe.profiles.at(0).assetKeys
-            == firstSource.assetManifest.profileAssetKeys);
-    QVERIFY(assembly.recipe.profiles.at(1).assetKeys
-            == secondSource.assetManifest.profileAssetKeys);
-    QCOMPARE(assembly.recipe.assets.size(), 6);
-    QVERIFY(assembly.assetSourcePaths.keys()
-            == assembly.recipe.assets.keys());
-    QVERIFY2(validateProductRecipe(assembly.recipe, &errorMessage),
-             qPrintable(errorMessage));
-
-    QVector<TemplateRecipeProfileSource> incompleteSources = profileSources;
-    const QString missingSourceKey =
-            incompleteSources[1].assetManifest.profileAssetKeys.value(
-                QStringLiteral("calibration"));
-    incompleteSources[1].assetManifest.assetSourcePaths.remove(
-                missingSourceKey);
-    TemplateRecipeAssembly unchanged = assembly;
-    const QString unchangedRecipeId = unchanged.recipe.recipeId;
-    QVERIFY(!assembleTemplateProductRecipe(recipeHeader,
-                                           incompleteSources,
-                                           &unchanged,
-                                           &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("maps do not match")));
-    QCOMPARE(unchanged.recipe.recipeId, unchangedRecipeId);
-    QCOMPARE(unchanged.recipe.profiles.size(), 2);
-
-    QVector<TemplateRecipeProfileSource> collidingSources = profileSources;
-    const QString firstTrackingKey =
-            collidingSources[0].assetManifest.profileAssetKeys.value(
-                QStringLiteral("trackingTemplate"));
-    const QString secondTrackingKey =
-            collidingSources[1].assetManifest.profileAssetKeys.value(
-                QStringLiteral("trackingTemplate"));
-    collidingSources[1].assetManifest.recipeAssets[secondTrackingKey] =
-            collidingSources[0].assetManifest.recipeAssets.value(
-                firstTrackingKey);
-    QVERIFY(!assembleTemplateProductRecipe(recipeHeader,
-                                           collidingSources,
-                                           &unchanged,
-                                           &errorMessage));
-    QVERIFY(errorMessage.contains(QStringLiteral("Duplicate recipe asset destination")));
-    QCOMPARE(unchanged.recipe.recipeId, unchangedRecipeId);
+    }
+    QVERIFY2(validateProductRecipe(geometryOnly, &error),
+             qPrintable(error));
+    QVERIFY2(productRecipeFromJson(
+                productRecipeToJson(geometryOnly),
+                &restored,
+                &error), qPrintable(error));
+    QVERIFY(restored.profiles.first().targetText.isEmpty());
+    QVERIFY(restored.profiles.first().characterBoxes.isEmpty());
 }
 
-QTEST_APPLESS_MAIN(ProductRecipeTest)
+void ProductRecipeTest::tissueRecipeHasNoTemplateAssets()
+{
+    const ProductRecipe tissue =
+            createRecipe(DetectionMode::Tissue);
+    QVERIFY(tissue.profiles.isEmpty());
+    QVERIFY(tissue.assets.isEmpty());
+    QVERIFY(validateProductRecipe(tissue));
+    QCOMPARE(tissue.tissueParameters.roughnessThreshold, 6.25);
+}
 
+void ProductRecipeTest::oldRecipeShapeIsRejected()
+{
+    ProductRecipe source = createRecipe(DetectionMode::Word);
+    QJsonObject json = productRecipeToJson(source);
+    json.insert(QStringLiteral("detectionMode"),
+                QStringLiteral("word_detection"));
+    ProductRecipe restored;
+    QString error;
+    QVERIFY(!productRecipeFromJson(json, &restored, &error));
+
+    json = productRecipeToJson(source);
+    json.insert(QStringLiteral("TemplatePrivateSettings"),
+                QJsonObject());
+    QVERIFY(!productRecipeFromJson(json, &restored, &error));
+
+    ProductRecipe duplicateAsset = source;
+    RecipeProfile &profile = duplicateAsset.profiles[0];
+    profile.assetKeys[QStringLiteral("rawImage")] =
+            profile.assetKeys.value(QStringLiteral("trackingTemplate"));
+    QVERIFY(!validateProductRecipe(duplicateAsset, &error));
+}
+
+QTEST_GUILESS_MAIN(ProductRecipeTest)
 #include "product_recipe_test.moc"

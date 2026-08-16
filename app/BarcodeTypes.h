@@ -1,6 +1,8 @@
 #ifndef BARCODETYPES_H
 #define BARCODETYPES_H
 
+#include "contracts/barcode_parameter_defaults.h"
+
 #include "BarcodeDecoderApi.h"
 
 #include <QByteArray>
@@ -30,10 +32,14 @@ enum class BarcodeReadStatus
 
 struct BarcodeDecodeOptions
 {
-    unsigned int formatMask = BARCODE_DECODER_FORMAT_DATA_MATRIX;
-    int roiPaddingPercent = 8;
-    int maxDecodeTimeMs = 60;
-    bool enableFallback = true;
+    unsigned int formatMask =
+            BarcodeParameterDefaults::FormatMask;
+    int roiPaddingPercent =
+            BarcodeParameterDefaults::RoiPaddingPercent;
+    int maxDecodeTimeMs =
+            BarcodeParameterDefaults::MaxDecodeTimeMs;
+    bool enableFallback =
+            BarcodeParameterDefaults::EnableFallback;
 };
 
 struct BarcodeReadResult

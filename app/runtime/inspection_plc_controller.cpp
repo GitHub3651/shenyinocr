@@ -6,12 +6,13 @@
 namespace {
 const int kMissingDeviceError = -1;
 const int kInvalidTriggerModeError = -2;
-const int kPlcDbNumber = 1;
 }
 
 InspectionPlcController::InspectionPlcController(
-    std::unique_ptr<IPlcDevice> device)
-    : m_device(std::move(device))
+    std::unique_ptr<IPlcDevice> device,
+    const InspectionPlcAddressMap &addresses)
+    : m_device(std::move(device)),
+      m_addresses(addresses)
 {
 }
 
@@ -61,7 +62,8 @@ PlcOperationResult InspectionPlcController::writeTriggerMode(
         return PlcOperationResult(kInvalidTriggerModeError);
     }
     return writeByte(
-                1032,
+                m_addresses.triggerModeDb,
+                m_addresses.triggerModeOffset,
                 static_cast<std::uint8_t>(modeIndex));
 }
 
@@ -70,28 +72,34 @@ InspectionPlcController::applyRunSettings(
     const InspectionPlcRunSettings &settings)
 {
     InspectionPlcRunSettingsResult result;
-    result.operation = writeWord(980, settings.rejectTime);
+    result.operation = writeWord(m_addresses.resultDb,
+                                 m_addresses.rejectTimeOffset,
+                                 settings.rejectTime);
     if (!result.operation.isSuccess()) {
         result.failedField = InspectionPlcRunSettingField::RejectTime;
         return result;
     }
 
     result.operation = writeDWord(
-                920,
+                m_addresses.resultDb,
+                m_addresses.rejectDistanceOffset,
                 settings.rejectDistance);
     if (!result.operation.isSuccess()) {
         result.failedField = InspectionPlcRunSettingField::RejectDistance;
         return result;
     }
 
-    result.operation = writeWord(982, settings.photoTime);
+    result.operation = writeWord(m_addresses.resultDb,
+                                 m_addresses.photoTimeOffset,
+                                 settings.photoTime);
     if (!result.operation.isSuccess()) {
         result.failedField = InspectionPlcRunSettingField::PhotoTime;
         return result;
     }
 
     result.operation = writeDWord(
-                924,
+                m_addresses.resultDb,
+                m_addresses.photoDistanceOffset,
                 settings.photoDistance);
     if (!result.operation.isSuccess()) {
         result.failedField = InspectionPlcRunSettingField::PhotoDistance;
@@ -103,13 +111,17 @@ InspectionPlcController::applyRunSettings(
 PlcOperationResult InspectionPlcController::writePhotoDistance(
     std::uint32_t photoDistance)
 {
-    return writeDWord(924, photoDistance);
+    return writeDWord(m_addresses.resultDb,
+                      m_addresses.photoDistanceOffset,
+                      photoDistance);
 }
 
 PlcOperationResult InspectionPlcController::writeResultValue(
     std::uint8_t value)
 {
-    return writeByte(1033, value);
+    return writeByte(m_addresses.resultDb,
+                     m_addresses.resultOffset,
+                     value);
 }
 
 PlcOperationResult InspectionPlcController::missingDeviceResult() const
@@ -118,6 +130,7 @@ PlcOperationResult InspectionPlcController::missingDeviceResult() const
 }
 
 PlcOperationResult InspectionPlcController::writeByte(
+    int db,
     int start,
     std::uint8_t value)
 {
@@ -128,7 +141,7 @@ PlcOperationResult InspectionPlcController::writeByte(
         static_cast<unsigned char>(value)
     };
     return m_device->writeDbArea(
-                kPlcDbNumber,
+                db,
                 start,
                 1,
                 PlcDataWidth::Byte,
@@ -136,6 +149,7 @@ PlcOperationResult InspectionPlcController::writeByte(
 }
 
 PlcOperationResult InspectionPlcController::writeWord(
+    int db,
     int start,
     std::uint16_t value)
 {
@@ -147,7 +161,7 @@ PlcOperationResult InspectionPlcController::writeWord(
         static_cast<unsigned char>(value & 0xFF)
     };
     return m_device->writeDbArea(
-                kPlcDbNumber,
+                db,
                 start,
                 2,
                 PlcDataWidth::Word,
@@ -155,6 +169,7 @@ PlcOperationResult InspectionPlcController::writeWord(
 }
 
 PlcOperationResult InspectionPlcController::writeDWord(
+    int db,
     int start,
     std::uint32_t value)
 {
@@ -168,7 +183,7 @@ PlcOperationResult InspectionPlcController::writeDWord(
         static_cast<unsigned char>(value & 0xFF)
     };
     return m_device->writeDbArea(
-                kPlcDbNumber,
+                db,
                 start,
                 4,
                 PlcDataWidth::DWord,

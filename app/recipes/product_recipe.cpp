@@ -1,14 +1,16 @@
-#include "product_recipe.h"
+#include "recipes/product_recipe.h"
 
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QSet>
 #include <QUuid>
 
 #include <cmath>
 #include <limits>
 
+const int RecipeProfile::DefaultImageThresholdPercent;
 const int ProductRecipe::CurrentSchemaVersion;
 
 namespace {
@@ -16,74 +18,100 @@ namespace {
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
-        *errorMessage = message;
+        *errorMessage = message.startsWith(QLatin1String("RECIPE_"))
+                ? message
+                : QStringLiteral("RECIPE_CONSTRAINT_VIOLATION: %1")
+                  .arg(message);
     }
 }
 
 bool isCanonicalRecipeId(const QString &recipeId)
 {
-    const QString trimmed = recipeId.trimmed();
-    const QUuid uuid(trimmed);
+    const QString value = recipeId.trimmed();
+    const QUuid uuid(value);
     return !uuid.isNull()
-            && uuid.toString(QUuid::WithoutBraces) == trimmed.toLower();
+            && uuid.toString(QUuid::WithoutBraces) == value.toLower();
 }
 
-bool isValidAssetPath(const QString &assetPath)
+bool hasOnlyKeys(const QJsonObject &object,
+                 const QStringList &allowed,
+                 const QString &context,
+                 QString *errorMessage)
 {
-    const QString normalized = QDir::fromNativeSeparators(assetPath.trimmed());
-    if (normalized.isEmpty()
-            || normalized.contains(QLatin1Char(':'))
-            || QDir::isAbsolutePath(normalized)
-            || QFileInfo(normalized).isAbsolute()) {
-        return false;
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        if (!allowed.contains(it.key())) {
+            setError(errorMessage,
+                     QStringLiteral("Unsupported %1 field: %2")
+                     .arg(context, it.key()));
+            return false;
+        }
     }
-
-    const QString cleaned = QDir::cleanPath(normalized);
-    return cleaned.startsWith(QLatin1String("assets/"))
-            && cleaned != QLatin1String("assets/..")
-            && !cleaned.startsWith(QLatin1String("assets/../"));
-}
-
-bool readRequiredString(const QJsonObject &json,
-                        const char *key,
-                        QString *value,
-                        QString *errorMessage)
-{
-    const QJsonValue jsonValue = json.value(QLatin1String(key));
-    if (!jsonValue.isString()) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe field is missing or is not a string: %1")
-                 .arg(QLatin1String(key)));
-        return false;
-    }
-
-    *value = jsonValue.toString();
     return true;
 }
 
-bool readRequiredNumber(const QJsonObject &json,
-                        const char *key,
-                        double *value,
-                        QString *errorMessage)
+bool isValidAssetPath(const QString &path)
 {
-    const QJsonValue jsonValue = json.value(QLatin1String(key));
-    if (!jsonValue.isDouble() || !std::isfinite(jsonValue.toDouble())) {
+    if (path.trimmed() != path
+            || path.contains(QLatin1Char('\\'))
+            || path.contains(QLatin1Char(':'))
+            || QDir::isAbsolutePath(path)
+            || QFileInfo(path).isAbsolute()) {
+        return false;
+    }
+    const QStringList parts = path.split(
+                QLatin1Char('/'), Qt::KeepEmptyParts);
+    if (parts.size() < 2 || parts.first() != QLatin1String("assets")) {
+        return false;
+    }
+    for (const QString &part : parts) {
+        if (part.isEmpty()
+                || part == QLatin1String(".")
+                || part == QLatin1String("..")) {
+            return false;
+        }
+    }
+    return QDir::cleanPath(path) == path;
+}
+
+bool readString(const QJsonObject &json,
+                const char *key,
+                QString *value,
+                QString *errorMessage)
+{
+    const QJsonValue field = json.value(QLatin1String(key));
+    if (!field.isString()) {
         setError(errorMessage,
-                 QStringLiteral("Recipe field is missing or is not a finite number: %1")
+                 QStringLiteral("Recipe field is missing or not a string: %1")
                  .arg(QLatin1String(key)));
         return false;
     }
-    *value = jsonValue.toDouble();
+    *value = field.toString();
     return true;
 }
 
-bool readRequiredInteger(const QJsonObject &json,
-                         const char *key,
-                         int *value,
-                         QString *errorMessage)
+bool readNumber(const QJsonObject &json,
+                const char *key,
+                double *value,
+                QString *errorMessage)
+{
+    const QJsonValue field = json.value(QLatin1String(key));
+    if (!field.isDouble() || !std::isfinite(field.toDouble())) {
+        setError(errorMessage,
+                 QStringLiteral("Recipe field is missing or not a finite number: %1")
+                 .arg(QLatin1String(key)));
+        return false;
+    }
+    *value = field.toDouble();
+    return true;
+}
+
+bool readInt(const QJsonObject &json,
+             const char *key,
+             int *value,
+             QString *errorMessage)
 {
     double number = 0.0;
-    if (!readRequiredNumber(json, key, &number, errorMessage)
+    if (!readNumber(json, key, &number, errorMessage)
             || std::floor(number) != number
             || number < static_cast<double>(std::numeric_limits<int>::min())
             || number > static_cast<double>(std::numeric_limits<int>::max())) {
@@ -113,18 +141,23 @@ bool rectFFromJson(const QJsonValue &value,
                    QString *errorMessage)
 {
     if (!value.isObject()) {
-        setError(errorMessage, QStringLiteral("Recipe trackingBox must be an object."));
+        setError(errorMessage, QStringLiteral("trackingRoi must be an object."));
         return false;
     }
     const QJsonObject json = value.toObject();
+    if (!hasOnlyKeys(json,
+                     QStringList() << "x" << "y" << "width" << "height",
+                     QStringLiteral("trackingRoi"), errorMessage)) {
+        return false;
+    }
     double x = 0.0;
     double y = 0.0;
     double width = 0.0;
     double height = 0.0;
-    if (!readRequiredNumber(json, "x", &x, errorMessage)
-            || !readRequiredNumber(json, "y", &y, errorMessage)
-            || !readRequiredNumber(json, "width", &width, errorMessage)
-            || !readRequiredNumber(json, "height", &height, errorMessage)) {
+    if (!readNumber(json, "x", &x, errorMessage)
+            || !readNumber(json, "y", &y, errorMessage)
+            || !readNumber(json, "width", &width, errorMessage)
+            || !readNumber(json, "height", &height, errorMessage)) {
         return false;
     }
     *rect = QRectF(x, y, width, height);
@@ -146,58 +179,71 @@ bool rectFromJson(const QJsonValue &value,
                   QString *errorMessage)
 {
     if (!value.isObject()) {
-        setError(errorMessage, QStringLiteral("Recipe character rect must be an object."));
+        setError(errorMessage,
+                 QStringLiteral("Character rect must be an object."));
         return false;
     }
     const QJsonObject json = value.toObject();
+    if (!hasOnlyKeys(json,
+                     QStringList() << "x" << "y" << "width" << "height",
+                     QStringLiteral("character rect"), errorMessage)) {
+        return false;
+    }
     int x = 0;
     int y = 0;
     int width = 0;
     int height = 0;
-    if (!readRequiredInteger(json, "x", &x, errorMessage)
-            || !readRequiredInteger(json, "y", &y, errorMessage)
-            || !readRequiredInteger(json, "width", &width, errorMessage)
-            || !readRequiredInteger(json, "height", &height, errorMessage)) {
+    if (!readInt(json, "x", &x, errorMessage)
+            || !readInt(json, "y", &y, errorMessage)
+            || !readInt(json, "width", &width, errorMessage)
+            || !readInt(json, "height", &height, errorMessage)) {
         return false;
     }
     *rect = QRect(x, y, width, height);
     return true;
 }
 
-QJsonObject profileToJson(const RecipeProfile &profile,
-                          DetectionMode detectionMode)
+bool usesCharacters(DetectionMode mode)
 {
-    QJsonObject assetKeys;
+    return mode == DetectionMode::Stamp
+            || mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord;
+}
+
+QJsonObject profileToJson(const RecipeProfile &profile,
+                          DetectionMode mode)
+{
+    QJsonObject assets;
     for (auto it = profile.assetKeys.constBegin();
          it != profile.assetKeys.constEnd(); ++it) {
-        assetKeys.insert(it.key(), it.value());
+        assets.insert(it.key(), it.value());
     }
-
-    QJsonArray characterBoxes;
-    for (const RecipeCharacterBox &box : profile.characterBoxes) {
-        QJsonObject boxJson;
-        boxJson.insert(QStringLiteral("name"), box.name);
-        boxJson.insert(QStringLiteral("rect"), rectToJson(box.rect));
-        characterBoxes.append(boxJson);
-    }
-
-    QJsonObject sourceSize;
-    sourceSize.insert(QStringLiteral("width"),
-                      profile.characterSourceImageSize.width());
-    sourceSize.insert(QStringLiteral("height"),
-                      profile.characterSourceImageSize.height());
-
     QJsonObject json;
     json.insert(QStringLiteral("name"), profile.name);
     json.insert(QStringLiteral("targetText"), profile.targetText);
-    json.insert(QStringLiteral("imageThreshold"), profile.imageThreshold);
-    json.insert(QStringLiteral("trackingBox"), rectFToJson(profile.trackingBox));
-    json.insert(QStringLiteral("hasValidBoxes"), profile.hasValidBoxes);
-    json.insert(QStringLiteral("characterSourceImageSize"), sourceSize);
-    json.insert(QStringLiteral("characterBoxes"), characterBoxes);
-    json.insert(QStringLiteral("assetKeys"), assetKeys);
+    json.insert(QStringLiteral("trackingRoi"),
+                rectFToJson(profile.trackingRoi));
+    json.insert(QStringLiteral("assetKeys"), assets);
 
-    if (detectionMode == DetectionMode::BarcodeWord) {
+    if (usesCharacters(mode)) {
+        json.insert(QStringLiteral("imageThresholdPercent"),
+                    profile.imageThresholdPercent);
+        QJsonObject size;
+        size.insert(QStringLiteral("width"),
+                    profile.characterSourceSize.width());
+        size.insert(QStringLiteral("height"),
+                    profile.characterSourceSize.height());
+        json.insert(QStringLiteral("characterSourceSize"), size);
+        QJsonArray boxes;
+        for (const RecipeCharacterBox &box : profile.characterBoxes) {
+            QJsonObject item;
+            item.insert(QStringLiteral("name"), box.name);
+            item.insert(QStringLiteral("rect"), rectToJson(box.rect));
+            boxes.append(item);
+        }
+        json.insert(QStringLiteral("characterBoxes"), boxes);
+    }
+    if (mode == DetectionMode::BarcodeWord) {
         QJsonObject barcode;
         barcode.insert(QStringLiteral("formatMask"),
                        static_cast<int>(profile.barcodeParameters.formatMask));
@@ -213,7 +259,7 @@ QJsonObject profileToJson(const RecipeProfile &profile,
 }
 
 bool profileFromJson(const QJsonValue &value,
-                     DetectionMode detectionMode,
+                     DetectionMode mode,
                      RecipeProfile *profile,
                      QString *errorMessage)
 {
@@ -222,129 +268,240 @@ bool profileFromJson(const QJsonValue &value,
         return false;
     }
     const QJsonObject json = value.toObject();
+    QStringList allowed;
+    allowed << "name" << "targetText" << "trackingRoi" << "assetKeys";
+    if (usesCharacters(mode)) {
+        allowed << "imageThresholdPercent"
+                << "characterSourceSize"
+                << "characterBoxes";
+    }
+    if (mode == DetectionMode::BarcodeWord) {
+        allowed << "barcode";
+    }
+    if (!hasOnlyKeys(json, allowed, QStringLiteral("profile"),
+                     errorMessage)) {
+        return false;
+    }
     RecipeProfile candidate;
-    if (!readRequiredString(json, "name", &candidate.name, errorMessage)
-            || !readRequiredString(json,
-                                   "targetText",
-                                   &candidate.targetText,
-                                   errorMessage)
-            || !readRequiredNumber(json,
-                                   "imageThreshold",
-                                   &candidate.imageThreshold,
-                                   errorMessage)
-            || !rectFFromJson(json.value(QStringLiteral("trackingBox")),
-                              &candidate.trackingBox,
-                              errorMessage)) {
+    if (!readString(json, "name", &candidate.name, errorMessage)
+            || !readString(json, "targetText", &candidate.targetText,
+                           errorMessage)
+            || !rectFFromJson(json.value(QStringLiteral("trackingRoi")),
+                              &candidate.trackingRoi, errorMessage)) {
         return false;
     }
-
-    const QJsonValue hasValidBoxesValue =
-            json.value(QStringLiteral("hasValidBoxes"));
-    if (!hasValidBoxesValue.isBool()) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe profile hasValidBoxes must be a boolean."));
+    const QJsonValue assetValue = json.value(QStringLiteral("assetKeys"));
+    if (!assetValue.isObject()) {
+        setError(errorMessage, QStringLiteral("assetKeys must be an object."));
         return false;
     }
-    candidate.hasValidBoxes = hasValidBoxesValue.toBool();
-
-    const QJsonValue sourceSizeValue =
-            json.value(QStringLiteral("characterSourceImageSize"));
-    if (!sourceSizeValue.isObject()) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe characterSourceImageSize must be an object."));
-        return false;
-    }
-    int sourceWidth = 0;
-    int sourceHeight = 0;
-    const QJsonObject sourceSize = sourceSizeValue.toObject();
-    if (!readRequiredInteger(sourceSize,
-                             "width",
-                             &sourceWidth,
-                             errorMessage)
-            || !readRequiredInteger(sourceSize,
-                                    "height",
-                                    &sourceHeight,
-                                    errorMessage)) {
-        return false;
-    }
-    candidate.characterSourceImageSize = QSize(sourceWidth, sourceHeight);
-
-    const QJsonValue characterBoxesValue =
-            json.value(QStringLiteral("characterBoxes"));
-    if (!characterBoxesValue.isArray()) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe characterBoxes must be an array."));
-        return false;
-    }
-    const QJsonArray characterBoxes = characterBoxesValue.toArray();
-    for (const QJsonValue &boxValue : characterBoxes) {
-        if (!boxValue.isObject()) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe character box must be an object."));
-            return false;
-        }
-        const QJsonObject boxJson = boxValue.toObject();
-        RecipeCharacterBox box;
-        if (!readRequiredString(boxJson, "name", &box.name, errorMessage)
-                || !rectFromJson(boxJson.value(QStringLiteral("rect")),
-                                 &box.rect,
-                                 errorMessage)) {
-            return false;
-        }
-        candidate.characterBoxes.append(box);
-    }
-
-    const QJsonValue assetKeysValue = json.value(QStringLiteral("assetKeys"));
-    if (!assetKeysValue.isObject()) {
-        setError(errorMessage, QStringLiteral("Recipe profile assetKeys must be an object."));
-        return false;
-    }
-    const QJsonObject assetKeys = assetKeysValue.toObject();
-    for (auto it = assetKeys.constBegin(); it != assetKeys.constEnd(); ++it) {
+    const QJsonObject assetKeys = assetValue.toObject();
+    for (auto it = assetKeys.constBegin();
+         it != assetKeys.constEnd(); ++it) {
         if (!it.value().isString()) {
             setError(errorMessage,
-                     QStringLiteral("Recipe profile asset key must be a string: %1")
-                     .arg(it.key()));
+                     QStringLiteral("Asset key value must be a string."));
             return false;
         }
         candidate.assetKeys.insert(it.key(), it.value().toString());
     }
 
-    if (detectionMode == DetectionMode::BarcodeWord) {
+    if (usesCharacters(mode)) {
+        if (!readInt(json, "imageThresholdPercent",
+                     &candidate.imageThresholdPercent, errorMessage)) {
+            return false;
+        }
+        const QJsonValue sizeValue =
+                json.value(QStringLiteral("characterSourceSize"));
+        if (!sizeValue.isObject()) {
+            setError(errorMessage,
+                     QStringLiteral("characterSourceSize must be an object."));
+            return false;
+        }
+        const QJsonObject size = sizeValue.toObject();
+        if (!hasOnlyKeys(size, QStringList() << "width" << "height",
+                         QStringLiteral("characterSourceSize"), errorMessage)) {
+            return false;
+        }
+        int width = 0;
+        int height = 0;
+        if (!readInt(size, "width", &width, errorMessage)
+                || !readInt(size, "height", &height, errorMessage)) {
+            return false;
+        }
+        candidate.characterSourceSize = QSize(width, height);
+        const QJsonValue boxesValue =
+                json.value(QStringLiteral("characterBoxes"));
+        if (!boxesValue.isArray()) {
+            setError(errorMessage, QStringLiteral("characterBoxes must be an array."));
+            return false;
+        }
+        for (const QJsonValue &boxValue : boxesValue.toArray()) {
+            if (!boxValue.isObject()) {
+                setError(errorMessage, QStringLiteral("Character box must be an object."));
+                return false;
+            }
+            const QJsonObject item = boxValue.toObject();
+            if (!hasOnlyKeys(item, QStringList() << "name" << "rect",
+                             QStringLiteral("character box"), errorMessage)) {
+                return false;
+            }
+            RecipeCharacterBox box;
+            if (!readString(item, "name", &box.name, errorMessage)
+                    || !rectFromJson(item.value(QStringLiteral("rect")),
+                                     &box.rect, errorMessage)) {
+                return false;
+            }
+            candidate.characterBoxes.append(box);
+        }
+    }
+    if (mode == DetectionMode::BarcodeWord) {
         const QJsonValue barcodeValue = json.value(QStringLiteral("barcode"));
         if (!barcodeValue.isObject()) {
-            setError(errorMessage, QStringLiteral("Barcode recipe profile is missing barcode parameters."));
+            setError(errorMessage, QStringLiteral("Barcode parameters are missing."));
             return false;
         }
         const QJsonObject barcode = barcodeValue.toObject();
-        int formatMask = 0;
-        if (!readRequiredInteger(barcode,
-                                 "formatMask",
-                                 &formatMask,
-                                 errorMessage)
-                || !readRequiredInteger(barcode,
-                                        "roiPaddingPercent",
-                                        &candidate.barcodeParameters.roiPaddingPercent,
-                                        errorMessage)
-                || !readRequiredInteger(barcode,
-                                        "maxDecodeTimeMs",
-                                        &candidate.barcodeParameters.maxDecodeTimeMs,
-                                        errorMessage)) {
+        if (!hasOnlyKeys(barcode,
+                         QStringList() << "formatMask"
+                         << "roiPaddingPercent" << "maxDecodeTimeMs"
+                         << "enableFallback",
+                         QStringLiteral("barcode"), errorMessage)) {
             return false;
         }
-        const QJsonValue enableFallback =
+        int mask = 0;
+        if (!readInt(barcode, "formatMask", &mask, errorMessage)
+                || !readInt(barcode, "roiPaddingPercent",
+                            &candidate.barcodeParameters.roiPaddingPercent,
+                            errorMessage)
+                || !readInt(barcode, "maxDecodeTimeMs",
+                            &candidate.barcodeParameters.maxDecodeTimeMs,
+                            errorMessage)) {
+            return false;
+        }
+        const QJsonValue fallback =
                 barcode.value(QStringLiteral("enableFallback"));
-        if (!enableFallback.isBool() || formatMask < 0) {
-            setError(errorMessage,
-                     QStringLiteral("Barcode recipe parameters are invalid."));
+        if (!fallback.isBool() || mask < 0) {
+            setError(errorMessage, QStringLiteral("Barcode parameters are invalid."));
             return false;
         }
         candidate.barcodeParameters.formatMask =
-                static_cast<unsigned int>(formatMask);
-        candidate.barcodeParameters.enableFallback = enableFallback.toBool();
+                static_cast<unsigned int>(mask);
+        candidate.barcodeParameters.enableFallback = fallback.toBool();
     }
-
     *profile = candidate;
+    return true;
+}
+
+bool validateProfile(const ProductRecipe &recipe,
+                     const RecipeProfile &profile,
+                     QString *errorMessage)
+{
+    if (profile.name.trimmed().isEmpty()) {
+        setError(errorMessage,
+                 QStringLiteral("Profile name is required."));
+        return false;
+    }
+    const QRectF roi = profile.trackingRoi;
+    if (!std::isfinite(roi.x()) || !std::isfinite(roi.y())
+            || !std::isfinite(roi.width()) || !std::isfinite(roi.height())
+            || roi.x() < 0.0 || roi.y() < 0.0
+            || roi.width() <= 0.0 || roi.height() <= 0.0) {
+        setError(errorMessage, QStringLiteral("Profile trackingRoi is invalid."));
+        return false;
+    }
+    for (auto it = profile.assetKeys.constBegin();
+         it != profile.assetKeys.constEnd(); ++it) {
+        const bool commonRole =
+                it.key() == QLatin1String("trackingTemplate")
+                || it.key() == QLatin1String("calibration")
+                || it.key() == QLatin1String("rawImage");
+        const bool stampRole =
+                recipe.detectionMode == DetectionMode::Stamp
+                && it.key() == QLatin1String("stampRing");
+        const bool characterRole = usesCharacters(recipe.detectionMode)
+                && it.key().startsWith(QLatin1String("character/"));
+        if (!commonRole && !stampRole && !characterRole) {
+            setError(errorMessage,
+                     QStringLiteral("Profile contains a forbidden asset role: %1")
+                     .arg(it.key()));
+            return false;
+        }
+    }
+    for (const QString &role : requiredTemplateProfileAssetRoles(
+             recipe.detectionMode)) {
+        if (!profile.assetKeys.contains(role)) {
+            setError(errorMessage,
+                     QStringLiteral("Profile is missing asset role: %1").arg(role));
+            return false;
+        }
+    }
+    for (auto it = profile.assetKeys.constBegin();
+         it != profile.assetKeys.constEnd(); ++it) {
+        if (it.key().trimmed().isEmpty()
+                || it.value().trimmed().isEmpty()
+                || !recipe.assets.contains(it.value())) {
+            setError(errorMessage,
+                     QStringLiteral("Profile asset reference is invalid: %1")
+                     .arg(it.key()));
+            return false;
+        }
+    }
+    if (!usesCharacters(recipe.detectionMode)) {
+        if (!profile.characterBoxes.isEmpty()
+                || profile.characterSourceSize != QSize(0, 0)) {
+            setError(errorMessage,
+                     QStringLiteral("OCR profile contains forbidden character fields."));
+            return false;
+        }
+        return true;
+    }
+    if (profile.imageThresholdPercent < 0
+            || profile.imageThresholdPercent > 100) {
+        setError(errorMessage,
+                 QStringLiteral("Character profile threshold is invalid."));
+        return false;
+    }
+    bool characterAsset = false;
+    for (auto it = profile.assetKeys.constBegin();
+         it != profile.assetKeys.constEnd(); ++it) {
+        characterAsset = characterAsset
+                || it.key().startsWith(QLatin1String("character/"));
+    }
+    const bool noCharacterData = !characterAsset
+            && profile.characterSourceSize == QSize(0, 0)
+            && profile.characterBoxes.isEmpty();
+    if (!noCharacterData) {
+        if (!characterAsset
+                || profile.characterSourceSize.width() <= 0
+                || profile.characterSourceSize.height() <= 0
+                || profile.characterBoxes.isEmpty()) {
+            setError(errorMessage,
+                     QStringLiteral("Character profile data is incomplete."));
+            return false;
+        }
+        const QRect bounds(QPoint(0, 0), profile.characterSourceSize);
+        for (const RecipeCharacterBox &box : profile.characterBoxes) {
+            if (box.name.trimmed().isEmpty()
+                    || box.rect.width() <= 0 || box.rect.height() <= 0
+                    || !bounds.contains(box.rect)) {
+                setError(errorMessage,
+                         QStringLiteral("Character box is invalid."));
+                return false;
+            }
+        }
+    }
+    if (recipe.detectionMode == DetectionMode::BarcodeWord) {
+        const BarcodeRecipeParameters &barcode = profile.barcodeParameters;
+        if (barcode.formatMask == 0u || (barcode.formatMask & ~3u) != 0u
+                || barcode.roiPaddingPercent < 0
+                || barcode.roiPaddingPercent > 100
+                || barcode.maxDecodeTimeMs <= 0
+                || barcode.maxDecodeTimeMs > 60000) {
+            setError(errorMessage, QStringLiteral("Barcode parameters are invalid."));
+            return false;
+        }
+    }
     return true;
 }
 
@@ -353,214 +510,173 @@ bool profileFromJson(const QJsonValue &value,
 QString detectionModeId(DetectionMode mode)
 {
     switch (mode) {
-    case DetectionMode::Stamp:
-        return QStringLiteral("stamp_detection");
-    case DetectionMode::Word:
-        return QStringLiteral("word_detection");
-    case DetectionMode::Ocr:
-        return QStringLiteral("ocr_detection");
-    case DetectionMode::Tissue:
-        return QStringLiteral("tissue_detection");
+    case DetectionMode::Stamp: return QStringLiteral("stamp");
+    case DetectionMode::Word: return QStringLiteral("word");
+    case DetectionMode::Ocr: return QStringLiteral("ocr");
+    case DetectionMode::Tissue: return QStringLiteral("tissue");
+    case DetectionMode::BarcodeWord: return QStringLiteral("barcodeWord");
+    }
+    return QString();
+}
+
+bool detectionModeFromId(const QString &id, DetectionMode *mode)
+{
+    if (!mode) return false;
+    if (id == QLatin1String("stamp")) *mode = DetectionMode::Stamp;
+    else if (id == QLatin1String("word")) *mode = DetectionMode::Word;
+    else if (id == QLatin1String("ocr")) *mode = DetectionMode::Ocr;
+    else if (id == QLatin1String("tissue")) *mode = DetectionMode::Tissue;
+    else if (id == QLatin1String("barcodeWord")) *mode = DetectionMode::BarcodeWord;
+    else return false;
+    return true;
+}
+
+QString detectionModeUiId(DetectionMode mode)
+{
+    switch (mode) {
+    case DetectionMode::Stamp: return QStringLiteral("stamp_detection");
+    case DetectionMode::Word: return QStringLiteral("word_detection");
+    case DetectionMode::Ocr: return QStringLiteral("ocr_detection");
+    case DetectionMode::Tissue: return QStringLiteral("tissue_detection");
     case DetectionMode::BarcodeWord:
         return QStringLiteral("barcode_word_detection");
     }
     return QString();
 }
 
-bool detectionModeFromId(const QString &modeId, DetectionMode *mode)
+bool detectionModeFromUiId(const QString &id, DetectionMode *mode)
 {
-    if (!mode) {
-        return false;
-    }
-
-    const QString normalized = modeId.trimmed();
-    if (normalized == QLatin1String("stamp_detection")) {
-        *mode = DetectionMode::Stamp;
-    } else if (normalized == QLatin1String("word_detection")) {
-        *mode = DetectionMode::Word;
-    } else if (normalized == QLatin1String("ocr_detection")) {
-        *mode = DetectionMode::Ocr;
-    } else if (normalized == QLatin1String("tissue_detection")) {
-        *mode = DetectionMode::Tissue;
-    } else if (normalized == QLatin1String("barcode_word_detection")) {
+    if (!mode) return false;
+    if (id == QLatin1String("stamp_detection")) *mode = DetectionMode::Stamp;
+    else if (id == QLatin1String("word_detection")) *mode = DetectionMode::Word;
+    else if (id == QLatin1String("ocr_detection")) *mode = DetectionMode::Ocr;
+    else if (id == QLatin1String("tissue_detection")) *mode = DetectionMode::Tissue;
+    else if (id == QLatin1String("barcode_word_detection")) {
         *mode = DetectionMode::BarcodeWord;
-    } else {
-        return false;
-    }
+    } else return false;
     return true;
 }
 
 bool isTemplateRecipeMode(DetectionMode mode)
 {
-    switch (mode) {
-    case DetectionMode::Stamp:
-    case DetectionMode::Word:
-    case DetectionMode::Ocr:
-    case DetectionMode::BarcodeWord:
-        return true;
-    case DetectionMode::Tissue:
-        return false;
-    }
-    return false;
+    return mode != DetectionMode::Tissue;
 }
 
 QStringList requiredTemplateProfileAssetRoles(DetectionMode mode)
 {
-    if (!isTemplateRecipeMode(mode)) {
-        return QStringList();
-    }
-
+    if (!isTemplateRecipeMode(mode)) return QStringList();
     QStringList roles;
     roles << QStringLiteral("trackingTemplate")
-          << QStringLiteral("calibration");
-    if (mode == DetectionMode::Stamp) {
-        roles << QStringLiteral("stampRing");
-    }
+          << QStringLiteral("calibration")
+          << QStringLiteral("rawImage");
+    if (mode == DetectionMode::Stamp) roles << QStringLiteral("stampRing");
     return roles;
 }
 
 ProductRecipe createProductRecipe(const QString &displayName,
-                                  DetectionMode detectionMode)
+                                  DetectionMode mode)
 {
     ProductRecipe recipe;
     recipe.recipeId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     recipe.displayName = displayName.trimmed();
-    recipe.detectionMode = detectionMode;
+    recipe.detectionMode = mode;
     return recipe;
 }
 
 bool validateProductRecipe(const ProductRecipe &recipe,
                            QString *errorMessage)
 {
-    if (errorMessage) {
-        errorMessage->clear();
-    }
-
+    if (errorMessage) errorMessage->clear();
     if (recipe.schemaVersion != ProductRecipe::CurrentSchemaVersion) {
         setError(errorMessage,
-                 QStringLiteral("Unsupported recipe schemaVersion: %1")
+                 QStringLiteral("RECIPE_SCHEMA_UNSUPPORTED: schemaVersion=%1")
                  .arg(recipe.schemaVersion));
         return false;
     }
-    if (!isCanonicalRecipeId(recipe.recipeId)) {
-        setError(errorMessage, QStringLiteral("recipeId must be a canonical UUID."));
+    if (!isCanonicalRecipeId(recipe.recipeId)
+            || recipe.displayName.trimmed().isEmpty()
+            || detectionModeId(recipe.detectionMode).isEmpty()) {
+        setError(errorMessage,
+                 QStringLiteral("RECIPE_ID_INVALID: recipe identity is invalid."));
         return false;
     }
-    if (recipe.displayName.trimmed().isEmpty()) {
-        setError(errorMessage, QStringLiteral("displayName must not be empty."));
-        return false;
-    }
-    if (detectionModeId(recipe.detectionMode).isEmpty()) {
-        setError(errorMessage, QStringLiteral("detectionMode is invalid."));
-        return false;
-    }
-    for (auto it = recipe.assets.constBegin(); it != recipe.assets.constEnd(); ++it) {
-        if (it.key().trimmed().isEmpty()) {
-            setError(errorMessage, QStringLiteral("Recipe asset key must not be empty."));
+    QSet<QString> destinations;
+    for (auto it = recipe.assets.constBegin();
+         it != recipe.assets.constEnd(); ++it) {
+        if (it.key().trimmed().isEmpty() || !isValidAssetPath(it.value())
+                || destinations.contains(it.value().toLower())) {
+            setError(errorMessage, QStringLiteral("Recipe asset is invalid."));
             return false;
         }
-        if (!isValidAssetPath(it.value())) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe asset must be a relative path under assets/: %1")
-                     .arg(it.value()));
-            return false;
-        }
+        destinations.insert(it.value().toLower());
     }
-
     if (recipe.detectionMode == DetectionMode::Tissue) {
         if (!std::isfinite(recipe.tissueParameters.roughnessThreshold)
-                || recipe.tissueParameters.roughnessThreshold <= 0.0) {
+                || recipe.tissueParameters.roughnessThreshold <= 0.0
+                || !recipe.profiles.isEmpty() || !recipe.assets.isEmpty()) {
             setError(errorMessage,
-                     QStringLiteral("Tissue roughnessThreshold must be greater than zero."));
-            return false;
-        }
-        if (!recipe.profiles.isEmpty()) {
-            setError(errorMessage,
-                     QStringLiteral("Tissue recipes must not contain template profiles."));
+                     QStringLiteral("RECIPE_TISSUE_PARAMETERS_INVALID: tissue recipe is invalid."));
             return false;
         }
         return true;
     }
-
-    if (recipe.profiles.isEmpty()) {
+    const bool single = recipe.detectionMode == DetectionMode::Stamp
+            || recipe.detectionMode == DetectionMode::Ocr;
+    if ((single && recipe.profiles.size() != 1)
+            || (!single && recipe.profiles.isEmpty())) {
         setError(errorMessage,
-                 QStringLiteral("Template-based recipes require at least one profile."));
+                 QStringLiteral("RECIPE_CONSTRAINT_VIOLATION: recipe profile count is invalid."));
         return false;
     }
-
+    QSet<QString> names;
+    QSet<QString> referencedAssetKeys;
     for (const RecipeProfile &profile : recipe.profiles) {
-        if (profile.name.trimmed().isEmpty()) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe profile name must not be empty."));
-            return false;
-        }
-        if (!std::isfinite(profile.imageThreshold)
-                || profile.imageThreshold < 0.0
-                || profile.imageThreshold > 100.0) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe profile imageThreshold must be between 0 and 100."));
-            return false;
-        }
-        if (!profile.hasValidBoxes
-                || !std::isfinite(profile.trackingBox.x())
-                || !std::isfinite(profile.trackingBox.y())
-                || !std::isfinite(profile.trackingBox.width())
-                || !std::isfinite(profile.trackingBox.height())
-                || profile.trackingBox.width() <= 0.0
-                || profile.trackingBox.height() <= 0.0) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe profile trackingBox is invalid."));
-            return false;
-        }
-
-        const QSize sourceSize = profile.characterSourceImageSize;
-        const bool sourceSizeEmpty = sourceSize.width() == 0
-                && sourceSize.height() == 0;
-        if ((!sourceSizeEmpty
-             && (sourceSize.width() <= 0 || sourceSize.height() <= 0))
-                || (sourceSizeEmpty && !profile.characterBoxes.isEmpty())) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe character source image size is invalid."));
-            return false;
-        }
-        const QRect sourceBounds(QPoint(0, 0), sourceSize);
-        for (const RecipeCharacterBox &box : profile.characterBoxes) {
-            if (box.name.trimmed().isEmpty()
-                    || box.rect.width() <= 0
-                    || box.rect.height() <= 0
-                    || !sourceBounds.contains(box.rect)) {
+        const QString name = profile.name.trimmed().toLower();
+        QString profileError;
+        if (names.contains(name)
+                || !validateProfile(recipe, profile, &profileError)) {
+            if (names.contains(name)) {
                 setError(errorMessage,
-                         QStringLiteral("Recipe character box is invalid: %1")
-                         .arg(box.name));
-                return false;
+                         QStringLiteral("RECIPE_CONSTRAINT_VIOLATION: profile names are duplicated."));
+            } else {
+                QString code;
+                switch (recipe.detectionMode) {
+                case DetectionMode::Stamp:
+                    code = QStringLiteral("RECIPE_STAMP_PROFILE_INVALID");
+                    break;
+                case DetectionMode::Word:
+                    code = QStringLiteral("RECIPE_WORD_PROFILE_INVALID");
+                    break;
+                case DetectionMode::Ocr:
+                    code = QStringLiteral("RECIPE_OCR_PROFILE_INVALID");
+                    break;
+                case DetectionMode::BarcodeWord:
+                    code = QStringLiteral("RECIPE_BARCODE_PROFILE_INVALID");
+                    break;
+                case DetectionMode::Tissue:
+                    break;
+                }
+                setError(errorMessage,
+                         QStringLiteral("%1: %2")
+                         .arg(code, profileError));
             }
+            return false;
         }
-
+        names.insert(name);
         for (auto it = profile.assetKeys.constBegin();
              it != profile.assetKeys.constEnd(); ++it) {
-            if (it.key().trimmed().isEmpty()
-                    || it.value().trimmed().isEmpty()
-                    || !recipe.assets.contains(it.value())) {
+            if (referencedAssetKeys.contains(it.value())) {
                 setError(errorMessage,
-                         QStringLiteral("Recipe profile asset reference is invalid: %1")
-                         .arg(it.key()));
+                         QStringLiteral("RECIPE_CONSTRAINT_VIOLATION: one asset cannot serve multiple profile roles."));
                 return false;
             }
+            referencedAssetKeys.insert(it.value());
         }
-
-        if (recipe.detectionMode == DetectionMode::BarcodeWord) {
-            const BarcodeRecipeParameters &barcode = profile.barcodeParameters;
-            if (barcode.formatMask == 0u
-                    || (barcode.formatMask & ~3u) != 0u
-                    || barcode.roiPaddingPercent < 0
-                    || barcode.roiPaddingPercent > 100
-                    || barcode.maxDecodeTimeMs <= 0
-                    || barcode.maxDecodeTimeMs > 60000) {
-                setError(errorMessage,
-                         QStringLiteral("Barcode recipe parameters are invalid."));
-                return false;
-            }
-        }
+    }
+    if (referencedAssetKeys.size() != recipe.assets.size()) {
+        setError(errorMessage,
+                 QStringLiteral("RECIPE_CONSTRAINT_VIOLATION: recipe contains unreferenced assets."));
+        return false;
     }
     return true;
 }
@@ -571,6 +687,11 @@ QJsonObject productRecipeToJson(const ProductRecipe &recipe)
     if (recipe.detectionMode == DetectionMode::Tissue) {
         parameters.insert(QStringLiteral("roughnessThreshold"),
                           recipe.tissueParameters.roughnessThreshold);
+    } else if (recipe.detectionMode == DetectionMode::Stamp
+               || recipe.detectionMode == DetectionMode::Ocr) {
+        parameters.insert(QStringLiteral("profile"),
+                          profileToJson(recipe.profiles.first(),
+                                        recipe.detectionMode));
     } else {
         QJsonArray profiles;
         for (const RecipeProfile &profile : recipe.profiles) {
@@ -578,12 +699,11 @@ QJsonObject productRecipeToJson(const ProductRecipe &recipe)
         }
         parameters.insert(QStringLiteral("profiles"), profiles);
     }
-
     QJsonObject assets;
-    for (auto it = recipe.assets.constBegin(); it != recipe.assets.constEnd(); ++it) {
-        assets.insert(it.key(), QDir::fromNativeSeparators(it.value()));
+    for (auto it = recipe.assets.constBegin();
+         it != recipe.assets.constEnd(); ++it) {
+        assets.insert(it.key(), it.value());
     }
-
     QJsonObject json;
     json.insert(QStringLiteral("schemaVersion"), recipe.schemaVersion);
     json.insert(QStringLiteral("recipeId"), recipe.recipeId);
@@ -598,91 +718,85 @@ bool productRecipeFromJson(const QJsonObject &json,
                            ProductRecipe *recipe,
                            QString *errorMessage)
 {
-    if (errorMessage) {
-        errorMessage->clear();
-    }
+    if (errorMessage) errorMessage->clear();
     if (!recipe) {
         setError(errorMessage, QStringLiteral("ProductRecipe output is null."));
         return false;
     }
-
+    if (!hasOnlyKeys(json,
+                     QStringList() << "schemaVersion" << "recipeId"
+                     << "displayName" << "detectionMode"
+                     << "parameters" << "assets",
+                     QStringLiteral("recipe"), errorMessage)) {
+        return false;
+    }
     ProductRecipe candidate;
-    const QJsonValue schemaValue = json.value(QStringLiteral("schemaVersion"));
-    if (!schemaValue.isDouble()
-            || std::floor(schemaValue.toDouble()) != schemaValue.toDouble()) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe field is missing or is not an integer: schemaVersion"));
-        return false;
-    }
-    candidate.schemaVersion = schemaValue.toInt();
-
     QString modeId;
-    if (!readRequiredString(json, "recipeId", &candidate.recipeId, errorMessage)
-            || !readRequiredString(json, "displayName", &candidate.displayName, errorMessage)
-            || !readRequiredString(json, "detectionMode", &modeId, errorMessage)) {
+    if (!readInt(json, "schemaVersion", &candidate.schemaVersion, errorMessage)
+            || !readString(json, "recipeId", &candidate.recipeId, errorMessage)
+            || !readString(json, "displayName", &candidate.displayName, errorMessage)
+            || !readString(json, "detectionMode", &modeId, errorMessage)
+            || !detectionModeFromId(modeId, &candidate.detectionMode)) {
+        if (errorMessage && errorMessage->isEmpty()) {
+            setError(errorMessage, QStringLiteral("Unsupported detectionMode."));
+        }
         return false;
     }
-    if (!detectionModeFromId(modeId, &candidate.detectionMode)) {
-        setError(errorMessage,
-                 QStringLiteral("Unsupported detectionMode: %1").arg(modeId));
-        return false;
-    }
-
     const QJsonValue parametersValue = json.value(QStringLiteral("parameters"));
     if (!parametersValue.isObject()) {
-        setError(errorMessage, QStringLiteral("Recipe parameters must be an object."));
+        setError(errorMessage, QStringLiteral("parameters must be an object."));
         return false;
     }
     const QJsonObject parameters = parametersValue.toObject();
     if (candidate.detectionMode == DetectionMode::Tissue) {
-        const QJsonValue thresholdValue =
-                parameters.value(QStringLiteral("roughnessThreshold"));
-        if (!thresholdValue.isDouble()) {
-            setError(errorMessage,
-                     QStringLiteral("Tissue roughnessThreshold must be a number."));
+        if (!hasOnlyKeys(parameters, QStringList() << "roughnessThreshold",
+                         QStringLiteral("tissue parameters"), errorMessage)
+                || !readNumber(parameters, "roughnessThreshold",
+                               &candidate.tissueParameters.roughnessThreshold,
+                               errorMessage)) return false;
+    } else if (candidate.detectionMode == DetectionMode::Stamp
+               || candidate.detectionMode == DetectionMode::Ocr) {
+        if (!hasOnlyKeys(parameters, QStringList() << "profile",
+                         QStringLiteral("single profile parameters"), errorMessage)) {
             return false;
         }
-        candidate.tissueParameters.roughnessThreshold = thresholdValue.toDouble();
+        RecipeProfile profile;
+        if (!profileFromJson(parameters.value(QStringLiteral("profile")),
+                             candidate.detectionMode, &profile, errorMessage)) {
+            return false;
+        }
+        candidate.profiles.append(profile);
     } else {
-        const QJsonValue profilesValue =
-                parameters.value(QStringLiteral("profiles"));
-        if (!profilesValue.isArray()) {
-            setError(errorMessage,
-                     QStringLiteral("Template recipe profiles must be an array."));
+        if (!hasOnlyKeys(parameters, QStringList() << "profiles",
+                         QStringLiteral("multi profile parameters"), errorMessage)
+                || !parameters.value(QStringLiteral("profiles")).isArray()) {
+            if (errorMessage && errorMessage->isEmpty()) {
+                setError(errorMessage, QStringLiteral("profiles must be an array."));
+            }
             return false;
         }
-        const QJsonArray profiles = profilesValue.toArray();
-        for (const QJsonValue &profileValue : profiles) {
+        for (const QJsonValue &value :
+             parameters.value(QStringLiteral("profiles")).toArray()) {
             RecipeProfile profile;
-            if (!profileFromJson(profileValue,
-                                 candidate.detectionMode,
-                                 &profile,
-                                 errorMessage)) {
-                return false;
-            }
+            if (!profileFromJson(value, candidate.detectionMode,
+                                 &profile, errorMessage)) return false;
             candidate.profiles.append(profile);
         }
     }
-
     const QJsonValue assetsValue = json.value(QStringLiteral("assets"));
     if (!assetsValue.isObject()) {
-        setError(errorMessage, QStringLiteral("Recipe assets must be an object."));
+        setError(errorMessage, QStringLiteral("assets must be an object."));
         return false;
     }
     const QJsonObject assets = assetsValue.toObject();
     for (auto it = assets.constBegin(); it != assets.constEnd(); ++it) {
         if (!it.value().isString()) {
-            setError(errorMessage,
-                     QStringLiteral("Recipe asset value must be a string: %1")
-                     .arg(it.key()));
+            setError(errorMessage, QStringLiteral("Asset path must be a string."));
             return false;
         }
         candidate.assets.insert(it.key(), it.value().toString());
     }
-
-    if (!validateProductRecipe(candidate, errorMessage)) {
-        return false;
-    }
+    if (!validateProductRecipe(candidate, errorMessage)) return false;
     *recipe = candidate;
     return true;
 }

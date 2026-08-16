@@ -8,13 +8,10 @@
 2. 选择与主程序一致的Qt 5.14.2、MSVC 2017 64-bit Kit，并使用Release配置。
 3. 首次打开或工程清单变化后执行 **Run qmake**。
 4. Build `product_recipe_test`、`recipe_store_test`、`tissue_roll_detector_baseline_test`、`ocr_detection_pipeline_test`、`stamp_detection_pipeline_test`、`word_detection_pipeline_test`、`barcode_word_detection_pipeline_test`、`profile_pose_selector_test`和`barcode_decoder_adapter_test`。
-5. 分别运行九个测试目标；`product_recipe_test`包含8个业务测试，`recipe_store_test`包含26个业务测试，`barcode_decoder_adapter_test`包含6个业务测试，其余目标各包含4个业务测试。
+5. 分别运行九个测试目标；阶段1的`product_recipe_test`和`recipe_store_test`各包含7个业务测试。
 
-`recipe_tests`包含两个独立目标。`product_recipe_test`验证五种模式ID、Schema 1 Profile参数JSON往返、
-旧`TemplatePrivateSettings`与新`RecipeProfile`字段无损映射、无效定位/阈值/字符框/二维码参数、
-Profile资源/字符变体枚举、钢印`stampRing`资产角色、多Profile资产命名空间隔离及完整ProductRecipe组装、悬空或越界资源拒绝和不可变运行快照；`recipe_store_test`只在系统临时目录验证
-`recipe.json`及资源复制、整目录覆盖、已校验配方目录查询及损坏目录报告、已选配方的模式/Profile顺序/资源角色解析、有序多配方选择的重复去除/部分成功/全部失败原子性、规范Profile的组装/事务发布/同模式重新选择、钢印/深度OCR单模板发布与同UUID重发、钢印缺环拒绝、草稿会话的稳定UUID与源目录防串写、同一发布身份覆盖时UUID与目录唯一性、统一目标字符解析、字符资产按目标与变体的稳定加载计划、整配方批量计划的顺序与失败不改写、已选配方从内部资源形成可编辑工作副本并事务回存，以及资源缺失、校验失败或目录提交失败时保留旧配方。
-它们不读写用户模板目录，也不改变主程序入口。
+`recipe_tests`包含两个独立目标。`product_recipe_test`验证`MachineSettingsStore`首启、保存/重载、恢复默认、清空、损坏与旧INI拒绝，以及五种类型化`ProductRecipe` JSON往返、单/多Profile、无模板纸巾配方和旧Recipe结构拒绝。
+`recipe_store_test`只在系统临时目录验证五模式整配方事务保存与`PreparedRecipe`准备、多Profile、`RecipeEditorSession`、提交失败回滚、资源缺失/损坏/非法相对路径拒绝、旧模板目录拒绝和五模式启动资源预检。它们不读写用户旧模板目录，也不改变主程序入口。
 
 `detection_tests`是五种检测Pipeline的子工程集合。纸巾目标验证配方唯一默认阈值6.0、
 显式参数传入和原失败诊断；深度OCR目标通过内存Fake OCR设备验证窄接口及原按字节清洗、
@@ -28,7 +25,7 @@ Profile选择目标验证无效候选跳过、严格最高分选择、同分保�
 `runtime_tests`验证运行与设备边界而不加载真实生产设备。当前`barcode_decoder_adapter_test`通过注入假C ABI函数，验证DLL接口就绪、成功结果/格式/角点映射、坏ROI在调用前拒绝、ABI参数错误保持终止、禁用fallback只调用一次，以及缓存的首选预处理策略优先执行。它不加载真实`BarcodeDecoder.dll`，也不读取生产二维码图片。
 
 测试目标链接完成后会把当前Kit的`Qt5Core.dll`、`Qt5Test.dll`
-（Debug为带`d`后缀版本）复制到EXE目录；需要OpenCV的五个检测目标和二维码设备适配器测试还会复制主程序
+（Debug为带`d`后缀版本）复制到EXE目录；需要OpenCV的配方存储、检测及设备适配器测试还会复制主程序
 Release发布包使用的x64 `opencv_world341.dll`，
 并读取PE头确认每个DLL与目标EXE架构一致，再逐个校验源文件和目标文件的SHA-256。
 这样即使Qt Creator把SUBDIRS工程配置为

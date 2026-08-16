@@ -12,23 +12,21 @@ PROJECT_ROOT = $$clean_path($$PWD/../../..)
 
 SOURCES += \
     ../product_recipe_test.cpp \
-    $$PROJECT_ROOT/app/appsettingsmanager.cpp \
+    $$PROJECT_ROOT/app/DetectionModes.cpp \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
-    $$PROJECT_ROOT/app/recipes/template_profile_assets.cpp \
-    $$PROJECT_ROOT/app/recipes/template_recipe_assembler.cpp \
-    $$PROJECT_ROOT/app/recipes/template_profile_mapper.cpp
+    $$PROJECT_ROOT/app/system_support/settings/machine_settings.cpp \
+    $$PROJECT_ROOT/app/system_support/settings/machine_settings_store.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/appsettingsmanager.h \
+    $$PROJECT_ROOT/app/DetectionModes.h \
+    $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
-    $$PROJECT_ROOT/app/recipes/template_profile_assets.h \
-    $$PROJECT_ROOT/app/recipes/template_recipe_assembler.h \
-    $$PROJECT_ROOT/app/recipes/template_profile_mapper.h
+    $$PROJECT_ROOT/app/system_support/settings/machine_settings.h \
+    $$PROJECT_ROOT/app/system_support/settings/machine_settings_store.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \
-    $$PROJECT_ROOT/app/recipes \
-    $$PROJECT_ROOT/third_party/opencv/include
+    $$PROJECT_ROOT/app/recipes
 
 CONFIG(debug, debug|release) {
     QMAKE_CXXFLAGS_DEBUG += /MTd

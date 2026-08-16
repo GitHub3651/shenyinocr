@@ -1,6 +1,6 @@
 #pragma once
 
-#include "appsettingsmanager.h"
+#include "system_support/settings/machine_settings_store.h"
 
 #include <QList>
 #include <QMap>
@@ -25,7 +25,7 @@ public:
     struct Callbacks
     {
         std::function<bool(bool)> saveSettings;
-        std::function<void(GlobalSettings *)> syncTemplateHistory;
+        std::function<void(MachineSettings *)> syncRecipeHistory;
         std::function<void()> updateImageSaveOptionsVisibility;
         std::function<void()> updateSaveDirectoryText;
         std::function<void()> updateTissueVisibility;
@@ -35,10 +35,10 @@ public:
 
     MachineSettingsPageController(
         Ui::Widget *ui,
-        GlobalSettings *appliedSettings,
+        MachineSettings *appliedSettings,
+        MachineSettingsStore *settingsStore,
         SettingsEditState *editState,
         QString *selectedDirectory,
-        QString *templateBaseDirectory,
         bool *applyingSettings,
         bool *updatingSettingsUi,
         const Callbacks &callbacks,
@@ -49,13 +49,13 @@ public:
     void installWheelProtection(QWidget *rootWidget);
     void setSoftwareDataDirectoryEditor(QLineEdit *editor);
 
-    bool load(QString *errorMessage);
+    void initialize(const MachineSettings &settings);
     bool save(bool showErrorMessage, QString *errorMessage);
     bool clear(QString *errorMessage);
-    GlobalSettings defaultsForHardwareState(
+    MachineSettings defaultsForHardwareState(
         bool cameraOpen,
         bool plcConnected) const;
-    void applyToUi(const GlobalSettings &settings);
+    void applyToUi(const MachineSettings &settings);
 
     void updateAppliedFromUi(const QString &key);
     void updateAppliedFromUi(const QStringList &keys);
@@ -66,7 +66,7 @@ public:
     void clearDirty(const QString &key);
     void clearDirty(const QStringList &keys);
     void clearAllDirty();
-    void restoreUnappliedGlobalSettings();
+    void restoreUnappliedMachineSettings();
 
     void updateHardwareEnabled(
         bool cameraOpen,
@@ -124,10 +124,10 @@ private:
         bool showDisabledReason);
 
     Ui::Widget *m_ui = nullptr;
-    GlobalSettings *m_appliedSettings = nullptr;
+    MachineSettings *m_appliedSettings = nullptr;
+    MachineSettingsStore *m_settingsStore = nullptr;
     SettingsEditState *m_editState = nullptr;
     QString *m_selectedDirectory = nullptr;
-    QString *m_templateBaseDirectory = nullptr;
     bool *m_applyingSettings = nullptr;
     bool *m_updatingSettingsUi = nullptr;
     Callbacks m_callbacks;

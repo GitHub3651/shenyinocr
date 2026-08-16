@@ -42,6 +42,10 @@ InspectionStartPreflightResult InspectionStartPreflight::evaluateAccess(
 InspectionStartPreflightResult InspectionStartPreflight::evaluateResources(
     const InspectionStartResourceInput &input)
 {
+    if (!input.preparedRecipeReady) {
+        return rejected(InspectionStartIssue::PreparedRecipeMissing);
+    }
+
     if (input.modeKind == InspectionStartModeKind::Tissue) {
         return InspectionStartPreflightResult();
     }
@@ -123,11 +127,6 @@ InspectionStartPreflightResult InspectionStartPreflight::evaluateResources(
 
     if (input.modeKind == InspectionStartModeKind::SingleTemplate) {
         QStringList errors;
-        if (!input.productTemplateDirectorySelected) {
-            errors.append(
-                        QString::fromWCharArray(
-                            L"\u672a\u9009\u62e9\u4ea7\u54c1\u6a21\u677f\u6587\u4ef6\u5939"));
-        }
         if (!input.trackingTemplateReady) {
             errors.append(
                         QString::fromWCharArray(
@@ -139,7 +138,19 @@ InspectionStartPreflightResult InspectionStartPreflight::evaluateResources(
                         QString::fromWCharArray(
                             L"\u55b7\u7801\u68c0\u6d4b\u533a\u57df "
                             L"calibrate_config.yaml/date_poly "
-                            L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
+                                 L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
+        }
+        if (input.targetTextRequired && !input.targetTextReady) {
+            errors.append(
+                        QString::fromWCharArray(
+                            L"\u76ee\u6807\u5b57\u7b26\u5c1a\u672a\u8bbe\u7f6e"));
+        }
+        if (input.characterTemplatesRequired
+                && !input.characterTemplatesReady) {
+            errors.append(
+                        QString::fromWCharArray(
+                            L"\u5b57\u7b26\u6a21\u677f\u7f3a\u5931\u6216"
+                            L"\u7d22\u5f15\u914d\u7f6e\u65e0\u6548"));
         }
         if (!errors.isEmpty()) {
             return rejected(

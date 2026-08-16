@@ -1,13 +1,13 @@
 #pragma once
 
-#include "appsettingsmanager.h"
+#include "system_support/settings/machine_settings.h"
 
 class MachineSettingsPolicy
 {
 public:
-    static GlobalSettings defaultsForHardwareState(
-        const GlobalSettings &applied,
-        const GlobalSettings &defaults,
+    static MachineSettings defaultsForHardwareState(
+        const MachineSettings &applied,
+        const MachineSettings &defaults,
         bool cameraOpen,
         bool plcConnected);
 };

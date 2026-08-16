@@ -4,6 +4,7 @@
 #include "TrackingTypes.h"
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
+#include "recipes/product_recipe.h"
 
 #include <QString>
 
@@ -12,12 +13,12 @@
 struct InspectionProfileSource
 {
     QString name;
-    QString directoryPath;
     cv::Mat trackingTemplate;
     std::vector<cv::Point2f> barcodePoly;
     std::vector<cv::Point2f> datePoly;
     QString targetText;
-    double imageThreshold = 70.0;
+    int imageThreshold =
+            RecipeProfile::DefaultImageThresholdPercent;
     std::vector<cv::Mat> digitTemplates;
     std::vector<int> digitTemplateTargetIndexes;
     BarcodeDecodeOptions barcodeOptions;
@@ -57,6 +58,5 @@ class InspectionProfileSnapshotBuilder
 {
 public:
     static InspectionProfileSnapshot create(
-        const std::vector<InspectionProfileSource> &sources,
-        const QString &fallbackThresholdText);
+        const std::vector<InspectionProfileSource> &sources);
 };

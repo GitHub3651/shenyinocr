@@ -1,6 +1,8 @@
 #ifndef RECIPES_PRODUCT_RECIPE_H
 #define RECIPES_PRODUCT_RECIPE_H
 
+#include "contracts/barcode_parameter_defaults.h"
+
 #include <QJsonObject>
 #include <QMap>
 #include <QRect>
@@ -28,10 +30,14 @@ struct TissueRecipeParameters
 
 struct BarcodeRecipeParameters
 {
-    unsigned int formatMask = 1u;
-    int roiPaddingPercent = 8;
-    int maxDecodeTimeMs = 60;
-    bool enableFallback = true;
+    unsigned int formatMask =
+            BarcodeParameterDefaults::FormatMask;
+    int roiPaddingPercent =
+            BarcodeParameterDefaults::RoiPaddingPercent;
+    int maxDecodeTimeMs =
+            BarcodeParameterDefaults::MaxDecodeTimeMs;
+    bool enableFallback =
+            BarcodeParameterDefaults::EnableFallback;
 };
 
 struct RecipeCharacterBox
@@ -42,12 +48,13 @@ struct RecipeCharacterBox
 
 struct RecipeProfile
 {
+    static const int DefaultImageThresholdPercent = 70;
+
     QString name;
     QString targetText;
-    double imageThreshold = 70.0;
-    QRectF trackingBox;
-    bool hasValidBoxes = false;
-    QSize characterSourceImageSize = QSize(0, 0);
+    int imageThresholdPercent = DefaultImageThresholdPercent;
+    QRectF trackingRoi;
+    QSize characterSourceSize = QSize(0, 0);
     QVector<RecipeCharacterBox> characterBoxes;
     BarcodeRecipeParameters barcodeParameters;
     QMap<QString, QString> assetKeys;
@@ -70,6 +77,8 @@ typedef std::shared_ptr<const ProductRecipe> ProductRecipeSnapshot;
 
 QString detectionModeId(DetectionMode mode);
 bool detectionModeFromId(const QString &modeId, DetectionMode *mode);
+QString detectionModeUiId(DetectionMode mode);
+bool detectionModeFromUiId(const QString &modeId, DetectionMode *mode);
 bool isTemplateRecipeMode(DetectionMode mode);
 QStringList requiredTemplateProfileAssetRoles(DetectionMode mode);
 

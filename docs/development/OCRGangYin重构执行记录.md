@@ -1206,7 +1206,56 @@
 - [x] 阶段0是纯文档阶段，静态门禁已经通过；本次规则补充完成并复核后，自动创建阶段0本地提交。
 - [x] 阶段1写生产代码前必须先新增并冻结 `docs/development/OCRGangYin新架构数据Schema.md`，逐字段确定 `MachineSettings`、五模式`ProductRecipe/Profile`、`PreparedRecipe`和资源清单；真实代码与已确认行为不能消除的冲突必须询问用户，不得猜默认值。
 
-### 下一阶段
+### 阶段0完成时的下一阶段
 
-- [ ] 阶段 1：设置与配方成为唯一数据源。
-- [ ] 阶段 1 尚未开始；不得在阶段 0 静态核对完成前修改生产代码。
+- [x] 阶段1“设置与配方成为唯一数据源”已于2026-08-16在阶段0提交`4b00646`之后开始。
+- [x] 阶段0静态核对与提交完成前没有修改阶段1生产代码。
+
+## 新架构完全替换阶段：阶段 1 设置与配方唯一数据源（2026-08-16～2026-08-17，已完成）
+
+### 调用链影响与Schema冻结
+
+- [x] 开始时复核分支`codex/ocrgangyin-refactor`、HEAD `4b006464b62d612a7c381f5fb7895ac768684cee`和干净工作区；`app.zip`不存在。阶段1期间持续检查该文件仍不存在，未创建、修改、移动、删除、暂存或提交用户文件。
+- [x] 在生产代码修改前从当前源码、UI、旧INI键、五种模式消费者、功能表和计划反向冻结`docs/development/OCRGangYin新架构数据Schema.md`，覆盖AppData根、MachineSettings、五种类型化ProductRecipe、单/多Profile、ROI/字符框/二维码参数、图片/YAML资源、PreparedRecipe、编辑会话、事务保存、拒绝合同和错误码。
+- [x] 真实调用链影响范围最终确认为50项：`SYS-001、SYS-007..008、UI-001、UI-008..009、SET-001..013、TPL-003..016、DET-002..006、CAM-001、CAM-003..004、CAM-006、RUN-001、RUN-005、PLC-001、PLC-003..004、SAVE-001..003`；功能表保持`迁移中50、已验证37、已确认删除3`，只有用户集中门禁通过后才恢复状态。
+
+### 唯一设置路径
+
+- [x] 新增`MachineSettings`和`MachineSettingsStore`。新设置只读写`<AppData>/settings/app_settings.json`，首启返回唯一默认对象；保存采用同目录临时文件、重读比较、备份改名、提交和失败回滚；损坏JSON、未知/缺失字段、非法范围、固定PLC地址变化和旧UI枚举ID均明确拒绝，不读取旧INI或旧目录。
+- [x] 新JSON使用`stamp/word/ocr/tissue/barcodeWord`、`none/ngOnly/okOnly/all`等Schema稳定枚举值；旧`word_detection`、`save_all`等只留在Qt页面适配内存中，不能进入新JSON。相机曝光800、增益1、检测间隔300、JPEG质量92等默认只由`MachineSettings`构造函数提供。
+- [x] `ApplicationStartup`成为本阶段唯一加载点：一次取得AppData根并加载设置快照，损坏即阻止启动；随后在组合根构造`MachineSettingsStore`、`RecipeStore`、vendor相机/PLC/OCR/读码器和主窗。主窗与设置页面共享同一个Store和启动快照，不再二次加载。
+- [x] 机器设置页面的保存、恢复默认和清空全部委托新Store；清空只删除新设置JSON，不删除配方、生产图片、授权或日志。相机曝光/增益、PLC连接/地址/工艺参数、存图策略和UI布局都来自MachineSettings快照；纸巾阈值不再属于机器设置。
+
+### 唯一配方与运行资产路径
+
+- [x] 收口`ProductRecipe`为五种DetectionMode的严格Schema：Stamp/Ocr单Profile，Word/BarcodeWord多Profile，Tissue零Profile零资源；跟踪ROI、字符来源尺寸/字符框、目标文本、阈值和二维码参数类型化；资源只能使用`assets/`内相对路径，同一资源不得承担多个Profile角色。
+- [x] 二维码formatMask=1、padding=8%、预算60ms、fallback=true的唯一代码默认移到`contracts/barcode_parameter_defaults.h`；产品配方和设备读码选项只引用该合同。图像阈值唯一默认70来自`RecipeProfile`，纸巾唯一默认6.0来自`TissueRecipeParameters`。
+- [x] 新增不可变`PreparedRecipeSnapshot`，完整读取并解码所有已声明的tracking/raw/stampRing/字符图片，解析`calibrate_config.yaml`及日期/二维码/钢印多边形并执行已保存资产交叉约束；资源缺失、空文件、坏图、坏YAML、越界路径和已声明字符数据内部不完整均返回结构化错误。目标字符尚未确认、整组字符尚未切割或目标覆盖不足形成可继续编辑但不可启动的快照，由启动预检拒绝；运行时不再引用外部绝对资源路径。
+- [x] `RecipeStore`只接受规范小写UUID目录。保存先写同级`<uuid>.tmp.<transaction-uuid>`，复制完整资源并从临时目录重载、比较、解码和准备，通过后备份正式目录并改名提交；提交失败恢复上一完整目录。非UUID旧模板目录不进入目录列表，显式请求返回`RECIPE_LEGACY_FORMAT_REJECTED`；UUID目录内只有旧INI时按缺少`recipe.json`拒绝。
+- [x] 新增统一`RecipeEditorSession`，负责New/Editing状态、稳定recipeId、草稿、资源源路径、事务发布和UUID工作区；重置/析构只清理当前会话工作区，不修改正式配方。模板编辑入口继续保持原按钮、画布和提示流程，但创建、加载、编辑、字符资产回存、同UUID重发及纸巾阈值保存全部走新Session/Store。
+- [x] 五模式启动预检只接受当前模式的PreparedRecipe；模式索引、相机/PLC/存图/变换/间隔来自已应用MachineSettings，跟踪图、ROI、YAML多边形、字符图、钢印环和纸巾阈值来自本次PreparedRecipe。启动链不再从UI控件、旧模板目录或检测器路径加载函数补资源。
+
+### 旧路径删除与工程清单
+
+- [x] 删除`AppSettingsManager`、`GlobalSettings`、`TemplatePrivateSettings`及其旧INI读写、旧设置兼容、模板父目录/按模式路径记忆、检测器按目录加载和旧模板私有设置调用；生产代码中三类旧符号与`settings.ini/app_settings.appset/QSettings`引用均为0（授权`license.ini`不属于本阶段旧设置）。
+- [x] 删除旧配方并行链：`recipe_selection.*`、`template_profile_assets.*`、`template_character_asset_workspace.*`、`template_profile_load_plan.*`、`template_profile_mapper.*`、`template_recipe_assembler.*`、`template_recipe_draft_session.*`、`template_recipe_edit_session.*`、`template_recipe_workflow.*`、`template_recipe_publisher.*`及旧`recipes/template_runtime_profile.h`；新的UI缓存头位于`runtime/template_runtime_profile.h`且不含路径/持久化字段。
+- [x] `app/recipes`不包含Detection实现或旧设置管理器；主工程和三个受影响测试工程已删除全部旧项并登记MachineSettings、PreparedRecipe、RecipeEditorSession、共享二维码默认合同及新runtime头。工程清单逐项解析结果为文件存在、大小写匹配、无重复登记。
+
+### 测试源码与Agent静态门禁
+
+- [x] 重写`product_recipe_test`为7项业务测试，覆盖MachineSettingsStore首启、保存重载、恢复默认、清空、损坏/旧INI/旧枚举拒绝、五模式JSON往返、单/多Profile、纸巾零模板和旧Recipe形状拒绝。
+- [x] 重写`recipe_store_test`为7项业务测试，覆盖五模式整目录保存/加载/准备、多Profile、只读PreparedRecipe、RecipeEditorSession与工作区清理、提交失败回滚、资源缺失/损坏/非法路径、旧模板目录拒绝和五模式启动资源预检；OpenCV依赖及运行库清单已加入测试工程。
+- [x] 更新`detection_completion_test`以使用MachineSettings和Prepared配方合同，删除旧运行设置字符串解析用例；声明/定义静态核对为140/140。Agent只修改和检查测试源码，未运行任何测试目标。
+- [x] Agent静态门禁通过：主工程及三个测试工程清单解析通过；全仓本地quoted include和文件名大小写通过；MachineSettingsStore、RecipeStore、RecipeEditorSession、模板/设置控制器及PLC控制器声明/定义核对通过；Widget 27个自动连接槽声明/定义一致；产品/Store测试各7/7；旧工程项0引用；配方反向依赖0；运行启动参数只来自设置/Prepared快照；默认值唯一性搜索通过；功能表90行状态统计为50/37/3；`git diff --check`通过。
+- [x] Agent未运行或间接触发qmake、nmake、jom、msbuild、cmake构建、Qt Creator构建、项目测试可执行文件、主程序或任何编译/链接/启动脚本。
+
+### 当前门禁状态
+
+- [x] 2026-08-17首次Qt Creator Rebuild在`machine_settings_store.cpp:48`因MSVC2017将无BOM UTF-8中文字符串按本机代码页解析而报C2001/C1907；已为本阶段4个严格UTF-8且含中文的编译单元统一补UTF-8 BOM，未改变提示文本或业务逻辑，并完成同类源码扫描。
+- [x] 2026-08-17复验发现`product_recipe_test`因测试工程漏列`DetectionModes.cpp`而报LNK2019/LNK1120，并发现既有窄字符中文较多的`template_editor_controller.cpp`不适合补BOM、导致模板提示框乱码；已为`product_recipe_test`和同样引用MachineSettings的`detection_completion_test`补齐`DetectionModes.cpp/.h`，同时仅撤回模板控制器BOM。MachineSettingsStore、ApplicationStartup和产品配方测试中只使用`QStringLiteral`的中文编译单元继续保留BOM。
+- [x] 2026-08-17测试复验中`recipe_store_test`为4通过/5失败，均由Windows下资产根前缀使用反斜杠、绝对资产路径使用正斜杠而将合法`assets/profiles/0/calibrate_config.yaml`误判为越界；已将PreparedRecipe的包含关系比较统一为清理后的正斜杠绝对路径，不放宽绝对路径、`..`或外部资源限制。同次`detection_completion_test`为141通过/1失败，失败夹具未给首个Profile设置被断言的`profile-a`名称；已补齐测试输入，不在生产构建器增加名称fallback。
+- [x] 2026-08-17主程序复验显示撤回`template_editor_controller.cpp`的BOM后出现多处C2001，证明依赖自动编码识别无法同时保证编译与窄字符中文显示；已审计`app/`下186个C/C++源码和头文件均为严格UTF-8，并在主qmake工程的MSVC配置中显式加入`/utf-8`，同时固定源字符集和执行字符集。Qt 5.14、MSVC2017及C++11保持不变。
+- [x] 2026-08-17人工回归发现“保存模板”被空目标字符阻断；用户确认模板制作不得受目标字符影响。复核阶段0基准代码后确认既有顺序是先保存基础模板，再询问是否立即切割字符模板，目标字符随后通过独立入口确认。现已删除基础保存的目标字符门禁和自动强制切割：基础几何/资源先事务发布，字符切割可立即执行或以后执行，目标字符可最后确认；`ProductRecipe`与`PreparedRecipe`允许这些明确的未完成编辑状态，同时仍解码并拒绝所有已声明的损坏资源，只有启动资源预检要求当前模式的目标字符及字符模板覆盖完整。Schema修订为1.1（JSON schemaVersion仍为1），产品配方、RecipeStore及启动预检测试源码同步覆盖“基础保存→可选切割→目标确认→允许启动”的边界。
+- [x] 2026-08-17用户确认阶段1最终差异的统一Qt Creator门禁均无问题：已执行Run qmake、Rebuild、设置/配方相关测试和主程序人工回归，并覆盖新设置首启/保存/重启/恢复默认/清空、新配方创建/加载/编辑/损坏拒绝、五模式资源预检、事务失败保护、旧格式拒绝、相机曝光/增益、模板入口及基础模板保存不依赖目标字符的流程。
+- [x] 阶段1实际受影响的50项保留功能全部由`迁移中`恢复为`已验证`；正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。当前无真实PLC，本轮PLC证据仍只限Fake合同，不冒充真实PLC、机械剔除或现场恢复验收。
+- [x] 阶段1提交前最终静态门禁通过：90个正式功能ID唯一且状态为0/0/0/87/0/3；74个差异路径均属于阶段1且无构建产物或用户文件，`app.zip`不存在、暂存区为空；主工程新增/删除清单、三个测试工程、全仓本地include大小写、关键声明/定义、三组测试声明/定义（7/7、7/7、140/140）、严格UTF-8和花括号核对通过；生产代码中旧设置三类型、旧INI读写、recipes反向依赖、旧目标字符保存门禁及`PREPARE_TARGET_TEXT_MISSING`均为0；`git diff --check`通过。Agent未执行构建、测试或主程序。允许精确暂存并创建唯一阶段1本地提交；不推送，不进入阶段2。

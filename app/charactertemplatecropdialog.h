@@ -7,6 +7,9 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QMap>
+
+#include "recipes/product_recipe.h"
 
 class QLabel;
 class QLineEdit;
@@ -19,10 +22,12 @@ class CharacterTemplateCropDialog : public QDialog
 {
 public:
     explicit CharacterTemplateCropDialog(const QImage &sourceImage,
-                                         const QString &templateDirPath,
+                                         const RecipeProfile &initialProfile,
                                          QWidget *parent = nullptr);
 
     int savedCount() const;
+    RecipeProfile resultProfile() const;
+    QMap<QString, QImage> characterImages() const;
 
 private:
     struct CharacterBox
@@ -41,11 +46,10 @@ private:
     QString nextAvailableFileName(const QString &baseName, const QStringList &reservedFileNames = QStringList()) const;
     void refreshSaveNamePreviews();
     bool saveTemplates();
-    bool saveCharacterBoxesToSettings(const QList<CharacterBox> &boxes, QString *errorMessage) const;
-    bool removeOldCharacterTemplateImages() const;
 
     QImage m_sourceImage;
-    QString m_templateDirPath;
+    RecipeProfile m_resultProfile;
+    QMap<QString, QImage> m_characterImages;
     QList<CharacterBox> m_initialBoxes;
     CropImageLabel *m_cropLabel = nullptr;
     QWidget *m_drawPage = nullptr;

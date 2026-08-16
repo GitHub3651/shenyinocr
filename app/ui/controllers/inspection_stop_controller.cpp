@@ -126,7 +126,7 @@ void InspectionStopController::stopInspection()
                         0,
                         (std::numeric_limits<int>::max)());
             m_host->ui->spinBox->setValue(
-                        m_host->m_appliedGlobalSettings.cameraExposure);
+                        m_host->m_appliedMachineSettings.cameraExposure);
         }
         m_host->m_settingsPageController->refreshDirty("camera.exposure");
         QMessageBox::warning(m_host,

@@ -60,12 +60,11 @@
 #include <templatematch.h>
 #include <Detector.h>
 #include "TrackingTypes.h"
-#include "appsettingsmanager.h"
+#include "system_support/settings/machine_settings_store.h"
 #include "recipes/product_recipe.h"
-#include "recipes/template_profile_assets.h"
+#include "recipes/recipe_store.h"
 #include "recipes/template_mode_memory.h"
-#include "recipes/template_runtime_profile.h"
-#include "recipes/template_recipe_workflow.h"
+#include "runtime/template_runtime_profile.h"
 #include "devices/barcode/barcode_decoder.h"
 #include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
@@ -93,7 +92,6 @@ class InspectionStartController;
 class InspectionStopController;
 class MachineSettingsPageController;
 class TemplateEditorController;
-struct RecipeSelection;
 struct InspectionProfileSnapshot;
 class InspectionRuntimeStartTransaction;
 
@@ -120,6 +118,9 @@ public:
         const std::shared_ptr<InspectionPlcController> &plcController,
         const OcrEngineFactory &ocrEngineFactory,
         const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
+        const MachineSettings &startupSettings,
+        const std::shared_ptr<MachineSettingsStore> &settingsStore,
+        const std::shared_ptr<RecipeStore> &recipeStore,
         QWidget *parent = nullptr);
     ~Widget();
 
@@ -138,8 +139,6 @@ public:
     void initWidget();                  ///< 初始化界面
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
     void display(const Mat* image);     ///< 显示图像
-    bool saveSettingsToDir(const QString &dirPath);
-    bool loadSettingsFromDir(const QString &dirPath, bool showErrorMessage = true);
 
 signals:
     // ========== 信号定义 ==========
@@ -163,7 +162,6 @@ private slots:
     void on_sureButton_clicked();       ///< 确定按钮
 
     // ========== 工具函数 ==========
-    QString setdatetime();              ///< 设置日期时间
 
 
     // ========== PLC相关槽函数 ==========
@@ -231,29 +229,32 @@ private:
     bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
-    bool applyRuntimeThreadSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyCameraHardwareSettingsForRun(QStringList *errors);
+    bool applyRuntimeThreadSettingsForRun(
+        const PreparedRecipeSnapshot &prepared,
+        QStringList *errors);
+    bool applyPlcTriggerModeForRun(QStringList *errors);
+    bool applyPlcRunSettingsForRun(QStringList *errors);
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
-    void setupTemplatePrivateSettingDirtyTracking();
+    void setupRecipeProfileDirtyTracking();
     void refreshTemplateTargetTextDirty();
     void refreshTemplateImageThresholdDirty();
-    void refreshTemplatePrivateSettingDirty();
+    void refreshRecipeProfileDirty();
     void markTemplateTargetTextDirty();
     void markTemplateImageThresholdDirty();
     void clearTemplateTargetTextDirty();
     void clearTemplateImageThresholdDirty();
-    void clearTemplatePrivateSettingDirty();
-    void updateTemplatePrivateSettingDirtyUi();
+    void clearRecipeProfileDirty();
+    void updateRecipeProfileDirtyUi();
     void updateHardwareParameterUiEnabled();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
     void updateImageSaveOptionsVisibility();
     void updateTissueRoughnessUiVisibility();
-    bool applyTissueRoughnessThresholdFromUi(bool showMessage);
-    void updateTissueRecipeParameters(double roughnessThreshold);
     void setupTemplateGuide();
     void adjustTemplateGuideHeight();
     void showTemplateGuideForCurrentMode();
@@ -267,11 +268,9 @@ private:
     void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
-    void restoreDefaultGlobalSettings();
+    void restoreDefaultMachineSettings();
     QString detectModeIdForIndex(int index) const;
     QString currentDetectModeId() const;
-    QStringList currentTemplatePathsForMode(const QString &modeId) const;
-    void storeCurrentTemplatePathsForMode(const QString &modeId);
     void restoreTemplatesForMode(const QString &modeId, bool showMessage);
     bool activatePublishedWordRecipe(const QString &recipeId,
                                      const QString &modeId,
@@ -291,6 +290,7 @@ private:
     bool startDetectionWorkerForMode(
         InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
+        const PreparedRecipeSnapshot &prepared,
         const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage);
     void enterInspectionFault(
@@ -315,10 +315,12 @@ private:
     Ui::Widget *ui;                     ///< UI界面指针
     MultiCameraWidget *m_multiCameraWidget = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
-    GlobalSettings m_appliedGlobalSettings;
-    QString m_currentDetectModeId = "word_detection";
-    bool m_applyingGlobalSettings = false;
-    bool m_updatingGlobalSettingsUi = false;
+    MachineSettings m_appliedMachineSettings;
+    std::shared_ptr<MachineSettingsStore> m_machineSettingsStore;
+    std::shared_ptr<RecipeStore> m_recipeStore;
+    QString m_currentDetectModeId;
+    bool m_applyingMachineSettings = false;
+    bool m_updatingMachineSettingsUi = false;
     SettingsEditState m_settingsEditState;
     std::unique_ptr<MachineSettingsPageController> m_settingsPageController;
     std::unique_ptr<TemplateEditorController> m_templateEditorController;
@@ -344,7 +346,6 @@ private:
     std::unique_ptr<InspectionResultCoordinator> m_resultCoordinator;
     std::unique_ptr<InspectionRuntimeUiCoordinator>
             m_runtimeUiCoordinator;
-    TissueRecipeParameters m_tissueRecipeParameters;
     bool m_faultAlarmPresented = false;
     ProductKey m_activePlcOutputProductKey;
     std::vector<ProductKey> m_pendingPlcResetProductKeys;
@@ -359,7 +360,6 @@ private:
 
     // ========== 图像相关 ==========
     int imageIndex;                     ///< 图像索引
-    QString imagePath;                  ///< 图像路径
     QStringList imageFiles;             ///< 图像文件列表
     bool recognitionCompletedFlag;      ///< 识别完成标志
 
@@ -394,7 +394,6 @@ private:
     // ========== 设置和UI ==========
     QMap<QString, bool> settings;       ///< 设置映射
     QPointer<ImageLabel> imageLabel;    ///< 图像标签指针
-    void initOverlapDetectorFromCurrentDir(); ///< 从当前模板文件夹加载防重叠配置
 
     // ========== 图像处理相关 ==========
     cv::Mat croppedImage;               ///< 裁剪图像
@@ -463,46 +462,18 @@ private:
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
     std::shared_ptr<IOcrEngine> m_ocrEngine;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
-    QStringList wordTemplateImagePathsForKey(const QDir &directory,
-                                             const QString &searchKey,
-                                             bool includeVariants = true) const;
-    bool loadWordDigitTemplatesFromDir(const QString &dirPath,
-                                       const QStringList &baseNames,
-                                       std::vector<cv::Mat> *templates,
-                                       std::vector<int> *templateTargetIndexes,
-                                       QString *errorMessage,
-                                       bool includeVariants = true) const;
     bool loadWordDigitTemplatesFromProfile(
         const WordTemplateProfile &profile,
         const QStringList &baseNames,
         std::vector<cv::Mat> *templates,
         std::vector<int> *templateTargetIndexes,
         QString *errorMessage) const;
-    bool loadWordTemplateProfileFromDir(const QString &dirPath,
-                                        WordTemplateProfile *profile,
-                                        QString *errorMessage);
-    bool loadWordTemplateProfileFromRecipeSelection(
-        const RecipeSelection &selection,
-        int profileIndex,
-        WordTemplateProfile *profile,
-        QString *errorMessage);
-    bool loadWordTemplateProfilesFromRecipeSelection(
-        const RecipeSelection &selection,
-        std::vector<WordTemplateProfile> *profiles,
-        QStringList *pendingMessages,
-        QString *errorMessage);
-    void refreshWordTemplateProfileDigitCache(
-        WordTemplateProfile *profile) const;
-    InspectionProfileSnapshot createWordTemplateRunSnapshot() const;
     void refreshWordTemplateRecipeProfile(
         WordTemplateProfile *profile) const;
-    bool saveWordTemplatePrivateSettings(
+    bool saveWordRecipeProfile(
         int profileIndex,
-        const TemplatePrivateSettings &settings,
+        const RecipeProfile &settings,
         QString *errorMessage);
-    void refreshWordTemplateRecipeAssets();
-    void prepareWordTemplateRecipeDraft(const WordTemplateProfile &profile);
-    bool publishWordTemplateRecipeDraft(QString *errorMessage);
     bool publishWordTemplateRecipeEdit(int profileIndex,
                                        QString *errorMessage);
     bool publishWordTemplateRecipeEdits(
@@ -515,27 +486,14 @@ private:
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
     void clearSingleTemplateRecipeState();
-    bool loadSingleTemplateCharacterAssets(
-        const QMap<QString, QString> &assetPathsByRole,
-        const QStringList &targetUnits,
-        std::vector<cv::Mat> *templates,
-        std::vector<int> *templateTargetIndexes,
-        QString *errorMessage) const;
     bool republishSingleTemplateRecipeSettings(
-        const TemplatePrivateSettings &settings,
+        const RecipeProfile &settings,
         QString *errorMessage);
     void refreshWordTemplateEditorCombo();
     void applyWordTemplateEditorSelection(int comboIndex);
     void setCurrentWordTemplateEditIndex(int profileIndex);
     int currentWordTemplateProfileIndex() const;
-    QString wordTemplateProfileAssetPath(
-        const WordTemplateProfile &profile,
-        const QString &role,
-        const QString &legacyFileName) const;
     void displayWordTemplateRawImage(const WordTemplateProfile &profile);
-    void displayWordTemplateRawImage(const QString &dirPath);
-    void displayWordTemplateRawImageFile(const QString &rawImagePath,
-                                         const QString &templateName);
     BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
     bool validateBarcodeTemplateRect(
         const QRect &uiBarcodeRect,
@@ -547,13 +505,10 @@ private:
     void clearBarcodeTemplateValidation();
 
     // ========== 设置相关函数 ==========
-    void loadSettings();                ///< 加载设置
     bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
-    void applyGlobalSettingsToUi(const GlobalSettings &settings);
-    void applyTemplatePrivateSettingsToUi(const TemplatePrivateSettings &settings);
+    void applyMachineSettingsToUi(const MachineSettings &settings);
+    void applyRecipeProfileToUi(const RecipeProfile &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
-    QString currentTemplateDirPath;       // 非字库模式当前路径；字库模式仅由当前 profile 临时派生
-    QString templateBaseDirPath;          // 产品模板父目录
     void initStyle();  // 声明后才能在 cpp 中实现和调用
 };
 

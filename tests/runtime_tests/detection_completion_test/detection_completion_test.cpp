@@ -42,6 +42,20 @@
 
 namespace {
 
+InspectionPlcAddressMap testPlcAddresses()
+{
+    InspectionPlcAddressMap addresses;
+    addresses.triggerModeDb = 1;
+    addresses.triggerModeOffset = 1032;
+    addresses.resultDb = 1;
+    addresses.resultOffset = 1033;
+    addresses.rejectTimeOffset = 980;
+    addresses.rejectDistanceOffset = 920;
+    addresses.photoTimeOffset = 982;
+    addresses.photoDistanceOffset = 924;
+    return addresses;
+}
+
 class FactoryFakeOcrEngine : public IOcrEngine
 {
 public:
@@ -547,7 +561,7 @@ private slots:
     void plcControllerUsesFixedResultAndPhotoDistanceAddresses();
     void settingsEditStateIgnoresUnknownKeys();
     void settingsEditStateDeduplicatesSharedDisplayNames();
-    void settingsEditStateIncludesTemplatePrivateChanges();
+    void settingsEditStateIncludesRecipeProfileChanges();
     void settingsEditStateClearsGlobalAndTemplateScopesSeparately();
     void productKeyRequiresRunAndPositiveSequence();
     void frameFactoryOwnsIndependentImage();
@@ -617,10 +631,6 @@ private slots:
     void runPlanSelectsSoftwareSingleTemplate();
     void runPlanSelectsHardwareBarcodeProfiles();
     void runPlanSelectsWholeFrameAndWordTracking();
-    void runtimeSettingsRetainValidValues();
-    void runtimeSettingsUseLegacyDefaultsForUnknownIndexes();
-    void runtimeSettingsRejectInvalidImageThreshold();
-    void runtimeSettingsRejectInvalidTissueThreshold();
     void shadowComparisonAcceptsEquivalentResults();
     void shadowComparisonIgnoresTimingAndDiagnosticByDefault();
     void shadowComparisonReportsBusinessResultDifferences();
@@ -645,7 +655,7 @@ private slots:
     void modeWorkerFactoryRejectsInvalidWordProfileIndex();
     void modeWorkerFactoryCarriesBarcodeStrategyAcrossFrames();
     void profileSnapshotPreservesOrderAndOwnsImages();
-    void profileSnapshotUsesLegacyThresholdFallback();
+    void profileSnapshotUsesRecipeThresholdWithoutFallback();
     void modeWorkerDispatcherRejectsInvalidRequests();
     void modeWorkerDispatcherCreatesRequestedWorker();
     void modeWorkerDispatcherLoadsBarcodeDecoderBeforeCreation();
@@ -798,7 +808,7 @@ void DetectionCompletionTest::faultPresenterWarnsThatConveyorStateIsUnknown()
 void DetectionCompletionTest::plcControllerRejectsCommandsWithoutDevice()
 {
     std::unique_ptr<IPlcDevice> device;
-    InspectionPlcController controller(std::move(device));
+    InspectionPlcController controller(std::move(device), testPlcAddresses());
     QVERIFY(!controller.hasDevice());
     QVERIFY(!controller.isConnected());
     QVERIFY(!controller.connectTo(
@@ -814,7 +824,7 @@ void DetectionCompletionTest::runtimeControllerOwnsTypedPlcConnectionBoundary()
     RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
     std::unique_ptr<IPlcDevice> device(fake);
     const std::shared_ptr<InspectionPlcController> plcController(
-                new InspectionPlcController(std::move(device)));
+                new InspectionPlcController(std::move(device), testPlcAddresses()));
     InspectionRuntimeController runtimeController(
                 InspectionRuntimeController::RunIdFactory(),
                 plcController);
@@ -839,7 +849,7 @@ void DetectionCompletionTest::plcControllerEncodesTriggerModeByte()
 {
     RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
     std::unique_ptr<IPlcDevice> device(fake);
-    InspectionPlcController controller(std::move(device));
+    InspectionPlcController controller(std::move(device), testPlcAddresses());
 
     QVERIFY(controller.writeTriggerMode(0).isSuccess());
     QVERIFY(controller.writeTriggerMode(1).isSuccess());
@@ -857,7 +867,7 @@ void DetectionCompletionTest::plcControllerPreservesRunSettingOrderAndEndian()
 {
     RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
     std::unique_ptr<IPlcDevice> device(fake);
-    InspectionPlcController controller(std::move(device));
+    InspectionPlcController controller(std::move(device), testPlcAddresses());
     InspectionPlcRunSettings settings;
     settings.rejectTime = 0x1234;
     settings.rejectDistance = 0x12345678;
@@ -885,7 +895,7 @@ void DetectionCompletionTest::plcControllerStopsRunSettingsAtFirstFailure()
     RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
     fake->failWriteCall = 3;
     std::unique_ptr<IPlcDevice> device(fake);
-    InspectionPlcController controller(std::move(device));
+    InspectionPlcController controller(std::move(device), testPlcAddresses());
     InspectionPlcRunSettings settings;
 
     const InspectionPlcRunSettingsResult result =
@@ -901,7 +911,7 @@ void DetectionCompletionTest::plcControllerUsesFixedResultAndPhotoDistanceAddres
 {
     RuntimeFakePlcDevice *fake = new RuntimeFakePlcDevice;
     std::unique_ptr<IPlcDevice> device(fake);
-    InspectionPlcController controller(std::move(device));
+    InspectionPlcController controller(std::move(device), testPlcAddresses());
 
     QVERIFY(controller.writeResultValue(49).isSuccess());
     QVERIFY(controller.writeResultValue(0).isSuccess());
@@ -939,7 +949,7 @@ void DetectionCompletionTest::settingsEditStateDeduplicatesSharedDisplayNames()
                 QStringLiteral("PLC\u8fde\u63a5")));
 }
 
-void DetectionCompletionTest::settingsEditStateIncludesTemplatePrivateChanges()
+void DetectionCompletionTest::settingsEditStateIncludesRecipeProfileChanges()
 {
     SettingsEditState state;
     state.registerGlobalSetting(QStringLiteral("camera.exposure"),
@@ -2301,31 +2311,29 @@ void DetectionCompletionTest::cameraOperationsCloseCameraWhenExposureFails()
 
 void DetectionCompletionTest::machineSettingsDefaultsRespectDisconnectedHardware()
 {
-    GlobalSettings applied;
+    MachineSettings applied;
     applied.detectModeId = QStringLiteral("old_mode");
     applied.cameraExposure = 456;
-    applied.cameraGain = 7.0;
+    applied.cameraGain = 7;
     applied.plcIp = QStringLiteral("old_ip");
     applied.plcRack = 7;
     applied.plcSlot = 8;
     applied.triggerModeId = QStringLiteral("old_trigger");
     applied.photoDistance = 777;
-    applied.templateDirPathsByMode.insert(
-        QStringLiteral("old_mode"), QStringList() << QStringLiteral("old"));
     applied.publishedRecipeIdsByMode.insert(
         QStringLiteral("old_mode"), QStringLiteral("uuid"));
 
-    GlobalSettings defaults;
+    MachineSettings defaults;
     defaults.detectModeId = QStringLiteral("default_mode");
     defaults.cameraExposure = 800;
-    defaults.cameraGain = 1.0;
+    defaults.cameraGain = 1;
     defaults.plcIp = QStringLiteral("default_ip");
     defaults.plcRack = 0;
     defaults.plcSlot = 1;
     defaults.triggerModeId = QStringLiteral("default_trigger");
     defaults.photoDistance = 50;
 
-    const GlobalSettings result =
+    const MachineSettings result =
         MachineSettingsPolicy::defaultsForHardwareState(
             applied, defaults, false, false);
 
@@ -2337,32 +2345,30 @@ void DetectionCompletionTest::machineSettingsDefaultsRespectDisconnectedHardware
     QCOMPARE(result.plcSlot, defaults.plcSlot);
     QCOMPARE(result.triggerModeId, applied.triggerModeId);
     QCOMPARE(result.photoDistance, applied.photoDistance);
-    QVERIFY(result.templateDirPathsByMode.isEmpty());
     QVERIFY(result.publishedRecipeIdsByMode.isEmpty());
 }
 
 void DetectionCompletionTest::machineSettingsDefaultsRespectConnectedHardware()
 {
-    GlobalSettings applied;
+    MachineSettings applied;
     applied.cameraExposure = 456;
-    applied.cameraGain = 7.0;
+    applied.cameraGain = 7;
     applied.plcIp = QStringLiteral("connected_ip");
     applied.plcRack = 7;
     applied.plcSlot = 8;
     applied.triggerModeId = QStringLiteral("old_trigger");
     applied.photoDistance = 777;
 
-    GlobalSettings defaults;
+    MachineSettings defaults;
     defaults.cameraExposure = 800;
-    defaults.cameraGain = 1.0;
+    defaults.cameraGain = 1;
     defaults.plcIp = QStringLiteral("default_ip");
     defaults.plcRack = 0;
     defaults.plcSlot = 1;
     defaults.triggerModeId = QStringLiteral("default_trigger");
-    defaults.plcModeId = defaults.triggerModeId;
     defaults.photoDistance = 50;
 
-    const GlobalSettings result =
+    const MachineSettings result =
         MachineSettingsPolicy::defaultsForHardwareState(
             applied, defaults, true, true);
 
@@ -2372,7 +2378,6 @@ void DetectionCompletionTest::machineSettingsDefaultsRespectConnectedHardware()
     QCOMPARE(result.plcRack, applied.plcRack);
     QCOMPARE(result.plcSlot, applied.plcSlot);
     QCOMPARE(result.triggerModeId, defaults.triggerModeId);
-    QCOMPARE(result.plcModeId, defaults.plcModeId);
     QCOMPARE(result.photoDistance, defaults.photoDistance);
 }
 
@@ -2744,6 +2749,7 @@ void DetectionCompletionTest::tissueStartNeedsNoTemplateAssets()
 {
     InspectionStartResourceInput input;
     input.modeKind = InspectionStartModeKind::Tissue;
+    input.preparedRecipeReady = true;
 
     const InspectionStartPreflightResult result =
             InspectionStartPreflight::evaluateResources(input);
@@ -2755,31 +2761,50 @@ void DetectionCompletionTest::singleTemplateStartReportsOrderedMissingAssets()
 {
     InspectionStartResourceInput input;
     input.modeKind = InspectionStartModeKind::SingleTemplate;
+    input.preparedRecipeReady = true;
 
-    const InspectionStartPreflightResult result =
+    InspectionStartPreflightResult result =
             InspectionStartPreflight::evaluateResources(input);
 
     QVERIFY(result.issue
             == InspectionStartIssue::ProductTemplateIncomplete);
-    QCOMPARE(result.details.size(), 3);
+    QCOMPARE(result.details.size(), 2);
     QCOMPARE(result.details.at(0),
-             QString::fromWCharArray(
-                 L"\u672a\u9009\u62e9\u4ea7\u54c1\u6a21\u677f\u6587\u4ef6\u5939"));
-    QCOMPARE(result.details.at(1),
              QString::fromWCharArray(
                  L"\u5b9a\u4f4d\u6a21\u677f\u56fe\u7247 tracking_template.bmp "
                  L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
-    QCOMPARE(result.details.at(2),
+    QCOMPARE(result.details.at(1),
              QString::fromWCharArray(
                  L"\u55b7\u7801\u68c0\u6d4b\u533a\u57df "
                  L"calibrate_config.yaml/date_poly "
                  L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
+
+    input.trackingTemplateReady = true;
+    input.dateRegionReady = true;
+    input.targetTextRequired = true;
+    input.characterTemplatesRequired = true;
+    result = InspectionStartPreflight::evaluateResources(input);
+    QVERIFY(result.issue
+            == InspectionStartIssue::ProductTemplateIncomplete);
+    QCOMPARE(result.details,
+             QStringList()
+             << QString::fromWCharArray(
+                 L"\u76ee\u6807\u5b57\u7b26\u5c1a\u672a\u8bbe\u7f6e")
+             << QString::fromWCharArray(
+                 L"\u5b57\u7b26\u6a21\u677f\u7f3a\u5931\u6216"
+                 L"\u7d22\u5f15\u914d\u7f6e\u65e0\u6548"));
+
+    input.targetTextReady = true;
+    input.characterTemplatesReady = true;
+    result = InspectionStartPreflight::evaluateResources(input);
+    QVERIFY(result.isAccepted());
 }
 
 void DetectionCompletionTest::wordStartRequiresProfilesAndCompleteCharacters()
 {
     InspectionStartResourceInput input;
     input.modeKind = InspectionStartModeKind::WordProfiles;
+    input.preparedRecipeReady = true;
 
     InspectionStartPreflightResult result =
             InspectionStartPreflight::evaluateResources(input);
@@ -2800,6 +2825,7 @@ void DetectionCompletionTest::barcodeStartAggregatesDecoderAndProfileErrors()
 {
     InspectionStartResourceInput input;
     input.modeKind = InspectionStartModeKind::BarcodeWordProfiles;
+    input.preparedRecipeReady = true;
     input.barcodeDecoderReady = false;
     input.barcodeDecoderError = QStringLiteral("DLL missing");
 
@@ -2851,6 +2877,7 @@ void DetectionCompletionTest::validWordAndBarcodeStartsAreAccepted()
 
     InspectionStartResourceInput input;
     input.modeKind = InspectionStartModeKind::WordProfiles;
+    input.preparedRecipeReady = true;
     input.profiles.push_back(profile);
     QVERIFY(InspectionStartPreflight::evaluateResources(input).isAccepted());
 
@@ -2900,74 +2927,6 @@ void DetectionCompletionTest::runPlanSelectsWholeFrameAndWordTracking()
                 true);
     QVERIFY(plan.trackingKind == InspectionTrackingKind::WordProfiles);
     QVERIFY(!plan.barcodeWordHardTriggerMode);
-}
-
-void DetectionCompletionTest::runtimeSettingsRetainValidValues()
-{
-    InspectionRuntimeSettingsInput input;
-    input.imageThresholdText = QStringLiteral(" 70 ");
-    input.tissueThresholdText = QStringLiteral(" 6.250 ");
-    input.rotationIndex = 2;
-    input.colorChannelIndex = 3;
-
-    const InspectionRuntimeSettingsResult result =
-            InspectionRunConfiguration::parseSettings(input);
-
-    QVERIFY(result.isAccepted());
-    QCOMPARE(result.settings.imageThreshold, 70);
-    QCOMPARE(result.settings.tissueThreshold, 6.25);
-    QCOMPARE(result.settings.rotationCode, 2);
-    QCOMPARE(result.settings.colorChannelCode, 3);
-}
-
-void DetectionCompletionTest::runtimeSettingsUseLegacyDefaultsForUnknownIndexes()
-{
-    InspectionRuntimeSettingsInput input;
-    input.imageThresholdText = QStringLiteral("0");
-    input.tissueThresholdText = QStringLiteral("1");
-    input.rotationIndex = 9;
-    input.colorChannelIndex = -1;
-
-    const InspectionRuntimeSettingsResult result =
-            InspectionRunConfiguration::parseSettings(input);
-
-    QVERIFY(result.isAccepted());
-    QCOMPARE(result.settings.rotationCode, 0);
-    QCOMPARE(result.settings.colorChannelCode, 0);
-}
-
-void DetectionCompletionTest::runtimeSettingsRejectInvalidImageThreshold()
-{
-    InspectionRuntimeSettingsInput input;
-    input.tissueThresholdText = QStringLiteral("6");
-
-    input.imageThresholdText = QStringLiteral("abc");
-    InspectionRuntimeSettingsResult result =
-            InspectionRunConfiguration::parseSettings(input);
-    QVERIFY(result.issue
-            == InspectionRuntimeSettingsIssue::InvalidImageThreshold);
-
-    input.imageThresholdText = QStringLiteral("101");
-    result = InspectionRunConfiguration::parseSettings(input);
-    QVERIFY(result.issue
-            == InspectionRuntimeSettingsIssue::InvalidImageThreshold);
-}
-
-void DetectionCompletionTest::runtimeSettingsRejectInvalidTissueThreshold()
-{
-    InspectionRuntimeSettingsInput input;
-    input.imageThresholdText = QStringLiteral("70");
-
-    input.tissueThresholdText = QStringLiteral("0");
-    InspectionRuntimeSettingsResult result =
-            InspectionRunConfiguration::parseSettings(input);
-    QVERIFY(result.issue
-            == InspectionRuntimeSettingsIssue::InvalidTissueThreshold);
-
-    input.tissueThresholdText = QStringLiteral("invalid");
-    result = InspectionRunConfiguration::parseSettings(input);
-    QVERIFY(result.issue
-            == InspectionRuntimeSettingsIssue::InvalidTissueThreshold);
 }
 
 void DetectionCompletionTest::shadowComparisonAcceptsEquivalentResults()
@@ -3856,7 +3815,7 @@ void DetectionCompletionTest::modeWorkerFactoryCarriesBarcodeStrategyAcrossFrame
 void DetectionCompletionTest::profileSnapshotPreservesOrderAndOwnsImages()
 {
     InspectionProfileSource first;
-    first.directoryPath = QStringLiteral("C:/recipes/profile-a");
+    first.name = QStringLiteral("profile-a");
     first.trackingTemplate = cv::Mat(
                 3, 4, CV_8UC1, cv::Scalar(17));
     first.datePoly.push_back(cv::Point2f(1.0f, 2.0f));
@@ -3868,7 +3827,6 @@ void DetectionCompletionTest::profileSnapshotPreservesOrderAndOwnsImages()
 
     InspectionProfileSource second;
     second.name = QStringLiteral("profile-b");
-    second.directoryPath = QStringLiteral("C:/recipes/ignored");
     second.trackingTemplate = cv::Mat(
                 2, 5, CV_8UC1, cv::Scalar(31));
     second.targetText = QStringLiteral("3");
@@ -3881,9 +3839,7 @@ void DetectionCompletionTest::profileSnapshotPreservesOrderAndOwnsImages()
     sources.push_back(first);
     sources.push_back(second);
     const InspectionProfileSnapshot snapshot =
-            InspectionProfileSnapshotBuilder::create(
-                sources,
-                QStringLiteral("66"));
+            InspectionProfileSnapshotBuilder::create(sources);
 
     sources[0].trackingTemplate.setTo(cv::Scalar(99));
     sources[0].digitTemplates[0].setTo(cv::Scalar(101));
@@ -3907,13 +3863,13 @@ void DetectionCompletionTest::profileSnapshotPreservesOrderAndOwnsImages()
     QCOMPARE(snapshot.detectionProfiles[1].thresholdPercent, 82);
 }
 
-void DetectionCompletionTest::profileSnapshotUsesLegacyThresholdFallback()
+void DetectionCompletionTest::profileSnapshotUsesRecipeThresholdWithoutFallback()
 {
     InspectionProfileSource source;
     source.name = QStringLiteral("profile-a");
     source.trackingTemplate = cv::Mat::ones(2, 2, CV_8UC1);
     source.targetText = QStringLiteral("1");
-    source.imageThreshold = 78.5;
+    source.imageThreshold = 78;
     source.digitTemplates.push_back(
                 cv::Mat::ones(2, 2, CV_8UC1));
     source.digitTemplateTargetIndexes.push_back(0);
@@ -3924,11 +3880,10 @@ void DetectionCompletionTest::profileSnapshotUsesLegacyThresholdFallback()
 
     const InspectionProfileSnapshot snapshot =
             InspectionProfileSnapshotBuilder::create(
-                std::vector<InspectionProfileSource>(1, source),
-                QStringLiteral("66"));
+                std::vector<InspectionProfileSource>(1, source));
 
     QVERIFY(snapshot.isValid());
-    QCOMPARE(snapshot.detectionProfiles[0].thresholdPercent, 66);
+    QCOMPARE(snapshot.detectionProfiles[0].thresholdPercent, 78);
     QCOMPARE(snapshot.detectionProfiles[0]
              .barcodeOptions.roiPaddingPercent, 11);
     QCOMPARE(snapshot.detectionProfiles[0]

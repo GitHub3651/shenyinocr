@@ -1,19 +1,14 @@
-﻿#include "ui/controllers/template_editor_controller.h"
+#include "ui/controllers/template_editor_controller.h"
 
 #include "widget.h"
 #include "ui_widget.h"
 
 #include "DetectionModes.h"
 #include "TrackingTypes.h"
-#include "appsettingsmanager.h"
 #include "charactertemplatecropdialog.h"
 #include "devices/barcode/barcode_decoder.h"
 #include "detection/common/detection_roi_geometry.h"
 #include "imagelabel.h"
-#include "recipes/template_character_asset_workspace.h"
-#include "recipes/template_profile_load_plan.h"
-#include "recipes/template_profile_mapper.h"
-#include "recipes/template_recipe_publisher.h"
 #include "runtime/inspection_acquisition_controller.h"
 #include "ui/controllers/machine_settings_page_controller.h"
 #include "ui/dialogs/recipe_selection_dialog.h"
@@ -46,8 +41,6 @@
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSortFilterProxyModel>
-#include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QTextEdit>
 #include <QTimer>
 #include <QTreeView>
@@ -89,7 +82,7 @@ bool parseIntValue(const QString &text, int *value)
 bool isSingleTemplateRecipeMode(const QString &modeId)
 {
     DetectionMode mode;
-    return detectionModeFromId(modeId, &mode)
+    return detectionModeFromUiId(modeId, &mode)
             && (mode == DetectionMode::Stamp
                 || mode == DetectionMode::Ocr);
 }
@@ -110,6 +103,75 @@ cv::Mat decodeImageFile(const QString &filePath, int flags)
     } catch (...) {
         return cv::Mat();
     }
+}
+
+bool writeImageFile(const QString &filePath,
+                    const cv::Mat &image,
+                    const char *extension,
+                    QString *errorMessage)
+{
+    if (image.empty()) {
+        if (errorMessage) *errorMessage = QStringLiteral("图像为空。");
+        return false;
+    }
+    std::vector<uchar> encoded;
+    if (!cv::imencode(extension, image, encoded)) {
+        if (errorMessage) *errorMessage = QStringLiteral("图像编码失败。");
+        return false;
+    }
+    QFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+            || file.write(reinterpret_cast<const char *>(encoded.data()),
+                          static_cast<qint64>(encoded.size()))
+               != static_cast<qint64>(encoded.size())) {
+        if (errorMessage) *errorMessage = file.errorString();
+        return false;
+    }
+    return true;
+}
+
+QImage imageFromBgrMat(const cv::Mat &image)
+{
+    if (image.empty()) return QImage();
+    cv::Mat rgb;
+    if (image.channels() == 1) {
+        cv::cvtColor(image, rgb, cv::COLOR_GRAY2RGB);
+    } else if (image.channels() == 4) {
+        cv::cvtColor(image, rgb, cv::COLOR_BGRA2RGBA);
+        return QImage(rgb.data, rgb.cols, rgb.rows,
+                      static_cast<int>(rgb.step),
+                      QImage::Format_RGBA8888).copy();
+    } else {
+        cv::cvtColor(image, rgb, cv::COLOR_BGR2RGB);
+    }
+    return QImage(rgb.data, rgb.cols, rgb.rows,
+                  static_cast<int>(rgb.step),
+                  QImage::Format_RGB888).copy();
+}
+
+bool writeCalibrationFile(
+        const QString &path,
+        const std::vector<cv::Point2f> &stamp,
+        const std::vector<cv::Point2f> &date,
+        const std::vector<cv::Point2f> &barcode,
+        QString *errorMessage)
+{
+    cv::FileStorage storage(
+                "calibrate_config.yaml",
+                cv::FileStorage::WRITE | cv::FileStorage::MEMORY);
+    storage << "stamp_poly" << stamp;
+    storage << "date_poly" << date;
+    storage << "barcode_poly" << barcode;
+    const std::string yaml = storage.releaseAndGetString();
+    QFile file(path);
+    if (yaml.empty()
+            || !file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+            || file.write(yaml.data(), static_cast<qint64>(yaml.size()))
+               != static_cast<qint64>(yaml.size())) {
+        if (errorMessage) *errorMessage = file.errorString();
+        return false;
+    }
+    return true;
 }
 
 cv::Point2f transformPoint(const cv::Mat &affine,
@@ -528,7 +590,11 @@ TemplateEditorController::TemplateEditorController(
       m_host(host),
       ui(view),
       imageLabel(editorImageLabel),
-      m_barcodeDecoder(barcodeDecoder)
+      m_barcodeDecoder(barcodeDecoder),
+      m_recipeEditorSession(
+          host && host->m_machineSettingsStore
+          ? host->m_machineSettingsStore->editorWorkspacesRootPath()
+          : QString())
 {
 }
 
@@ -609,16 +675,10 @@ bool TemplateEditorController::saveSettings(bool showErrorMessage)
     return m_host->saveSettings(showErrorMessage);
 }
 
-bool TemplateEditorController::loadSettingsFromDir(
-    const QString &dirPath, bool showErrorMessage)
+void TemplateEditorController::applyRecipeProfileToUi(
+    const RecipeProfile &settings)
 {
-    return m_host->loadSettingsFromDir(dirPath, showErrorMessage);
-}
-
-void TemplateEditorController::applyTemplatePrivateSettingsToUi(
-    const TemplatePrivateSettings &settings)
-{
-    m_host->applyTemplatePrivateSettingsToUi(settings);
+    m_host->applyRecipeProfileToUi(settings);
 }
 
 void TemplateEditorController::resetTemplateCaptureState()
@@ -626,620 +686,417 @@ void TemplateEditorController::resetTemplateCaptureState()
     m_host->resetTemplateCaptureState();
 }
 
-void TemplateEditorController::selectLegacyTemplates()
+void TemplateEditorController::selectPublishedRecipeForCurrentMode()
 {
     if (m_host->m_operationState == Widget::OperationState::Detecting
             || m_host->m_operationState == Widget::OperationState::Stopping
             || m_host->m_templateCaptureState
                != Widget::TemplateCaptureState::Idle) {
-        QMessageBox::warning(m_host,
-                    "提示",
-                    "请先停止识别或退出模板制作，再选择产品模板。");
+        QMessageBox::warning(
+                    m_host,
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先停止识别或退出模板制作，再选择产品配方。"));
         return;
     }
-    QString dirPath;
-    auto templateDialogStartDir = [this]() -> QString {
-        if (!m_host->templateBaseDirPath.trimmed().isEmpty() && QDir(m_host->templateBaseDirPath).exists()) {
-            return QDir(m_host->templateBaseDirPath).absolutePath();
-        }
-
-        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
-        if (desktopPath.trimmed().isEmpty()) {
-            desktopPath = QDir::homePath();
-        }
-        return QDir(desktopPath).absolutePath();
-    };
-
-    if (isWordFamilyMode(currentDetectModeId())) {
-        QFileDialog dialog(m_host, "选择产品模板文件夹（可勾选多个）", templateDialogStartDir());
-        dialog.setFileMode(QFileDialog::Directory);
-        dialog.setOption(QFileDialog::ShowDirsOnly, true);
-        dialog.setOption(QFileDialog::DontUseNativeDialog, true);
-        dialog.setLabelText(QFileDialog::LookIn, "查找范围:");
-        dialog.setLabelText(QFileDialog::FileName, "文件夹:");
-        dialog.setLabelText(QFileDialog::FileType, "文件类型:");
-        dialog.setLabelText(QFileDialog::Accept, "选择");
-        dialog.setLabelText(QFileDialog::Reject, "取消");
-        dialog.setNameFilter("所有文件 (*)");
-
-        CheckableDirectoryProxyModel *checkableDirectoryModel =
-                new CheckableDirectoryProxyModel(&dialog);
-        dialog.setProxyModel(checkableDirectoryModel);
-
-        QListView *listView = dialog.findChild<QListView *>("listView");
-        if (listView) {
-            listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-        }
-        QTreeView *treeView = dialog.findChild<QTreeView *>();
-        if (treeView) {
-            treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
-            treeView->setHeaderHidden(true);
-            treeView->setColumnHidden(1, true);
-            treeView->setColumnHidden(2, true);
-            treeView->setColumnHidden(3, true);
-        }
-
-        if (dialog.exec() != QDialog::Accepted) return;
-
-        QStringList selectedDirs = checkableDirectoryModel->checkedDirectories();
-        const QStringList dialogSelectedDirs =
-                selectedDirs.isEmpty() ? dialog.selectedFiles() : QStringList();
-        for (const QString &selectedDirPath : dialogSelectedDirs) {
-            const QString cleanDir = QDir(selectedDirPath).absolutePath();
-            if (!cleanDir.isEmpty() && !selectedDirs.contains(cleanDir)) {
-                selectedDirs.append(cleanDir);
-            }
-        }
-
-        if (selectedDirs.isEmpty()) return;
-        resetTemplateCaptureState();
-        const QFileInfo firstSelectedDirInfo(selectedDirs.first());
-        if (firstSelectedDirInfo.dir().exists()) {
-            m_host->templateBaseDirPath = firstSelectedDirInfo.dir().absolutePath();
-        }
-        if (imageLabel) {
-            imageLabel->setTemplateDrawingEnabled(false);
-        }
-        hideTemplateGuide();
-
-        if (!selectedDirs.isEmpty()) {
-            std::vector<WordTemplateProfile> loadedProfiles;
-            QStringList skippedMessages;
-            QStringList pendingTargetMessages;
-
-            for (const QString &selectedDirPath : selectedDirs) {
-                QDir templateDir(selectedDirPath);
-                WordTemplateProfile profile;
-                QString profileMessage;
-                if (!loadWordTemplateProfileFromDir(templateDir.absolutePath(),
-                                                    &profile,
-                                                    &profileMessage)) {
-                    skippedMessages.append(QString("%1：%2")
-                                           .arg(templateDir.dirName())
-                                           .arg(profileMessage));
-                    continue;
-                }
-                if (!profileMessage.trimmed().isEmpty()) {
-                    pendingTargetMessages.append(QString("%1：%2")
-                                                 .arg(profile.name)
-                                                 .arg(profileMessage));
-                }
-                loadedProfiles.push_back(profile);
-            }
-
-            if (loadedProfiles.empty()) {
-                QString detailMessage = "所选产品模板配置全部无效，已保留当前加载的模板。";
-                if (!skippedMessages.isEmpty()) {
-                    detailMessage += "\n\n具体原因：\n" + skippedMessages.join("\n");
-                }
-                if (!pendingTargetMessages.isEmpty()) {
-                    detailMessage += "\n\n目标字符待设置：\n" + pendingTargetMessages.join("\n");
-                }
-                showParameterCritical("严重警告", detailMessage);
-                return;
-            }
-
-            wordDraftSession().reset();
-            wordEditSession().reset();
-            singleTemplateEditSession().reset();
-            singleTemplateResolvedAssets().clear();
-            setCurrentTemplateDisplayName(QString());
-            wordTemplateProfiles().swap(loadedProfiles);
-            refreshWordTemplateRecipeAssets();
-            m_host->currentTemplateDirPath = wordTemplateProfiles().front().dirPath;
-            setCurrentTemplateNameVisible(false);
-            updateCurrentTemplateName();
-            refreshWordTemplateEditorCombo();
-            saveSettings();
-
-            qDebug() << "[WORD_TEMPLATE] loaded profile count:"
-                     << static_cast<int>(wordTemplateProfiles().size());
-            if (!skippedMessages.isEmpty() || !pendingTargetMessages.isEmpty()) {
-                QString detailMessage = QString("已加载 %1 个字库模板").arg(static_cast<int>(wordTemplateProfiles().size()));
-                if (!pendingTargetMessages.isEmpty()) {
-                    detailMessage += "\n\n以下模板已加载，但目标字符待设置：\n" + pendingTargetMessages.join("\n");
-                }
-                if (!skippedMessages.isEmpty()) {
-                    detailMessage += "\n\n以下模板已跳过：\n" + skippedMessages.join("\n");
-                }
-                showParameterWarning("提示",
-                                     detailMessage);
-            } else {
-                showParameterInfo("提示",
-                                  QString("已加载 %1 个有效字库模板")
-                                  .arg(static_cast<int>(wordTemplateProfiles().size())));
-            }
-            return;
-        }
-    } else {
-        dirPath = QFileDialog::getExistingDirectory(nullptr, "选择产品模板文件夹",
-                                                    templateDialogStartDir(),
-                                                    QFileDialog::ShowDirsOnly);
-        if (dirPath.isEmpty()) return;
-        resetTemplateCaptureState();
-        const QFileInfo selectedDirInfo(dirPath);
-        if (selectedDirInfo.dir().exists()) {
-            m_host->templateBaseDirPath = selectedDirInfo.dir().absolutePath();
-        }
-        if (imageLabel) {
-            imageLabel->setTemplateDrawingEnabled(false);
-        }
-        hideTemplateGuide();
-    }
-
-    if (dirPath.isEmpty()) return;
-
-    wordDraftSession().reset();
-    wordEditSession().reset();
-    singleTemplateEditSession().reset();
-    singleTemplateResolvedAssets().clear();
-    setCurrentTemplateDisplayName(QString());
-    wordTemplateProfiles().clear();
-    m_host->currentTemplateDirPath = dirPath;
-
-    saveSettings(); // 保存路径
-    const bool templateLoaded = loadSettingsFromDir(dirPath, true);
-    setCurrentTemplateNameVisible(templateLoaded);
-    if (!templateLoaded) {
-        updateCurrentTemplateName();
-        return;
-    }
-    updateCurrentTemplateName();
-    refreshWordTemplateEditorCombo();
-    if (isWordFamilyMode(currentDetectModeId()) && imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearGreenRects();
-        imageLabel->clearSelection();
-        hideTemplateGuide();
-        displayWordTemplateRawImage(dirPath);
-    }
-    m_host->wrongindex = ui->lineEdit_12->text().toInt();
-
-    qDebug()<<"currentTemplate"<<m_host->currentTemplateDirPath;
-
-    initOverlapDetectorFromCurrentDir();
-
-    QMessageBox::information(m_host, "提示", "模板已选择");
+    selectPublishedRecipe();
 }
 
 void TemplateEditorController::saveCurrentTemplate()
 {
     if (m_host->m_operationState == Widget::OperationState::Detecting
             || m_host->m_operationState == Widget::OperationState::Stopping
-            || m_host->m_operationState == Widget::OperationState::TemplatePreviewing) {
-        QMessageBox::warning(m_host,
-                    "提示",
-                    "当前状态不能保存模板，请先停止识别或冻结模板画面。");
+            || m_host->m_operationState
+               == Widget::OperationState::TemplatePreviewing) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("当前状态不能保存配方，请先停止识别或冻结模板画面。"));
         return;
     }
-    const bool isBarcodeWordTemplateMode =
-            currentDetectModeId() == BarcodeWordDetectionMode;
-    const bool isWordTemplateMode =
-            isWordFamilyMode(currentDetectModeId());
-    const bool isStampTemplateMode =
-            currentDetectModeId() == QStringLiteral("stamp_detection");
-
-    if (!m_acquisitionController
-            || !m_acquisitionController->hasCurrentImage()) {
-        QMessageBox::warning(m_host, "提示", "请先点击【制作模板】拍照获取图像。");
+    DetectionMode mode;
+    if (!detectionModeFromUiId(currentDetectModeId(), &mode)) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("当前检测模式无效。"));
         return;
     }
-    if (!imageLabel->isTemplateDrawingEnabled()) {
-        QMessageBox::warning(m_host,
-                    "提示",
-                    isBarcodeWordTemplateMode
-                        ? "请先点击【制作模板】拍照，并完成定位锚点、二维码区域和日期检测区域框选。"
-                        : "请先点击【制作模板】拍照，并完成定位区域和喷码检测区域框选。");
-        return;
-    }
-
-    // 字库匹配模式下，保存前先检查框选状态，避免输入名称后才发现无法保存。
-    QRect uiTrackRect = imageLabel->getTrackingRect();
-    QRect uiBarcodeRect = imageLabel->getBarcodeRect();
-    QPolygon uiDetectPoly = imageLabel->getDetectionPoly();
-
-    if (isWordTemplateMode) {
-        if (uiTrackRect.isNull()) {
-            QMessageBox::warning(m_host,
-                        "提示",
-                        isBarcodeWordTemplateMode
-                            ? "请先框选稳定定位锚点。"
-                            : "请先框选定位区域。");
+    if (mode == DetectionMode::Tissue) {
+        bool thresholdValid = false;
+        const double roughness =
+                ui->lineEdit_tissueRoughnessThreshold
+                ->text().trimmed().toDouble(&thresholdValid);
+        if (!thresholdValid || roughness <= 0.0) {
+            showParameterWarning(
+                        QStringLiteral("参数错误"),
+                        QStringLiteral("纸巾粗糙度阈值必须大于0。"));
             return;
         }
-        if (uiTrackRect.width() <= 5 || uiTrackRect.height() <= 5) {
-            QMessageBox::warning(m_host,
-                        "提示",
-                        isBarcodeWordTemplateMode
-                            ? "定位锚点区域太小，请重新框选。"
-                            : "定位区域太小，请重新框选。");
-            return;
-        }
-        if (isBarcodeWordTemplateMode) {
-            if (uiBarcodeRect.isNull()) {
-                QMessageBox::warning(m_host, "提示", "请先框选二维码区域。");
-                return;
-            }
-            if (uiBarcodeRect.width() <= 5 || uiBarcodeRect.height() <= 5) {
-                QMessageBox::warning(m_host, "提示", "二维码区域太小，请重新框选。");
-                return;
-            }
-            const QRect normalizedBarcodeRect =
-                    uiBarcodeRect.normalized();
-            if (!barcodeTemplateReadable()
-                    || validatedBarcodeRect()
-                       != normalizedBarcodeRect) {
-                BarcodeReadResult barcode;
-                QString failureReason;
-                if (!validateBarcodeTemplateRect(
-                            normalizedBarcodeRect,
-                            barcodeTemplateValidationOptions(),
-                            &barcode,
-                            &failureReason)) {
-                    clearBarcodeTemplateValidation();
-                    imageLabel->retryBarcodeRegion();
-                    QMessageBox::warning(m_host,
-                                "二维码扫描失败",
-                                failureReason
-                                + "\n\n定位锚点已保留。模板不能保存，"
-                                  "请重新完整框选二维码区域，扫描成功后再框选日期区域。");
-                    return;
-                }
-
-                acceptBarcodeTemplateValidation(
-                            normalizedBarcodeRect, barcode.text);
-            }
-        }
-        if (uiDetectPoly.isEmpty()) {
-            QMessageBox::warning(m_host, "提示", "请先框选喷码检测区域。");
-            return;
-        }
-        if (uiDetectPoly.size() < 3 || !imageLabel->isDetectionPolyComplete()) {
-            QMessageBox::warning(m_host, "提示", "喷码检测区域未闭合或点数不足，请重新框选。");
-            return;
-        }
-    }
-
-    if (!isWordTemplateMode
-            && (uiTrackRect.isNull()
-                || uiDetectPoly.isEmpty()
-                || uiDetectPoly.size() < 3)) {
-        QMessageBox::warning(m_host, "警告",
-                             "保存模板前，请先在图像上完成以下操作：\n\n"
-                             "1. 框选定位区域\n"
-                             "2. 框选并闭合喷码检测区域\n\n"
-                             "完成后再点击【保存模板】。");
-        return;
-    }
-
-    int thresholdValue = 0;
-    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)
-            || thresholdValue < 0
-            || thresholdValue > 100) {
-        showParameterWarning("参数错误",
-                             "图像合格阈值必须是0到100之间的整数（单位：%），模板未保存。");
-        return;
-    }
-
-    auto defaultTemplateBaseDir = [this]() -> QString {
-        if (!m_host->templateBaseDirPath.trimmed().isEmpty() && QDir(m_host->templateBaseDirPath).exists()) {
-            return QDir(m_host->templateBaseDirPath).absolutePath();
-        }
-
-        QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
-        if (desktopPath.trimmed().isEmpty()) {
-            desktopPath = QDir::homePath();
-        }
-        return QDir(desktopPath).absolutePath();
-    };
-
-    QDialog inputDialog(m_host);
-    inputDialog.setWindowTitle("保存模板");
-    inputDialog.setWindowFlags(inputDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
-
-    QVBoxLayout *mainLayout = new QVBoxLayout(&inputDialog);
-    QFormLayout *formLayout = new QFormLayout();
-
-    QLineEdit *nameEdit = new QLineEdit(&inputDialog);
-    formLayout->addRow("产品模板文件夹名称：", nameEdit);
-    QLabel *nameErrorLabel = new QLabel("模板文件夹名称不能为空", &inputDialog);
-    nameErrorLabel->setStyleSheet("color: #d93025;");
-    formLayout->addRow("", nameErrorLabel);
-
-    QLineEdit *baseDirEdit = new QLineEdit(defaultTemplateBaseDir(), &inputDialog);
-    QPushButton *browseButton = new QPushButton("浏览", &inputDialog);
-    QHBoxLayout *baseDirLayout = new QHBoxLayout();
-    baseDirLayout->addWidget(baseDirEdit);
-    baseDirLayout->addWidget(browseButton);
-    formLayout->addRow("模板文件夹保存目录：", baseDirLayout);
-
-    QLabel *hintLabel = new QLabel(
-                isBarcodeWordTemplateMode
-                    ? "保存后会记录稳定定位锚点、独立二维码区域和日期检测区域。"
-                    : "保存后会记录当前产品的定位区域、喷码检测区域和参数配置。",
-                &inputDialog);
-    hintLabel->setWordWrap(true);
-
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    QPushButton *okButton = new QPushButton("确定", &inputDialog);
-    QPushButton *cancelButton = new QPushButton("取消", &inputDialog);
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(okButton);
-    buttonLayout->addWidget(cancelButton);
-
-    mainLayout->addLayout(formLayout);
-    mainLayout->addWidget(hintLabel);
-    mainLayout->addLayout(buttonLayout);
-
-    connect(browseButton, &QPushButton::clicked, this, [this, baseDirEdit]() {
-        const QString selectedBaseDir = QFileDialog::getExistingDirectory(
+        bool accepted = false;
+        const QString displayName = QInputDialog::getText(
                     m_host,
-                    "选择模板文件夹保存目录",
-                    baseDirEdit->text().trimmed().isEmpty() ? QDir::homePath() : baseDirEdit->text(),
-                    QFileDialog::ShowDirsOnly);
-        if (!selectedBaseDir.isEmpty()) {
-            baseDirEdit->setText(QDir(selectedBaseDir).absolutePath());
-        }
-    });
-    auto updateNameState = [nameEdit, nameErrorLabel, okButton]() {
-        const bool isEmpty = nameEdit->text().trimmed().isEmpty();
-        okButton->setEnabled(!isEmpty);
-        nameErrorLabel->setVisible(isEmpty);
-        nameEdit->setStyleSheet(isEmpty ? "QLineEdit { border: 1px solid #d93025; }" : "");
-    };
-    connect(nameEdit, &QLineEdit::textChanged, &inputDialog, updateNameState);
-    updateNameState();
-    connect(okButton, &QPushButton::clicked, &inputDialog, &QDialog::accept);
-    connect(cancelButton, &QPushButton::clicked, &inputDialog, &QDialog::reject);
-
-    if (inputDialog.exec() != QDialog::Accepted) return;
-
-    QString newFolderName = nameEdit->text().trimmed();
-    if (newFolderName.isEmpty()) return;
-    const QRegularExpression invalidFolderNameChars(R"([\\/:*?"<>|])");
-    if (newFolderName == "."
-            || newFolderName == ".."
-            || newFolderName.contains(invalidFolderNameChars)) {
-        QMessageBox::warning(m_host,
-                    "提示",
-                    "产品模板文件夹名称不能是“.”或“..”，"
-                    "也不能包含 \\ / : * ? \" < > | 这些字符。");
-        return;
-    }
-
-    QString baseDirPath = baseDirEdit->text().trimmed();
-    if (baseDirPath.isEmpty()) {
-        QMessageBox::warning(m_host, "提示", "请选择模板文件夹保存目录。");
-        return;
-    }
-    baseDirPath = QDir(baseDirPath).absolutePath();
-
-    QString savePath = QDir::cleanPath(
-                QDir(baseDirPath).absoluteFilePath(newFolderName));
-    if (QDir(QFileInfo(savePath).absolutePath()).absolutePath()
-            .compare(baseDirPath, Qt::CaseInsensitive) != 0) {
-        QMessageBox::warning(m_host, "错误", "产品模板保存路径无效，模板未保存。");
-        return;
-    }
-
-    QDir dir(savePath);
-    if (dir.exists()) {
-        QMessageBox confirmBox(m_host);
-        confirmBox.setIcon(QMessageBox::Warning);
-        confirmBox.setWindowTitle("确认覆盖");
-        confirmBox.setText(
-                    QString("产品模板 [%1] 已存在。\n\n"
-                            "继续保存会先清空该文件夹中的全部旧文件和子文件夹，"
-                            "然后写入当前模板。\n"
-                            "清空后旧模板无法恢复。\n\n"
-                            "是否继续？")
-                    .arg(newFolderName));
-        QPushButton *overwriteButton = confirmBox.addButton("覆盖", QMessageBox::AcceptRole);
-        QPushButton *cancelButton = confirmBox.addButton("取消", QMessageBox::RejectRole);
-        confirmBox.setDefaultButton(cancelButton);
-        confirmBox.exec();
-        if (confirmBox.clickedButton() != overwriteButton) {
+                    QStringLiteral("保存产品配方"),
+                    QStringLiteral("产品配方名称："),
+                    QLineEdit::Normal,
+                    QString(),
+                    &accepted).trimmed();
+        if (!accepted || displayName.isEmpty()) {
             return;
         }
-
-        const QFileInfo existingTemplateInfo(savePath);
-        if (existingTemplateInfo.isSymLink()) {
-            QMessageBox::warning(m_host,
-                                 "错误",
-                                 "同名产品模板文件夹是快捷链接，无法安全清空。");
+        ProductRecipe recipe = createProductRecipe(
+                    displayName, DetectionMode::Tissue);
+        recipe.tissueParameters.roughnessThreshold = roughness;
+        QString errorMessage;
+        if (!m_recipeEditorSession.beginNew(recipe, &errorMessage)
+                || !m_recipeEditorSession.replaceDraft(
+                    recipe, QMap<QString, QString>(), &errorMessage)) {
+            showParameterCritical(
+                        QStringLiteral("严重警告"), errorMessage);
             return;
         }
-        if (!dir.removeRecursively()) {
-            QMessageBox::warning(m_host,
-                        "错误",
-                        "同名产品模板文件夹清空失败。\n"
-                        "请检查其中的文件是否被其他程序占用。");
+        PreparedRecipeSnapshot prepared;
+        if (!m_recipeEditorSession.publish(
+                    *m_host->m_recipeStore,
+                    &prepared,
+                    &errorMessage)) {
+            showParameterCritical(
+                        QStringLiteral("严重警告"),
+                        QStringLiteral(
+                            "纸巾产品配方保存失败，上一完整版本保持不变：\n%1")
+                        .arg(errorMessage));
             return;
         }
-        dir = QDir(savePath);
-    }
-
-    if (!QDir().mkpath(savePath)) {
-        QMessageBox::warning(m_host, "错误", "产品模板文件夹创建失败，无法保存模板。");
+        m_activePreparedRecipe = prepared;
+        m_currentTemplateDisplayName = displayName;
+        m_currentTemplateNameVisible = true;
+        const QString modeId = detectionModeUiId(mode);
+        m_templateModeMemory.publishedRecipeIdsByMode()
+                .insert(modeId, recipe.recipeId);
+        m_host->m_appliedMachineSettings
+                .publishedRecipeIdsByMode =
+                m_templateModeMemory.publishedRecipeIdsByMode();
+        saveSettings(false);
+        updateCurrentTemplateName();
+        showParameterInfo(
+                    QStringLiteral("成功"),
+                    QStringLiteral("纸巾产品配方已事务保存。"));
         return;
     }
-    dir = QDir(savePath);
-    m_host->templateBaseDirPath = baseDirPath;
-
-    // 2. 转换坐标 (使用局部 clone 确保计算基准稳定)
-    cv::Mat calibImg = m_acquisitionController->currentImageClone();
-
-    auto toPhysicalPoint = [&](QPoint uiPt) -> cv::Point2f {
-        QSize labelSize = imageLabel->size();
-        QSize imgSize(calibImg.cols, calibImg.rows);
-        const QPixmap *displayedPixmap = imageLabel->pixmap();
-        QSize displayedSize =
-                displayedPixmap && !displayedPixmap->isNull()
-                ? displayedPixmap->size()
-                : imgSize.scaled(labelSize, Qt::KeepAspectRatio);
-        int xOff = (labelSize.width() - displayedSize.width()) / 2;
-        int yOff = (labelSize.height() - displayedSize.height()) / 2;
-        double ratioX =
-                static_cast<double>(imgSize.width()) / displayedSize.width();
-        double ratioY =
-                static_cast<double>(imgSize.height()) / displayedSize.height();
-
-        float px = static_cast<float>((uiPt.x() - xOff) * ratioX);
-        float py = static_cast<float>((uiPt.y() - yOff) * ratioY);
-        return cv::Point2f(px, py);
-    };
-
-    auto toPhysicalRect = [&](QRect uiRect) -> cv::Rect2d {
-        cv::Point2f tl = toPhysicalPoint(uiRect.topLeft());
-        cv::Point2f br = toPhysicalPoint(uiRect.bottomRight());
-        cv::Rect2d phys(tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-
-        phys.x = std::max(0.0, phys.x);
-        phys.y = std::max(0.0, phys.y);
-        if (phys.x + phys.width > calibImg.cols) phys.width = calibImg.cols - phys.x;
-        if (phys.y + phys.height > calibImg.rows) phys.height = calibImg.rows - phys.y;
-        return phys;
-    };
-
-    m_host->savedTrackingBox = toPhysicalRect(uiTrackRect);
-
-    // 计算多边形的绝对物理坐标，并存入 YAML 相对坐标 (相对于追踪框中心)
-    std::vector<cv::Point2f> absDatePoly;
-    for (const QPoint& pt : uiDetectPoly) {
-        absDatePoly.push_back(toPhysicalPoint(pt));
+    if (!m_host->m_recipeStore
+            || !m_acquisitionController
+            || !m_acquisitionController->hasCurrentImage()
+            || !imageLabel
+            || !imageLabel->isTemplateDrawingEnabled()) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先点击【制作模板】获取图像并完成区域框选。"));
+        return;
     }
 
-    cv::Point2f trackCenter(m_host->savedTrackingBox.x + m_host->savedTrackingBox.width / 2.0,
-                            m_host->savedTrackingBox.y + m_host->savedTrackingBox.height / 2.0);
+    const bool barcodeMode = mode == DetectionMode::BarcodeWord;
+    const bool characterMode = mode == DetectionMode::Stamp
+            || mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord;
 
-    std::vector<cv::Point2f> relBarcodePoly;
-    if (isBarcodeWordTemplateMode) {
-        const cv::Rect2d barcodeBox =
-                toPhysicalRect(uiBarcodeRect.normalized());
-        const std::vector<cv::Point2f> absBarcodePoly = {
-            cv::Point2f(static_cast<float>(barcodeBox.x),
-                        static_cast<float>(barcodeBox.y)),
-            cv::Point2f(static_cast<float>(barcodeBox.x + barcodeBox.width),
-                        static_cast<float>(barcodeBox.y)),
-            cv::Point2f(static_cast<float>(barcodeBox.x + barcodeBox.width),
-                        static_cast<float>(barcodeBox.y + barcodeBox.height)),
-            cv::Point2f(static_cast<float>(barcodeBox.x),
-                        static_cast<float>(barcodeBox.y + barcodeBox.height))
-        };
-        relBarcodePoly.reserve(absBarcodePoly.size());
-        for (const cv::Point2f &point : absBarcodePoly) {
-            relBarcodePoly.push_back(
-                        cv::Point2f(point.x - trackCenter.x,
-                                    point.y - trackCenter.y));
+    const QRect trackingUi = imageLabel->getTrackingRect().normalized();
+    const QRect barcodeUi = imageLabel->getBarcodeRect().normalized();
+    const QPolygon dateUi = imageLabel->getDetectionPoly();
+    if (trackingUi.width() <= 5 || trackingUi.height() <= 5
+            || dateUi.size() < 3
+            || !imageLabel->isDetectionPolyComplete()) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请完成有效的定位区域和闭合的喷码检测区域。"));
+        return;
+    }
+    if (barcodeMode) {
+        if (barcodeUi.width() <= 5 || barcodeUi.height() <= 5) {
+            showParameterWarning(
+                        QStringLiteral("提示"),
+                        QStringLiteral("请完整框选二维码区域。"));
+            return;
         }
-    }
-
-    std::vector<cv::Point2f> relDatePoly;
-    for (const auto& pt : absDatePoly) {
-        relDatePoly.push_back(cv::Point2f(pt.x - trackCenter.x, pt.y - trackCenter.y));
-    }
-    m_host->savedBarcodePoly = relBarcodePoly;
-    m_host->savedDatePoly = relDatePoly;
-    m_host->hasValidBoxes = true;
-
-    // 3. 物理保存
-    cv::imwrite(dir.absoluteFilePath("template_raw.png").toLocal8Bit().toStdString(), calibImg);
-    cv::Mat tplImg = calibImg(m_host->savedTrackingBox).clone();
-    cv::imwrite(dir.absoluteFilePath("tracking_template.bmp").toLocal8Bit().toStdString(), tplImg);
-    m_host->m_loadedTrackingTemplate = tplImg.clone();
-
-    m_host->currentTemplateDirPath = savePath;
-    singleTemplateEditSession().reset();
-    singleTemplateResolvedAssets().clear();
-    setCurrentTemplateDisplayName(QString());
-
-    QString yamlPath = savePath + "/calibrate_config.yaml";
-    {
-        cv::FileStorage fs(yamlPath.toLocal8Bit().toStdString(), cv::FileStorage::WRITE);
-        if (isBarcodeWordTemplateMode) {
-            fs << "barcode_poly" << relBarcodePoly;
-        }
-        fs << "date_poly" << relDatePoly;
-        fs.release();
-    }
-
-    // 4. 特征标定 (仅模式 0)
-    if (ui->comboBox_4->currentIndex() == 0) {
-        QMessageBox::information(m_host, "标定提示", "即将标定吸管口和钢印区。");
-
-        // 吸管口标定
-        cv::Rect ringRect = getQuickRectROI(calibImg, "ROI_1");
-        if (ringRect.width > 5 && ringRect.height > 5) {
-            cv::Mat ringTpl = calibImg(ringRect).clone();
-            QString ringPath = savePath + "/template_ring.bmp";
-            cv::imwrite(ringPath.toLocal8Bit().toStdString(), ringTpl);
-
-            // 计算中心点用于相对坐标转换 (仿照 widget1.cpp 逻辑)
-            cv::Point2f cRing(ringRect.x + ringRect.width / 2.0f, ringRect.y + ringRect.height / 2.0f);
-
-            // 钢印多边形标定
-            std::vector<cv::Point> stampPts = getPolygonROI(calibImg, "ROI_2");
-            if (stampPts.size() >= 3) {
-                // 转换相对坐标并使用 FileStorage 保存 (关键：确保引擎能读懂)
-                std::vector<cv::Point2f> relStamp;
-                for (const auto& pt : stampPts) {
-                    relStamp.push_back(cv::Point2f(pt.x - cRing.x, pt.y - cRing.y));
-                }
-
-                cv::FileStorage fs(yamlPath.toLocal8Bit().toStdString(), cv::FileStorage::WRITE);
-                fs << "stamp_poly" << relStamp;
-                fs << "date_poly" << relDatePoly;
-                fs.release();
-
-                // 重新初始化检测引擎
-                initOverlapDetectorFromCurrentDir();
+        if (!barcodeTemplateReadable()
+                || validatedBarcodeRect() != barcodeUi) {
+            BarcodeReadResult barcode;
+            QString reason;
+            if (!validateBarcodeTemplateRect(
+                    barcodeUi,
+                    barcodeTemplateValidationOptions(),
+                    &barcode,
+                    &reason)) {
+                clearBarcodeTemplateValidation();
+                imageLabel->retryBarcodeRegion();
+                showParameterWarning(
+                            QStringLiteral("二维码扫描失败"),
+                            reason);
+                return;
             }
+            acceptBarcodeTemplateValidation(barcodeUi, barcode.text);
         }
     }
 
-    // 5. 保存所有配置
-    if (!m_host->saveSettingsToDir(savePath)) {
+    const QString targetText = ui->dateEdit->toPlainText().trimmed();
+    int threshold = RecipeProfile::DefaultImageThresholdPercent;
+    if (characterMode
+            && (!parseIntValue(ui->lineEdit_yuzhi->text(), &threshold)
+                || threshold < 0 || threshold > 100)) {
+        showParameterWarning(
+                    QStringLiteral("参数错误"),
+                    QStringLiteral("图像合格阈值必须是0到100之间的整数。"));
         return;
     }
-    saveSettings();
-    if (isWordTemplateMode) {
-        WordTemplateProfile savedProfile;
-        QString profileMessage;
-        if (!loadWordTemplateProfileFromDir(savePath, &savedProfile, &profileMessage)) {
-            showParameterCritical("严重警告",
-                                  QString("产品模板文件已保存，但重新加载模板失败：\n%1")
-                                  .arg(profileMessage));
+
+    bool accepted = false;
+    const QString displayName = QInputDialog::getText(
+                m_host,
+                QStringLiteral("保存产品配方"),
+                QStringLiteral("产品配方名称："),
+                QLineEdit::Normal,
+                QString(),
+                &accepted).trimmed();
+    if (!accepted || displayName.isEmpty()) {
+        return;
+    }
+
+    ProductRecipe recipe = createProductRecipe(displayName, mode);
+    QString errorMessage;
+    if (!m_recipeEditorSession.beginNew(recipe, &errorMessage)) {
+        showParameterCritical(QStringLiteral("严重警告"), errorMessage);
+        return;
+    }
+    const QString workspacePath =
+            m_recipeEditorSession.workspacePath();
+    if (workspacePath.isEmpty()) {
+        showParameterCritical(
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("无法创建配方编辑工作区。"));
+        return;
+    }
+
+    const cv::Mat rawImage =
+            m_acquisitionController->currentImageClone();
+    const QSize labelSize = imageLabel->size();
+    const QSize imageSize(rawImage.cols, rawImage.rows);
+    const QPixmap *pixmap = imageLabel->pixmap();
+    const QSize displayedSize = pixmap && !pixmap->isNull()
+            ? pixmap->size()
+            : imageSize.scaled(labelSize, Qt::KeepAspectRatio);
+    const int xOffset =
+            (labelSize.width() - displayedSize.width()) / 2;
+    const int yOffset =
+            (labelSize.height() - displayedSize.height()) / 2;
+    const double ratioX = static_cast<double>(imageSize.width())
+            / displayedSize.width();
+    const double ratioY = static_cast<double>(imageSize.height())
+            / displayedSize.height();
+    auto physicalPoint = [=](const QPoint &point) {
+        return cv::Point2f(
+                    static_cast<float>((point.x() - xOffset) * ratioX),
+                    static_cast<float>((point.y() - yOffset) * ratioY));
+    };
+    auto physicalRect = [&](const QRect &rect) {
+        const cv::Point2f topLeft = physicalPoint(rect.topLeft());
+        const cv::Point2f bottomRight = physicalPoint(rect.bottomRight());
+        QRectF result(topLeft.x, topLeft.y,
+                      bottomRight.x - topLeft.x,
+                      bottomRight.y - topLeft.y);
+        result = result.intersected(
+                    QRectF(0.0, 0.0, rawImage.cols, rawImage.rows));
+        return result;
+    };
+
+    RecipeProfile profile;
+    profile.name = displayName;
+    profile.targetText = targetText;
+    profile.imageThresholdPercent = threshold;
+    profile.trackingRoi = physicalRect(trackingUi);
+    const cv::Rect trackingRect(
+                cvRound(profile.trackingRoi.x()),
+                cvRound(profile.trackingRoi.y()),
+                cvRound(profile.trackingRoi.width()),
+                cvRound(profile.trackingRoi.height()));
+    profile.trackingRoi = QRectF(
+                trackingRect.x,
+                trackingRect.y,
+                trackingRect.width,
+                trackingRect.height);
+    if (profile.trackingRoi.width() <= 5.0
+            || profile.trackingRoi.height() <= 5.0) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("定位区域转换后无效，配方未保存。"));
+        return;
+    }
+    const cv::Point2f trackingCenter(
+                static_cast<float>(profile.trackingRoi.center().x()),
+                static_cast<float>(profile.trackingRoi.center().y()));
+    std::vector<cv::Point2f> datePolygon;
+    for (const QPoint &point : dateUi) {
+        const cv::Point2f physical = physicalPoint(point);
+        datePolygon.emplace_back(
+                    physical.x - trackingCenter.x,
+                    physical.y - trackingCenter.y);
+    }
+    std::vector<cv::Point2f> barcodePolygon;
+    if (barcodeMode) {
+        const QRectF rectangle = physicalRect(barcodeUi);
+        const cv::Point2f corners[] = {
+            cv::Point2f(static_cast<float>(rectangle.left()),
+                        static_cast<float>(rectangle.top())),
+            cv::Point2f(static_cast<float>(rectangle.right()),
+                        static_cast<float>(rectangle.top())),
+            cv::Point2f(static_cast<float>(rectangle.right()),
+                        static_cast<float>(rectangle.bottom())),
+            cv::Point2f(static_cast<float>(rectangle.left()),
+                        static_cast<float>(rectangle.bottom()))
+        };
+        for (const cv::Point2f &point : corners) {
+            barcodePolygon.emplace_back(
+                        point.x - trackingCenter.x,
+                        point.y - trackingCenter.y);
+        }
+    }
+
+    if (trackingRect.x < 0 || trackingRect.y < 0
+            || trackingRect.x + trackingRect.width > rawImage.cols
+            || trackingRect.y + trackingRect.height > rawImage.rows) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("定位区域超出图像范围，配方未保存。"));
+        return;
+    }
+    const cv::Mat trackingTemplate = rawImage(trackingRect).clone();
+
+    std::vector<cv::Point2f> stampPolygon;
+    cv::Mat stampRing;
+    if (mode == DetectionMode::Stamp) {
+        QMessageBox::information(
+                    m_host,
+                    QStringLiteral("标定提示"),
+                    QStringLiteral("即将标定吸管口和钢印区。"));
+        const cv::Rect ring = getQuickRectROI(rawImage, "ROI_1");
+        if (ring.width <= 5 || ring.height <= 5
+                || ring.x < 0 || ring.y < 0
+                || ring.x + ring.width > rawImage.cols
+                || ring.y + ring.height > rawImage.rows) {
+            showParameterWarning(
+                        QStringLiteral("提示"),
+                        QStringLiteral("吸管口区域无效，配方未保存。"));
             return;
         }
-        wordTemplateProfiles().clear();
-        wordTemplateProfiles().push_back(savedProfile);
-        refreshWordTemplateRecipeAssets();
-        prepareWordTemplateRecipeDraft(wordTemplateProfiles().front());
-        setCurrentWordTemplateEditIndex(0);
-        refreshWordTemplateEditorCombo();
-        storeCurrentTemplatePathsForMode(currentDetectModeId());
-        saveSettings();
+        stampRing = rawImage(ring).clone();
+        const cv::Point2f ringCenter(
+                    ring.x + ring.width / 2.0f,
+                    ring.y + ring.height / 2.0f);
+        const std::vector<cv::Point> points =
+                getPolygonROI(rawImage, "ROI_2");
+        if (points.size() < 3u) {
+            showParameterWarning(
+                        QStringLiteral("提示"),
+                        QStringLiteral("钢印区域点数不足，配方未保存。"));
+            return;
+        }
+        for (const cv::Point &point : points) {
+            stampPolygon.emplace_back(
+                        point.x - ringCenter.x,
+                        point.y - ringCenter.y);
+        }
     }
+
+    QDir workspace(workspacePath);
+    const QString rawPath =
+            workspace.filePath(QStringLiteral("template_raw.png"));
+    const QString trackingPath =
+            workspace.filePath(QStringLiteral("tracking_template.bmp"));
+    const QString calibrationPath =
+            workspace.filePath(QStringLiteral("calibrate_config.yaml"));
+    if (!writeImageFile(rawPath, rawImage, ".png", &errorMessage)
+            || !writeImageFile(trackingPath, trackingTemplate,
+                               ".bmp", &errorMessage)
+            || !writeCalibrationFile(calibrationPath,
+                                     stampPolygon,
+                                     datePolygon,
+                                     barcodePolygon,
+                                     &errorMessage)) {
+        showParameterCritical(
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("配方资产写入失败：\n%1").arg(errorMessage));
+        return;
+    }
+
+    QMap<QString, QString> sources;
+    auto addAsset = [&](const QString &key,
+                        const QString &role,
+                        const QString &source,
+                        const QString &relative) {
+        recipe.assets.insert(key, relative);
+        profile.assetKeys.insert(role, key);
+        sources.insert(key, source);
+    };
+    addAsset(QStringLiteral("profile0.rawImage"),
+             QStringLiteral("rawImage"),
+             rawPath,
+             QStringLiteral("assets/profiles/0/template_raw.png"));
+    addAsset(QStringLiteral("profile0.trackingTemplate"),
+             QStringLiteral("trackingTemplate"),
+             trackingPath,
+             QStringLiteral("assets/profiles/0/tracking_template.bmp"));
+    addAsset(QStringLiteral("profile0.calibration"),
+             QStringLiteral("calibration"),
+             calibrationPath,
+             QStringLiteral("assets/profiles/0/calibrate_config.yaml"));
+    if (mode == DetectionMode::Stamp) {
+        const QString ringPath =
+                workspace.filePath(QStringLiteral("template_ring.bmp"));
+        if (!writeImageFile(ringPath, stampRing, ".bmp", &errorMessage)) {
+            showParameterCritical(QStringLiteral("严重警告"), errorMessage);
+            return;
+        }
+        addAsset(QStringLiteral("profile0.stampRing"),
+                 QStringLiteral("stampRing"),
+                 ringPath,
+                 QStringLiteral("assets/profiles/0/template_ring.bmp"));
+    }
+
+    recipe.profiles.append(profile);
+    if (!m_recipeEditorSession.replaceDraft(
+            recipe, sources, &errorMessage)) {
+        showParameterCritical(QStringLiteral("严重警告"), errorMessage);
+        return;
+    }
+    PreparedRecipeSnapshot prepared;
+    if (!m_recipeEditorSession.publish(
+            *m_host->m_recipeStore, &prepared, &errorMessage)) {
+        showParameterCritical(
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("产品配方保存失败；上一完整版本保持不变：\n%1")
+                    .arg(errorMessage));
+        return;
+    }
+    m_activePreparedRecipe = prepared;
+
+    QStringList pendingMessages;
+    const QString uiModeId = detectionModeUiId(mode);
+    const bool activated =
+            mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord
+            ? activatePublishedWordRecipe(
+                recipe.recipeId, uiModeId, false,
+                &pendingMessages, &errorMessage)
+            : activatePublishedSingleTemplateRecipe(
+                recipe.recipeId, uiModeId, false, &errorMessage);
+    if (!activated) {
+        showParameterCritical(
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("配方已保存，但当前界面加载失败：\n%1")
+                    .arg(errorMessage));
+        return;
+    }
+
+    m_templateModeMemory.publishedRecipeIdsByMode()
+            .insert(uiModeId, recipe.recipeId);
+    m_host->m_appliedMachineSettings.publishedRecipeIdsByMode =
+            m_templateModeMemory.publishedRecipeIdsByMode();
+    saveSettings(false);
     imageLabel->setTemplateDrawingEnabled(false);
     imageLabel->clearSelection();
     clearBarcodeTemplateValidation();
@@ -1247,32 +1104,29 @@ void TemplateEditorController::saveCurrentTemplate()
     resetTemplateCaptureState();
     ui->statusLabel->setText(
                 m_host->m_bOpenDevice
-                ? "模板保存完成，相机已打开"
-                : "模板保存完成，相机已关闭");
-    setCurrentTemplateNameVisible(true);
-    updateCurrentTemplateName();
-    refreshWordTemplateEditorCombo();
-    if (isWordTemplateMode || isStampTemplateMode) {
+                ? QStringLiteral("配方保存完成，相机已打开")
+                : QStringLiteral("配方保存完成，相机已关闭"));
+    if (characterMode) {
         QMessageBox splitMessageBox(m_host);
         splitMessageBox.setIcon(QMessageBox::Information);
-        splitMessageBox.setWindowTitle("保存成功");
-        splitMessageBox.setText("产品模板已保存成功。\n\n是否立即切割字符模板？");
-        QPushButton *splitButton = splitMessageBox.addButton("确定", QMessageBox::AcceptRole);
-        splitMessageBox.addButton("取消", QMessageBox::RejectRole);
+        splitMessageBox.setWindowTitle(QStringLiteral("保存成功"));
+        splitMessageBox.setText(
+                    QStringLiteral(
+                        "产品模板已保存成功。\n\n是否立即切割字符模板？"));
+        QPushButton *splitButton = splitMessageBox.addButton(
+                    QStringLiteral("确定"), QMessageBox::AcceptRole);
+        splitMessageBox.addButton(
+                    QStringLiteral("取消"), QMessageBox::RejectRole);
         splitMessageBox.setDefaultButton(splitButton);
         splitMessageBox.exec();
-
         if (splitMessageBox.clickedButton() == splitButton) {
             showManualCharacterTemplateCropDialog();
         }
     } else {
-        QMessageBox::information(m_host, "成功", "模板及双框配置已全部保存！");
+        showParameterInfo(
+                    QStringLiteral("成功"),
+                    QStringLiteral("产品模板和全部资源已事务保存。"));
     }
-}
-
-void TemplateEditorController::initOverlapDetectorFromCurrentDir()
-{
-    m_host->initOverlapDetectorFromCurrentDir();
 }
 
 TemplateModeMemory &TemplateEditorController::modeMemory()
@@ -1297,32 +1151,9 @@ TemplateEditorController::wordTemplateProfiles() const
     return m_wordTemplateProfiles;
 }
 
-TemplateRecipeDraftSession &TemplateEditorController::wordDraftSession()
+PreparedRecipeSnapshot TemplateEditorController::activePreparedRecipe() const
 {
-    return m_wordTemplateRecipeDraftSession;
-}
-
-TemplateRecipeEditSession &TemplateEditorController::wordEditSession()
-{
-    return m_wordTemplateRecipeEditSession;
-}
-
-TemplateRecipeEditSession &
-TemplateEditorController::singleTemplateEditSession()
-{
-    return m_singleTemplateRecipeEditSession;
-}
-
-QMap<QString, QString> &
-TemplateEditorController::singleTemplateResolvedAssets()
-{
-    return m_singleTemplateResolvedAssetPathsByRole;
-}
-
-const QMap<QString, QString> &
-TemplateEditorController::singleTemplateResolvedAssets() const
-{
-    return m_singleTemplateResolvedAssetPathsByRole;
+    return m_activePreparedRecipe;
 }
 
 QString TemplateEditorController::currentTemplateDisplayName() const
@@ -1574,18 +1405,22 @@ bool TemplateEditorController::validateBarcodeTemplateRect(
 
 BarcodeDecodeOptions TemplateEditorController::barcodeTemplateValidationOptions() const
 {
+    BarcodeRecipeParameters parameters;
     const int profileIndex = currentWordTemplateProfileIndex();
     if (currentDetectModeId() == BarcodeWordDetectionMode
             && profileIndex >= 0
             && profileIndex
                < static_cast<int>(m_wordTemplateProfiles.size())) {
-        return m_wordTemplateProfiles[
+        parameters = m_wordTemplateProfiles[
                     static_cast<size_t>(profileIndex)]
-                .settings.barcodeOptions;
+                .settings.barcodeParameters;
     }
-
-    return AppSettingsManager::defaultTemplatePrivateSettings()
-            .barcodeOptions;
+    BarcodeDecodeOptions options;
+    options.formatMask = parameters.formatMask;
+    options.roiPaddingPercent = parameters.roiPaddingPercent;
+    options.maxDecodeTimeMs = parameters.maxDecodeTimeMs;
+    options.enableFallback = parameters.enableFallback;
+    return options;
 }
 
 
@@ -1596,11 +1431,6 @@ void TemplateEditorController::updateCurrentTemplateName()
     if (m_currentTemplateNameVisible
             && !m_currentTemplateDisplayName.trimmed().isEmpty()) {
         templateName = m_currentTemplateDisplayName.trimmed();
-    } else if (m_currentTemplateNameVisible && !m_host->currentTemplateDirPath.isEmpty()) {
-        QDir templateDir(m_host->currentTemplateDirPath);
-        if (templateDir.exists() && !templateDir.dirName().isEmpty()) {
-            templateName = templateDir.dirName();
-        }
     }
 
     ui->currentTemplateName->setText(templateName);
@@ -1970,33 +1800,33 @@ void TemplateEditorController::setupManualCharacterCropUi()
 
 
 
-void TemplateEditorController::setupTemplatePrivateSettingDirtyTracking()
+void TemplateEditorController::setupRecipeProfileDirtyTracking()
 {
     m_templateTargetLabelText = ui->label ? ui->label->text() : QString("目标字符内容:");
     m_templateThresholdLabelText = ui->label_4 ? ui->label_4->text() : QString("图像合格阈值:");
 
     if (ui->dateEdit) {
         connect(ui->dateEdit, &QTextEdit::textChanged, this, [this]() {
-            if (m_host->m_updatingGlobalSettingsUi || m_host->m_applyingGlobalSettings) {
+            if (m_host->m_updatingMachineSettingsUi || m_host->m_applyingMachineSettings) {
                 return;
             }
             if ((isWordFamilyMode(currentDetectModeId())
                  && !m_wordTemplateProfiles.empty())
                     || (isSingleTemplateRecipeMode(currentDetectModeId())
-                        && m_singleTemplateRecipeEditSession.isActive())) {
+                        && m_recipeEditorSession.isActive())) {
                 refreshTemplateTargetTextDirty();
             }
         });
     }
     if (ui->lineEdit_yuzhi) {
         connect(ui->lineEdit_yuzhi, &QLineEdit::textChanged, this, [this](const QString &) {
-            if (m_host->m_updatingGlobalSettingsUi || m_host->m_applyingGlobalSettings) {
+            if (m_host->m_updatingMachineSettingsUi || m_host->m_applyingMachineSettings) {
                 return;
             }
             if ((isWordFamilyMode(currentDetectModeId())
                  && !m_wordTemplateProfiles.empty())
                     || (isSingleTemplateRecipeMode(currentDetectModeId())
-                        && m_singleTemplateRecipeEditSession.isActive())) {
+                        && m_recipeEditorSession.isActive())) {
                 refreshTemplateImageThresholdDirty();
             }
         });
@@ -2014,15 +1844,15 @@ void TemplateEditorController::refreshTemplateTargetTextDirty()
         dirty = (ui->dateEdit->toPlainText() != profile.settings.targetText);
     } else if (ui
                && isSingleTemplateRecipeMode(currentDetectModeId())
-               && m_singleTemplateRecipeEditSession.isActive()
-               && m_singleTemplateRecipeEditSession.recipe().profiles.size() == 1) {
+               && m_recipeEditorSession.isActive()
+               && m_recipeEditorSession.recipe().profiles.size() == 1) {
         dirty = ui->dateEdit->toPlainText()
-                != m_singleTemplateRecipeEditSession.recipe()
+                != m_recipeEditorSession.recipe()
                    .profiles.first().targetText;
     }
 
     m_host->m_settingsEditState.setTemplateTargetDirty(dirty);
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
 void TemplateEditorController::refreshTemplateImageThresholdDirty()
@@ -2037,28 +1867,28 @@ void TemplateEditorController::refreshTemplateImageThresholdDirty()
             dirty = true;
         } else {
             const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-            dirty = (thresholdValue != static_cast<int>(profile.settings.imageThreshold));
+            dirty = (thresholdValue != static_cast<int>(profile.settings.imageThresholdPercent));
         }
     } else if (ui
                && isSingleTemplateRecipeMode(currentDetectModeId())
-               && m_singleTemplateRecipeEditSession.isActive()
-               && m_singleTemplateRecipeEditSession.recipe().profiles.size() == 1) {
+               && m_recipeEditorSession.isActive()
+               && m_recipeEditorSession.recipe().profiles.size() == 1) {
         int thresholdValue = 0;
         if (!parseIntValue(ui->lineEdit_yuzhi->text(), &thresholdValue)) {
             dirty = true;
         } else {
             dirty = thresholdValue
                     != static_cast<int>(
-                        m_singleTemplateRecipeEditSession.recipe()
-                        .profiles.first().imageThreshold);
+                        m_recipeEditorSession.recipe()
+                        .profiles.first().imageThresholdPercent);
         }
     }
 
     m_host->m_settingsEditState.setTemplateThresholdDirty(dirty);
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
-void TemplateEditorController::refreshTemplatePrivateSettingDirty()
+void TemplateEditorController::refreshRecipeProfileDirty()
 {
     refreshTemplateTargetTextDirty();
     refreshTemplateImageThresholdDirty();
@@ -2067,34 +1897,34 @@ void TemplateEditorController::refreshTemplatePrivateSettingDirty()
 void TemplateEditorController::markTemplateTargetTextDirty()
 {
     m_host->m_settingsEditState.setTemplateTargetDirty(true);
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
 void TemplateEditorController::markTemplateImageThresholdDirty()
 {
     m_host->m_settingsEditState.setTemplateThresholdDirty(true);
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
 void TemplateEditorController::clearTemplateTargetTextDirty()
 {
     m_host->m_settingsEditState.setTemplateTargetDirty(false);
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
 void TemplateEditorController::clearTemplateImageThresholdDirty()
 {
     m_host->m_settingsEditState.setTemplateThresholdDirty(false);
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
-void TemplateEditorController::clearTemplatePrivateSettingDirty()
+void TemplateEditorController::clearRecipeProfileDirty()
 {
     m_host->m_settingsEditState.clearTemplateDirty();
-    updateTemplatePrivateSettingDirtyUi();
+    updateRecipeProfileDirtyUi();
 }
 
-void TemplateEditorController::updateTemplatePrivateSettingDirtyUi()
+void TemplateEditorController::updateRecipeProfileDirtyUi()
 {
     if (ui->label) {
         ui->label->setText(m_host->m_settingsEditState.isTemplateTargetDirty()
@@ -2110,600 +1940,189 @@ void TemplateEditorController::updateTemplatePrivateSettingDirtyUi()
 
 void TemplateEditorController::showManualCharacterTemplateCropDialog()
 {
-    if (!ui) {
+    if (!m_activePreparedRecipe
+            || !m_activePreparedRecipe->recipe) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先选择已保存的产品配方。"));
         return;
     }
-    if (currentDetectModeId() == QStringLiteral("stamp_detection")) {
-        showStampCharacterTemplateCropDialog();
+    const DetectionMode mode =
+            m_activePreparedRecipe->recipe->detectionMode;
+    if (mode != DetectionMode::Stamp
+            && mode != DetectionMode::Word
+            && mode != DetectionMode::BarcodeWord) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("当前模式不使用字符模板。"));
         return;
     }
-    if (!isWordFamilyMode(currentDetectModeId())) {
-        showParameterInfoAsError("提示", "手动切割字符模板只用于钢印或字库类检测模式。");
-        return;
-    }
-
-    const int profileIndex = currentWordTemplateProfileIndex();
-    if (profileIndex < 0 || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
-        showParameterInfoAsError("提示", "请先选择当前编辑的产品模板。");
-        return;
-    }
-    const WordTemplateProfile &selectedProfile =
-            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-    if (!selectedProfile.resolvedAssetPathsByRole.isEmpty()) {
-        showPublishedRecipeCharacterTemplateCropDialog(profileIndex);
-        return;
-    }
-
-    const QString templateDirPath = selectedProfile.dirPath;
-
-    if (templateDirPath.trimmed().isEmpty() || !QDir(templateDirPath).exists()) {
-        showParameterInfoAsError("提示", "请先选择产品模板文件夹。");
-        return;
-    }
-
-    const QString rawImagePath = QDir(templateDirPath).filePath("template_raw.png");
-    QImage rawImage(rawImagePath);
-    if (rawImage.isNull()) {
-        showParameterCritical("严重警告", "当前产品模板缺少 template_raw.png，无法手动切割字符模板。");
-        return;
-    }
-
-    const TemplatePrivateSettings &privateSettings =
-            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)].settings;
-    cv::Rect2d trackingBox = privateSettings.trackingBox;
-    bool trackingBoxValid = trackingBox.width > 0 && trackingBox.height > 0;
-    if (!trackingBoxValid) {
-        showParameterCritical("严重警告", "当前产品模板缺少有效定位区域，无法还原喷码检测区域。");
-        return;
-    }
-
-    const QString yamlPath = QDir(templateDirPath).filePath("calibrate_config.yaml");
-    CalibrationData calib;
-    if (!QFile::exists(yamlPath)
-            || !calib.load(yamlPath.toLocal8Bit().toStdString())
-            || calib.date_poly.empty()) {
-        showParameterCritical("严重警告", "当前产品模板缺少有效喷码检测区域，无法手动切割字符模板。");
-        return;
-    }
-
-    QPolygonF datePolygon;
-    const QPointF trackingCenter(trackingBox.x + trackingBox.width / 2.0,
-                                 trackingBox.y + trackingBox.height / 2.0);
-    for (const cv::Point2f &point : calib.date_poly) {
-        datePolygon << QPointF(trackingCenter.x() + point.x,
-                               trackingCenter.y() + point.y);
-    }
-
-    QRect cropRect = datePolygon.boundingRect().toAlignedRect()
-            .intersected(QRect(0, 0, rawImage.width(), rawImage.height()));
-    if (cropRect.width() <= 0 || cropRect.height() <= 0) {
-        showParameterCritical("严重警告", "喷码检测区域超出模板图像范围，无法手动切割字符模板。");
-        return;
-    }
-
-    CharacterTemplateCropDialog dialog(rawImage.copy(cropRect), templateDirPath, m_host);
-    if (dialog.exec() != QDialog::Accepted || dialog.savedCount() <= 0) {
-        return;
-    }
-
-    TemplatePrivateSettings refreshedSettings;
-    QString refreshedSettingsError;
-    if (AppSettingsManager::loadTemplatePrivateSettings(templateDirPath,
-                                                        &refreshedSettings,
-                                                        &refreshedSettingsError)) {
-        WordTemplateProfile &profile =
-                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        profile.settings = refreshedSettings;
-        refreshWordTemplateRecipeProfile(&profile);
-        refreshWordTemplateRecipeAssets();
-    } else {
-        showParameterCritical("严重警告",
-                              QString("字符模板图片已生成，但字符框配置重新读取失败：\n%1")
-                              .arg(refreshedSettingsError));
-        return;
-    }
-
-    const QString targetText = ui->dateEdit->toPlainText();
-    QString reloadMessage;
-    if (!targetText.trimmed().isEmpty()) {
-        const QStringList baseNames = parseTemplateTargetUnits(targetText);
-        std::vector<cv::Mat> reloadedTemplates;
-        std::vector<int> reloadedTemplateTargetIndexes;
-        QString loadError;
-        if (loadWordDigitTemplatesFromDir(templateDirPath,
-                                          baseNames,
-                                          &reloadedTemplates,
-                                          &reloadedTemplateTargetIndexes,
-                                          &loadError,
-                                          true)) {
-            if (profileIndex >= 0
-                    && profileIndex < static_cast<int>(m_wordTemplateProfiles.size())) {
-                WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-                profile.digitTemplates = reloadedTemplates;
-                profile.digitTemplateTargetIndexes = reloadedTemplateTargetIndexes;
-                refreshWordTemplateProfileDigitCache(
-                            &profile);
-            }
-        } else {
-            reloadMessage = QString("\n\n字符模板已保存，但当前目标字符仍有图片未加载成功：\n%1").arg(loadError);
-        }
-    }
-
-    QString recipePublishMessage;
-    if (reloadMessage.isEmpty() && m_wordTemplateRecipeDraftSession.isActive()) {
-        QString publishError;
-        if (!publishWordTemplateRecipeDraft(&publishError)) {
-            recipePublishMessage =
-                    QString("\n\n字符模板已保存，但新产品配方同步失败：\n%1")
-                    .arg(publishError);
-        }
-    }
-
-    showParameterInfo("提示",
-                      QString("已保存 %1 张字符模板图片。%2%3")
-                      .arg(dialog.savedCount())
-                      .arg(reloadMessage)
-                      .arg(recipePublishMessage));
+    const int profileIndex = mode == DetectionMode::Stamp
+            ? 0 : currentWordTemplateProfileIndex();
+    editActiveRecipeCharacterAssets(profileIndex);
 }
 
 void TemplateEditorController::showStampCharacterTemplateCropDialog()
 {
-    if (!ui
-            || currentDetectModeId()
-               != QStringLiteral("stamp_detection")) {
-        return;
+    if (m_activePreparedRecipe
+            && m_activePreparedRecipe->recipe
+            && m_activePreparedRecipe->recipe->detectionMode
+               == DetectionMode::Stamp) {
+        editActiveRecipeCharacterAssets(0);
     }
-    if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-        showParameterWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u8BF7\u5148\u505C\u6B62\u68C0\u6D4B\u540E\u518D\u5207\u5272\u94A2\u5370\u5B57\u7B26\u6A21\u677F\u3002"));
-        return;
-    }
-
-    const bool isPublishedRecipe =
-            m_singleTemplateRecipeEditSession.isActive();
-    TemplatePrivateSettings privateSettings;
-    QString rawImagePath;
-    QString calibrationPath;
-    QString templateDirPath;
-    QString settingsError;
-
-    if (isPublishedRecipe) {
-        if (m_singleTemplateRecipeEditSession.recipe().detectionMode
-                != DetectionMode::Stamp
-                || m_singleTemplateRecipeEditSession.recipe().profiles.size()
-                   != 1
-                || m_singleTemplateResolvedAssetPathsByRole.isEmpty()) {
-            showParameterInfoAsError(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u5F53\u524D\u5DF2\u53D1\u5E03\u94A2\u5370\u914D\u65B9\u6CA1\u6709\u6709\u6548\u7684\u7F16\u8F91\u4F1A\u8BDD\u3002"));
-            return;
-        }
-        privateSettings = templatePrivateSettingsFromRecipeProfile(
-                    m_singleTemplateRecipeEditSession.recipe()
-                    .profiles.first());
-        rawImagePath = m_singleTemplateResolvedAssetPathsByRole
-                .value(QStringLiteral("rawImage"));
-        calibrationPath = m_singleTemplateResolvedAssetPathsByRole
-                .value(QStringLiteral("calibration"));
-    } else {
-        templateDirPath = m_host->currentTemplateDirPath.trimmed();
-        if (templateDirPath.isEmpty()
-                || !QDir(templateDirPath).exists()) {
-            showParameterInfoAsError(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u8BF7\u5148\u9009\u62E9\u6216\u4FDD\u5B58\u94A2\u5370\u4EA7\u54C1\u6A21\u677F\u3002"));
-            return;
-        }
-        if (!AppSettingsManager::loadTemplatePrivateSettings(
-                    templateDirPath,
-                    &privateSettings,
-                    &settingsError)) {
-            showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                        QStringLiteral("\u5F53\u524D\u94A2\u5370\u6A21\u677F\u53C2\u6570\u65E0\u6CD5\u8BFB\u53D6\uFF1A\n%1")
-                        .arg(settingsError));
-            return;
-        }
-        rawImagePath = QDir(templateDirPath).filePath(
-                    QStringLiteral("template_raw.png"));
-        calibrationPath = QDir(templateDirPath).filePath(
-                    QStringLiteral("calibrate_config.yaml"));
-    }
-
-    QImage rawImage(rawImagePath);
-    if (rawImage.isNull()) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u5F53\u524D\u94A2\u5370\u6A21\u677F\u7F3A\u5C11\u53EF\u8BFB\u7684 template_raw.png\uFF0C\u65E0\u6CD5\u5207\u5272\u5B57\u7B26\u6A21\u677F\u3002"));
-        return;
-    }
-
-    CalibrationData calibration;
-    const cv::Rect2d trackingBox = privateSettings.trackingBox;
-    if (trackingBox.width <= 0.0
-            || trackingBox.height <= 0.0
-            || calibrationPath.trimmed().isEmpty()
-            || !calibration.load(
-                calibrationPath.toLocal8Bit().toStdString())
-            || calibration.date_poly.size() < 3) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u5F53\u524D\u94A2\u5370\u6A21\u677F\u7F3A\u5C11\u6709\u6548\u5B9A\u4F4D\u533A\u57DF\u6216\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\uFF0C\u65E0\u6CD5\u5207\u5272\u5B57\u7B26\u6A21\u677F\u3002"));
-        return;
-    }
-
-    QPolygonF datePolygon;
-    const QPointF trackingCenter(trackingBox.x + trackingBox.width / 2.0,
-                                 trackingBox.y + trackingBox.height / 2.0);
-    for (const cv::Point2f &point : calibration.date_poly) {
-        datePolygon << QPointF(trackingCenter.x() + point.x,
-                               trackingCenter.y() + point.y);
-    }
-    const QRect cropRect = datePolygon.boundingRect().toAlignedRect()
-            .intersected(QRect(0, 0,
-                               rawImage.width(),
-                               rawImage.height()));
-    if (cropRect.width() <= 0 || cropRect.height() <= 0) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u8D85\u51FA\u94A2\u5370\u6A21\u677F\u539F\u56FE\u8303\u56F4\u3002"));
-        return;
-    }
-
-    if (!isPublishedRecipe) {
-        CharacterTemplateCropDialog dialog(rawImage.copy(cropRect),
-                                           templateDirPath,
-                                           m_host);
-        if (dialog.exec() != QDialog::Accepted
-                || dialog.savedCount() <= 0) {
-            return;
-        }
-
-        TemplatePrivateSettings refreshedSettings;
-        if (!AppSettingsManager::loadTemplatePrivateSettings(
-                    templateDirPath,
-                    &refreshedSettings,
-                    &settingsError)) {
-            showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                        QStringLiteral("\u5B57\u7B26\u6A21\u677F\u56FE\u7247\u5DF2\u751F\u6210\uFF0C\u4F46\u5B57\u7B26\u6846\u914D\u7F6E\u91CD\u65B0\u8BFB\u53D6\u5931\u8D25\uFF1A\n%1")
-                        .arg(settingsError));
-            return;
-        }
-
-        std::vector<cv::Mat> reloadedTemplates;
-        std::vector<int> reloadedTemplateTargetIndexes;
-        QString reloadMessage;
-        const QStringList targetUnits = parseTemplateTargetUnits(
-                    refreshedSettings.targetText);
-        if (targetUnits.isEmpty()) {
-            reloadMessage = QStringLiteral(
-                        "\n\n\u5B57\u7B26\u6A21\u677F\u5DF2\u4FDD\u5B58\uFF0C\u8BF7\u586B\u5199\u76EE\u6807\u5B57\u7B26\u5E76\u70B9\u51FB\u201C\u786E\u8BA4\u5B57\u7B26\u201D\u540E\u751F\u6548\u3002");
-        } else if (loadWordDigitTemplatesFromDir(
-                       templateDirPath,
-                       targetUnits,
-                       &reloadedTemplates,
-                       &reloadedTemplateTargetIndexes,
-                       &settingsError,
-                       false)) {
-            m_host->digitTemplates.swap(reloadedTemplates);
-            m_host->digitTemplateTargetIndexes.swap(
-                        reloadedTemplateTargetIndexes);
-        } else {
-            reloadMessage = QStringLiteral(
-                        "\n\n\u5B57\u7B26\u6A21\u677F\u5DF2\u4FDD\u5B58\uFF0C\u4F46\u5F53\u524D\u76EE\u6807\u5B57\u7B26\u6240\u9700\u56FE\u7247\u672A\u5168\u90E8\u52A0\u8F7D\uFF1A\n%1")
-                    .arg(settingsError);
-        }
-
-        showParameterInfo(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5DF2\u4E3A\u5F53\u524D\u94A2\u5370\u6A21\u677F\u4FDD\u5B58 %1 \u5F20\u5B57\u7B26\u6A21\u677F\u56FE\u7247\u3002%2")
-                    .arg(dialog.savedCount())
-                    .arg(reloadMessage));
-        return;
-    }
-
-    TemplateCharacterAssetWorkspace workspace;
-    if (!workspace.prepare(m_singleTemplateResolvedAssetPathsByRole,
-                           &settingsError)
-            || !AppSettingsManager::saveTemplatePrivateSettings(
-                workspace.directoryPath(),
-                privateSettings,
-                &settingsError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u65E0\u6CD5\u51C6\u5907\u94A2\u5370\u5B57\u7B26\u6A21\u677F\u4E34\u65F6\u7F16\u8F91\u533A\uFF1A\n%1")
-                    .arg(settingsError));
-        return;
-    }
-
-    CharacterTemplateCropDialog dialog(rawImage.copy(cropRect),
-                                       workspace.directoryPath(),
-                                       m_host);
-    if (dialog.exec() != QDialog::Accepted
-            || dialog.savedCount() <= 0) {
-        return;
-    }
-
-    TemplatePrivateSettings updatedSettings;
-    if (!AppSettingsManager::loadTemplatePrivateSettings(
-                workspace.directoryPath(),
-                &updatedSettings,
-                &settingsError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u5B57\u7B26\u56FE\u7247\u5DF2\u5728\u4E34\u65F6\u533A\u751F\u6210\uFF0C\u4F46\u5B57\u7B26\u6846\u6570\u636E\u65E0\u6CD5\u8BFB\u53D6\uFF1A\n%1")
-                    .arg(settingsError));
-        return;
-    }
-
-    std::vector<cv::Mat> candidateTemplates;
-    std::vector<int> candidateTemplateTargetIndexes;
-    const QStringList targetUnits = parseTemplateTargetUnits(
-                updatedSettings.targetText);
-    if (targetUnits.isEmpty()
-            || !loadWordDigitTemplatesFromDir(
-                workspace.directoryPath(),
-                targetUnits,
-                &candidateTemplates,
-                &candidateTemplateTargetIndexes,
-                &settingsError,
-                false)) {
-        showParameterInfoWithRedWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u94A2\u5370\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    targetUnits.isEmpty()
-                    ? QStringLiteral("\u8BF7\u5148\u786E\u8BA4\u94A2\u5370\u76EE\u6807\u5B57\u7B26\u3002")
-                    : QStringLiteral("\u5F53\u524D\u76EE\u6807\u5B57\u7B26\u5BF9\u5E94\u56FE\u7247\u4E0D\u5B8C\u6574\uFF1A\n%1")
-                      .arg(settingsError));
-        return;
-    }
-
-    const TemplateProfileAssetManifest updatedManifest =
-            workspace.assetManifest(0);
-    const RecipeProfile &currentProfile =
-            m_singleTemplateRecipeEditSession.recipe().profiles.first();
-    const RecipeProfile updatedProfile =
-            recipeProfileFromTemplatePrivateSettings(
-                currentProfile.name,
-                updatedSettings,
-                updatedManifest.profileAssetKeys);
-    TemplateRecipeEditSession candidateSession =
-            m_singleTemplateRecipeEditSession;
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
-    RecipeSelection publishedSelection;
-    TemplateRecipeWorkflowFailureStage failureStage =
-            TemplateRecipeWorkflowFailureStage::None;
-    if (!TemplateRecipeWorkflow::republishProfileAssets(
-                &candidateSession,
-                store,
-                0,
-                updatedProfile,
-                updatedManifest,
-                &publishedSelection,
-                &failureStage,
-                &settingsError)) {
-        const QString failureDetail =
-                failureStage
-                == TemplateRecipeWorkflowFailureStage::Validation
-                ? QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
-                  .arg(settingsError)
-                : QStringLiteral("\u94A2\u5370\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
-                  .arg(settingsError);
-        showParameterInfoWithRedWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u94A2\u5370\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    failureDetail);
-        return;
-    }
-
-    if (!activatePublishedSingleTemplateRecipe(
-                publishedSelection.recipe->recipeId,
-                QStringLiteral("stamp_detection"),
-                false,
-                &settingsError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u94A2\u5370\u4EA7\u54C1\u914D\u65B9\u5DF2\u91CD\u65B0\u53D1\u5E03\uFF0C\u4F46\u5F53\u524D\u7F13\u5B58\u5237\u65B0\u5931\u8D25\uFF1B\u8BF7\u91CD\u65B0\u9009\u62E9\u8BE5\u914D\u65B9\uFF1A\n%1")
-                    .arg(settingsError));
-        return;
-    }
-
-    saveSettings(false);
-    qDebug() << "[RECIPE_PUBLISH] republished stamp recipe assets:"
-             << publishedSelection.recipe->recipeId
-             << publishedSelection.recipeDirectoryPath
-             << "characters:" << dialog.savedCount();
-    showParameterInfo(
-                QStringLiteral("\u63D0\u793A"),
-                QStringLiteral("\u5DF2\u4E3A\u5F53\u524D\u94A2\u5370\u914D\u65B9\u4FDD\u5B58 %1 \u5F20\u5B57\u7B26\u6A21\u677F\u56FE\u7247\uFF0C\u5E76\u4F7F\u7528\u539F\u914D\u65B9\u7F16\u53F7\u91CD\u65B0\u53D1\u5E03\u3002")
-                .arg(dialog.savedCount()));
 }
 
 void TemplateEditorController::showPublishedRecipeCharacterTemplateCropDialog(
         int profileIndex)
 {
-    if (profileIndex < 0
-            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())
-            || !m_wordTemplateRecipeEditSession.isActive()) {
+    editActiveRecipeCharacterAssets(profileIndex);
+}
+
+void TemplateEditorController::editActiveRecipeCharacterAssets(
+        int profileIndex)
+{
+    if (!m_host->m_recipeStore
+            || !m_activePreparedRecipe
+            || !m_activePreparedRecipe->recipe
+            || !m_recipeEditorSession.isActive()
+            || profileIndex < 0
+            || profileIndex >= m_activePreparedRecipe->profiles.size()) {
         showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5F53\u524D\u5DF2\u53D1\u5E03\u914D\u65B9\u6CA1\u6709\u6709\u6548\u7684\u7F16\u8F91\u4F1A\u8BDD\u3002"));
+                    QStringLiteral("提示"),
+                    QStringLiteral("当前配方没有可编辑的Profile。"));
+        return;
+    }
+    const DetectionMode mode =
+            m_activePreparedRecipe->recipe->detectionMode;
+    if (mode != DetectionMode::Stamp
+            && mode != DetectionMode::Word
+            && mode != DetectionMode::BarcodeWord) {
         return;
     }
 
-    const WordTemplateProfile profile =
-            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-    const QString rawImagePath = wordTemplateProfileAssetPath(
-                profile,
-                QStringLiteral("rawImage"),
-                QStringLiteral("template_raw.png"));
-    QImage rawImage(rawImagePath);
-    if (rawImage.isNull()) {
+    const PreparedRecipeProfile &prepared =
+            m_activePreparedRecipe->profiles.at(profileIndex);
+    std::vector<cv::Point> datePolygon;
+    const cv::Point2f center(
+                static_cast<float>(
+                    prepared.definition.trackingRoi.center().x()),
+                static_cast<float>(
+                    prepared.definition.trackingRoi.center().y()));
+    for (const cv::Point2f &point : prepared.datePolygon) {
+        datePolygon.emplace_back(
+                    cvRound(center.x + point.x),
+                    cvRound(center.y + point.y));
+    }
+    const cv::Rect bounds = cv::boundingRect(datePolygon)
+            & cv::Rect(0, 0,
+                       prepared.rawImage.cols,
+                       prepared.rawImage.rows);
+    const QImage rawImage = imageFromBgrMat(prepared.rawImage);
+    if (bounds.width <= 0 || bounds.height <= 0
+            || rawImage.isNull()) {
         showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u5F53\u524D\u4EA7\u54C1\u914D\u65B9\u7F3A\u5C11\u53EF\u8BFB\u7684\u539F\u56FE\uFF0C\u65E0\u6CD5\u5207\u5272\u5B57\u7B26\u6A21\u677F\u3002"));
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("配方喷码区域无法用于字符切割。"));
         return;
     }
 
-    const cv::Rect2d trackingBox = profile.settings.trackingBox;
-    if (trackingBox.width <= 0.0
-            || trackingBox.height <= 0.0
-            || profile.datePoly.empty()) {
+    CharacterTemplateCropDialog dialog(
+                rawImage.copy(QRect(bounds.x, bounds.y,
+                                    bounds.width, bounds.height)),
+                prepared.definition,
+                m_host);
+    if (dialog.exec() != QDialog::Accepted
+            || dialog.savedCount() <= 0) {
+        return;
+    }
+
+    ProductRecipe recipe = m_recipeEditorSession.recipe();
+    QMap<QString, QString> sources =
+            m_recipeEditorSession.assetSourcePaths();
+    RecipeProfile profile = dialog.resultProfile();
+    const QStringList oldRoles = profile.assetKeys.keys();
+    for (const QString &role : oldRoles) {
+        if (!role.startsWith(QLatin1String("character/"))) {
+            continue;
+        }
+        const QString key = profile.assetKeys.take(role);
+        recipe.assets.remove(key);
+        sources.remove(key);
+    }
+
+    const QString workspacePath =
+            m_recipeEditorSession.workspacePath();
+    if (workspacePath.isEmpty()) {
         showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u5F53\u524D\u4EA7\u54C1\u914D\u65B9\u7F3A\u5C11\u6709\u6548\u5B9A\u4F4D\u533A\u57DF\u6216\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u3002"));
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("配方编辑工作区无效。"));
         return;
     }
-
-    QPolygonF datePolygon;
-    const QPointF trackingCenter(trackingBox.x + trackingBox.width / 2.0,
-                                 trackingBox.y + trackingBox.height / 2.0);
-    for (const cv::Point2f &point : profile.datePoly) {
-        datePolygon << QPointF(trackingCenter.x() + point.x,
-                               trackingCenter.y() + point.y);
-    }
-    const QRect cropRect = datePolygon.boundingRect().toAlignedRect()
-            .intersected(QRect(0, 0, rawImage.width(), rawImage.height()));
-    if (cropRect.width() <= 0 || cropRect.height() <= 0) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u8D85\u51FA\u4EA7\u54C1\u914D\u65B9\u539F\u56FE\u8303\u56F4\u3002"));
-        return;
-    }
-
-    QString workspaceError;
-    TemplateCharacterAssetWorkspace workspace;
-    if (!workspace.prepare(profile.resolvedAssetPathsByRole,
-                           &workspaceError)) {
-        showParameterCritical(QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                              QStringLiteral("\u65E0\u6CD5\u51C6\u5907\u5B57\u7B26\u6A21\u677F\u4E34\u65F6\u7F16\u8F91\u533A\uFF1A\n%1")
-                              .arg(workspaceError));
-        return;
-    }
-
-    if (!AppSettingsManager::saveTemplatePrivateSettings(
-                workspace.directoryPath(),
-                profile.settings,
-                &workspaceError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u65E0\u6CD5\u51C6\u5907\u5B57\u7B26\u6846\u7F16\u8F91\u6570\u636E\uFF1A\n%1")
-                    .arg(workspaceError));
-        return;
-    }
-
-    CharacterTemplateCropDialog dialog(rawImage.copy(cropRect),
-                                       workspace.directoryPath(),
-                                       m_host);
-    if (dialog.exec() != QDialog::Accepted || dialog.savedCount() <= 0) {
-        return;
-    }
-
-    TemplatePrivateSettings updatedSettings;
-    if (!AppSettingsManager::loadTemplatePrivateSettings(
-                workspace.directoryPath(),
-                &updatedSettings,
-                &workspaceError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u5B57\u7B26\u56FE\u7247\u5DF2\u5728\u4E34\u65F6\u533A\u751F\u6210\uFF0C\u4F46\u5B57\u7B26\u6846\u6570\u636E\u65E0\u6CD5\u8BFB\u53D6\uFF1A\n%1")
-                    .arg(workspaceError));
-        return;
-    }
-
-    const TemplateProfileAssetManifest updatedManifest =
-            workspace.assetManifest(profileIndex);
-    const RecipeProfile updatedProfile =
-            recipeProfileFromTemplatePrivateSettings(
-                profile.name,
-                updatedSettings,
-                updatedManifest.profileAssetKeys);
-
-    const QStringList targetUnits = parseTemplateTargetUnits(
-                updatedSettings.targetText);
-    if (!updatedSettings.targetText.trimmed().isEmpty()) {
-        std::vector<cv::Mat> templates;
-        std::vector<int> templateTargetIndexes;
-        if (!loadWordDigitTemplatesFromDir(workspace.directoryPath(),
-                                           targetUnits,
-                                           &templates,
-                                           &templateTargetIndexes,
-                                           &workspaceError,
-                                           true)) {
-            showParameterInfoWithRedWarning(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                        QStringLiteral("\u5F53\u524D\u76EE\u6807\u5B57\u7B26\u5BF9\u5E94\u56FE\u7247\u4E0D\u5B8C\u6574\uFF1A\n%1")
-                        .arg(workspaceError));
+    QDir workspace(workspacePath);
+    const QMap<QString, QImage> images = dialog.characterImages();
+    int characterIndex = 0;
+    for (auto it = images.constBegin(); it != images.constEnd();
+         ++it, ++characterIndex) {
+        const QString source = workspace.filePath(
+                    QStringLiteral("profile%1_%2")
+                    .arg(profileIndex).arg(it.key()));
+        if (!it.value().save(source, "PNG")) {
+            showParameterCritical(
+                        QStringLiteral("严重警告"),
+                        QStringLiteral("字符模板写入编辑工作区失败。"));
             return;
         }
+        const QString key =
+                QStringLiteral("profile%1.character%2")
+                .arg(profileIndex)
+                .arg(characterIndex, 4, 10, QLatin1Char('0'));
+        recipe.assets.insert(
+                    key,
+                    QStringLiteral("assets/profiles/%1/character_templates/%2")
+                    .arg(profileIndex).arg(it.key()));
+        profile.assetKeys.insert(
+                    QStringLiteral("character/") + it.key(), key);
+        sources.insert(key, source);
     }
-
-    const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
-                            .filePath(QStringLiteral("recipes")));
-    TemplateRecipeEditSession candidateSession =
-            m_wordTemplateRecipeEditSession;
-    RecipeSelection publishedSelection;
-    TemplateRecipeWorkflowFailureStage failureStage =
-            TemplateRecipeWorkflowFailureStage::None;
-    if (!TemplateRecipeWorkflow::republishProfileAssets(
-                &candidateSession,
-                store,
-                profileIndex,
-                updatedProfile,
-                updatedManifest,
-                &publishedSelection,
-                &failureStage,
-                &workspaceError)) {
-        const QString failureDetail =
-                failureStage
-                == TemplateRecipeWorkflowFailureStage::Validation
-                ? QStringLiteral("\u914D\u65B9\u8D44\u4EA7\u66F4\u65B0\u6821\u9A8C\u5931\u8D25\uFF1A\n%1")
-                  .arg(workspaceError)
-                : QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
-                  .arg(workspaceError);
-        showParameterInfoWithRedWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u5B57\u7B26\u6A21\u677F\u4FEE\u6539\u672A\u5199\u5165\u6B63\u5F0F\u4EA7\u54C1\u914D\u65B9\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                    failureDetail);
+    recipe.profiles[profileIndex] = profile;
+    QString errorMessage;
+    if (!m_recipeEditorSession.replaceDraft(
+            recipe, sources, &errorMessage)) {
+        showParameterCritical(QStringLiteral("严重警告"), errorMessage);
         return;
     }
-
-    QStringList pendingMessages;
-    if (!activatePublishedWordRecipe(
-                publishedSelection.recipe->recipeId,
-                currentDetectModeId(),
-                false,
-                &pendingMessages,
-                &workspaceError)) {
+    PreparedRecipeSnapshot updated;
+    if (!m_recipeEditorSession.publish(
+            *m_host->m_recipeStore, &updated, &errorMessage)) {
+        showParameterInfoWithRedWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("字符模板修改未写入正式配方，原配方保持不变。"),
+                    errorMessage);
+        return;
+    }
+    m_activePreparedRecipe = updated;
+    QStringList pending;
+    const QString modeId = detectionModeUiId(mode);
+    const bool activated =
+            mode == DetectionMode::Stamp
+            ? activatePublishedSingleTemplateRecipe(
+                recipe.recipeId, modeId, false, &errorMessage)
+            : activatePublishedWordRecipe(
+                recipe.recipeId, modeId, false,
+                &pending, &errorMessage);
+    if (!activated) {
         showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u5DF2\u91CD\u65B0\u53D1\u5E03\uFF0C\u4F46\u5F53\u524D\u7F13\u5B58\u5237\u65B0\u5931\u8D25\uFF1B\u8BF7\u91CD\u65B0\u9009\u62E9\u8BE5\u914D\u65B9\uFF1A\n%1")
-                    .arg(workspaceError));
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("配方已更新但界面刷新失败：\n%1")
+                    .arg(errorMessage));
         return;
     }
     setCurrentWordTemplateEditIndex(profileIndex);
     saveSettings(false);
-
-    qDebug() << "[RECIPE_PUBLISH] republished word recipe assets:"
-             << publishedSelection.recipe->recipeId
-             << publishedSelection.recipeDirectoryPath
-             << "profile:" << profileIndex
-             << "characters:" << dialog.savedCount();
-    QString message = QStringLiteral("\u5DF2\u4E3AProfile [%1] \u4FDD\u5B58 %2 \u5F20\u5B57\u7B26\u6A21\u677F\u56FE\u7247\uFF0C\u5E76\u4F7F\u7528\u539F\u914D\u65B9\u7F16\u53F7\u91CD\u65B0\u53D1\u5E03\u3002")
-            .arg(profile.name)
-            .arg(dialog.savedCount());
-    if (!pendingMessages.isEmpty()) {
-        message += QStringLiteral("\n\n\u76EE\u6807\u5B57\u7B26\u5F85\u786E\u8BA4\uFF1A\n%1")
-                .arg(pendingMessages.join(QLatin1Char('\n')));
-        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
-    } else {
-        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
-    }
+    showParameterInfo(
+                QStringLiteral("提示"),
+                QStringLiteral("已事务保存 %1 张字符模板图片。")
+                .arg(dialog.savedCount()));
 }
 
 void TemplateEditorController::setupWordTemplateEditorCombo()
@@ -2953,12 +2372,11 @@ void TemplateEditorController::setupWordTemplateEditorCombo()
 void TemplateEditorController::clearWordMultiTemplateState()
 {
     clearBarcodeTemplateValidation();
-    m_wordTemplateRecipeDraftSession.reset();
-    m_wordTemplateRecipeEditSession.reset();
+    m_recipeEditorSession.reset();
+    m_activePreparedRecipe.reset();
     m_currentTemplateDisplayName.clear();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
-    m_host->currentTemplateDirPath.clear();
     m_host->m_loadedTrackingTemplate.release();
     m_host->savedBarcodePoly.clear();
     m_host->savedDatePoly.clear();
@@ -2968,20 +2386,20 @@ void TemplateEditorController::clearWordMultiTemplateState()
         QSignalBlocker targetBlocker(ui->dateEdit);
         QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
         ui->dateEdit->clear();
-        ui->lineEdit_yuzhi->setText("70");
+        ui->lineEdit_yuzhi->setText(QString::number(
+            RecipeProfile::DefaultImageThresholdPercent));
     }
     m_currentTemplateNameVisible = false;
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
-    clearTemplatePrivateSettingDirty();
+    clearRecipeProfileDirty();
 }
 
 void TemplateEditorController::clearSingleTemplateRecipeState()
 {
-    m_singleTemplateRecipeEditSession.reset();
-    m_singleTemplateResolvedAssetPathsByRole.clear();
+    m_recipeEditorSession.reset();
+    m_activePreparedRecipe.reset();
     m_currentTemplateDisplayName.clear();
-    m_host->currentTemplateDirPath.clear();
     m_host->m_loadedTrackingTemplate.release();
     m_host->digitTemplates.clear();
     m_host->digitTemplateTargetIndexes.clear();
@@ -2993,12 +2411,13 @@ void TemplateEditorController::clearSingleTemplateRecipeState()
         QSignalBlocker targetBlocker(ui->dateEdit);
         QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
         ui->dateEdit->clear();
-        ui->lineEdit_yuzhi->setText(QStringLiteral("70"));
+        ui->lineEdit_yuzhi->setText(QString::number(
+            RecipeProfile::DefaultImageThresholdPercent));
     }
     m_currentTemplateNameVisible = false;
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
-    clearTemplatePrivateSettingDirty();
+    clearRecipeProfileDirty();
 }
 
 QString TemplateEditorController::detectModeIdForIndex(int index) const
@@ -3011,252 +2430,55 @@ QString TemplateEditorController::currentDetectModeId() const
     return detectModeIdForIndex(ui ? ui->comboBox_4->currentIndex() : 1);
 }
 
-QStringList TemplateEditorController::currentTemplatePathsForMode(const QString &modeId) const
+void TemplateEditorController::restoreTemplatesForMode(
+        const QString &modeId,
+        bool showMessage)
 {
-    QStringList paths;
-
-    if (isWordFamilyMode(modeId)) {
-        for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
-            if (profile.dirPath.trimmed().isEmpty()) {
-                continue;
-            }
-            const QString path = QDir(profile.dirPath).absolutePath();
-            if (!paths.contains(path)) {
-                paths.append(path);
-            }
-        }
-        return paths;
-    }
-
-    if (!m_host->currentTemplateDirPath.trimmed().isEmpty()) {
-        paths.append(QDir(m_host->currentTemplateDirPath).absolutePath());
-    }
-    return paths;
-}
-
-void TemplateEditorController::storeCurrentTemplatePathsForMode(const QString &modeId)
-{
-    if (modeId.trimmed().isEmpty()) {
+    clearWordMultiTemplateState();
+    clearSingleTemplateRecipeState();
+    m_recipeEditorSession.reset();
+    m_activePreparedRecipe.reset();
+    const QString recipeId = m_templateModeMemory
+            .publishedRecipeIdsByMode().value(modeId).trimmed();
+    if (recipeId.isEmpty()) {
+        updateCurrentTemplateName();
         return;
     }
-    if (isWordFamilyMode(modeId)
-            && m_wordTemplateRecipeEditSession.isActive()) {
-        const QString recipeId =
-                m_wordTemplateRecipeEditSession.recipe().recipeId.trimmed();
-        if (!recipeId.isEmpty()) {
-            m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId, recipeId);
-            return;
-        }
+
+    DetectionMode mode;
+    QString errorMessage;
+    QStringList pending;
+    const bool modeValid = detectionModeFromUiId(modeId, &mode);
+    bool restored = false;
+    if (modeValid && mode == DetectionMode::Tissue) {
+        restored = activatePublishedTissueRecipe(
+                    recipeId, false, &errorMessage);
+    } else if (modeValid
+               && (mode == DetectionMode::Word
+                   || mode == DetectionMode::BarcodeWord)) {
+        restored = activatePublishedWordRecipe(
+                    recipeId, modeId, false,
+                    &pending, &errorMessage);
+    } else if (modeValid) {
+        restored = activatePublishedSingleTemplateRecipe(
+                    recipeId, modeId, false, &errorMessage);
     }
-    if (isSingleTemplateRecipeMode(modeId)
-            && m_singleTemplateRecipeEditSession.isActive()) {
-        const QString recipeId =
-                m_singleTemplateRecipeEditSession.recipe()
-                .recipeId.trimmed();
-        if (!recipeId.isEmpty()) {
-            m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId, recipeId);
-            return;
-        }
+    if (restored) {
+        updateCurrentTemplateName();
+        return;
     }
+
     m_templateModeMemory.publishedRecipeIdsByMode().remove(modeId);
-    m_templateModeMemory.templatePathsByMode().insert(modeId, currentTemplatePathsForMode(modeId));
-}
-
-void TemplateEditorController::restoreTemplatesForMode(const QString &modeId, bool showMessage)
-{
-    const QString rememberedRecipeId =
-            m_templateModeMemory.publishedRecipeIdsByMode().value(modeId).trimmed();
-    if ((isWordFamilyMode(modeId)
-         || isSingleTemplateRecipeMode(modeId))
-            && !rememberedRecipeId.isEmpty()) {
-        QStringList pendingMessages;
-        QString restoreError;
-        const bool restored = isWordFamilyMode(modeId)
-                ? activatePublishedWordRecipe(rememberedRecipeId,
-                                              modeId,
-                                              false,
-                                              &pendingMessages,
-                                              &restoreError)
-                : activatePublishedSingleTemplateRecipe(
-                    rememberedRecipeId,
-                    modeId,
-                    false,
-                    &restoreError);
-        if (restored) {
-            qDebug() << "[RECIPE_RESTORE] restored published recipe:"
-                     << modeId
-                     << rememberedRecipeId
-                     << "profiles:"
-                     << (isWordFamilyMode(modeId)
-                         ? static_cast<int>(m_wordTemplateProfiles.size())
-                         : 1);
-            if (showMessage && !pendingMessages.isEmpty()) {
-                showParameterWarning(
-                            QStringLiteral("\u63D0\u793A"),
-                            pendingMessages.join(QLatin1Char('\n')));
-            }
-            return;
-        }
-
-        qWarning() << "[RECIPE_RESTORE] remembered recipe is unavailable;"
-                   << "falling back to legacy template paths:"
-                   << modeId
-                   << rememberedRecipeId
-                   << restoreError;
-        m_templateModeMemory.publishedRecipeIdsByMode().remove(modeId);
-        m_host->m_appliedGlobalSettings.publishedRecipeIdsByMode.remove(modeId);
-        if (!saveSettings(false)) {
-            qWarning() << "[RECIPE_RESTORE] failed to remove unavailable recipe memory:"
-                       << rememberedRecipeId;
-        }
-        if (showMessage) {
-            showParameterWarning(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral(
-                            "\u4E0A\u6B21\u5DF2\u53D1\u5E03\u914D\u65B9\u65E0\u6CD5\u6062\u590D\uFF0C"
-                            "\u5DF2\u56DE\u9000\u5230\u539F\u6A21\u677F\u8DEF\u5F84\uFF1A\n%1")
-                        .arg(restoreError));
-        }
-    }
-
-    const QStringList paths = m_templateModeMemory.templatePathsByMode().value(modeId);
-    if (paths.isEmpty()) {
-        return;
-    }
-
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearGreenRects();
-        imageLabel->clearSelection();
-    }
-    hideTemplateGuide();
-
-    if (isWordFamilyMode(modeId)) {
-        std::vector<WordTemplateProfile> loadedProfiles;
-        QStringList validPaths;
-        QStringList skippedMessages;
-        QStringList userMessages;
-        bool removedRecipeStorePath = false;
-        const QString recipesRootPath = QDir::cleanPath(
-                    QDir(AppSettingsManager::globalDataDirPath())
-                    .filePath(QStringLiteral("recipes")));
-
-        for (const QString &path : paths) {
-            QDir templateDir(path);
-            const QString parentPath = QDir::cleanPath(
-                        QFileInfo(templateDir.absolutePath())
-                        .dir()
-                        .absolutePath());
-            if (QString::compare(parentPath,
-                                 recipesRootPath,
-                                 Qt::CaseInsensitive) == 0) {
-                removedRecipeStorePath = true;
-                qDebug() << "[TEMPLATE_RESTORE] removed recipe-store path from legacy memory:"
-                         << templateDir.absolutePath();
-                continue;
-            }
-            if (!templateDir.exists()) {
-                skippedMessages.append(QString("%1：产品模板文件夹不存在").arg(path));
-                userMessages.append(
-                            QString("模板路径 %1 不存在，已跳过读取。")
-                            .arg(path));
-                continue;
-            }
-
-            WordTemplateProfile profile;
-            QString message;
-            if (!loadWordTemplateProfileFromDir(templateDir.absolutePath(), &profile, &message)) {
-                skippedMessages.append(QString("%1：%2")
-                                       .arg(templateDir.dirName())
-                                       .arg(message));
-                userMessages.append(
-                            QString("模板“%1”无法加载：%2")
-                            .arg(templateDir.dirName())
-                            .arg(message));
-                continue;
-            }
-            validPaths.append(templateDir.absolutePath());
-            loadedProfiles.push_back(profile);
-        }
-
-        if (loadedProfiles.empty()) {
-            qDebug() << "[TEMPLATE_RESTORE] word templates restore failed:" << skippedMessages;
-            clearWordMultiTemplateState();
-            if (removedRecipeStorePath || !userMessages.isEmpty()) {
-                m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList());
-                saveSettings(false);
-            }
-            if (!userMessages.isEmpty()) {
-                showParameterWarning("提示", userMessages.join("\n"));
-            }
-            return;
-        }
-
-        m_wordTemplateRecipeDraftSession.reset();
-        m_wordTemplateRecipeEditSession.reset();
-        m_wordTemplateProfiles.swap(loadedProfiles);
-        refreshWordTemplateRecipeAssets();
-        if (removedRecipeStorePath || validPaths != paths) {
-            m_templateModeMemory.templatePathsByMode().insert(modeId, validPaths);
-            saveSettings(false);
-            if (!userMessages.isEmpty()) {
-                showParameterWarning("提示", userMessages.join("\n"));
-            }
-        }
-        m_host->currentTemplateDirPath = m_wordTemplateProfiles.front().dirPath;
-        m_currentTemplateNameVisible = false;
-        updateCurrentTemplateName();
-        refreshWordTemplateEditorCombo();
-        qDebug() << "[TEMPLATE_RESTORE] restored word templates:"
-                 << static_cast<int>(m_wordTemplateProfiles.size());
-        return;
-    }
-
-    const QString firstPath = QDir(paths.first()).absolutePath();
-    if (!QDir(firstPath).exists()) {
-        qDebug() << "[TEMPLATE_RESTORE] template path not exists:" << firstPath;
-        m_host->currentTemplateDirPath.clear();
-        m_currentTemplateNameVisible = false;
-        updateCurrentTemplateName();
-        m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList());
-        saveSettings(false);
-        showParameterWarning("提示",
-                             QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
-                             .arg(firstPath));
-        return;
-    }
-
-    if (!m_wordTemplateProfiles.empty()) {
-        m_wordTemplateRecipeDraftSession.reset();
-        m_wordTemplateRecipeEditSession.reset();
-        m_wordTemplateProfiles.clear();
-        refreshWordTemplateEditorCombo();
-    }
-
-    m_singleTemplateRecipeEditSession.reset();
-    m_singleTemplateResolvedAssetPathsByRole.clear();
-    m_currentTemplateDisplayName.clear();
-    m_host->currentTemplateDirPath = firstPath;
-    m_currentTemplateNameVisible = loadSettingsFromDir(firstPath, showMessage);
-    if (!m_currentTemplateNameVisible) {
-        m_host->currentTemplateDirPath.clear();
-        updateCurrentTemplateName();
-        m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList());
-        saveSettings(false);
-        showParameterWarning("提示",
-                             QString("加载历史模板路径 %1 失败，该模板状态异常，已跳过读取。")
-                             .arg(firstPath));
-        return;
-    }
-    if (paths.size() != 1 || paths.first() != firstPath) {
-        m_templateModeMemory.templatePathsByMode().insert(modeId, QStringList() << firstPath);
-        saveSettings(false);
-    }
+    m_host->m_appliedMachineSettings
+            .publishedRecipeIdsByMode.remove(modeId);
+    saveSettings(false);
     updateCurrentTemplateName();
-    if (m_currentTemplateNameVisible) {
-        initOverlapDetectorFromCurrentDir();
+    if (showMessage) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("上次产品配方无法恢复，记录已清除；不会读取旧模板目录：\n%1")
+                    .arg(errorMessage));
     }
-    qDebug() << "[TEMPLATE_RESTORE] restored template for mode:" << modeId << firstPath;
 }
 
 void TemplateEditorController::refreshWordTemplateEditorCombo()
@@ -3271,6 +2493,9 @@ void TemplateEditorController::refreshWordTemplateEditorCombo()
     const bool isStampMode =
             currentDetectModeId() == QStringLiteral("stamp_detection");
     const bool isTemplateMode = isWordMode || isSingleMode;
+    DetectionMode selectedMode = DetectionMode::Word;
+    const bool isRecipeMode = detectionModeFromUiId(
+                currentDetectModeId(), &selectedMode);
     const bool hasWordProfiles = isWordMode && !m_wordTemplateProfiles.empty();
 
     if (ui->batchTextsure_btn) {
@@ -3285,24 +2510,14 @@ void TemplateEditorController::refreshWordTemplateEditorCombo()
         m_manualCharacterCropButton->setVisible(isWordMode || isStampMode);
     }
 
-    bool allProfilesUseLegacyDirectories = hasWordProfiles;
-    for (const WordTemplateProfile &profile : m_wordTemplateProfiles) {
-        if (!profile.resolvedAssetPathsByRole.isEmpty()) {
-            allProfilesUseLegacyDirectories = false;
-            break;
-        }
-    }
     if (m_publishTemplateGroupButton) {
         const bool canPublishWordGroup =
                 isWordMode
-                && m_wordTemplateProfiles.size() > 1
-                && allProfilesUseLegacyDirectories
-                && !m_wordTemplateRecipeEditSession.isActive();
+                && !m_wordTemplateProfiles.empty()
+                && m_recipeEditorSession.isActive();
         const bool canPublishSingleTemplate =
                 isSingleMode
-                && !m_host->currentTemplateDirPath.trimmed().isEmpty()
-                && QDir(m_host->currentTemplateDirPath).exists()
-                && !m_singleTemplateRecipeEditSession.isActive();
+                && m_recipeEditorSession.isActive();
         m_publishTemplateGroupButton->setVisible(
                     canPublishWordGroup || canPublishSingleTemplate);
         m_publishTemplateGroupButton->setText(
@@ -3310,15 +2525,7 @@ void TemplateEditorController::refreshWordTemplateEditorCombo()
                     ? QStringLiteral("\u53D1\u5E03\u5F53\u524D\u6A21\u677F")
                     : QStringLiteral("\u53D1\u5E03\u6A21\u677F\u7EC4"));
         m_publishTemplateGroupButton->setToolTip(
-                    isSingleMode
-                    ? QStringLiteral(
-                        "\u628A\u5F53\u524D\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
-                        "\u52A0\u8F7D\u7684\u4EA7\u54C1\u6A21\u677F\u53D1\u5E03\u4E3A"
-                        "\u53EF\u6309\u6A21\u5F0F\u6062\u590D\u7684\u4EA7\u54C1\u914D\u65B9\u3002")
-                    : QStringLiteral(
-                        "\u628A\u5F53\u524D\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
-                        "\u52A0\u8F7D\u7684\u591A\u4E2AProfile\uFF0C\u6309\u5F53\u524D\u987A\u5E8F"
-                        "\u53D1\u5E03\u4E3A\u4E00\u4E2A\u4EA7\u54C1\u914D\u65B9\u3002"));
+                    QStringLiteral("事务保存当前产品配方及其完整资源目录。"));
     }
 
     if (!m_wordTemplateEditComboBox || !m_wordTemplateEditWidget) {
@@ -3343,10 +2550,6 @@ void TemplateEditorController::refreshWordTemplateEditorCombo()
             }
         } else if (isSingleMode) {
             QString displayName = m_currentTemplateDisplayName.trimmed();
-            if (displayName.isEmpty()
-                    && !m_host->currentTemplateDirPath.trimmed().isEmpty()) {
-                displayName = QDir(m_host->currentTemplateDirPath).dirName();
-            }
             comboBox->addItem(displayName.isEmpty()
                               ? QStringLiteral("--")
                               : displayName,
@@ -3356,14 +2559,16 @@ void TemplateEditorController::refreshWordTemplateEditorCombo()
 
     fillCombo(m_wordTemplateEditComboBox);
 
-    m_wordTemplateEditWidget->setVisible(isTemplateMode);
+    m_wordTemplateEditWidget->setVisible(isRecipeMode);
     if (m_wordTemplateEditLabel) {
         m_wordTemplateEditLabel->setText(
-                    QStringLiteral("\u5F53\u524D\u7F16\u8F91\u6A21\u677F:"));
+                    selectedMode == DetectionMode::Tissue
+                    ? QStringLiteral("\u5F53\u524D\u4EA7\u54C1\u914D\u65B9:")
+                    : QStringLiteral("\u5F53\u524D\u7F16\u8F91\u6A21\u677F:"));
     }
     m_wordTemplateEditComboBox->setVisible(isTemplateMode);
     if (m_publishedRecipeButton) {
-        m_publishedRecipeButton->setVisible(isTemplateMode);
+        m_publishedRecipeButton->setVisible(isRecipeMode);
     }
 
     if (!isWordMode) {
@@ -3428,422 +2633,65 @@ void TemplateEditorController::setCurrentWordTemplateEditIndex(int profileIndex)
     syncCombo(m_wordTemplateEditComboBox);
 
     const WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-    m_host->currentTemplateDirPath = profile.dirPath;
-    m_host->savedTrackingBox = profile.settings.trackingBox;
-    m_host->hasValidBoxes = profile.settings.hasValidBoxes;
+    m_host->savedTrackingBox = cv::Rect2d(
+                profile.settings.trackingRoi.x(),
+                profile.settings.trackingRoi.y(),
+                profile.settings.trackingRoi.width(),
+                profile.settings.trackingRoi.height());
+    m_host->hasValidBoxes =
+            profile.settings.trackingRoi.width() > 0.0
+            && profile.settings.trackingRoi.height() > 0.0;
     {
         QSignalBlocker blocker(ui->dateEdit);
         ui->dateEdit->setPlainText(profile.settings.targetText);
     }
     {
         QSignalBlocker blocker(ui->lineEdit_yuzhi);
-        ui->lineEdit_yuzhi->setText(QString::number(static_cast<int>(profile.settings.imageThreshold)));
+        ui->lineEdit_yuzhi->setText(QString::number(static_cast<int>(profile.settings.imageThresholdPercent)));
     }
-    refreshTemplatePrivateSettingDirty();
+    refreshRecipeProfileDirty();
 
     qDebug() << "[WORD_TEMPLATE_PROFILE] editing profile:"
              << profileIndex
              << profile.name
-             << profile.dirPath
-             << "threshold:" << profile.settings.imageThreshold;
+             << "threshold:" << profile.settings.imageThresholdPercent;
 
     displayWordTemplateRawImage(profile);
 }
 
 void TemplateEditorController::publishCurrentWordTemplateGroup()
 {
-    if (m_host->m_operationState == Widget::OperationState::Detecting
-            || m_host->m_operationState == Widget::OperationState::Stopping
-            || m_host->m_templateCaptureState != Widget::TemplateCaptureState::Idle) {
-        showParameterWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u8BF7\u5148\u505C\u6B62\u8BC6\u522B\u6216\u9000\u51FA"
-                        "\u6A21\u677F\u5236\u4F5C\uFF0C\u518D\u53D1\u5E03"
-                        "\u5F53\u524D\u6A21\u677F\u7EC4\u3002"));
-        return;
-    }
-
-    DetectionMode detectionMode;
-    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
-            || (detectionMode != DetectionMode::Word
-                && detectionMode != DetectionMode::BarcodeWord)) {
-        showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u591AProfile\u914D\u65B9\u53EA\u7528\u4E8E"
-                        "\u5B57\u5E93\u5339\u914D\u548C\u4E8C\u7EF4\u7801+"
-                        "\u4E09\u671F\u6A21\u5F0F\u3002"));
-        return;
-    }
-    if (m_wordTemplateProfiles.size() < 2) {
-        showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u8BF7\u5148\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
-                        "\u81F3\u5C11\u52A0\u8F7D\u4E24\u4E2A\u6709\u6548\u6A21\u677F\u3002"));
-        return;
-    }
-    if (m_wordTemplateRecipeEditSession.isActive()) {
-        showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u5F53\u524D\u5DF2\u7ECF\u662F\u5DF2\u53D1\u5E03\u914D\u65B9\uFF0C"
-                        "\u65E0\u9700\u91CD\u590D\u53D1\u5E03\u6A21\u677F\u7EC4\u3002"));
-        return;
-    }
-    if (m_host->m_settingsEditState.isTemplateTargetDirty()
-            || m_host->m_settingsEditState.isTemplateThresholdDirty()) {
-        showParameterWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u5F53\u524DProfile\u8FD8\u6709\u672A\u786E\u8BA4\u7684"
-                        "\u76EE\u6807\u5B57\u7B26\u6216\u56FE\u50CF\u9608\u503C\u3002\n"
-                        "\u8BF7\u5148\u70B9\u51FB\u5BF9\u5E94\u7684\u786E\u8BA4/\u8BBE\u7F6E"
-                        "\u6309\u94AE\uFF0C\u518D\u53D1\u5E03\u6A21\u677F\u7EC4\u3002"));
-        return;
-    }
-
-    QVector<TemplateRecipeProfileSource> profileSources;
-    profileSources.reserve(static_cast<int>(m_wordTemplateProfiles.size()));
-    for (int profileIndex = 0;
-         profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
-         ++profileIndex) {
-        const WordTemplateProfile &profile =
-                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        if (!profile.resolvedAssetPathsByRole.isEmpty()) {
-            showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                        QStringLiteral(
-                            "Profile [%1] \u4E0D\u662F\u65E7\u6A21\u677F\u76EE\u5F55\uFF0C"
-                            "\u5F53\u524D\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\u3002")
-                        .arg(profile.name));
-            return;
-        }
-
-        const QDir sourceDirectory(profile.dirPath);
-        if (!sourceDirectory.exists()) {
-            showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                        QStringLiteral(
-                            "Profile [%1] \u7684\u65E7\u6A21\u677F\u76EE\u5F55\u5DF2\u4E0D\u5B58\u5728\uFF1A\n%2\n\n"
-                            "\u4EA7\u54C1\u914D\u65B9\u672A\u53D1\u5E03\uFF0C\u5F53\u524D\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\u3002")
-                        .arg(profile.name, profile.dirPath));
-            return;
-        }
-
-        TemplateRecipeProfileSource profileSource;
-        profileSource.assetManifest = buildTemplateProfileAssetManifest(
-                    sourceDirectory.absolutePath(), profileIndex);
-        const QString profileName = profile.name.trimmed().isEmpty()
-                ? sourceDirectory.dirName()
-                : profile.name.trimmed();
-        profileSource.profile = recipeProfileFromTemplatePrivateSettings(
-                    profileName,
-                    profile.settings,
-                    profileSource.assetManifest.profileAssetKeys);
-        profileSources.append(profileSource);
-    }
-
-    const WordTemplateProfile &firstProfile = m_wordTemplateProfiles.front();
-    QString firstProfileName = firstProfile.name.trimmed();
-    if (firstProfileName.isEmpty()) {
-        firstProfileName = QDir(firstProfile.dirPath).dirName();
-    }
-    const QString defaultDisplayName = QStringLiteral("%1\u7B49%2\u4E2A\u6A21\u677F")
-            .arg(firstProfileName)
-            .arg(static_cast<int>(m_wordTemplateProfiles.size()));
-    bool accepted = false;
-    const QString displayName = QInputDialog::getText(m_host,
-                QStringLiteral("\u53D1\u5E03\u591AProfile\u4EA7\u54C1\u914D\u65B9"),
-                QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u540D\u79F0\uFF1A"),
-                QLineEdit::Normal,
-                defaultDisplayName,
-                &accepted).trimmed();
-    if (!accepted) {
-        return;
-    }
-    if (displayName.isEmpty()) {
-        showParameterWarning(
-                    QStringLiteral("\u53C2\u6570\u9519\u8BEF"),
-                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A\u3002"));
-        return;
-    }
-
-    const ProductRecipe recipeHeader = createProductRecipe(displayName,
-                                                            detectionMode);
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
-    RecipeSelection publishedSelection;
-    QString publishError;
-    if (!publishTemplateRecipe(store,
-                               recipeHeader,
-                               profileSources,
-                               &publishedSelection,
-                               &publishError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u591AProfile\u4EA7\u54C1\u914D\u65B9\u53D1\u5E03\u5931\u8D25\uFF0C"
-                        "\u5F53\u524D\u65E7\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                    .arg(publishError));
-        return;
-    }
-
-    QStringList pendingMessages;
-    QString activationError;
-    if (!activatePublishedWordRecipe(
-                publishedSelection.recipe->recipeId,
-                currentDetectModeId(),
-                false,
-                &pendingMessages,
-                &activationError)) {
-        qWarning() << "[RECIPE_PUBLISH] published word template group;"
-                   << "activation failed:"
-                   << publishedSelection.recipe->recipeId
-                   << activationError;
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u591AProfile\u4EA7\u54C1\u914D\u65B9\u5DF2\u53D1\u5E03\uFF0C"
-                        "\u4F46\u5F53\u524D\u7F13\u5B58\u88C5\u914D\u5931\u8D25\u3002\n"
-                        "\u5F53\u524D\u65E7\u6A21\u677F\u7EC4\u4FDD\u6301\u4E0D\u53D8\uFF0C"
-                        "\u8BF7\u7A0D\u540E\u901A\u8FC7\u201C\u5DF2\u53D1\u5E03\u914D\u65B9\u201D"
-                        "\u91CD\u65B0\u9009\u62E9\uFF1A\n%1")
-                    .arg(activationError));
-        return;
-    }
-    saveSettings(false);
-
-    qDebug() << "[RECIPE_PUBLISH] published word template group:"
-             << publishedSelection.recipe->recipeId
-             << publishedSelection.recipeDirectoryPath
-             << "profiles:" << publishedSelection.profiles.size();
-    QString message = QStringLiteral(
-                "\u5DF2\u628A %1 \u4E2AProfile\u53D1\u5E03\u4E3A\u4E00\u4E2A\u4EA7\u54C1\u914D\u65B9\u201C%2\u201D\u3002")
-            .arg(publishedSelection.profiles.size())
-            .arg(displayName);
-    if (!pendingMessages.isEmpty()) {
-        message += QStringLiteral(
-                    "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26\u5F85\u786E\u8BA4\uFF1A\n%1")
-                .arg(pendingMessages.join(QLatin1Char('\n')));
-        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
-    } else {
-        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
-    }
+    publishCurrentRecipeSession();
 }
 
 void TemplateEditorController::publishCurrentSingleTemplateRecipe()
 {
-    if (m_host->m_operationState == Widget::OperationState::Detecting
-            || m_host->m_operationState == Widget::OperationState::Stopping
-            || m_host->m_templateCaptureState != Widget::TemplateCaptureState::Idle) {
-        showParameterWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u8BF7\u5148\u505C\u6B62\u8BC6\u522B\u6216\u9000\u51FA\u6A21\u677F\u5236\u4F5C\uFF0C"
-                        "\u518D\u53D1\u5E03\u5F53\u524D\u6A21\u677F\u3002"));
-        return;
-    }
+    publishCurrentRecipeSession();
+}
 
-    DetectionMode detectionMode;
-    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
-            || (detectionMode != DetectionMode::Stamp
-                && detectionMode != DetectionMode::Ocr)) {
+void TemplateEditorController::publishCurrentRecipeSession()
+{
+    if (!m_recipeEditorSession.isActive()
+            || !m_host->m_recipeStore) {
         showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u53D1\u5E03\u5F53\u524D\u5355\u6A21\u677F\u53EA\u7528\u4E8E"
-                        "\u6A21\u677F\u5339\u914D\u548C\u6DF1\u5EA6OCR\u6A21\u5F0F\u3002"));
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先通过【保存模板】创建产品配方。"));
         return;
     }
-    if (m_singleTemplateRecipeEditSession.isActive()) {
-        showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u5F53\u524D\u5DF2\u7ECF\u662F\u5DF2\u53D1\u5E03\u914D\u65B9\uFF0C"
-                        "\u65E0\u9700\u91CD\u590D\u53D1\u5E03\u3002"));
-        return;
-    }
-    if (m_host->currentTemplateDirPath.trimmed().isEmpty()
-            || !QDir(m_host->currentTemplateDirPath).exists()) {
-        showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u8BF7\u5148\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
-                        "\u52A0\u8F7D\u4E00\u4E2A\u6709\u6548\u4EA7\u54C1\u6A21\u677F\u3002"));
-        return;
-    }
-    if (m_host->m_settingsEditState.isTemplateTargetDirty()
-            || m_host->m_settingsEditState.isTemplateThresholdDirty()) {
-        showParameterWarning(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral(
-                        "\u5F53\u524D\u8FD8\u6709\u672A\u786E\u8BA4\u7684\u76EE\u6807\u5B57\u7B26\u6216\u56FE\u50CF\u9608\u503C\u3002\n"
-                        "\u8BF7\u5148\u70B9\u51FB\u5BF9\u5E94\u7684\u786E\u8BA4/\u8BBE\u7F6E\u6309\u94AE\u3002"));
-        return;
-    }
-
-    TemplatePrivateSettings privateSettings;
-    QString settingsError;
-    if (!AppSettingsManager::loadTemplatePrivateSettings(
-                m_host->currentTemplateDirPath,
-                &privateSettings,
-                &settingsError)) {
+    QString errorMessage;
+    PreparedRecipeSnapshot prepared;
+    if (!m_recipeEditorSession.publish(
+            *m_host->m_recipeStore, &prepared, &errorMessage)) {
         showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u5F53\u524D\u65E7\u6A21\u677F\u79C1\u6709\u8BBE\u7F6E\u65E0\u6CD5\u8BFB\u53D6\uFF0C"
-                        "\u4EA7\u54C1\u914D\u65B9\u672A\u53D1\u5E03\uFF1A\n%1")
-                    .arg(settingsError));
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("产品配方事务保存失败，原配方保持不变：\n%1")
+                    .arg(errorMessage));
         return;
     }
-    int currentUiThreshold = 0;
-    if (!parseIntValue(ui->lineEdit_yuzhi->text(),
-                       &currentUiThreshold)
-            || currentUiThreshold < 0
-            || currentUiThreshold > 100) {
-        showParameterWarning(
-                    QStringLiteral("\u53C2\u6570\u9519\u8BEF"),
-                    QStringLiteral(
-                        "\u56FE\u50CF\u5408\u683C\u9608\u503C\u5FC5\u987B\u662F0\u5230100\u4E4B\u95F4\u7684\u6574\u6570\uFF08\u5355\u4F4D\uFF1A%\uFF09\u3002"));
-        return;
-    }
-    privateSettings.targetText = ui->dateEdit->toPlainText();
-    privateSettings.imageThreshold = currentUiThreshold;
-
-    const QDir sourceDirectory(m_host->currentTemplateDirPath);
-    const cv::Mat sourceTrackingTemplate = decodeImageFile(
-                sourceDirectory.filePath(
-                    QStringLiteral("tracking_template.bmp")),
-                cv::IMREAD_COLOR);
-    CalibrationData sourceCalibration;
-    const QString sourceCalibrationPath = sourceDirectory.filePath(
-                QStringLiteral("calibrate_config.yaml"));
-    if (!privateSettings.hasValidBoxes
-            || privateSettings.trackingBox.width <= 0
-            || privateSettings.trackingBox.height <= 0
-            || sourceTrackingTemplate.empty()
-            || !sourceCalibration.load(
-                sourceCalibrationPath.toLocal8Bit().toStdString())
-            || sourceCalibration.date_poly.size() < 3) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u5F53\u524D\u65E7\u6A21\u677F\u7684\u5B9A\u4F4D\u56FE\u3001\u5B9A\u4F4D\u6846\u6216\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u65E0\u6548\uFF0C"
-                        "\u4EA7\u54C1\u914D\u65B9\u672A\u53D1\u5E03\u3002"));
-        return;
-    }
-    if (detectionMode == DetectionMode::Stamp) {
-        OverlapDetector sourceOverlapDetector;
-        std::vector<cv::Mat> sourceDigitTemplates;
-        std::vector<int> sourceDigitTargetIndexes;
-        QString sourceCharacterError;
-        if (sourceCalibration.stamp_poly.size() < 3
-                || !sourceOverlapDetector.init(
-                    sourceDirectory.filePath(
-                        QStringLiteral("template_ring.bmp"))
-                    .toLocal8Bit().toStdString(),
-                    sourceCalibrationPath.toLocal8Bit().toStdString())
-                || !loadWordDigitTemplatesFromDir(
-                    sourceDirectory.absolutePath(),
-                    parseTemplateTargetUnits(privateSettings.targetText),
-                    &sourceDigitTemplates,
-                    &sourceDigitTargetIndexes,
-                    &sourceCharacterError,
-                    false)) {
-            showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                        QStringLiteral(
-                            "\u5F53\u524D\u94A2\u5370\u6A21\u677F\u7684\u94A2\u5370\u73AF\u3001\u94A2\u5370\u533A\u57DF\u6216\u76EE\u6807\u5B57\u7B26\u8D44\u4EA7\u65E0\u6548\uFF0C"
-                            "\u4EA7\u54C1\u914D\u65B9\u672A\u53D1\u5E03\u3002\n%1")
-                        .arg(sourceCharacterError));
-            return;
-        }
-    }
-
-    TemplateRecipeProfileSource profileSource;
-    profileSource.assetManifest =
-            buildTemplateProfileAssetManifest(
-                sourceDirectory.absolutePath(), 0);
-    const QString profileName = sourceDirectory.dirName().trimmed().isEmpty()
-            ? QStringLiteral("Profile 1")
-            : sourceDirectory.dirName().trimmed();
-    profileSource.profile = recipeProfileFromTemplatePrivateSettings(
-                profileName,
-                privateSettings,
-                profileSource.assetManifest.profileAssetKeys);
-
-    bool accepted = false;
-    const QString displayName = QInputDialog::getText(m_host,
-                QStringLiteral("\u53D1\u5E03\u4EA7\u54C1\u914D\u65B9"),
-                QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u540D\u79F0\uFF1A"),
-                QLineEdit::Normal,
-                profileName,
-                &accepted).trimmed();
-    if (!accepted) {
-        return;
-    }
-    if (displayName.isEmpty()) {
-        showParameterWarning(
-                    QStringLiteral("\u53C2\u6570\u9519\u8BEF"),
-                    QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A\u3002"));
-        return;
-    }
-
-    QVector<TemplateRecipeProfileSource> profileSources;
-    profileSources.append(profileSource);
-    const ProductRecipe recipeHeader =
-            createProductRecipe(displayName, detectionMode);
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
-    RecipeSelection publishedSelection;
-    QString publishError;
-    if (!publishTemplateRecipe(store,
-                               recipeHeader,
-                               profileSources,
-                               &publishedSelection,
-                               &publishError)) {
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u53D1\u5E03\u5931\u8D25\uFF0C"
-                        "\u5F53\u524D\u65E7\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                    .arg(publishError));
-        return;
-    }
-
-    QString activationError;
-    if (!activatePublishedSingleTemplateRecipe(
-                publishedSelection.recipe->recipeId,
-                currentDetectModeId(),
-                false,
-                &activationError)) {
-        qWarning() << "[RECIPE_PUBLISH] published single-template recipe;"
-                   << "activation failed:"
-                   << publishedSelection.recipe->recipeId
-                   << activationError;
-        showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                    QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u5DF2\u53D1\u5E03\uFF0C\u4F46\u5F53\u524D\u7F13\u5B58\u88C5\u914D\u5931\u8D25\u3002\n"
-                        "\u5F53\u524D\u65E7\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF0C"
-                        "\u8BF7\u7A0D\u540E\u4ECE\u201C\u5DF2\u53D1\u5E03\u914D\u65B9\u201D\u91CD\u65B0\u9009\u62E9\uFF1A\n%1")
-                    .arg(activationError));
-        return;
-    }
-    saveSettings(false);
-
-    qDebug() << "[RECIPE_PUBLISH] published single-template recipe:"
-             << publishedSelection.recipe->recipeId
-             << publishedSelection.recipeDirectoryPath
-             << "mode:" << currentDetectModeId();
+    m_activePreparedRecipe = prepared;
     showParameterInfo(
-                QStringLiteral("\u63D0\u793A"),
-                QStringLiteral("\u5DF2\u53D1\u5E03\u5E76\u52A0\u8F7D\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\u3002")
-                .arg(displayName));
+                QStringLiteral("提示"),
+                QStringLiteral("当前产品配方已完整保存。"));
 }
 
 void TemplateEditorController::selectPublishedRecipe()
@@ -3861,18 +2709,15 @@ void TemplateEditorController::selectPublishedRecipe()
     }
 
     DetectionMode detectionMode;
-    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
-            || !isTemplateRecipeMode(detectionMode)) {
+    if (!detectionModeFromUiId(currentDetectModeId(), &detectionMode)) {
         showParameterInfoAsError(
                     QStringLiteral("\u63D0\u793A"),
                     QStringLiteral(
-                        "\u5F53\u524D\u8BC6\u522B\u6A21\u5F0F\u4E0D\u4F7F\u7528\u6A21\u677F\u4EA7\u54C1\u914D\u65B9\u3002"));
+                        "\u5F53\u524D\u8BC6\u522B\u6A21\u5F0F\u65E0\u6548\u3002"));
         return;
     }
 
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
+    const RecipeStore &store = *m_host->m_recipeStore;
     RecipeCatalog catalog;
     QString catalogError;
     if (!store.listRecipes(&catalog, &catalogError)) {
@@ -3906,31 +2751,38 @@ void TemplateEditorController::selectPublishedRecipe()
 
     QStringList pendingMessages;
     QString activationError;
-    const bool activated = isWordFamilyMode(currentDetectModeId())
-            ? activatePublishedWordRecipe(dialog.selectedRecipeId(),
-                                          currentDetectModeId(),
-                                          true,
-                                          &pendingMessages,
-                                          &activationError)
-            : activatePublishedSingleTemplateRecipe(
-                dialog.selectedRecipeId(),
-                currentDetectModeId(),
-                true,
-                &activationError);
+    bool activated = false;
+    if (detectionMode == DetectionMode::Tissue) {
+        activated = activatePublishedTissueRecipe(
+                    dialog.selectedRecipeId(), true,
+                    &activationError);
+    } else if (isWordFamilyMode(currentDetectModeId())) {
+        activated = activatePublishedWordRecipe(
+                    dialog.selectedRecipeId(),
+                    currentDetectModeId(), true,
+                    &pendingMessages, &activationError);
+    } else {
+        activated = activatePublishedSingleTemplateRecipe(
+                    dialog.selectedRecipeId(),
+                    currentDetectModeId(), true,
+                    &activationError);
+    }
     if (!activated) {
         return;
     }
     saveSettings(false);
 
-    const ProductRecipe &activeRecipe = isWordFamilyMode(
-                currentDetectModeId())
-            ? m_wordTemplateRecipeEditSession.recipe()
-            : m_singleTemplateRecipeEditSession.recipe();
-    QString message = QStringLiteral(
+    const ProductRecipe &activeRecipe =
+            m_recipeEditorSession.recipe();
+    QString message = detectionMode == DetectionMode::Tissue
+            ? QStringLiteral(
+                "\u5DF2\u52A0\u8F7D\u7EB8\u5DFE\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\u3002")
+              .arg(activeRecipe.displayName)
+            : QStringLiteral(
                 "\u5DF2\u52A0\u8F7D\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\uFF0C"
                 "\u5171 %2 \u4E2AProfile\u3002")
-            .arg(activeRecipe.displayName)
-            .arg(activeRecipe.profiles.size());
+              .arg(activeRecipe.displayName)
+              .arg(activeRecipe.profiles.size());
     if (!pendingMessages.isEmpty()) {
         message += QStringLiteral(
                     "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26"
@@ -3942,11 +2794,86 @@ void TemplateEditorController::selectPublishedRecipe()
     }
 }
 
-bool TemplateEditorController::activatePublishedWordRecipe(const QString &recipeId,
-                                         const QString &modeId,
-                                         bool showErrorMessage,
-                                         QStringList *pendingMessages,
-                                         QString *errorMessage)
+bool TemplateEditorController::activatePublishedTissueRecipe(
+        const QString &recipeId,
+        bool showErrorMessage,
+        QString *errorMessage)
+{
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    PreparedRecipeSnapshot prepared;
+    QString loadError;
+    if (!m_host->m_recipeStore->loadPreparedRecipe(
+                recipeId, &prepared, &loadError)
+            || !prepared
+            || !prepared->recipe
+            || prepared->recipe->detectionMode
+               != DetectionMode::Tissue) {
+        const QString message = loadError.isEmpty()
+                ? QStringLiteral("纸巾产品配方无效。")
+                : loadError;
+        if (errorMessage) {
+            *errorMessage = message;
+        }
+        if (showErrorMessage) {
+            showParameterCritical(
+                        QStringLiteral("严重警告"),
+                        QStringLiteral("纸巾产品配方准备失败：\n%1")
+                        .arg(message));
+        }
+        return false;
+    }
+    QString sessionError;
+    if (!m_recipeEditorSession.beginEdit(
+                *m_host->m_recipeStore, recipeId,
+                &sessionError)) {
+        if (errorMessage) {
+            *errorMessage = sessionError;
+        }
+        if (showErrorMessage) {
+            showParameterCritical(
+                        QStringLiteral("严重警告"),
+                        sessionError);
+        }
+        return false;
+    }
+
+    resetTemplateCaptureState();
+    clearBarcodeTemplateValidation();
+    m_wordTemplateProfiles.clear();
+    m_currentWordTemplateEditIndex = -1;
+    m_host->m_loadedTrackingTemplate.release();
+    m_host->digitTemplates.clear();
+    m_host->digitTemplateTargetIndexes.clear();
+    m_host->savedBarcodePoly.clear();
+    m_host->savedDatePoly.clear();
+    m_host->savedTrackingBox = cv::Rect2d();
+    m_host->hasValidBoxes = false;
+    m_activePreparedRecipe = prepared;
+    m_currentTemplateDisplayName =
+            prepared->recipe->displayName;
+    m_currentTemplateNameVisible = true;
+    ui->lineEdit_tissueRoughnessThreshold->setText(
+                QString::number(
+                    prepared->tissue.roughnessThreshold,
+                    'f', 3));
+    const QString modeId =
+            detectionModeUiId(DetectionMode::Tissue);
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(
+                modeId, prepared->recipe->recipeId);
+    updateCurrentTemplateName();
+    refreshWordTemplateEditorCombo();
+    clearRecipeProfileDirty();
+    return true;
+}
+
+bool TemplateEditorController::activatePublishedWordRecipe(
+        const QString &recipeId,
+        const QString &modeId,
+        bool showErrorMessage,
+        QStringList *pendingMessages,
+        QString *errorMessage)
 {
     if (pendingMessages) {
         pendingMessages->clear();
@@ -3956,73 +2883,86 @@ bool TemplateEditorController::activatePublishedWordRecipe(const QString &recipe
     }
 
     DetectionMode detectionMode;
-    if (!detectionModeFromId(modeId, &detectionMode)
+    if (!detectionModeFromUiId(modeId, &detectionMode)
             || (detectionMode != DetectionMode::Word
                 && detectionMode != DetectionMode::BarcodeWord)) {
         const QString message = QStringLiteral(
-                    "\u5DF2\u53D1\u5E03\u5B57\u5E93\u914D\u65B9\u53EA\u7528\u4E8E"
-                    "\u5B57\u5E93\u5339\u914D\u548C\u4E8C\u7EF4\u7801+"
-                    "\u4E09\u671F\u6A21\u5F0F\u3002");
-        if (errorMessage) *errorMessage = message;
+                    "已发布字库配方只用于字库匹配和二维码+三期模式。");
+        if (errorMessage) {
+            *errorMessage = message;
+        }
         if (showErrorMessage) {
-            showParameterInfoAsError(QStringLiteral("\u63D0\u793A"), message);
+            showParameterInfoAsError(QStringLiteral("提示"), message);
         }
         return false;
     }
 
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
-    RecipeSelection selection;
-    QString selectionError;
-    if (!loadRecipeSelection(store,
-                             recipeId,
-                             detectionMode,
-                             &selection,
-                             &selectionError)) {
-        if (errorMessage) *errorMessage = selectionError;
+    PreparedRecipeSnapshot prepared;
+    QString loadError;
+    if (!m_host->m_recipeStore->loadPreparedRecipe(
+                recipeId, &prepared, &loadError)
+            || !prepared
+            || !prepared->recipe
+            || prepared->recipe->detectionMode != detectionMode
+            || prepared->profiles.isEmpty()) {
+        const QString message = loadError.isEmpty()
+                ? QStringLiteral("产品配方模式或Profile无效。")
+                : loadError;
+        if (errorMessage) {
+            *errorMessage = message;
+        }
         if (showErrorMessage) {
             showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral("严重警告"),
                         QStringLiteral(
-                            "\u4EA7\u54C1\u914D\u65B9\u52A0\u8F7D\u5931\u8D25\uFF0C"
-                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                        .arg(selectionError));
+                            "产品配方准备失败，当前模板保持不变：\n%1")
+                        .arg(message));
         }
         return false;
     }
 
     std::vector<WordTemplateProfile> loadedProfiles;
-    QStringList loadedPendingMessages;
-    QString cacheError;
-    if (!loadWordTemplateProfilesFromRecipeSelection(
-                selection,
-                &loadedProfiles,
-                &loadedPendingMessages,
-                &cacheError)) {
-        if (errorMessage) *errorMessage = cacheError;
-        if (showErrorMessage) {
-            showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                        QStringLiteral(
-                            "\u4EA7\u54C1\u914D\u65B9\u8D44\u6E90\u65E0\u6CD5\u88C5\u914D\uFF0C"
-                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                        .arg(cacheError));
+    loadedProfiles.reserve(
+                static_cast<std::size_t>(prepared->profiles.size()));
+    for (const PreparedRecipeProfile &source : prepared->profiles) {
+        WordTemplateProfile profile;
+        profile.name = source.definition.name;
+        profile.rawImage = source.rawImage.clone();
+        profile.trackingTemplate = source.trackingTemplate.clone();
+        profile.barcodePoly = source.barcodePolygon;
+        profile.datePoly = source.datePolygon;
+        profile.settings = source.definition;
+        profile.targetCount =
+                preparedRecipeTargetUnits(
+                    source.definition.targetText).size();
+        profile.characterAssets.reserve(
+                    source.characterAssets.size());
+        for (const PreparedRecipeCharacterAsset &asset
+             : source.characterAssets) {
+            PreparedRecipeCharacterAsset copy = asset;
+            copy.image = asset.image.clone();
+            profile.characterAssets.push_back(copy);
         }
-        return false;
+        for (const cv::Mat &character : source.characterTemplates) {
+            profile.digitTemplates.push_back(character.clone());
+        }
+        profile.digitTemplateTargetIndexes =
+                source.characterTemplateTargetIndexes;
+        loadedProfiles.push_back(profile);
     }
 
-    TemplateRecipeEditSession candidateEditSession;
-    QString editSessionError;
-    if (!candidateEditSession.begin(selection, &editSessionError)) {
-        if (errorMessage) *errorMessage = editSessionError;
+    QString sessionError;
+    if (!m_recipeEditorSession.beginEdit(
+                *m_host->m_recipeStore, recipeId, &sessionError)) {
+        if (errorMessage) {
+            *errorMessage = sessionError;
+        }
         if (showErrorMessage) {
             showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral("严重警告"),
                         QStringLiteral(
-                            "\u4EA7\u54C1\u914D\u65B9\u7F16\u8F91\u4F1A\u8BDD\u65E0\u6CD5\u5EFA\u7ACB\uFF0C"
-                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
-                        .arg(editSessionError));
+                            "产品配方编辑会话无法建立，当前模板保持不变：\n%1")
+                        .arg(sessionError));
         }
         return false;
     }
@@ -4033,106 +2973,25 @@ bool TemplateEditorController::activatePublishedWordRecipe(const QString &recipe
         imageLabel->setTemplateDrawingEnabled(false);
     }
     hideTemplateGuide();
-    m_singleTemplateRecipeEditSession.reset();
-    m_singleTemplateResolvedAssetPathsByRole.clear();
-    m_currentTemplateDisplayName.clear();
-    m_wordTemplateRecipeDraftSession.reset();
     m_wordTemplateProfiles.swap(loadedProfiles);
-    m_wordTemplateRecipeEditSession = candidateEditSession;
-    m_host->currentTemplateDirPath = selection.recipeDirectoryPath;
-    m_currentTemplateNameVisible = false;
-    m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId,
-                                      selection.recipe->recipeId);
-    refreshWordTemplateEditorCombo();
-    clearTemplatePrivateSettingDirty();
-    if (pendingMessages) {
-        *pendingMessages = loadedPendingMessages;
+    m_activePreparedRecipe = prepared;
+    m_currentTemplateDisplayName = prepared->recipe->displayName;
+    m_currentTemplateNameVisible = true;
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(
+                modeId, prepared->recipe->recipeId);
+    if (!m_wordTemplateProfiles.empty()) {
+        setCurrentWordTemplateEditIndex(0);
     }
+    refreshWordTemplateEditorCombo();
+    clearRecipeProfileDirty();
 
-    qDebug() << "[RECIPE_SELECT] selected word recipe:"
-             << selection.recipe->recipeId
-             << selection.recipe->displayName
+    qDebug() << "[RECIPE_SELECT] selected prepared word recipe:"
+             << prepared->recipe->recipeId
+             << prepared->recipe->displayName
              << "profiles:" << m_wordTemplateProfiles.size();
     return true;
 }
 
-bool TemplateEditorController::loadSingleTemplateCharacterAssets(
-        const QMap<QString, QString> &assetPathsByRole,
-        const QStringList &targetUnits,
-        std::vector<cv::Mat> *templates,
-        std::vector<int> *templateTargetIndexes,
-        QString *errorMessage) const
-{
-    if (errorMessage) {
-        errorMessage->clear();
-    }
-    if (!templates || !templateTargetIndexes) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("\u5185\u90E8\u5B57\u7B26\u6A21\u677F\u8F93\u51FA\u65E0\u6548\u3002");
-        }
-        return false;
-    }
-
-    templates->clear();
-    templateTargetIndexes->clear();
-    if (targetUnits.isEmpty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("\u76EE\u6807\u5B57\u7B26\u4E3A\u7A7A\u6216\u89E3\u6790\u5931\u8D25\u3002");
-        }
-        return false;
-    }
-
-    QStringList failedFiles;
-    for (int targetIndex = 0;
-         targetIndex < targetUnits.size();
-         ++targetIndex) {
-        const QString targetUnit =
-                targetUnits.at(targetIndex).trimmed().toLower();
-        QStringList matchingPaths;
-        for (auto it = assetPathsByRole.constBegin();
-             it != assetPathsByRole.constEnd();
-             ++it) {
-            if (!it.key().startsWith(QStringLiteral("character/"))) {
-                continue;
-            }
-            const QString fileName =
-                    it.key().mid(QStringLiteral("character/").size());
-            if (QFileInfo(fileName).completeBaseName().trimmed().toLower()
-                    == targetUnit) {
-                matchingPaths.append(it.value());
-            }
-        }
-        matchingPaths.sort(Qt::CaseInsensitive);
-        if (matchingPaths.isEmpty()) {
-            failedFiles.append(targetUnit);
-            continue;
-        }
-
-        for (const QString &matchingPath : matchingPaths) {
-            const cv::Mat characterTemplate =
-                    decodeImageFile(matchingPath,
-                                    cv::IMREAD_GRAYSCALE);
-            if (characterTemplate.empty()) {
-                failedFiles.append(
-                            QFileInfo(matchingPath).fileName());
-                continue;
-            }
-            templates->push_back(characterTemplate);
-            templateTargetIndexes->push_back(targetIndex);
-        }
-    }
-    if (!failedFiles.isEmpty()) {
-        templates->clear();
-        templateTargetIndexes->clear();
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u4EE5\u4E0B\u5B57\u7B26\u6A21\u677F\u56FE\u65E0\u6CD5\u89E3\u7801\uFF1A%1")
-                    .arg(failedFiles.join(QLatin1Char(' ')));
-        }
-        return false;
-    }
-    return !templates->empty();
-}
 
 bool TemplateEditorController::activatePublishedSingleTemplateRecipe(
         const QString &recipeId,
@@ -4143,121 +3002,63 @@ bool TemplateEditorController::activatePublishedSingleTemplateRecipe(
     if (errorMessage) {
         errorMessage->clear();
     }
-
-    auto fail = [this, showErrorMessage, errorMessage](
+    const auto fail = [this, showErrorMessage, errorMessage](
             const QString &message) {
         if (errorMessage) {
             *errorMessage = message;
         }
         if (showErrorMessage) {
             showParameterCritical(
-                        QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                        QStringLiteral("严重警告"),
                         QStringLiteral(
-                            "\u4EA7\u54C1\u914D\u65B9\u8D44\u6E90\u65E0\u6CD5\u5B8C\u6574\u88C5\u914D\uFF0C"
-                            "\u5F53\u524D\u6A21\u677F\u4FDD\u6301\u4E0D\u53D8\uFF1A\n%1")
+                            "产品配方资源无法完整准备，当前模板保持不变：\n%1")
                         .arg(message));
         }
         return false;
     };
 
     DetectionMode detectionMode;
-    if (!detectionModeFromId(modeId, &detectionMode)
+    if (!detectionModeFromUiId(modeId, &detectionMode)
             || (detectionMode != DetectionMode::Stamp
                 && detectionMode != DetectionMode::Ocr)) {
         return fail(QStringLiteral(
-                        "\u5DF2\u53D1\u5E03\u5355\u6A21\u677F\u914D\u65B9\u53EA\u7528\u4E8E"
-                        "\u6A21\u677F\u5339\u914D\u548C\u6DF1\u5EA6OCR\u6A21\u5F0F\u3002"));
+                        "已发布单模板配方只用于模板匹配和深度OCR模式。"));
     }
 
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
-    RecipeSelection selection;
-    QString selectionError;
-    if (!loadRecipeSelection(store,
-                             recipeId,
-                             detectionMode,
-                             &selection,
-                             &selectionError)) {
-        return fail(selectionError);
-    }
-    if (selection.profiles.size() != 1
-            || selection.recipe->profiles.size() != 1) {
-        return fail(QStringLiteral(
-                        "\u5355\u6A21\u677F\u4EA7\u54C1\u914D\u65B9\u5FC5\u987B\u4E14\u53EA\u80FD\u5305\u542B\u4E00\u4E2AProfile\u3002"));
+    PreparedRecipeSnapshot prepared;
+    QString loadError;
+    if (!m_host->m_recipeStore->loadPreparedRecipe(
+                recipeId, &prepared, &loadError)
+            || !prepared
+            || !prepared->recipe
+            || prepared->recipe->detectionMode != detectionMode
+            || prepared->profiles.size() != 1) {
+        return fail(loadError.isEmpty()
+                    ? QStringLiteral(
+                        "单模板产品配方必须且只能包含一个Profile。")
+                    : loadError);
     }
 
-    const ResolvedRecipeProfile &resolvedProfile =
-            selection.profiles.first();
-    const TemplatePrivateSettings privateSettings =
-            templatePrivateSettingsFromRecipeProfile(
-                resolvedProfile.profile);
-    if (!privateSettings.hasValidBoxes
-            || privateSettings.trackingBox.width <= 0
-            || privateSettings.trackingBox.height <= 0) {
-        return fail(QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u5B9A\u4F4D\u6846\u53C2\u6570\u65E0\u6548\u3002"));
-    }
-
-    TemplateProfileLoadPlan loadPlan;
-    QString loadPlanError;
-    if (!buildTemplateProfileLoadPlan(
-                resolvedProfile,
-                parseTemplateTargetUnits(privateSettings.targetText),
-                &loadPlan,
-                &loadPlanError)) {
-        return fail(loadPlanError);
-    }
-
-    const cv::Mat trackingTemplate =
-            decodeImageFile(loadPlan.trackingTemplatePath,
-                            cv::IMREAD_COLOR);
-    if (trackingTemplate.empty()) {
-        return fail(QStringLiteral(
-                        "\u5B9A\u4F4D\u6A21\u677F\u56FE tracking_template.bmp \u65E0\u6CD5\u89E3\u7801\u3002"));
-    }
-
-    CalibrationData calibration;
-    if (!calibration.load(
-                loadPlan.calibrationPath.toLocal8Bit().toStdString())
-            || calibration.date_poly.size() < 3) {
-        return fail(QStringLiteral(
-                        "\u6807\u5B9A\u6587\u4EF6\u7F3A\u5C11\u6709\u6548\u7684\u55B7\u7801\u68C0\u6D4B\u533A\u57DF\u3002"));
-    }
-
-    OverlapDetector candidateOverlapDetector;
-    std::vector<cv::Mat> candidateDigitTemplates;
-    std::vector<int> candidateDigitTargetIndexes;
+    const PreparedRecipeProfile &profile = prepared->profiles.first();
+    OverlapDetector overlapDetector;
     if (detectionMode == DetectionMode::Stamp) {
-        const QString stampRingPath =
-                resolvedProfile.assetPathsByRole
-                .value(QStringLiteral("stampRing")).trimmed();
-        if (stampRingPath.isEmpty()
-                || calibration.stamp_poly.size() < 3
-                || !candidateOverlapDetector.init(
-                    stampRingPath.toLocal8Bit().toStdString(),
-                    loadPlan.calibrationPath.toLocal8Bit().toStdString())) {
+        CalibrationData calibration;
+        calibration.stamp_poly = profile.stampPolygon;
+        calibration.date_poly = profile.datePolygon;
+        calibration.barcode_poly = profile.barcodePolygon;
+        if (!overlapDetector.init(
+                    profile.stampRingTemplate, calibration)) {
             return fail(QStringLiteral(
-                            "\u94A2\u5370\u73AF\u56FE\u6216\u94A2\u5370\u533A\u57DF\u65E0\u6548\uFF0C"
-                            "\u9632\u91CD\u53E0\u5F15\u64CE\u65E0\u6CD5\u521D\u59CB\u5316\u3002"));
-        }
-        QString characterError;
-        if (!loadSingleTemplateCharacterAssets(
-                    resolvedProfile.assetPathsByRole,
-                    parseTemplateTargetUnits(privateSettings.targetText),
-                    &candidateDigitTemplates,
-                    &candidateDigitTargetIndexes,
-                    &characterError)) {
-            return fail(QStringLiteral(
-                            "\u94A2\u5370\u76EE\u6807\u5B57\u7B26\u8D44\u4EA7\u4E0D\u5B8C\u6574\uFF1A%1")
-                        .arg(characterError));
+                            "钢印环图或钢印区域无效，防重叠引擎无法初始化。"));
         }
     }
 
-    TemplateRecipeEditSession candidateEditSession;
-    QString editError;
-    if (!candidateEditSession.begin(selection, &editError)) {
-        return fail(editError);
+    QString sessionError;
+    if (!m_recipeEditorSession.beginEdit(
+                *m_host->m_recipeStore,
+                recipeId,
+                &sessionError)) {
+        return fail(sessionError);
     }
 
     resetTemplateCaptureState();
@@ -4268,99 +3069,79 @@ bool TemplateEditorController::activatePublishedSingleTemplateRecipe(
         imageLabel->clearSelection();
     }
     hideTemplateGuide();
-    m_wordTemplateRecipeDraftSession.reset();
-    m_wordTemplateRecipeEditSession.reset();
     m_wordTemplateProfiles.clear();
     m_currentWordTemplateEditIndex = -1;
-    m_singleTemplateRecipeEditSession = candidateEditSession;
-    m_singleTemplateResolvedAssetPathsByRole =
-            resolvedProfile.assetPathsByRole;
-    m_currentTemplateDisplayName = selection.recipe->displayName;
-    m_host->currentTemplateDirPath =
-            QFileInfo(loadPlan.trackingTemplatePath).absolutePath();
-    m_host->m_loadedTrackingTemplate = trackingTemplate;
-    m_host->savedTrackingBox = privateSettings.trackingBox;
-    m_host->savedBarcodePoly = calibration.barcode_poly;
-    m_host->savedDatePoly = calibration.date_poly;
+    m_activePreparedRecipe = prepared;
+    m_currentTemplateDisplayName = prepared->recipe->displayName;
+    m_host->m_loadedTrackingTemplate =
+            profile.trackingTemplate.clone();
+    m_host->savedTrackingBox = cv::Rect2d(
+                profile.definition.trackingRoi.x(),
+                profile.definition.trackingRoi.y(),
+                profile.definition.trackingRoi.width(),
+                profile.definition.trackingRoi.height());
+    m_host->savedBarcodePoly = profile.barcodePolygon;
+    m_host->savedDatePoly = profile.datePolygon;
     m_host->hasValidBoxes = true;
-    m_host->digitTemplates.swap(candidateDigitTemplates);
-    m_host->digitTemplateTargetIndexes.swap(candidateDigitTargetIndexes);
-    if (detectionMode == DetectionMode::Stamp) {
-        m_host->overlapDetector = candidateOverlapDetector;
+    m_host->digitTemplates.clear();
+    for (const cv::Mat &character : profile.characterTemplates) {
+        m_host->digitTemplates.push_back(character.clone());
     }
-    applyTemplatePrivateSettingsToUi(privateSettings);
-    emit m_host->ssim(static_cast<int>(privateSettings.imageThreshold));
+    m_host->digitTemplateTargetIndexes =
+            profile.characterTemplateTargetIndexes;
+    if (detectionMode == DetectionMode::Stamp) {
+        m_host->overlapDetector = overlapDetector;
+    }
+    applyRecipeProfileToUi(profile.definition);
+    emit m_host->ssim(
+                profile.definition.imageThresholdPercent);
     m_currentTemplateNameVisible = true;
-    m_templateModeMemory.publishedRecipeIdsByMode().insert(modeId,
-                                      selection.recipe->recipeId);
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(
+                modeId, prepared->recipe->recipeId);
     updateCurrentTemplateName();
     refreshWordTemplateEditorCombo();
-    clearTemplatePrivateSettingDirty();
-
-    qDebug() << "[RECIPE_SELECT] selected single-template recipe:"
-             << selection.recipe->recipeId
-             << selection.recipe->displayName
-             << "mode:" << modeId;
+    clearRecipeProfileDirty();
     return true;
 }
 
 bool TemplateEditorController::republishSingleTemplateRecipeSettings(
-        const TemplatePrivateSettings &settings,
+        const RecipeProfile &settings,
         QString *errorMessage)
 {
     if (errorMessage) {
         errorMessage->clear();
     }
-    if (!m_singleTemplateRecipeEditSession.isActive()
-            || m_singleTemplateRecipeEditSession.recipe().profiles.size()
-               != 1) {
+    if (!m_recipeEditorSession.isActive()
+            || m_recipeEditorSession.recipe().profiles.size() != 1) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
-                        "\u5F53\u524D\u5DF2\u53D1\u5E03\u5355\u6A21\u677F\u6CA1\u6709\u6709\u6548\u7F16\u8F91\u4F1A\u8BDD\u3002");
+                        "当前已发布单模板没有有效编辑会话。");
         }
         return false;
     }
 
-    const RecipeProfile &currentProfile =
-            m_singleTemplateRecipeEditSession.recipe().profiles.first();
-    const RecipeProfile updatedProfile =
-            recipeProfileFromTemplatePrivateSettings(
-                currentProfile.name,
-                settings,
-                currentProfile.assetKeys);
-    QVector<RecipeProfile> updatedProfiles;
-    updatedProfiles.append(updatedProfile);
+    RecipeProfile updated = settings;
+    updated.name =
+            m_recipeEditorSession.recipe().profiles.first().name;
+    updated.assetKeys =
+            m_recipeEditorSession.recipe().profiles.first().assetKeys;
+    if (!m_recipeEditorSession.updateProfile(
+                0, updated, errorMessage)) {
+        return false;
+    }
 
-    const RecipeStore store(
-                QDir(AppSettingsManager::globalDataDirPath())
-                .filePath(QStringLiteral("recipes")));
-    RecipeSelection publishedSelection;
-    if (!TemplateRecipeWorkflow::republishProfiles(
-                &m_singleTemplateRecipeEditSession,
-                store,
-                updatedProfiles,
-                &publishedSelection,
-                nullptr,
+    PreparedRecipeSnapshot prepared;
+    if (!m_recipeEditorSession.publish(
+                *m_host->m_recipeStore,
+                &prepared,
                 errorMessage)) {
         return false;
     }
-    if (publishedSelection.profiles.size() != 1) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u91CD\u65B0\u53D1\u5E03\u540E\u7684\u5355\u6A21\u677FProfile\u6570\u91CF\u65E0\u6548\u3002");
-        }
-        return false;
-    }
-
-    m_singleTemplateResolvedAssetPathsByRole =
-            publishedSelection.profiles.first().assetPathsByRole;
+    m_activePreparedRecipe = prepared;
     m_templateModeMemory.publishedRecipeIdsByMode().insert(
                 currentDetectModeId(),
-                publishedSelection.recipe->recipeId);
+                prepared->recipe->recipeId);
     saveSettings(false);
-    qDebug() << "[RECIPE_PUBLISH] republished single-template recipe:"
-             << publishedSelection.recipe->recipeId
-             << "mode:" << currentDetectModeId();
     return true;
 }
 
@@ -4373,199 +3154,28 @@ int TemplateEditorController::currentWordTemplateProfileIndex() const
     return m_currentWordTemplateEditIndex;
 }
 
-QString TemplateEditorController::wordTemplateProfileAssetPath(
-        const WordTemplateProfile &profile,
-        const QString &role,
-        const QString &legacyFileName) const
-{
-    const QString resolvedPath =
-            profile.resolvedAssetPathsByRole.value(role).trimmed();
-    if (!resolvedPath.isEmpty()) {
-        return QFileInfo(resolvedPath).absoluteFilePath();
-    }
-
-    if (profile.dirPath.trimmed().isEmpty()
-            || legacyFileName.trimmed().isEmpty()) {
-        return QString();
-    }
-    return QDir(profile.dirPath).filePath(legacyFileName);
-}
-
 void TemplateEditorController::displayWordTemplateRawImage(
         const WordTemplateProfile &profile)
 {
-    const QString rawImagePath = wordTemplateProfileAssetPath(
-                profile,
-                QStringLiteral("rawImage"),
-                QStringLiteral("template_raw.png"));
-    const QString templateName = profile.name.trimmed().isEmpty()
-            ? QDir(profile.dirPath).dirName()
-            : profile.name.trimmed();
-    displayWordTemplateRawImageFile(rawImagePath, templateName);
-}
-
-void TemplateEditorController::displayWordTemplateRawImage(const QString &dirPath)
-{
-    if (dirPath.trimmed().isEmpty()) {
+    if (!ui || !ui->image_undetected || profile.rawImage.empty()) {
         return;
     }
-    displayWordTemplateRawImageFile(
-                QDir(dirPath).filePath(QStringLiteral("template_raw.png")),
-                QDir(dirPath).dirName());
-}
-
-void TemplateEditorController::displayWordTemplateRawImageFile(
-        const QString &rawImagePath,
-        const QString &templateName)
-{
-    if (!ui || !ui->image_undetected || rawImagePath.trimmed().isEmpty()) {
+    const QImage image = imageFromBgrMat(profile.rawImage);
+    if (image.isNull()) {
         return;
     }
-
-    if (!QFile::exists(rawImagePath)) {
-        qDebug() << "[WORD_TEMPLATE_PROFILE] template_raw.png not found:" << rawImagePath;
-        return;
-    }
-
-    QPixmap rawPixmap;
-    if (!rawPixmap.load(rawImagePath)) {
-        qDebug() << "[WORD_TEMPLATE_PROFILE] template_raw.png load failed:" << rawImagePath;
-        return;
-    }
-
     ui->image_undetected->setScaledContents(false);
     ui->image_undetected->setAlignment(Qt::AlignCenter);
-    ui->image_undetected->setAutoFitPixmap(rawPixmap);
-
+    ui->image_undetected->setAutoFitPixmap(
+                QPixmap::fromImage(image));
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearGreenRects();
         imageLabel->clearSelection();
     }
-    updateImageDisplayStatusText(QString("正在显示模板【%1】的产品图像")
-                                 .arg(templateName));
-}
-
-QStringList TemplateEditorController::wordTemplateImagePathsForKey(const QDir &directory,
-                                                 const QString &searchKey,
-                                                 bool includeVariants) const
-{
-    QStringList exactPaths;
-    QStringList variantPaths;
-    const QString normalizedKey = searchKey.trimmed().toLower();
-    if (normalizedKey.isEmpty() || !directory.exists()) {
-        return QStringList();
-    }
-
-    static const QStringList filters = {"*.jpg", "*.jpeg", "*.png", "*.bmp", "*.tiff"};
-    const QFileInfoList fileList = directory.entryInfoList(
-                filters,
-                QDir::Files | QDir::NoDotAndDotDot,
-                QDir::Name | QDir::IgnoreCase);
-
-    for (const QFileInfo &fileInfo : fileList) {
-        const QString baseName = fileInfo.completeBaseName().toLower();
-        if (baseName == normalizedKey) {
-            exactPaths.append(fileInfo.absoluteFilePath());
-        } else if (includeVariants && baseName.startsWith(normalizedKey)) {
-            const QString suffix = baseName.mid(normalizedKey.length());
-            if (suffix.startsWith("_") || suffix.startsWith("-") || suffix.startsWith("(")) {
-                variantPaths.append(fileInfo.absoluteFilePath());
-            }
-        }
-    }
-
-    exactPaths.sort(Qt::CaseInsensitive);
-    variantPaths.sort(Qt::CaseInsensitive);
-    exactPaths.append(variantPaths);
-    return exactPaths;
-}
-
-bool TemplateEditorController::loadWordDigitTemplatesFromDir(const QString &dirPath,
-                                           const QStringList &baseNames,
-                                           std::vector<cv::Mat> *templates,
-                                           std::vector<int> *templateTargetIndexes,
-                                           QString *errorMessage,
-                                           bool includeVariants) const
-{
-    if (!templates || !templateTargetIndexes) {
-        if (errorMessage) {
-            *errorMessage = "内部参数无效";
-        }
-        return false;
-    }
-
-    templates->clear();
-    templateTargetIndexes->clear();
-
-    QDir directory(dirPath);
-    if (!directory.exists()) {
-        if (errorMessage) {
-            *errorMessage = "产品模板文件夹不存在";
-        }
-        return false;
-    }
-
-    if (baseNames.isEmpty()) {
-        if (errorMessage) {
-            *errorMessage = "目标字符为空或解析失败";
-        }
-        return false;
-    }
-
-    QStringList failedNames;
-    for (int targetIndex = 0; targetIndex < baseNames.size(); ++targetIndex) {
-        const QString searchKey = baseNames.at(targetIndex).trimmed().toLower();
-        const QStringList imagePaths = wordTemplateImagePathsForKey(directory, searchKey, includeVariants);
-        if (imagePaths.isEmpty()) {
-            failedNames.append(searchKey);
-            continue;
-        }
-
-        bool allVariantsLoaded = true;
-        for (const QString &imagePath : imagePaths) {
-            QFile file(imagePath);
-            if (!file.open(QIODevice::ReadOnly)) {
-                failedNames.append(QFileInfo(imagePath).completeBaseName() + "(无法打开)");
-                allVariantsLoaded = false;
-                continue;
-            }
-
-            const QByteArray data = file.readAll();
-            cv::Mat templateImg;
-            try {
-                std::vector<uchar> buf(data.begin(), data.end());
-                templateImg = cv::imdecode(buf, cv::IMREAD_GRAYSCALE);
-            } catch (...) {
-                qDebug() << "[WORD_TEMPLATE] digit imdecode crashed:" << imagePath;
-            }
-
-            if (templateImg.empty()) {
-                failedNames.append(QFileInfo(imagePath).completeBaseName() + "(读取损坏)");
-                allVariantsLoaded = false;
-                continue;
-            }
-
-            templates->push_back(templateImg);
-            templateTargetIndexes->push_back(targetIndex);
-        }
-
-        if (!allVariantsLoaded) {
-            continue;
-        }
-    }
-
-    if (!failedNames.isEmpty()) {
-        templates->clear();
-        templateTargetIndexes->clear();
-        if (errorMessage) {
-            *errorMessage = QString("以下字符未找到对应图片，或图片读取失败：\n[ %1 ]")
-                    .arg(failedNames.join(" "));
-        }
-        return false;
-    }
-
-    return !templates->empty();
+    updateImageDisplayStatusText(
+                QStringLiteral("正在显示模板【%1】的产品图像")
+                .arg(profile.name));
 }
 
 bool TemplateEditorController::loadWordDigitTemplatesFromProfile(
@@ -4575,649 +3185,102 @@ bool TemplateEditorController::loadWordDigitTemplatesFromProfile(
         std::vector<int> *templateTargetIndexes,
         QString *errorMessage) const
 {
-    if (profile.resolvedAssetPathsByRole.isEmpty()) {
-        return loadWordDigitTemplatesFromDir(profile.dirPath,
-                                             baseNames,
-                                             templates,
-                                             templateTargetIndexes,
-                                             errorMessage,
-                                             true);
-    }
-    if (!templates || !templateTargetIndexes) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u5185\u90e8\u53c2\u6570\u65e0\u6548");
-        }
-        return false;
-    }
-
-    templates->clear();
-    templateTargetIndexes->clear();
-    if (baseNames.isEmpty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u76ee\u6807\u5b57\u7b26\u4e3a\u7a7a"
-                        "\u6216\u89e3\u6790\u5931\u8d25");
-        }
-        return false;
-    }
-
-    ResolvedRecipeProfile resolvedProfile;
-    resolvedProfile.profile = profile.recipeProfile;
-    resolvedProfile.assetPathsByRole = profile.resolvedAssetPathsByRole;
-    TemplateProfileLoadPlan loadPlan;
-    QString planError;
-    if (!buildTemplateProfileLoadPlan(resolvedProfile,
-                                      baseNames,
-                                      &loadPlan,
-                                      &planError)) {
-        if (errorMessage) {
-            *errorMessage = planError;
-        }
-        return false;
-    }
-    if (!loadPlan.pendingTargetMessage.isEmpty()
-            || loadPlan.characterTemplates.isEmpty()) {
-        if (errorMessage) {
-            *errorMessage = loadPlan.pendingTargetMessage.isEmpty()
-                    ? QStringLiteral(
-                        "\u672a\u627e\u5230\u5bf9\u5e94"
-                        "\u5b57\u7b26\u56fe\u7247")
-                    : loadPlan.pendingTargetMessage;
-        }
-        return false;
-    }
-
-    QStringList failedNames;
-    for (const TemplateCharacterLoadItem &item : loadPlan.characterTemplates) {
-        QFile file(item.absoluteFilePath);
-        cv::Mat templateImage;
-        if (file.open(QIODevice::ReadOnly)) {
-            const QByteArray data = file.readAll();
-            try {
-                const std::vector<uchar> buffer(data.begin(), data.end());
-                templateImage = cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
-            } catch (...) {
-                templateImage.release();
-            }
-        }
-
-        if (templateImage.empty()) {
-            failedNames.append(item.fileName);
-            continue;
-        }
-        templates->push_back(templateImage);
-        templateTargetIndexes->push_back(item.targetIndex);
-    }
-
-    if (!failedNames.isEmpty()) {
-        templates->clear();
-        templateTargetIndexes->clear();
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u4ee5\u4e0b\u5b57\u7b26\u56fe\u7247"
-                        "\u8bfb\u53d6\u5931\u8d25\uff1a\n[ %1 ]")
-                    .arg(failedNames.join(QLatin1Char(' ')));
-        }
-        return false;
-    }
-    return !templates->empty();
-}
-
-bool TemplateEditorController::loadWordTemplateProfileFromDir(const QString &dirPath,
-                                            WordTemplateProfile *profile,
-                                            QString *errorMessage)
-{
-    if (!profile) {
-        if (errorMessage) *errorMessage = "内部模板对象为空";
-        return false;
-    }
-
-    QDir templateDir(dirPath);
-    if (!templateDir.exists()) {
-        if (errorMessage) *errorMessage = "产品模板文件夹不存在";
-        return false;
-    }
-
-    TemplatePrivateSettings privateSettings;
-    QString privateError;
-    if (!AppSettingsManager::loadTemplatePrivateSettings(templateDir.absolutePath(),
-                                                         &privateSettings,
-                                                         &privateError)) {
-        if (errorMessage) *errorMessage = privateError;
-        return false;
-    }
-
-    const QString yamlPath = templateDir.filePath("calibrate_config.yaml");
-    CalibrationData calib;
-    if (!QFileInfo::exists(yamlPath)
-            || !calib.load(yamlPath.toLocal8Bit().toStdString())
-            || calib.date_poly.empty()) {
-        if (errorMessage) *errorMessage = "calibrate_config.yaml 中缺少有效喷码检测区域";
-        return false;
-    }
-    if (currentDetectModeId() == BarcodeWordDetectionMode
-            && calib.barcode_poly.size() != 4) {
-        if (errorMessage) {
-            *errorMessage = QString(
-                        "使用旧版二维码区域格式，缺少有效 barcode_poly；"
-                        "请重新制作稳定定位锚点、二维码区域和日期区域");
-        }
-        return false;
-    }
-
-    const QString trackingPath = templateDir.filePath("tracking_template.bmp");
-    QFile trackingFile(trackingPath);
-    cv::Mat trackingTemplate;
-    if (trackingFile.open(QIODevice::ReadOnly)) {
-        const QByteArray data = trackingFile.readAll();
-        try {
-            std::vector<uchar> buffer(data.begin(), data.end());
-            trackingTemplate = cv::imdecode(buffer, cv::IMREAD_COLOR);
-        } catch (...) {
-            qDebug() << "[WORD_TEMPLATE] tracking template decode failed:" << trackingPath;
-        }
-    }
-    if (trackingTemplate.empty()) {
-        if (errorMessage) *errorMessage = "tracking_template.bmp 缺失或无法读取";
-        return false;
-    }
-
-    const bool trackingBoxValid = privateSettings.trackingBox.width > 0
-            && privateSettings.trackingBox.height > 0;
-    if (!trackingBoxValid) {
-        if (errorMessage) *errorMessage = "模板私有配置中的定位区域无效";
-        return false;
-    }
-    if (!privateSettings.hasValidBoxes) {
-        privateSettings.hasValidBoxes = true;
-        QString repairError;
-        if (!AppSettingsManager::saveTemplatePrivateSettings(templateDir.absolutePath(),
-                                                             privateSettings,
-                                                             &repairError)) {
-            if (errorMessage) {
-                *errorMessage = QString("定位区域有效，但 hasValidBoxes 自动修复失败：%1").arg(repairError);
-            }
-            return false;
-        }
-    }
-
-    WordTemplateProfile loadedProfile;
-    loadedProfile.name = templateDir.dirName();
-    loadedProfile.dirPath = templateDir.absolutePath();
-    loadedProfile.trackingTemplate = trackingTemplate;
-    loadedProfile.barcodePoly = calib.barcode_poly;
-    loadedProfile.datePoly = calib.date_poly;
-    loadedProfile.settings = privateSettings;
-    refreshWordTemplateRecipeProfile(&loadedProfile);
-
-    const QStringList baseNames = parseTemplateTargetUnits(privateSettings.targetText);
-    loadedProfile.targetCount = baseNames.size();
-    QString pendingMessage;
-    if (privateSettings.targetText.trimmed().isEmpty() || baseNames.isEmpty()) {
-        pendingMessage = "目标字符为空或解析失败，目标字符待设置";
-    } else {
-        QString digitError;
-        if (!loadWordDigitTemplatesFromDir(loadedProfile.dirPath,
-                                           baseNames,
-                                           &loadedProfile.digitTemplates,
-                                           &loadedProfile.digitTemplateTargetIndexes,
-                                           &digitError)) {
-            pendingMessage = QString("字符图片不完整，目标字符待重新确认：%1").arg(digitError);
-        }
-    }
-
-    refreshWordTemplateProfileDigitCache(
-                &loadedProfile);
-    *profile = loadedProfile;
-    if (errorMessage) *errorMessage = pendingMessage;
-    return true;
-}
-
-bool TemplateEditorController::loadWordTemplateProfileFromRecipeSelection(
-        const RecipeSelection &selection,
-        int profileIndex,
-        WordTemplateProfile *profile,
-        QString *errorMessage)
-{
     if (errorMessage) {
         errorMessage->clear();
     }
-    if (!profile) {
+    if (!templates || !templateTargetIndexes
+            || baseNames.isEmpty()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("Internal template profile output is null.");
-        }
-        return false;
-    }
-    if (!selection.recipe
-            || (selection.recipe->detectionMode != DetectionMode::Word
-                && selection.recipe->detectionMode
-                   != DetectionMode::BarcodeWord)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Selected recipe is not a word-family recipe.");
-        }
-        return false;
-    }
-    if (profileIndex < 0 || profileIndex >= selection.profiles.size()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("Selected recipe profile index is invalid.");
+            *errorMessage = QStringLiteral("目标字符或输出参数无效。");
         }
         return false;
     }
 
-    const ResolvedRecipeProfile &resolvedProfile =
-            selection.profiles.at(profileIndex);
-    const QStringList targetUnits =
-            parseTemplateTargetUnits(resolvedProfile.profile.targetText);
-    TemplateProfileLoadPlan loadPlan;
-    if (!buildTemplateProfileLoadPlan(resolvedProfile,
-                                      targetUnits,
-                                      &loadPlan,
-                                      errorMessage)) {
-        return false;
-    }
-
-    CalibrationData calibration;
-    if (!calibration.load(
-                loadPlan.calibrationPath.toLocal8Bit().toStdString())
-            || calibration.date_poly.empty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "Selected recipe calibration has no valid date polygon.");
-        }
-        return false;
-    }
-    if (selection.recipe->detectionMode == DetectionMode::BarcodeWord
-            && calibration.barcode_poly.size() != 4) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "Selected barcode recipe must contain a four-point barcode polygon.");
-        }
-        return false;
-    }
-
-    cv::Mat trackingTemplate;
-    QFile trackingFile(loadPlan.trackingTemplatePath);
-    if (trackingFile.open(QIODevice::ReadOnly)) {
-        const QByteArray bytes = trackingFile.readAll();
-        try {
-            const std::vector<uchar> buffer(bytes.begin(), bytes.end());
-            trackingTemplate = cv::imdecode(buffer, cv::IMREAD_COLOR);
-        } catch (...) {
-            trackingTemplate.release();
-        }
-    }
-    if (trackingTemplate.empty()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "Selected recipe tracking template cannot be decoded.");
-        }
-        return false;
-    }
-
-    WordTemplateProfile loadedProfile;
-    loadedProfile.name = loadPlan.profile.name;
-    loadedProfile.dirPath = selection.recipeDirectoryPath;
-    loadedProfile.trackingTemplate = trackingTemplate;
-    loadedProfile.barcodePoly = calibration.barcode_poly;
-    loadedProfile.datePoly = calibration.date_poly;
-    loadedProfile.settings =
-            templatePrivateSettingsFromRecipeProfile(loadPlan.profile);
-    loadedProfile.recipeProfile = loadPlan.profile;
-    loadedProfile.resolvedAssetPathsByRole =
-            resolvedProfile.assetPathsByRole;
-    loadedProfile.targetCount = loadPlan.targetUnits.size();
-    loadedProfile.recipeAssetManifest.profileAssetKeys =
-            loadPlan.profile.assetKeys;
-
-    for (auto it = loadPlan.profile.assetKeys.constBegin();
-         it != loadPlan.profile.assetKeys.constEnd();
-         ++it) {
-        const QString assetKey = it.value();
-        const QString sourcePath =
-                resolvedProfile.assetPathsByRole.value(it.key());
-        const QString relativePath =
-                selection.recipe->assets.value(assetKey);
-        if (!sourcePath.isEmpty()) {
-            loadedProfile.recipeAssetManifest.assetSourcePaths.insert(
-                        assetKey,
-                        sourcePath);
-        }
-        if (!relativePath.isEmpty()) {
-            loadedProfile.recipeAssetManifest.recipeAssets.insert(
-                        assetKey,
-                        relativePath);
-        }
-    }
-
-    QString pendingMessage = loadPlan.pendingTargetMessage;
-    if (pendingMessage.isEmpty()) {
-        QStringList failedCharacterFiles;
-        for (const TemplateCharacterLoadItem &item :
-             loadPlan.characterTemplates) {
-            QFile characterFile(item.absoluteFilePath);
-            cv::Mat characterTemplate;
-            if (characterFile.open(QIODevice::ReadOnly)) {
-                const QByteArray bytes = characterFile.readAll();
-                try {
-                    const std::vector<uchar> buffer(bytes.begin(), bytes.end());
-                    characterTemplate =
-                            cv::imdecode(buffer, cv::IMREAD_GRAYSCALE);
-                } catch (...) {
-                    characterTemplate.release();
-                }
+    std::vector<cv::Mat> selected;
+    std::vector<int> indexes;
+    QVector<bool> found(baseNames.size(), false);
+    for (int targetIndex = 0;
+         targetIndex < baseNames.size(); ++targetIndex) {
+        for (const PreparedRecipeCharacterAsset &asset
+             : profile.characterAssets) {
+            if (preparedRecipeCharacterAssetMatchesTarget(
+                    asset.normalizedBaseName,
+                    baseNames.at(targetIndex))) {
+                selected.push_back(asset.image.clone());
+                indexes.push_back(targetIndex);
+                found[targetIndex] = true;
             }
-
-            if (characterTemplate.empty()) {
-                failedCharacterFiles.append(item.fileName);
-                continue;
-            }
-            loadedProfile.digitTemplates.push_back(characterTemplate);
-            loadedProfile.digitTemplateTargetIndexes.push_back(
-                        item.targetIndex);
-        }
-
-        if (!failedCharacterFiles.isEmpty()) {
-            loadedProfile.digitTemplates.clear();
-            loadedProfile.digitTemplateTargetIndexes.clear();
-            pendingMessage = QStringLiteral(
-                        "Character assets cannot be decoded: %1")
-                    .arg(failedCharacterFiles.join(QLatin1Char(' ')));
         }
     }
 
-    refreshWordTemplateProfileDigitCache(&loadedProfile);
-    *profile = loadedProfile;
-    if (errorMessage) {
-        *errorMessage = pendingMessage;
+    QStringList missing;
+    for (int i = 0; i < found.size(); ++i) {
+        if (!found.at(i)) {
+            missing.append(baseNames.at(i));
+        }
     }
+    if (!missing.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "配方中缺少目标字符资产：%1")
+                    .arg(missing.join(QLatin1Char(' ')));
+        }
+        return false;
+    }
+
+    templates->swap(selected);
+    templateTargetIndexes->swap(indexes);
     return true;
-}
-
-bool TemplateEditorController::loadWordTemplateProfilesFromRecipeSelection(
-        const RecipeSelection &selection,
-        std::vector<WordTemplateProfile> *profiles,
-        QStringList *pendingMessages,
-        QString *errorMessage)
-{
-    if (errorMessage) {
-        errorMessage->clear();
-    }
-    if (!profiles) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "Internal template profile collection output is null.");
-        }
-        return false;
-    }
-
-    TemplateRecipeLoadPlan recipeLoadPlan;
-    if (!buildTemplateRecipeLoadPlan(selection,
-                                     &recipeLoadPlan,
-                                     errorMessage)) {
-        return false;
-    }
-
-    std::vector<WordTemplateProfile> loadedProfiles;
-    loadedProfiles.reserve(
-                static_cast<size_t>(recipeLoadPlan.profiles.size()));
-    QStringList loadedPendingMessages;
-    for (int profileIndex = 0;
-         profileIndex < recipeLoadPlan.profiles.size();
-         ++profileIndex) {
-        WordTemplateProfile loadedProfile;
-        QString profileMessage;
-        if (!loadWordTemplateProfileFromRecipeSelection(
-                    selection,
-                    profileIndex,
-                    &loadedProfile,
-                    &profileMessage)) {
-            if (errorMessage) {
-                const QString profileName =
-                        recipeLoadPlan.profiles.at(profileIndex)
-                        .profile.name.trimmed().isEmpty()
-                        ? QString::number(profileIndex + 1)
-                        : recipeLoadPlan.profiles.at(profileIndex)
-                          .profile.name;
-                *errorMessage = QStringLiteral(
-                            "Recipe profile %1 cache cannot be assembled: %2")
-                        .arg(profileName, profileMessage);
-            }
-            return false;
-        }
-
-        if (!profileMessage.trimmed().isEmpty()) {
-            const QString profileName = loadedProfile.name.trimmed().isEmpty()
-                    ? QString::number(profileIndex + 1)
-                    : loadedProfile.name;
-            loadedPendingMessages.append(
-                        QStringLiteral("%1: %2")
-                        .arg(profileName, profileMessage));
-        }
-        loadedProfiles.push_back(loadedProfile);
-    }
-
-    profiles->swap(loadedProfiles);
-    if (pendingMessages) {
-        *pendingMessages = loadedPendingMessages;
-    }
-    return true;
-}
-
-void TemplateEditorController::refreshWordTemplateProfileDigitCache(
-    WordTemplateProfile *profile) const
-{
-    if (!profile) {
-        return;
-    }
-
-    profile->preparedDigitTemplates =
-            TemplateMatch::prepareDigitTemplates(
-                profile->digitTemplates);
-}
-
-InspectionProfileSnapshot
-TemplateEditorController::createWordTemplateRunSnapshot() const
-{
-    std::vector<InspectionProfileSource> sources;
-    sources.reserve(m_wordTemplateProfiles.size());
-    for (const WordTemplateProfile &sourceProfile : m_wordTemplateProfiles) {
-        InspectionProfileSource source;
-        source.name = sourceProfile.name;
-        source.directoryPath = sourceProfile.dirPath;
-        source.trackingTemplate = sourceProfile.trackingTemplate;
-        source.barcodePoly = sourceProfile.barcodePoly;
-        source.datePoly = sourceProfile.datePoly;
-        source.targetText = sourceProfile.settings.targetText;
-        source.imageThreshold = sourceProfile.settings.imageThreshold;
-        source.digitTemplates = sourceProfile.digitTemplates;
-        source.digitTemplateTargetIndexes =
-                sourceProfile.digitTemplateTargetIndexes;
-        source.barcodeOptions = sourceProfile.settings.barcodeOptions;
-        source.decodeStrategy.preferredStrategyId =
-                sourceProfile.preferredBarcodeStrategyId;
-        source.decodeStrategy.preferredOptionFlags =
-                sourceProfile.preferredBarcodeOptionFlags;
-        source.decodeStrategy.consecutiveFailures =
-                sourceProfile.consecutiveBarcodeFailures;
-        sources.push_back(source);
-    }
-    return InspectionProfileSnapshotBuilder::create(
-                sources,
-                ui->lineEdit_yuzhi->text());
 }
 
 void TemplateEditorController::refreshWordTemplateRecipeProfile(
-    WordTemplateProfile *profile) const
+        WordTemplateProfile *profile) const
 {
-    if (!profile) {
-        return;
+    if (profile) {
+        profile->settings.name = profile->name;
     }
-
-    const QMap<QString, QString> assetKeys =
-            profile->recipeProfile.assetKeys;
-    profile->recipeProfile =
-            recipeProfileFromTemplatePrivateSettings(profile->name,
-                                                     profile->settings,
-                                                     assetKeys);
 }
 
-bool TemplateEditorController::saveWordTemplatePrivateSettings(
+bool TemplateEditorController::saveWordRecipeProfile(
         int profileIndex,
-        const TemplatePrivateSettings &settings,
+        const RecipeProfile &settings,
         QString *errorMessage)
 {
     if (errorMessage) {
         errorMessage->clear();
     }
-    if (profileIndex < 0
-            || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u5f53\u524d\u4ea7\u54c1\u6a21\u677f"
-                        "Profile\u65e0\u6548\u3002");
-        }
-        return false;
-    }
-
-    const WordTemplateProfile &profile =
-            m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-    if (profile.resolvedAssetPathsByRole.isEmpty()) {
-        return AppSettingsManager::saveTemplatePrivateSettings(
-                    profile.dirPath,
-                    settings,
-                    errorMessage);
-    }
-
-    if (!m_wordTemplateRecipeEditSession.isActive()
+    if (!m_recipeEditorSession.isActive()
+            || profileIndex < 0
+            || profileIndex >= static_cast<int>(
+                m_wordTemplateProfiles.size())
             || profileIndex
-               >= m_wordTemplateRecipeEditSession.recipe().profiles.size()) {
+               >= m_recipeEditorSession.recipe().profiles.size()) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
-                        "\u5F53\u524D\u5DF2\u53D1\u5E03\u914D\u65B9"
-                        "\u6CA1\u6709\u6709\u6548\u7684\u7F16\u8F91\u4F1A\u8BDD\u3002");
+                        "当前产品配方Profile无效。");
         }
         return false;
     }
 
-    const RecipeProfile candidateProfile =
-            recipeProfileFromTemplatePrivateSettings(
-                profile.name,
-                settings,
-                profile.recipeProfile.assetKeys);
-    return TemplateRecipeWorkflow::validateProfileUpdate(
-                m_wordTemplateRecipeEditSession,
-                profileIndex,
-                candidateProfile,
-                errorMessage);
+    RecipeProfile updated = settings;
+    updated.name =
+            m_recipeEditorSession.recipe()
+            .profiles.at(profileIndex).name;
+    updated.assetKeys =
+            m_recipeEditorSession.recipe()
+            .profiles.at(profileIndex).assetKeys;
+    return m_recipeEditorSession.updateProfile(
+                profileIndex, updated, errorMessage);
 }
 
-void TemplateEditorController::refreshWordTemplateRecipeAssets()
-{
-    for (int profileIndex = 0;
-         profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
-         ++profileIndex) {
-        WordTemplateProfile &profile =
-                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        profile.recipeAssetManifest =
-                buildTemplateProfileAssetManifest(profile.dirPath,
-                                                  profileIndex);
-        profile.recipeProfile.assetKeys =
-                profile.recipeAssetManifest.profileAssetKeys;
-    }
-}
-
-void TemplateEditorController::prepareWordTemplateRecipeDraft(
-        const WordTemplateProfile &profile)
-{
-    m_wordTemplateRecipeDraftSession.reset();
-    m_wordTemplateRecipeEditSession.reset();
-
-    DetectionMode detectionMode;
-    if (!detectionModeFromId(currentDetectModeId(), &detectionMode)
-            || (detectionMode != DetectionMode::Word
-                && detectionMode != DetectionMode::BarcodeWord)
-            || profile.dirPath.trimmed().isEmpty()) {
-        return;
-    }
-
-    const QString displayName = profile.name.trimmed().isEmpty()
-            ? QDir(profile.dirPath).dirName()
-            : profile.name.trimmed();
-    const ProductRecipe recipeHeader =
-            createProductRecipe(displayName, detectionMode);
-    QString sessionError;
-    if (!m_wordTemplateRecipeDraftSession.begin(recipeHeader,
-                                                profile.dirPath,
-                                                &sessionError)) {
-        qWarning() << "[RECIPE_DRAFT] cannot begin word recipe draft:"
-                   << sessionError;
-    }
-}
-
-bool TemplateEditorController::publishWordTemplateRecipeDraft(QString *errorMessage)
-{
-    if (errorMessage) {
-        errorMessage->clear();
-    }
-    if (!m_wordTemplateRecipeDraftSession.isActive()) {
-        return true;
-    }
-    if (m_wordTemplateProfiles.size() != 1) {
-        if (errorMessage) {
-            *errorMessage = "本次新建配方只允许包含一个产品模板。";
-        }
-        return false;
-    }
-
-    const WordTemplateProfile &profile = m_wordTemplateProfiles.front();
-    TemplateRecipeProfileSource profileSource;
-    profileSource.profile = profile.recipeProfile;
-    profileSource.assetManifest = profile.recipeAssetManifest;
-    QVector<TemplateRecipeProfileSource> profileSources;
-    profileSources.append(profileSource);
-
-    const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
-                            .filePath("recipes"));
-    RecipeSelection publishedSelection;
-    TemplateRecipeWorkflowFailureStage failureStage =
-            TemplateRecipeWorkflowFailureStage::None;
-    if (!TemplateRecipeWorkflow::publishDraftAndBeginEdit(
-                &m_wordTemplateRecipeDraftSession,
-                &m_wordTemplateRecipeEditSession,
-                store,
-                profile.dirPath,
-                profileSources,
-                &publishedSelection,
-                &failureStage,
-                errorMessage)) {
-        if (failureStage == TemplateRecipeWorkflowFailureStage::EditSession
-                && errorMessage) {
-            *errorMessage = QString(
-                        "产品配方已经发布，但无法建立后续编辑会话：%1")
-                    .arg(*errorMessage);
-        }
-        return false;
-    }
-
-    m_templateModeMemory.publishedRecipeIdsByMode().insert(currentDetectModeId(),
-                                      publishedSelection.recipe->recipeId);
-    m_host->m_appliedGlobalSettings.publishedRecipeIdsByMode =
-            m_templateModeMemory.publishedRecipeIdsByMode();
-    saveSettings(false);
-
-    qDebug() << "[RECIPE_PUBLISH] published word recipe:"
-             << publishedSelection.recipe->recipeId
-             << publishedSelection.recipeDirectoryPath;
-    return true;
-}
-
-bool TemplateEditorController::publishWordTemplateRecipeEdit(int profileIndex,
-                                           QString *errorMessage)
+bool TemplateEditorController::publishWordTemplateRecipeEdit(
+        int profileIndex,
+        QString *errorMessage)
 {
     QVector<int> profileIndexes;
     profileIndexes.append(profileIndex);
-    return publishWordTemplateRecipeEdits(profileIndexes, errorMessage);
+    return publishWordTemplateRecipeEdits(
+                profileIndexes, errorMessage);
 }
 
 bool TemplateEditorController::publishWordTemplateRecipeEdits(
@@ -5227,250 +3290,201 @@ bool TemplateEditorController::publishWordTemplateRecipeEdits(
     if (errorMessage) {
         errorMessage->clear();
     }
-    if (!m_wordTemplateRecipeEditSession.isActive()) {
-        return true;
-    }
-    QVector<RecipeProfile> updatedProfiles =
-            m_wordTemplateRecipeEditSession.recipe().profiles;
-    for (int profileIndex : profileIndexes) {
-        if (profileIndex < 0
-                || profileIndex >= static_cast<int>(m_wordTemplateProfiles.size())
-                || profileIndex >= updatedProfiles.size()) {
-            if (errorMessage) {
-                *errorMessage = "当前配方编辑Profile无效。";
-            }
-            return false;
+    if (!m_recipeEditorSession.isActive()) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral(
+                        "当前产品配方没有有效编辑会话。");
         }
-
-        updatedProfiles[profileIndex] =
-                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)]
-                .recipeProfile;
-    }
-
-    const RecipeStore store(QDir(AppSettingsManager::globalDataDirPath())
-                            .filePath("recipes"));
-    RecipeSelection publishedSelection;
-    if (!TemplateRecipeWorkflow::republishProfiles(
-                &m_wordTemplateRecipeEditSession,
-                store,
-                updatedProfiles,
-                &publishedSelection,
-                nullptr,
-                errorMessage)) {
         return false;
     }
 
-    qDebug() << "[RECIPE_PUBLISH] republished word recipe:"
-             << publishedSelection.recipe->recipeId
-             << publishedSelection.recipeDirectoryPath;
+    ProductRecipe candidate = m_recipeEditorSession.recipe();
+    for (int profileIndex : profileIndexes) {
+        if (profileIndex < 0
+                || profileIndex >= static_cast<int>(
+                    m_wordTemplateProfiles.size())
+                || profileIndex >= candidate.profiles.size()) {
+            if (errorMessage) {
+                *errorMessage = QStringLiteral(
+                            "当前配方编辑Profile无效。");
+            }
+            return false;
+        }
+        RecipeProfile updated =
+                m_wordTemplateProfiles[
+                    static_cast<std::size_t>(
+                        profileIndex)].settings;
+        updated.name = candidate.profiles.at(profileIndex).name;
+        updated.assetKeys =
+                candidate.profiles.at(profileIndex).assetKeys;
+        candidate.profiles[profileIndex] = updated;
+    }
+
+    if (!m_recipeEditorSession.replaceDraft(
+                candidate,
+                m_recipeEditorSession.assetSourcePaths(),
+                errorMessage)) {
+        return false;
+    }
+    PreparedRecipeSnapshot prepared;
+    if (!m_recipeEditorSession.publish(
+                *m_host->m_recipeStore,
+                &prepared,
+                errorMessage)) {
+        return false;
+    }
+    m_activePreparedRecipe = prepared;
+    m_templateModeMemory.publishedRecipeIdsByMode().insert(
+                currentDetectModeId(),
+                prepared->recipe->recipeId);
+    saveSettings(false);
     return true;
 }
 
 void TemplateEditorController::applyCurrentTargetText()
 {
-    if (isWordFamilyMode(currentDetectModeId()))
-    {
-        if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-            showParameterWarning("提示", "请先停止检测后再修改模板字符");
-            return;
-        }
-
-        if (m_wordTemplateProfiles.empty()) {
-            showParameterInfoAsError("提示", "请先选择字库模板");
-            return;
-        }
-
-        const int profileIndex = currentWordTemplateProfileIndex();
-        if (profileIndex < 0) {
-            showParameterInfoAsError("提示", "当前编辑模板无效");
-            return;
-        }
-
-        WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        const QString newMubiaozifu = ui->dateEdit->toPlainText();
-
-        std::vector<cv::Mat> tempTemplates;
-        std::vector<int> tempTemplateTargetIndexes;
-        QString loadError;
-        const QStringList baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
-        if (!newMubiaozifu.trimmed().isEmpty()
-                && !loadWordDigitTemplatesFromProfile(
-                    profile,
-                    baseNamesToFind,
-                    &tempTemplates,
-                    &tempTemplateTargetIndexes,
-                    &loadError)) {
-            showParameterCritical("严重警告",
-                QString("当前模板 [%1] 字符图片加载失败：\n%2\n\n本次更新已撤销。")
-                .arg(profile.name)
-                .arg(loadError));
-            return;
-        }
-
-        TemplatePrivateSettings updatedSettings = profile.settings;
-        updatedSettings.targetText = newMubiaozifu;
-        QString saveError;
-        if (!saveWordTemplatePrivateSettings(profileIndex,
-                                             updatedSettings,
-                                             &saveError)) {
-            showParameterCritical("严重警告",
-                                  QString("当前模板 [%1] 的目标字符写入失败：\n%2")
-                                  .arg(profile.name)
-                                  .arg(saveError));
-            return;
-        }
-
-        profile.settings = updatedSettings;
-        refreshWordTemplateRecipeProfile(&profile);
-        profile.targetCount = baseNamesToFind.size();
-        profile.digitTemplates = tempTemplates;
-        profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
-        refreshWordTemplateProfileDigitCache(
-                    &profile);
-        refreshTemplateTargetTextDirty();
-
-        const QString profileName = profile.name.isEmpty()
-                ? QDir(profile.dirPath).dirName()
-                : profile.name;
-        QString recipePublishMessage;
-        QString recipePublishWarning;
-        if (m_wordTemplateRecipeEditSession.isActive()) {
-            QString publishError;
-            if (publishWordTemplateRecipeEdit(profileIndex, &publishError)) {
-                recipePublishMessage = "\n产品配方已使用原配方编号重新发布。";
-            } else {
-                recipePublishWarning =
-                        QString("目标字符已保存到当前模板，但产品配方重新发布失败：\n%1")
-                        .arg(publishError);
-            }
-        }
-        const QString message =
-                QString("已更新产品模板 %1 的目标字符。\n其他产品模板未修改。%2")
-                .arg(profileName)
-                .arg(recipePublishMessage);
-        if (recipePublishWarning.isEmpty()) {
-            showParameterInfo("提示", message);
-        } else {
-            showParameterInfoWithRedWarning("提示",
-                                            message,
-                                            recipePublishWarning);
-        }
+    if (m_host->hasRunningInspectionThread()
+            || m_host->isCollecting) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先停止检测后再修改目标字符。"));
+        return;
+    }
+    if (!m_recipeEditorSession.isActive()) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先创建或加载产品配方。"));
         return;
     }
 
-    if (isSingleTemplateRecipeMode(currentDetectModeId())
-            && m_singleTemplateRecipeEditSession.isActive()) {
-        if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-            showParameterWarning(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u8BF7\u5148\u505C\u6B62\u68C0\u6D4B\u540E\u518D\u4FEE\u6539\u76EE\u6807\u5B57\u7B26\u3002"));
+    const QString targetText =
+            ui->dateEdit->toPlainText();
+    if (targetText.trimmed().isEmpty()) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("目标字符不能为空。"));
+        return;
+    }
+
+    if (isWordFamilyMode(currentDetectModeId())) {
+        const int profileIndex =
+                currentWordTemplateProfileIndex();
+        if (profileIndex < 0) {
+            showParameterInfoAsError(
+                        QStringLiteral("提示"),
+                        QStringLiteral("当前编辑Profile无效。"));
             return;
         }
 
-        const QString targetText = ui->dateEdit->toPlainText();
-        std::vector<cv::Mat> candidateDigitTemplates;
-        std::vector<int> candidateDigitTargetIndexes;
-        if (currentDetectModeId() == QStringLiteral("stamp_detection")) {
-            QString characterError;
-            if (!loadSingleTemplateCharacterAssets(
-                        m_singleTemplateResolvedAssetPathsByRole,
-                        parseTemplateTargetUnits(targetText),
-                        &candidateDigitTemplates,
-                        &candidateDigitTargetIndexes,
-                        &characterError)) {
-                showParameterCritical(
-                            QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
-                            QStringLiteral(
-                                "\u5F53\u524D\u5DF2\u53D1\u5E03\u94A2\u5370\u914D\u65B9\u7684\u5B57\u7B26\u8D44\u4EA7\u4E0D\u5B8C\u6574\uFF1A\n%1\n\n"
-                                "\u672C\u6B21\u66F4\u65B0\u5DF2\u64A4\u9500\u3002")
-                            .arg(characterError));
-                return;
-            }
+        WordTemplateProfile previous =
+                m_wordTemplateProfiles[
+                    static_cast<std::size_t>(profileIndex)];
+        WordTemplateProfile &profile =
+                m_wordTemplateProfiles[
+                    static_cast<std::size_t>(profileIndex)];
+        std::vector<cv::Mat> templates;
+        std::vector<int> indexes;
+        QString validationError;
+        const QStringList targetUnits =
+                preparedRecipeTargetUnits(targetText);
+        if (!loadWordDigitTemplatesFromProfile(
+                    profile,
+                    targetUnits,
+                    &templates,
+                    &indexes,
+                    &validationError)) {
+            showParameterCritical(
+                        QStringLiteral("严重警告"),
+                        QStringLiteral(
+                            "目标字符对应的配方资产不完整：\n%1")
+                        .arg(validationError));
+            return;
         }
 
-        TemplatePrivateSettings settings =
-                templatePrivateSettingsFromRecipeProfile(
-                    m_singleTemplateRecipeEditSession.recipe()
-                    .profiles.first());
+        profile.settings.targetText = targetText;
+        profile.targetCount = targetUnits.size();
+        profile.digitTemplates.swap(templates);
+        profile.digitTemplateTargetIndexes.swap(indexes);
+
+        QString publishError;
+        if (!saveWordRecipeProfile(
+                    profileIndex,
+                    profile.settings,
+                    &publishError)
+                || !publishWordTemplateRecipeEdit(
+                    profileIndex,
+                    &publishError)) {
+            profile = previous;
+            if (m_activePreparedRecipe
+                    && m_activePreparedRecipe->recipe) {
+                m_recipeEditorSession.beginEdit(
+                            *m_host->m_recipeStore,
+                            m_activePreparedRecipe->recipe->recipeId,
+                            nullptr);
+            }
+            showParameterInfoWithRedWarning(
+                        QStringLiteral("提示"),
+                        QStringLiteral(
+                            "目标字符未生效，正式配方保持不变。"),
+                        publishError);
+            return;
+        }
+
+        clearTemplateTargetTextDirty();
+        showParameterInfo(
+                    QStringLiteral("提示"),
+                    QStringLiteral(
+                        "当前Profile目标字符已事务保存。"));
+        return;
+    }
+
+    if (isSingleTemplateRecipeMode(currentDetectModeId())) {
+        RecipeProfile settings =
+                m_recipeEditorSession.recipe()
+                .profiles.first();
         settings.targetText = targetText;
         QString publishError;
-        if (!republishSingleTemplateRecipeSettings(settings,
-                                                   &publishError)) {
+        if (!republishSingleTemplateRecipeSettings(
+                    settings, &publishError)) {
+            if (m_activePreparedRecipe
+                    && m_activePreparedRecipe->recipe) {
+                m_recipeEditorSession.beginEdit(
+                            *m_host->m_recipeStore,
+                            m_activePreparedRecipe->recipe->recipeId,
+                            nullptr);
+            }
             showParameterInfoWithRedWarning(
-                        QStringLiteral("\u63D0\u793A"),
+                        QStringLiteral("提示"),
                         QStringLiteral(
-                            "\u76EE\u6807\u5B57\u7B26\u672A\u751F\u6548\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                        QStringLiteral(
-                            "\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
-                        .arg(publishError));
+                            "目标字符未生效，正式配方保持不变。"),
+                        publishError);
             return;
         }
-
-        if (currentDetectModeId() == QStringLiteral("stamp_detection")) {
-            m_host->digitTemplates.swap(candidateDigitTemplates);
-            m_host->digitTemplateTargetIndexes.swap(
-                        candidateDigitTargetIndexes);
+        if (m_activePreparedRecipe
+                && !m_activePreparedRecipe->profiles.isEmpty()) {
+            m_host->digitTemplates.clear();
+            for (const cv::Mat &character
+                 : m_activePreparedRecipe->profiles.first()
+                   .characterTemplates) {
+                m_host->digitTemplates.push_back(
+                            character.clone());
+            }
+            m_host->digitTemplateTargetIndexes =
+                    m_activePreparedRecipe->profiles.first()
+                    .characterTemplateTargetIndexes;
         }
         clearTemplateTargetTextDirty();
         showParameterInfo(
-                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("提示"),
                     QStringLiteral(
-                        "\u76EE\u6807\u5B57\u7B26\u8BBE\u7F6E\u6210\u529F\uFF0C"
-                        "\u4EA7\u54C1\u914D\u65B9\u5DF2\u4F7F\u7528\u539F\u914D\u65B9\u7F16\u53F7\u91CD\u65B0\u53D1\u5E03\u3002"));
+                        "目标字符已事务保存。"));
         return;
     }
 
-    if (ui->comboBox_4->currentIndex() == 0)
-    {
-        // 1. 检查是否存在有效的模板路径
-        if (m_host->currentTemplateDirPath.isEmpty()) {
-            showParameterInfoAsError("提示", "请先选择产品模板文件夹");
-            return;
-        }
-        // 2. 读取当前修改后的目标字符
-        QString newMubiaozifu = ui->dateEdit->toPlainText();
-        if (newMubiaozifu.isEmpty()) {
-            m_host->digitTemplates.clear();
-            m_host->digitTemplateTargetIndexes.clear();
-            showParameterInfoAsError("提示", "目标字符为空，已清空模板");
-            return;
-        }
-
-        std::vector<cv::Mat> tempTemplates;
-        std::vector<int> tempTemplateTargetIndexes;
-        QString loadError;
-        const QStringList baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
-        const bool includeVariantTemplates = false;
-
-        if (!loadWordDigitTemplatesFromDir(m_host->currentTemplateDirPath,
-                                           baseNamesToFind,
-                                           &tempTemplates,
-                                           &tempTemplateTargetIndexes,
-                                           &loadError,
-                                           includeVariantTemplates)) {
-            // 如果有任何图片读取失败或丢失，绝不更新运行字符模板，同时给出严厉警告。
-            showParameterCritical("严重警告",
-                QString("%1\n\n请检查产品模板文件夹内的字符图片是否存在或是否损坏（支持中文，无需关心后缀和大小写）！\n本次更新已撤销。")
-                .arg(loadError));
-            return;
-        }
-
-        // 5. 全部成功后，再更新到全局容器
-        m_host->digitTemplates = tempTemplates;
-        m_host->digitTemplateTargetIndexes = tempTemplateTargetIndexes;
-        showParameterInfo("提示",
-                          QString("目标字符确认成功，目标字符 %1 个，字符模板图 %2 张！")
-                          .arg(baseNamesToFind.size())
-                          .arg(static_cast<int>(m_host->digitTemplates.size())));
-    }
-    else{
-     showParameterInfo("提示", "目标字符确认成功");
-    }
-
-
+    showParameterInfoAsError(
+                QStringLiteral("提示"),
+                QStringLiteral("当前模式不使用目标字符。"));
 }
-
-
 
 void TemplateEditorController::applyBatchTargetText()
 {
@@ -5478,268 +3492,254 @@ void TemplateEditorController::applyBatchTargetText()
         applyCurrentTargetText();
         return;
     }
-
-    if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-        showParameterWarning("提示", "请先停止检测后再批量修改模板字符");
+    if (m_host->hasRunningInspectionThread()
+            || m_host->isCollecting) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先停止检测后再批量修改模板字符。"));
+        return;
+    }
+    if (!m_recipeEditorSession.isActive()
+            || m_wordTemplateProfiles.empty()) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先加载字库产品配方。"));
         return;
     }
 
-    if (m_wordTemplateProfiles.empty()) {
-        showParameterInfoAsError("提示", "请先选择字库模板");
+    const QString targetText =
+            ui->dateEdit->toPlainText();
+    const QStringList targetUnits =
+            preparedRecipeTargetUnits(targetText);
+    if (targetUnits.isEmpty()) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("目标字符不能为空。"));
         return;
     }
 
-    const QString newMubiaozifu = ui->dateEdit->toPlainText();
-    const bool needLoadDigitTemplates = !newMubiaozifu.trimmed().isEmpty();
-    QStringList baseNamesToFind;
-    if (needLoadDigitTemplates) {
-        baseNamesToFind = parseTemplateTargetUnits(newMubiaozifu);
-        if (baseNamesToFind.isEmpty()) {
-            showParameterInfoAsError("提示", "目标字符解析失败");
+    const std::vector<WordTemplateProfile> previous =
+            m_wordTemplateProfiles;
+    for (WordTemplateProfile &profile
+         : m_wordTemplateProfiles) {
+        std::vector<cv::Mat> templates;
+        std::vector<int> indexes;
+        QString validationError;
+        if (!loadWordDigitTemplatesFromProfile(
+                    profile,
+                    targetUnits,
+                    &templates,
+                    &indexes,
+                    &validationError)) {
+            m_wordTemplateProfiles = previous;
+            showParameterCritical(
+                        QStringLiteral("严重警告"),
+                        QStringLiteral(
+                            "Profile【%1】缺少目标字符资产：\n%2")
+                        .arg(profile.name, validationError));
             return;
         }
+        profile.settings.targetText = targetText;
+        profile.targetCount = targetUnits.size();
+        profile.digitTemplates.swap(templates);
+        profile.digitTemplateTargetIndexes.swap(indexes);
     }
 
-    const int oldProfileIndex = currentWordTemplateProfileIndex();
-    int successCount = 0;
-    QStringList failedMessages;
-
-    for (int profileIndex = 0;
-         profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
-         ++profileIndex) {
-        WordTemplateProfile &profile =
-                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        const QString profileName = profile.name.isEmpty()
-                ? QDir(profile.dirPath).dirName()
-                : profile.name;
-
-        QDir directory(profile.dirPath);
-        if (profile.dirPath.isEmpty() || !directory.exists()) {
-            failedMessages.append(QString("%1：产品模板文件夹不存在").arg(profileName));
-            continue;
-        }
-
-        std::vector<cv::Mat> tempTemplates;
-        std::vector<int> tempTemplateTargetIndexes;
-        if (needLoadDigitTemplates) {
-            QString loadError;
-            if (!loadWordDigitTemplatesFromProfile(
-                        profile,
-                        baseNamesToFind,
-                        &tempTemplates,
-                        &tempTemplateTargetIndexes,
-                        &loadError)) {
-                failedMessages.append(QString("%1：%2")
-                                      .arg(profileName)
-                                      .arg(loadError));
-                continue;
-            }
-        }
-
-        TemplatePrivateSettings updatedSettings = profile.settings;
-        updatedSettings.targetText = newMubiaozifu;
-        QString saveError;
-        if (!saveWordTemplatePrivateSettings(profileIndex,
-                                             updatedSettings,
-                                             &saveError)) {
-            failedMessages.append(QString("%1：目标字符写入失败，%2").arg(profileName).arg(saveError));
-            continue;
-        }
-
-        profile.settings = updatedSettings;
-        refreshWordTemplateRecipeProfile(&profile);
-        profile.targetCount = baseNamesToFind.size();
-        profile.digitTemplates = tempTemplates;
-        profile.digitTemplateTargetIndexes = tempTemplateTargetIndexes;
-        refreshWordTemplateProfileDigitCache(
-                    &profile);
-        ++successCount;
+    QVector<int> indexes;
+    for (int i = 0;
+         i < static_cast<int>(m_wordTemplateProfiles.size());
+         ++i) {
+        indexes.append(i);
     }
-
-    if (oldProfileIndex >= 0) {
-        setCurrentWordTemplateEditIndex(oldProfileIndex);
-    }
-
-    if (successCount == 0) {
-        showParameterCritical("严重警告",
-                              QString("所有模板的目标字符批量保存失败：\n%1")
-                              .arg(failedMessages.join("\n")));
+    QString publishError;
+    if (!publishWordTemplateRecipeEdits(
+                indexes, &publishError)) {
+        m_wordTemplateProfiles = previous;
+        if (m_activePreparedRecipe
+                && m_activePreparedRecipe->recipe) {
+            m_recipeEditorSession.beginEdit(
+                        *m_host->m_recipeStore,
+                        m_activePreparedRecipe->recipe->recipeId,
+                        nullptr);
+        }
+        showParameterInfoWithRedWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral(
+                        "批量目标字符未生效，正式配方保持不变。"),
+                    publishError);
         return;
     }
 
-    if (!failedMessages.isEmpty()) {
-        QMessageBox::warning(m_host,
-                             "提示",
-                             QString("已成功保存 %1 个模板，失败 %2 个：\n%3")
-                             .arg(successCount)
-                             .arg(failedMessages.size())
-                             .arg(failedMessages.join("\n")));
-        return;
-    }
-
-    refreshTemplateTargetTextDirty();
-
-    QString recipePublishMessage;
-    QString recipePublishWarning;
-    if (m_wordTemplateRecipeEditSession.isActive()) {
-        QVector<int> profileIndexes;
-        for (int profileIndex = 0;
-             profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
-             ++profileIndex) {
-            profileIndexes.append(profileIndex);
-        }
-
-        QString publishError;
-        if (publishWordTemplateRecipeEdits(profileIndexes, &publishError)) {
-            recipePublishMessage =
-                    "\n产品配方已使用原配方编号重新发布。";
-        } else {
-            recipePublishWarning =
-                    QString("目标字符已批量保存到当前模板，但产品配方重新发布失败：\n%1")
-                    .arg(publishError);
-        }
-    }
-
-    const QString message =
-            QString("已将当前目标字符保存到所有已选择的产品模板。%1")
-            .arg(recipePublishMessage);
-    if (recipePublishWarning.isEmpty()) {
-        showParameterInfo("提示", message);
-    } else {
-        showParameterInfoWithRedWarning("提示",
-                                        message,
-                                        recipePublishWarning);
-    }
+    clearTemplateTargetTextDirty();
+    showParameterInfo(
+                QStringLiteral("提示"),
+                QStringLiteral(
+                    "全部Profile目标字符已事务保存。"));
 }
 
 void TemplateEditorController::applyCurrentImageThreshold()
 {
+    if (m_host->hasRunningInspectionThread()
+            || m_host->isCollecting) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先停止检测后再修改模板阈值。"));
+        return;
+    }
+    int threshold = 0;
+    if (!parseIntValue(
+                ui->lineEdit_yuzhi->text(), &threshold)
+            || threshold < 0 || threshold > 100) {
+        showParameterWarning(
+                    QStringLiteral("参数错误"),
+                    QStringLiteral(
+                        "图像合格阈值必须是0到100之间的整数（单位：%）。"));
+        return;
+    }
+    if (!m_recipeEditorSession.isActive()) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先创建或加载产品配方。"));
+        return;
+    }
+
+    QString publishError;
     if (isWordFamilyMode(currentDetectModeId())) {
-        if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-            showParameterWarning("提示", "请先停止检测后再修改模板阈值");
-            return;
-        }
-
-        const int profileIndex = currentWordTemplateProfileIndex();
+        const int profileIndex =
+                currentWordTemplateProfileIndex();
         if (profileIndex < 0) {
-            showParameterInfoAsError("提示", "当前产品模板无效");
+            showParameterInfoAsError(
+                        QStringLiteral("提示"),
+                        QStringLiteral("当前编辑Profile无效。"));
             return;
         }
-
-        const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
-        int thresholdValue = 0;
-        if (!parseIntValue(thresholdText, &thresholdValue)
-                || thresholdValue < 0
-                || thresholdValue > 100) {
-            showParameterWarning("参数错误",
-                                 "图像合格阈值必须是0到100之间的整数（单位：%）");
-            return;
-        }
-
+        const WordTemplateProfile previous =
+                m_wordTemplateProfiles[
+                    static_cast<std::size_t>(profileIndex)];
         WordTemplateProfile &profile =
-                m_wordTemplateProfiles[static_cast<size_t>(profileIndex)];
-        TemplatePrivateSettings updatedSettings = profile.settings;
-        updatedSettings.imageThreshold = thresholdValue;
-        QString saveError;
-        if (!saveWordTemplatePrivateSettings(profileIndex,
-                                             updatedSettings,
-                                             &saveError)) {
-            showParameterCritical("严重警告",
-                                  QString("当前模板 [%1] 的图像阈值写入失败：\n%2")
-                                  .arg(profile.name)
-                                  .arg(saveError));
-            return;
-        }
-
-        profile.settings = updatedSettings;
-        refreshWordTemplateRecipeProfile(&profile);
-        emit m_host->ssim(thresholdValue);
-        refreshTemplateImageThresholdDirty();
-
-        QString recipePublishMessage;
-        QString recipePublishWarning;
-        if (m_wordTemplateRecipeEditSession.isActive()) {
-            QString publishError;
-            if (publishWordTemplateRecipeEdit(profileIndex, &publishError)) {
-                recipePublishMessage =
-                        "\n产品配方已使用原配方编号重新发布。";
-            } else {
-                recipePublishWarning =
-                        QString("图像阈值已保存到当前模板，但产品配方重新发布失败：\n%1")
-                        .arg(publishError);
+                m_wordTemplateProfiles[
+                    static_cast<std::size_t>(profileIndex)];
+        profile.settings.imageThresholdPercent = threshold;
+        if (!saveWordRecipeProfile(
+                    profileIndex,
+                    profile.settings,
+                    &publishError)
+                || !publishWordTemplateRecipeEdit(
+                    profileIndex,
+                    &publishError)) {
+            profile = previous;
+            if (m_activePreparedRecipe
+                    && m_activePreparedRecipe->recipe) {
+                m_recipeEditorSession.beginEdit(
+                            *m_host->m_recipeStore,
+                            m_activePreparedRecipe->recipe->recipeId,
+                            nullptr);
             }
-        }
-
-        const QString message =
-                QString("模板 [%1] 图像阈值设置成功：%2%3")
-                .arg(profile.name)
-                .arg(thresholdText)
-                .arg(recipePublishMessage);
-        if (recipePublishWarning.isEmpty()) {
-            showParameterInfo("提示", message);
-        } else {
-            showParameterInfoWithRedWarning("提示",
-                                            message,
-                                            recipePublishWarning);
-        }
-        return;
-    }
-
-    if (isSingleTemplateRecipeMode(currentDetectModeId())
-            && m_singleTemplateRecipeEditSession.isActive()) {
-        if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-            showParameterWarning(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u8BF7\u5148\u505C\u6B62\u68C0\u6D4B\u540E\u518D\u4FEE\u6539\u6A21\u677F\u9608\u503C\u3002"));
-            return;
-        }
-
-        int thresholdValue = 0;
-        if (!parseIntValue(ui->lineEdit_yuzhi->text(),
-                           &thresholdValue)
-                || thresholdValue < 0
-                || thresholdValue > 100) {
-            showParameterWarning(
-                        QStringLiteral("\u53C2\u6570\u9519\u8BEF"),
-                        QStringLiteral("\u56FE\u50CF\u5408\u683C\u9608\u503C\u5FC5\u987B\u662F0\u5230100\u4E4B\u95F4\u7684\u6574\u6570\uFF08\u5355\u4F4D\uFF1A%\uFF09"));
-            return;
-        }
-
-        TemplatePrivateSettings settings =
-                templatePrivateSettingsFromRecipeProfile(
-                    m_singleTemplateRecipeEditSession.recipe()
-                    .profiles.first());
-        settings.imageThreshold = thresholdValue;
-        QString publishError;
-        if (!republishSingleTemplateRecipeSettings(settings,
-                                                   &publishError)) {
             showParameterInfoWithRedWarning(
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u56FE\u50CF\u9608\u503C\u672A\u751F\u6548\uFF0C\u5F53\u524D\u914D\u65B9\u4FDD\u6301\u4E0D\u53D8\u3002"),
-                        QStringLiteral("\u4EA7\u54C1\u914D\u65B9\u91CD\u65B0\u53D1\u5E03\u5931\u8D25\uFF1A\n%1")
-                        .arg(publishError));
+                        QStringLiteral("提示"),
+                        QStringLiteral(
+                            "图像阈值未生效，正式配方保持不变。"),
+                        publishError);
             return;
         }
-
-        emit m_host->ssim(thresholdValue);
-        clearTemplateImageThresholdDirty();
-        showParameterInfo(
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u56FE\u50CF\u9608\u503C\u8BBE\u7F6E\u6210\u529F\uFF1A%1\n\u4EA7\u54C1\u914D\u65B9\u5DF2\u4F7F\u7528\u539F\u914D\u65B9\u7F16\u53F7\u91CD\u65B0\u53D1\u5E03\u3002")
-                    .arg(thresholdValue));
+    } else if (isSingleTemplateRecipeMode(
+                   currentDetectModeId())) {
+        RecipeProfile settings =
+                m_recipeEditorSession.recipe()
+                .profiles.first();
+        settings.imageThresholdPercent = threshold;
+        if (!republishSingleTemplateRecipeSettings(
+                    settings, &publishError)) {
+            if (m_activePreparedRecipe
+                    && m_activePreparedRecipe->recipe) {
+                m_recipeEditorSession.beginEdit(
+                            *m_host->m_recipeStore,
+                            m_activePreparedRecipe->recipe->recipeId,
+                            nullptr);
+            }
+            showParameterInfoWithRedWarning(
+                        QStringLiteral("提示"),
+                        QStringLiteral(
+                            "图像阈值未生效，正式配方保持不变。"),
+                        publishError);
+            return;
+        }
+    } else {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("当前模式不使用图像合格阈值。"));
         return;
     }
 
-    int number = 0;
-    if (!parseIntValue(ui->lineEdit_yuzhi->text(), &number)
-            || number < 0
-            || number > 100) {
-        showParameterWarning("参数错误",
-                             "图像合格阈值必须是0到100之间的整数（单位：%）");
+    emit m_host->ssim(threshold);
+    clearTemplateImageThresholdDirty();
+    showParameterInfo(
+                QStringLiteral("提示"),
+                QStringLiteral("图像阈值已事务保存：%1")
+                .arg(threshold));
+}
+
+void TemplateEditorController::applyCurrentTissueThreshold()
+{
+    if (m_host->hasRunningInspectionThread()
+            || m_host->isCollecting) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先停止检测后再修改纸巾配方阈值。"));
         return;
     }
-    emit m_host->ssim(number);
-    showParameterInfo("提示", "阈值设置成功");
+    bool valid = false;
+    const double threshold =
+            ui->lineEdit_tissueRoughnessThreshold
+            ->text().trimmed().toDouble(&valid);
+    if (!valid || !std::isfinite(threshold) || threshold <= 0.0) {
+        showParameterWarning(
+                    QStringLiteral("参数错误"),
+                    QStringLiteral("纸巾粗糙度阈值必须是大于0的有限数字。"));
+        return;
+    }
+    if (!m_host->m_recipeStore
+            || !m_recipeEditorSession.isActive()
+            || !m_activePreparedRecipe
+            || !m_activePreparedRecipe->recipe
+            || m_activePreparedRecipe->recipe->detectionMode
+               != DetectionMode::Tissue) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先使用【保存模板】创建或加载纸巾产品配方。"));
+        return;
+    }
+
+    const QString recipeId =
+            m_activePreparedRecipe->recipe->recipeId;
+    ProductRecipe candidate = m_recipeEditorSession.recipe();
+    candidate.tissueParameters.roughnessThreshold = threshold;
+    QString errorMessage;
+    PreparedRecipeSnapshot updated;
+    if (!m_recipeEditorSession.replaceDraft(
+            candidate, QMap<QString, QString>(), &errorMessage)
+            || !m_recipeEditorSession.publish(
+                *m_host->m_recipeStore, &updated, &errorMessage)) {
+        m_recipeEditorSession.beginEdit(
+                    *m_host->m_recipeStore, recipeId, nullptr);
+        ui->lineEdit_tissueRoughnessThreshold->setText(
+                    QString::number(
+                        m_activePreparedRecipe->tissue
+                        .roughnessThreshold,
+                        'f', 3));
+        showParameterInfoWithRedWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("纸巾阈值未生效，正式配方保持不变。"),
+                    errorMessage);
+        return;
+    }
+
+    m_activePreparedRecipe = updated;
+    ui->lineEdit_tissueRoughnessThreshold->setText(
+                QString::number(threshold, 'f', 3));
+    showParameterInfo(
+                QStringLiteral("提示"),
+                QStringLiteral("纸巾粗糙度阈值已事务保存到当前产品配方。"));
 }
 
 void TemplateEditorController::applyBatchImageThreshold()
@@ -5748,123 +3748,70 @@ void TemplateEditorController::applyBatchImageThreshold()
         applyCurrentImageThreshold();
         return;
     }
-
-    if (m_host->hasRunningInspectionThread() || m_host->isCollecting) {
-        showParameterWarning("提示", "请先停止检测后再批量修改模板阈值");
+    if (m_host->hasRunningInspectionThread()
+            || m_host->isCollecting) {
+        showParameterWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先停止检测后再批量修改模板阈值。"));
+        return;
+    }
+    int threshold = 0;
+    if (!parseIntValue(
+                ui->lineEdit_yuzhi->text(), &threshold)
+            || threshold < 0 || threshold > 100) {
+        showParameterWarning(
+                    QStringLiteral("参数错误"),
+                    QStringLiteral(
+                        "图像合格阈值必须是0到100之间的整数（单位：%）。"));
+        return;
+    }
+    if (!m_recipeEditorSession.isActive()
+            || m_wordTemplateProfiles.empty()) {
+        showParameterInfoAsError(
+                    QStringLiteral("提示"),
+                    QStringLiteral("请先加载字库产品配方。"));
         return;
     }
 
-    if (m_wordTemplateProfiles.empty()) {
-        showParameterInfoAsError("提示", "请先选择字库模板");
+    const std::vector<WordTemplateProfile> previous =
+            m_wordTemplateProfiles;
+    QVector<int> profileIndexes;
+    for (int i = 0;
+         i < static_cast<int>(m_wordTemplateProfiles.size());
+         ++i) {
+        m_wordTemplateProfiles[
+                static_cast<std::size_t>(i)]
+                .settings.imageThresholdPercent = threshold;
+        profileIndexes.append(i);
+    }
+
+    QString publishError;
+    if (!publishWordTemplateRecipeEdits(
+                profileIndexes, &publishError)) {
+        m_wordTemplateProfiles = previous;
+        if (m_activePreparedRecipe
+                && m_activePreparedRecipe->recipe) {
+            m_recipeEditorSession.beginEdit(
+                        *m_host->m_recipeStore,
+                        m_activePreparedRecipe->recipe->recipeId,
+                        nullptr);
+        }
+        showParameterInfoWithRedWarning(
+                    QStringLiteral("提示"),
+                    QStringLiteral(
+                        "批量图像阈值未生效，正式配方保持不变。"),
+                    publishError);
         return;
     }
 
-    const QString thresholdText = ui->lineEdit_yuzhi->text().trimmed();
-    int thresholdValue = 0;
-    if (!parseIntValue(thresholdText, &thresholdValue)
-            || thresholdValue < 0
-            || thresholdValue > 100) {
-        showParameterWarning("参数错误",
-                             "图像合格阈值必须是0到100之间的整数（单位：%）");
-        return;
-    }
-
-    const int currentProfileIndex = currentWordTemplateProfileIndex();
-    bool currentProfileUpdated = false;
-    int successCount = 0;
-    QStringList failedMessages;
-
-    for (int i = 0; i < static_cast<int>(m_wordTemplateProfiles.size()); ++i) {
-        WordTemplateProfile &profile = m_wordTemplateProfiles[static_cast<size_t>(i)];
-        const QString profileName = profile.name.isEmpty()
-                ? QDir(profile.dirPath).dirName()
-                : profile.name;
-
-        QDir directory(profile.dirPath);
-        if (profile.dirPath.isEmpty() || !directory.exists()) {
-            failedMessages.append(QString("%1：产品模板文件夹不存在").arg(profileName));
-            continue;
-        }
-
-        TemplatePrivateSettings updatedSettings = profile.settings;
-        updatedSettings.imageThreshold = thresholdValue;
-        QString saveError;
-        if (!saveWordTemplatePrivateSettings(i,
-                                             updatedSettings,
-                                             &saveError)) {
-            failedMessages.append(
-                        QString("%1：图像合格阈值写入失败，%2")
-                        .arg(profileName)
-                        .arg(saveError));
-            continue;
-        }
-
-        profile.settings = updatedSettings;
-        refreshWordTemplateRecipeProfile(&profile);
-        if (i == currentProfileIndex) {
-            currentProfileUpdated = true;
-        }
-        ++successCount;
-    }
-
-    if (currentProfileUpdated) {
-        emit m_host->ssim(thresholdValue);
-    }
-    refreshTemplateImageThresholdDirty();
-
-    if (successCount == 0) {
-        showParameterCritical(
-                    "严重警告",
-                    QString("所有模板的图像合格阈值批量设置失败：\n%1")
-                    .arg(failedMessages.join("\n")));
-        return;
-    }
-
-    if (!failedMessages.isEmpty()) {
-        QMessageBox::warning(m_host,
-                    "提示",
-                    QString("已成功设置 %1 个模板，失败 %2 个：\n%3")
-                    .arg(successCount)
-                    .arg(failedMessages.size())
-                    .arg(failedMessages.join("\n")));
-        return;
-    }
-
-    QString recipePublishMessage;
-    QString recipePublishWarning;
-    if (m_wordTemplateRecipeEditSession.isActive()) {
-        QVector<int> profileIndexes;
-        for (int profileIndex = 0;
-             profileIndex < static_cast<int>(m_wordTemplateProfiles.size());
-             ++profileIndex) {
-            profileIndexes.append(profileIndex);
-        }
-
-        QString publishError;
-        if (publishWordTemplateRecipeEdits(profileIndexes, &publishError)) {
-            recipePublishMessage =
-                    "\n产品配方已使用原配方编号重新发布。";
-        } else {
-            recipePublishWarning =
-                    QString("图像阈值已批量保存到当前模板，但产品配方重新发布失败：\n%1")
-                    .arg(publishError);
-        }
-    }
-
-    const QString message =
-            QString("已将当前图像合格阈值保存到所有已选择的产品模板。%1")
-            .arg(recipePublishMessage);
-    if (recipePublishWarning.isEmpty()) {
-        showParameterInfo("提示", message);
-    } else {
-        showParameterInfoWithRedWarning("提示",
-                                        message,
-                                        recipePublishWarning);
-    }
+    emit m_host->ssim(threshold);
+    clearTemplateImageThresholdDirty();
+    showParameterInfo(
+                QStringLiteral("提示"),
+                QStringLiteral(
+                    "全部Profile图像阈值已事务保存：%1")
+                .arg(threshold));
 }
-
-
-
 
 
 /**

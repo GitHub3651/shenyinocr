@@ -1,6 +1,5 @@
 #include "ui/controllers/machine_settings_page_controller.h"
 
-#include "DetectionModes.h"
 #include "system_support/machine_settings_policy.h"
 #include "ui/controllers/settings_edit_state.h"
 #include "ui_widget.h"
@@ -29,54 +28,37 @@ namespace {
 
 const QStringList &detectModeIds()
 {
-    static const QStringList ids = {
-        "stamp_detection",
-        "word_detection",
-        "ocr_detection",
-        "tissue_detection",
-        BarcodeWordDetectionMode
-    };
+    static const QStringList ids = machineSettingsDetectionModeIds();
     return ids;
 }
 
 const QStringList &imageSaveModeIds()
 {
-    static const QStringList ids = {
-        "save_none", "save_ng", "save_ok", "save_all"
-    };
+    static const QStringList ids = machineSettingsImageSaveModeIds();
     return ids;
 }
 
 const QStringList &imageSaveTypeIds()
 {
-    static const QStringList ids = {
-        "save_both", "save_annotated_only", "save_raw_only"
-    };
+    static const QStringList ids = machineSettingsImageSaveTypeIds();
     return ids;
 }
 
 const QStringList &colorChannelIds()
 {
-    static const QStringList ids = {"color", "red", "green", "blue"};
+    static const QStringList ids = machineSettingsColorChannelIds();
     return ids;
 }
 
 const QStringList &rotationIds()
 {
-    static const QStringList ids = {
-        "rotate_none",
-        "rotate_clockwise_90",
-        "rotate_counterclockwise_90",
-        "rotate_180"
-    };
+    static const QStringList ids = machineSettingsRotationIds();
     return ids;
 }
 
 const QStringList &triggerModeIds()
 {
-    static const QStringList ids = {
-        "trigger_continuous", "trigger_interval"
-    };
+    static const QStringList ids = machineSettingsTriggerModeIds();
     return ids;
 }
 
@@ -134,10 +116,10 @@ QString text(const wchar_t *value)
 
 MachineSettingsPageController::MachineSettingsPageController(
     Ui::Widget *ui,
-    GlobalSettings *appliedSettings,
+    MachineSettings *appliedSettings,
+    MachineSettingsStore *settingsStore,
     SettingsEditState *editState,
     QString *selectedDirectory,
-    QString *templateBaseDirectory,
     bool *applyingSettings,
     bool *updatingSettingsUi,
     const Callbacks &callbacks,
@@ -145,9 +127,9 @@ MachineSettingsPageController::MachineSettingsPageController(
     : QObject(parent),
       m_ui(ui),
       m_appliedSettings(appliedSettings),
+      m_settingsStore(settingsStore),
       m_editState(editState),
       m_selectedDirectory(selectedDirectory),
-      m_templateBaseDirectory(templateBaseDirectory),
       m_applyingSettings(applyingSettings),
       m_updatingSettingsUi(updatingSettingsUi),
       m_callbacks(callbacks)
@@ -173,9 +155,6 @@ void MachineSettingsPageController::setupBindings()
                           m_ui->label_12, true);
     registerGlobalSetting("image.rotation", m_ui->comboBox_2,
                           m_ui->label_27, true);
-    registerGlobalSetting("tissue.roughness_threshold",
-                          m_ui->lineEdit_tissueRoughnessThreshold,
-                          m_ui->label_tissueRoughnessThreshold, true);
     registerGlobalSetting("plc.trigger_mode", m_ui->comboBox_3,
                           m_ui->label_15, true,
                           HardwareDependency::PlcRuntime);
@@ -260,11 +239,13 @@ void MachineSettingsPageController::setupNumericInputValidators()
     setIntValidator(m_ui->lineEdit_2);
     setIntValidator(m_ui->lineEdit_3);
     setIntValidator(m_ui->lineEdit_6);
-    setIntValidator(m_ui->lineEdit_20);
     setIntValidator(m_ui->lineEdit_4);
     setIntValidator(m_ui->lineEdit_7);
-    setIntValidator(m_ui->lineEdit_8);
     setIntValidator(m_ui->lineEdit_12);
+    m_ui->lineEdit_20->setValidator(
+        new QIntValidator(0, 65535, m_ui->lineEdit_20));
+    m_ui->lineEdit_8->setValidator(
+        new QIntValidator(0, 65535, m_ui->lineEdit_8));
 
     if (m_ui->lineEdit_yuzhi) {
         m_ui->lineEdit_yuzhi->setValidator(
@@ -315,32 +296,15 @@ void MachineSettingsPageController::setSoftwareDataDirectoryEditor(
     }
 }
 
-bool MachineSettingsPageController::load(QString *errorMessage)
+void MachineSettingsPageController::initialize(
+    const MachineSettings &settings)
 {
-    if (errorMessage) {
-        errorMessage->clear();
-    }
     if (!m_appliedSettings) {
-        if (errorMessage) {
-            *errorMessage = "Missing applied settings storage.";
-        }
-        return false;
+        return;
     }
-    GlobalSettings settings;
-    QString loadError;
-    const bool loaded = AppSettingsManager::loadGlobalSettings(
-        &settings, &loadError);
-    if (!loaded) {
-        settings = AppSettingsManager::defaultGlobalSettings();
-        if (errorMessage) {
-            *errorMessage = loadError;
-        }
-    }
-    settings.cameraGain = static_cast<int>(settings.cameraGain);
     *m_appliedSettings = settings;
     m_loaded = true;
     applyToUi(settings);
-    return loaded;
 }
 
 bool MachineSettingsPageController::save(
@@ -357,29 +321,38 @@ bool MachineSettingsPageController::save(
         return false;
     }
     syncImmediateSettings();
-    return AppSettingsManager::saveGlobalSettings(
-        *m_appliedSettings, errorMessage);
+    MachineSettingsStoreError storeError;
+    const bool saved = m_settingsStore
+            && m_settingsStore->save(*m_appliedSettings, &storeError);
+    if (!saved && errorMessage) {
+        *errorMessage = storeError.userMessage;
+    }
+    return saved;
 }
 
 bool MachineSettingsPageController::clear(QString *errorMessage)
 {
-    if (!AppSettingsManager::clearGlobalSettings(errorMessage)) {
+    MachineSettingsStoreError storeError;
+    if (!m_settingsStore
+            || !m_settingsStore->clear(&storeError)) {
+        if (errorMessage) {
+            *errorMessage = storeError.userMessage;
+        }
         return false;
     }
     if (!m_appliedSettings) {
         return false;
     }
-    *m_appliedSettings = AppSettingsManager::defaultGlobalSettings();
+    *m_appliedSettings = MachineSettings::defaults();
     applyToUi(*m_appliedSettings);
     return true;
 }
 
-GlobalSettings MachineSettingsPageController::defaultsForHardwareState(
+MachineSettings MachineSettingsPageController::defaultsForHardwareState(
     bool cameraOpen,
     bool plcConnected) const
 {
-    const GlobalSettings defaults =
-        AppSettingsManager::defaultGlobalSettings();
+    const MachineSettings defaults = MachineSettings::defaults();
     return MachineSettingsPolicy::defaultsForHardwareState(
         m_appliedSettings ? *m_appliedSettings : defaults,
         defaults,
@@ -388,7 +361,7 @@ GlobalSettings MachineSettingsPageController::defaultsForHardwareState(
 }
 
 void MachineSettingsPageController::applyToUi(
-    const GlobalSettings &settings)
+    const MachineSettings &settings)
 {
     if (!m_ui) {
         return;
@@ -429,8 +402,6 @@ void MachineSettingsPageController::applyToUi(
     m_ui->lineEdit_7->setText(QString::number(settings.rejectDistance));
     m_ui->lineEdit_8->setText(QString::number(settings.rejectTime));
     m_ui->lineEdit_12->setText(QString::number(settings.rejectPosition));
-    m_ui->lineEdit_tissueRoughnessThreshold->setText(
-        QString::number(settings.tissueRoughnessThreshold, 'f', 3));
 
     if (m_ui->rightPanelSplitter
             && !settings.rightPanelSplitterState.isEmpty()
@@ -453,9 +424,6 @@ void MachineSettingsPageController::applyToUi(
     }
     if (m_selectedDirectory) {
         *m_selectedDirectory = settings.imageSavePath;
-    }
-    if (m_templateBaseDirectory) {
-        *m_templateBaseDirectory = settings.templateBaseDirPath;
     }
     if (m_callbacks.updateSaveDirectoryText) {
         m_callbacks.updateSaveDirectoryText();
@@ -594,10 +562,6 @@ bool MachineSettingsPageController::isDirtyByValue(
         return comboDirty(m_ui->comboBox_2, rotationIds(),
                           m_appliedSettings->imageRotationId);
     }
-    if (key == "tissue.roughness_threshold") {
-        return doubleDirty(m_ui->lineEdit_tissueRoughnessThreshold,
-                           m_appliedSettings->tissueRoughnessThreshold);
-    }
     if (key == "plc.trigger_mode") {
         return comboDirty(m_ui->comboBox_3, triggerModeIds(),
                           m_appliedSettings->triggerModeId);
@@ -734,7 +698,6 @@ void MachineSettingsPageController::updateAppliedFromUi(
         m_appliedSettings->detectModeId = idAt(
             detectModeIds(), m_ui->comboBox_4->currentIndex(),
             m_appliedSettings->detectModeId);
-        m_appliedSettings->plcModeId = m_appliedSettings->triggerModeId;
     } else if (key == "image.save_mode") {
         m_appliedSettings->imageSaveModeId = idAt(
             imageSaveModeIds(), m_ui->comboBox->currentIndex(),
@@ -748,13 +711,9 @@ void MachineSettingsPageController::updateAppliedFromUi(
         m_appliedSettings->imageSavePath = *m_selectedDirectory;
     } else if (key == "trigger.enabled") {
         m_appliedSettings->triggerEnabled = m_ui->checkBox->isChecked();
-    } else if (key == "template.base_dir"
-               && m_templateBaseDirectory) {
-        m_appliedSettings->templateBaseDirPath =
-            *m_templateBaseDirectory;
-    } else if (key == "template.history_paths") {
-        if (m_callbacks.syncTemplateHistory) {
-            m_callbacks.syncTemplateHistory(m_appliedSettings);
+    } else if (key == "recipe.history") {
+        if (m_callbacks.syncRecipeHistory) {
+            m_callbacks.syncRecipeHistory(m_appliedSettings);
         }
     } else if (key == "camera.exposure") {
         m_appliedSettings->cameraExposure = m_ui->spinBox->value();
@@ -768,14 +727,10 @@ void MachineSettingsPageController::updateAppliedFromUi(
         m_appliedSettings->imageRotationId = idAt(
             rotationIds(), m_ui->comboBox_2->currentIndex(),
             m_appliedSettings->imageRotationId);
-    } else if (key == "tissue.roughness_threshold") {
-        m_appliedSettings->tissueRoughnessThreshold =
-            m_ui->lineEdit_tissueRoughnessThreshold->text().toDouble();
     } else if (key == "plc.trigger_mode") {
         m_appliedSettings->triggerModeId = idAt(
             triggerModeIds(), m_ui->comboBox_3->currentIndex(),
             m_appliedSettings->triggerModeId);
-        m_appliedSettings->plcModeId = m_appliedSettings->triggerModeId;
     } else if (key == "plc.photo_distance") {
         m_appliedSettings->photoDistance = m_ui->lineEdit_6->text().toInt();
     } else if (key == "plc.photo_time") {
@@ -816,15 +771,14 @@ void MachineSettingsPageController::syncImmediateSettings()
         << "plc.ip"
         << "plc.rack"
         << "plc.slot"
-        << "template.base_dir"
-        << "template.history_paths");
+        << "recipe.history");
     if (m_ui && m_ui->rightPanelSplitter && m_appliedSettings) {
         m_appliedSettings->rightPanelSplitterState =
             m_ui->rightPanelSplitter->saveState();
     }
 }
 
-void MachineSettingsPageController::restoreUnappliedGlobalSettings()
+void MachineSettingsPageController::restoreUnappliedMachineSettings()
 {
     if (!m_ui || !m_appliedSettings) {
         return;
@@ -838,7 +792,6 @@ void MachineSettingsPageController::restoreUnappliedGlobalSettings()
     QSignalBlocker gain(m_ui->lineEdit_14);
     QSignalBlocker channel(m_ui->comboBox_5);
     QSignalBlocker rotation(m_ui->comboBox_2);
-    QSignalBlocker tissue(m_ui->lineEdit_tissueRoughnessThreshold);
     QSignalBlocker trigger(m_ui->comboBox_3);
     QSignalBlocker photoDistance(m_ui->lineEdit_6);
     QSignalBlocker photoTime(m_ui->lineEdit_20);
@@ -854,8 +807,6 @@ void MachineSettingsPageController::restoreUnappliedGlobalSettings()
         colorChannelIds(), m_appliedSettings->colorChannelId, 0));
     m_ui->comboBox_2->setCurrentIndex(indexOf(
         rotationIds(), m_appliedSettings->imageRotationId, 0));
-    m_ui->lineEdit_tissueRoughnessThreshold->setText(QString::number(
-        m_appliedSettings->tissueRoughnessThreshold, 'f', 3));
     m_ui->comboBox_3->setCurrentIndex(indexOf(
         triggerModeIds(), m_appliedSettings->triggerModeId, 1));
     m_ui->lineEdit_6->setText(

@@ -14,6 +14,7 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     detection_completion_test.cpp \
+    $$PROJECT_ROOT/app/DetectionModes.cpp \
     $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.cpp \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
@@ -40,6 +41,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.cpp \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.cpp \
     $$PROJECT_ROOT/app/system_support/machine_settings_policy.cpp \
+    $$PROJECT_ROOT/app/system_support/settings/machine_settings.cpp \
     $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.cpp \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.cpp \
@@ -51,6 +53,8 @@ SOURCES += \
     $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.cpp
 
 HEADERS += \
+    $$PROJECT_ROOT/app/DetectionModes.h \
+    $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
     $$PROJECT_ROOT/app/TrackingTypes.h \
     $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.h \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
@@ -78,6 +82,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.h \
     $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.h \
     $$PROJECT_ROOT/app/system_support/machine_settings_policy.h \
+    $$PROJECT_ROOT/app/system_support/settings/machine_settings.h \
     $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.h \
     $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
     $$PROJECT_ROOT/app/BarcodeTypes.h \

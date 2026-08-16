@@ -1,8 +1,6 @@
 ﻿#include "Detector.h"
 #include <algorithm>
-#include <iostream>
 #include <cmath>
-#include <fstream>
 #include <mutex> // 必须添加，用于多线程安全锁
 
 namespace {
@@ -131,106 +129,72 @@ cv::Rect buildRingSearchRoi(const cv::Size& imageSize,
 
 } // namespace
 
-bool CalibrationData::load(const std::string& yamlPath) {
-    try {
-        // 内存流读取 YAML，彻底解决 Windows 中文路径报错问题
-        std::ifstream file(yamlPath);
-        if (!file.is_open()) {
-            std::cerr << "❌ Cannot open calibration config: " << yamlPath << std::endl;
-            return false;
-        }
-        std::string yamlStr((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        if (yamlStr.empty()) return false; // 防止空文件导致 OpenCV 崩溃
-
-        cv::FileStorage fs(yamlStr, cv::FileStorage::READ | cv::FileStorage::MEMORY);
-
-        if (!fs.isOpened()) return false;
-        fs["stamp_poly"] >> stamp_poly;
-        fs["date_poly"] >> date_poly; // 加载生产日期多边形
-        fs["barcode_poly"] >> barcode_poly; // 二维码区域为可选节点
-        fs.release();
-        return true;
-    } catch (...) {
-        std::cerr << "❌ Exception caught in CalibrationData::load" << std::endl;
-        return false;
-    }
-}
-
 OverlapDetector::OverlapDetector() {}
 
-bool OverlapDetector::init(const std::string& tplRingPath, const std::string& configPath) {
+bool OverlapDetector::init(const cv::Mat& ringTemplate,
+                           const CalibrationData& calibration) {
     try {
-        // 内存流读取图片，彻底解决 Windows 中文路径无法 imread 的 BUG
-        std::ifstream file(tplRingPath, std::ios::binary);
-        if (!file.is_open()) {
-            std::cerr << "[Engine Error] Failed to open template file: " << tplRingPath << std::endl;
+        if (ringTemplate.empty()
+                || ringTemplate.cols < 10
+                || ringTemplate.rows < 10
+                || calibration.stamp_poly.size() < 3
+                || calibration.date_poly.size() < 3) {
             return false;
         }
 
-        std::vector<char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        if (buffer.empty()) return false; // 防止空文件
-
-        std::vector<uchar> ubuf(buffer.begin(), buffer.end());
-        templateRing = cv::imdecode(ubuf, cv::IMREAD_GRAYSCALE);
-
-        // 如果图片损坏，或者图片太小（比如只有几个像素，会导致下面resize时变为0像素从而抛异常）
-        if (templateRing.empty() || templateRing.cols < 10 || templateRing.rows < 10 || !calibData.load(configPath)) {
-            return false;
+        if (ringTemplate.channels() == 1) {
+            templateRing = ringTemplate.clone();
+        } else {
+            cv::cvtColor(ringTemplate, templateRing, cv::COLOR_BGR2GRAY);
         }
+        calibData = calibration;
 
         preRotatedRings.clear();
         preRotatedAngles.clear();
-
-        int h = templateRing.rows;
-        int w = templateRing.cols;
-        cv::Point2f center(w / 2.0f, h / 2.0f);
-
-        // 1. 生成全尺寸的各角度旋转模板
+        const int h = templateRing.rows;
+        const int w = templateRing.cols;
+        const cv::Point2f center(w / 2.0f, h / 2.0f);
         for (int angle = -45; angle <= 47; angle += 2) {
-            cv::Mat M = cv::getRotationMatrix2D(center, angle, 1.0);
-            double cos_v = std::abs(M.at<double>(0, 0));
-            double sin_v = std::abs(M.at<double>(0, 1));
-            int nW = static_cast<int>((h * sin_v) + (w * cos_v));
-            int nH = static_cast<int>((h * cos_v) + (w * sin_v));
-            M.at<double>(0, 2) += (nW / 2.0) - center.x;
-            M.at<double>(1, 2) += (nH / 2.0) - center.y;
-
-            nW = std::max(1, nW); // 防止宽变为0
-            nH = std::max(1, nH); // 防止高变为0
+            cv::Mat transform = cv::getRotationMatrix2D(
+                        center, angle, 1.0);
+            const double cosine = std::abs(transform.at<double>(0, 0));
+            const double sine = std::abs(transform.at<double>(0, 1));
+            const int rotatedWidth = std::max(
+                        1, static_cast<int>(h * sine + w * cosine));
+            const int rotatedHeight = std::max(
+                        1, static_cast<int>(h * cosine + w * sine));
+            transform.at<double>(0, 2) += rotatedWidth / 2.0 - center.x;
+            transform.at<double>(1, 2) += rotatedHeight / 2.0 - center.y;
 
             cv::Mat rotated;
-            cv::warpAffine(templateRing, rotated, M, cv::Size(nW, nH), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+            cv::warpAffine(templateRing,
+                           rotated,
+                           transform,
+                           cv::Size(rotatedWidth, rotatedHeight),
+                           cv::INTER_LINEAR,
+                           cv::BORDER_REPLICATE);
             preRotatedRings.push_back(rotated);
             preRotatedAngles.push_back(angle);
         }
 
-        // ================= 极速优化：提前生成缩放版的模板缓存 =================
-        pyramidScale = 0.2; // 提高粗配分辨率，减少拉环在反光/亮度波动下的特征丢失
+        pyramidScale = 0.2;
         preRotatedRingsSmall.clear();
-        for (const auto& rotTpl : preRotatedRings) {
-            cv::Mat smallTpl;
-            // 获取新尺寸，若缩放后宽高为0抛异常，则强制最小为1
-            int newW = std::max(1, static_cast<int>(rotTpl.cols * pyramidScale));
-            int newH = std::max(1, static_cast<int>(rotTpl.rows * pyramidScale));
-            // 必须使用 INTER_AREA 保证缩小后不产生马赛克失真
-            cv::resize(rotTpl, smallTpl, cv::Size(newW, newH), 0, 0, cv::INTER_AREA);
-            preRotatedRingsSmall.push_back(smallTpl);
+        for (const cv::Mat &rotated : preRotatedRings) {
+            cv::Mat small;
+            cv::resize(rotated,
+                       small,
+                       cv::Size(std::max(1, static_cast<int>(rotated.cols * pyramidScale)),
+                                std::max(1, static_cast<int>(rotated.rows * pyramidScale))),
+                       0,
+                       0,
+                       cv::INTER_AREA);
+            preRotatedRingsSmall.push_back(small);
         }
-        // ======================================================================
-
-        std::cout << "[Engine Info] Successfully generated " << preRotatedRings.size() << " rotated templates in memory." << std::endl;
         return true;
-    } catch (const cv::Exception& e) {
-        std::cerr << "❌ OpenCV exception in OverlapDetector::init: " << e.what() << std::endl;
-        return false; // 捕获OpenCV自带的异常，避免程序崩溃
-    } catch (...) {
-        std::cerr << "❌ Unknown exception in OverlapDetector::init" << std::endl;
-        return false; // 捕获所有其它C++异常
+    } catch (const cv::Exception&) {
+        return false;
     }
 }
-
-
-#include <mutex>
 
 DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::vector<cv::Point>& datePoly) {
     DetectResult res;

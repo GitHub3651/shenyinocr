@@ -15,6 +15,10 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++11
 
+msvc {
+    QMAKE_CXXFLAGS += /utf-8
+}
+
 
 TARGET = ShengYin
 TEMPLATE = app
@@ -49,20 +53,11 @@ CONFIG(release, debug|release) {
 }
 
 SOURCES += \
-    appsettingsmanager.cpp \
     recipes/product_recipe.cpp \
     recipes/recipe_store.cpp \
-    recipes/recipe_selection.cpp \
-    recipes/template_profile_assets.cpp \
+    recipes/prepared_recipe.cpp \
+    recipes/recipe_editor_session.cpp \
     recipes/template_mode_memory.cpp \
-    recipes/template_character_asset_workspace.cpp \
-    recipes/template_profile_load_plan.cpp \
-    recipes/template_recipe_assembler.cpp \
-    recipes/template_recipe_draft_session.cpp \
-    recipes/template_recipe_edit_session.cpp \
-    recipes/template_recipe_workflow.cpp \
-    recipes/template_recipe_publisher.cpp \
-    recipes/template_profile_mapper.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     ui/controllers/detection_completion_controller.cpp \
     ui/controllers/inspection_result_coordinator.cpp \
@@ -74,6 +69,8 @@ SOURCES += \
     ui/controllers/settings_edit_state.cpp \
     ui/controllers/template_editor_controller.cpp \
     system_support/machine_settings_policy.cpp \
+    system_support/settings/machine_settings.cpp \
+    system_support/settings/machine_settings_store.cpp \
     system_support/license/license_codec.cpp \
     system_support/logging/application_logger.cpp \
     system_support/crash/windows_crash_stack.cpp \
@@ -146,21 +143,12 @@ SOURCES += \
         widget.cpp
 
 HEADERS += \
-    appsettingsmanager.h \
+    contracts/barcode_parameter_defaults.h \
     recipes/product_recipe.h \
     recipes/recipe_store.h \
-    recipes/recipe_selection.h \
-    recipes/template_profile_assets.h \
+    recipes/prepared_recipe.h \
+    recipes/recipe_editor_session.h \
     recipes/template_mode_memory.h \
-    recipes/template_character_asset_workspace.h \
-    recipes/template_profile_load_plan.h \
-    recipes/template_recipe_assembler.h \
-    recipes/template_recipe_draft_session.h \
-    recipes/template_recipe_edit_session.h \
-    recipes/template_recipe_workflow.h \
-    recipes/template_recipe_publisher.h \
-    recipes/template_profile_mapper.h \
-    recipes/template_runtime_profile.h \
     ui/dialogs/recipe_selection_dialog.h \
     ui/controllers/detection_completion_controller.h \
     ui/controllers/inspection_result_coordinator.h \
@@ -172,6 +160,8 @@ HEADERS += \
     ui/controllers/settings_edit_state.h \
     ui/controllers/template_editor_controller.h \
     system_support/machine_settings_policy.h \
+    system_support/settings/machine_settings.h \
+    system_support/settings/machine_settings_store.h \
     system_support/license/license_codec.h \
     system_support/logging/application_logger.h \
     system_support/crash/windows_crash_stack.h \
@@ -202,6 +192,7 @@ HEADERS += \
     runtime/detection_worker.h \
     runtime/detection_mode_worker_factory.h \
     runtime/inspection_profile_snapshot.h \
+    runtime/template_runtime_profile.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_fault_state.h \
     runtime/inspection_plc_controller.h \
