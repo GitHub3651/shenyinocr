@@ -20,7 +20,7 @@
 #include "runtime/inspection_camera_start_transition.h"
 #include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_run_configuration.h"
-#include "runtime/inspection_start_preflight.h"
+#include "application/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "runtime/inspection_runtime_start_transaction.h"
 #include "runtime/inspection_runtime_stop_transaction.h"
@@ -2890,7 +2890,7 @@ void DetectionCompletionTest::runPlanSelectsSoftwareSingleTemplate()
 {
     const InspectionRunPlan plan =
             InspectionRunConfiguration::createPlan(
-                InspectionStartModeKind::SingleTemplate,
+                InspectionTrackingKind::SingleTemplate,
                 false);
 
     QVERIFY(plan.acquisitionKind
@@ -2904,7 +2904,8 @@ void DetectionCompletionTest::runPlanSelectsHardwareBarcodeProfiles()
 {
     const InspectionRunPlan plan =
             InspectionRunConfiguration::createPlan(
-                InspectionStartModeKind::BarcodeWordProfiles,
+                InspectionTrackingKind::WordProfiles,
+                true,
                 true);
 
     QVERIFY(plan.acquisitionKind
@@ -2918,12 +2919,12 @@ void DetectionCompletionTest::runPlanSelectsWholeFrameAndWordTracking()
 {
     InspectionRunPlan plan =
             InspectionRunConfiguration::createPlan(
-                InspectionStartModeKind::Tissue,
+                InspectionTrackingKind::WholeFrame,
                 false);
     QVERIFY(plan.trackingKind == InspectionTrackingKind::WholeFrame);
 
     plan = InspectionRunConfiguration::createPlan(
-                InspectionStartModeKind::WordProfiles,
+                InspectionTrackingKind::WordProfiles,
                 true);
     QVERIFY(plan.trackingKind == InspectionTrackingKind::WordProfiles);
     QVERIFY(!plan.barcodeWordHardTriggerMode);

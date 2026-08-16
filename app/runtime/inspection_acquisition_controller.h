@@ -47,7 +47,6 @@ public:
     bool hasCamera() const;
     bool isSoftwareRunning() const;
     bool isHardwareRunning() const;
-    bool hasRunningInspectionThread(bool templatePreviewActive) const;
 
     CameraOperationResult enumerateDevices(int *deviceCount);
     CameraOperationResult openDevice(int deviceIndex);

@@ -29,7 +29,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_camera_recovery_transition.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_camera_operations.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp \
+    $$PROJECT_ROOT/app/application/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_stop_transaction.cpp \
@@ -70,7 +70,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.h \
     $$PROJECT_ROOT/app/runtime/inspection_camera_recovery_transition.h \
     $$PROJECT_ROOT/app/runtime/inspection_camera_operations.h \
-    $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h \
+    $$PROJECT_ROOT/app/application/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_stop_transaction.h \

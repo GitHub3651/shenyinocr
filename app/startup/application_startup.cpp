@@ -9,7 +9,11 @@
 #include "devices/camera/hikvision_camera_device.h"
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
+#include "application/inspection_application_service.h"
+#include "application/inspection_runtime_port.h"
+#include "application/settings_application_service.h"
 #include "runtime/inspection_plc_controller.h"
+#include "runtime/inspection_runtime_controller.h"
 #include "recipes/recipe_store.h"
 #include "system_support/settings/machine_settings_store.h"
 #include "widget.h"
@@ -166,6 +170,9 @@ int ApplicationStartup::run(int argc, char *argv[])
         }
         const std::shared_ptr<RecipeStore> recipeStore(
                     new RecipeStore(settingsStore->recipesRootPath()));
+        const std::shared_ptr<SettingsApplicationService> settingsService(
+                    new SettingsApplicationService(
+                        settingsStore, startupSettings));
 
         const std::shared_ptr<ICameraDevice> cameraDevice(
                     new HikvisionCameraDevice);
@@ -187,6 +194,20 @@ int ApplicationStartup::run(int argc, char *argv[])
         const std::shared_ptr<InspectionPlcController> plcController(
                     new InspectionPlcController(
                         std::move(plcDevice), plcAddresses));
+        const std::shared_ptr<InspectionRuntimeController>
+                runtimeController(
+                    new InspectionRuntimeController(
+                        InspectionRuntimeController::RunIdFactory(),
+                        plcController));
+        const std::shared_ptr<InspectionRuntimePort> runtimePort(
+                    new InspectionRuntimePort);
+        const std::shared_ptr<InspectionApplicationService>
+                inspectionService(
+                    new InspectionApplicationService(
+                        runtimeController,
+                        runtimePort,
+                        settingsService,
+                        recipeStore));
         const QString ocrConfigPath = QDir(applicationDirectory).filePath(
                     QStringLiteral("config1.txt"));
         const Widget::OcrEngineFactory ocrEngineFactory =
@@ -199,11 +220,12 @@ int ApplicationStartup::run(int argc, char *argv[])
 
         Widget window(
                     cameraDevice,
-                    plcController,
                     ocrEngineFactory,
                     barcodeDecoder,
-                    startupSettings,
-                    settingsStore,
+                    runtimeController,
+                    runtimePort,
+                    inspectionService,
+                    settingsService,
                     recipeStore);
         window.showMaximized();
         result = application.exec();

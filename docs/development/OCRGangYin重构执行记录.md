@@ -1259,3 +1259,37 @@
 - [x] 2026-08-17用户确认阶段1最终差异的统一Qt Creator门禁均无问题：已执行Run qmake、Rebuild、设置/配方相关测试和主程序人工回归，并覆盖新设置首启/保存/重启/恢复默认/清空、新配方创建/加载/编辑/损坏拒绝、五模式资源预检、事务失败保护、旧格式拒绝、相机曝光/增益、模板入口及基础模板保存不依赖目标字符的流程。
 - [x] 阶段1实际受影响的50项保留功能全部由`迁移中`恢复为`已验证`；正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。当前无真实PLC，本轮PLC证据仍只限Fake合同，不冒充真实PLC、机械剔除或现场恢复验收。
 - [x] 阶段1提交前最终静态门禁通过：90个正式功能ID唯一且状态为0/0/0/87/0/3；74个差异路径均属于阶段1且无构建产物或用户文件，`app.zip`不存在、暂存区为空；主工程新增/删除清单、三个测试工程、全仓本地include大小写、关键声明/定义、三组测试声明/定义（7/7、7/7、140/140）、严格UTF-8和花括号核对通过；生产代码中旧设置三类型、旧INI读写、recipes反向依赖、旧目标字符保存门禁及`PREPARE_TARGET_TEXT_MISSING`均为0；`git diff --check`通过。Agent未执行构建、测试或主程序。允许精确暂存并创建唯一阶段1本地提交；不推送，不进入阶段2。
+
+## 新架构完全替换阶段：阶段 2 应用层与启停边界（2026-08-17，已完成）
+
+### 开始基准与真实影响范围
+
+- [x] 开始时复核分支`codex/ocrgangyin-refactor`、HEAD `b7bb3f4cb28a3203a22513e42cef824e00503f75 refactor(settings): 完成阶段1设置与配方唯一数据源`和干净工作区；`app.zip`不存在，阶段2未创建、修改、移动、删除、暂存或提交该用户文件。
+- [x] 从启动按钮、停止按钮、相机开关、设置dirty、三类PLC入口、启动事务、采集线程结束回调、关闭事件、Qt信号槽和qmake清单重新追踪实际调用链；阶段2实际影响范围与最低范围一致，为12项：`RUN-001..003、UI-002、SET-004..005、CAM-001..002、PLC-001..004`。2026-08-17用户确认统一门禁通过后，状态恢复为`迁移中0、已验证87、已确认删除3`。
+
+### 应用服务、命令与只读快照
+
+- [x] 新增`InspectionApplicationService`、`SettingsApplicationService`、`ApplicationError/OperationResult`、`RuntimeSnapshot`和`InspectionRunContext`。`ApplicationStartup`只负责构造并注入Store、Runtime、应用服务、运行端口和主窗，不包含预检、运行决策、设备时序或UI用例规则。
+- [x] `SettingsApplicationService`成为生产代码中`MachineSettingsStore`唯一写入者，统一持有current/draft并提供应用、丢弃、默认、清空和只读目录查询；设置页与模板工作区不再持有或写Store。
+- [x] 启动访问门禁、检测模式解析、当前UUID配方重新加载/准备、五模式资源预检、Profile快照、运行ID与启动时间、MachineSettings和PreparedRecipe快照以及Start事务统一进入`InspectionApplicationService::start`。运行执行只使用本次`InspectionRunContext`快照，不在启动过程中回读可变UI草稿或模板目录。
+- [x] `InspectionApplicationService::stop`统一处理正常/Fault停止请求、采集协作停止、检测Worker等待、相机恢复、故障产品收口和Runtime事务提交；UI只保留Fault确认框、中文提示、画布/结果显示清理。普通停止不会误执行Fault样式复位。
+- [x] 相机打开/关闭、PLC连接/断开、触发模式、工艺参数和拍照距离均增加应用命令和结构化结果；保持“打开相机先尝试PLC、PLC失败不阻止相机”、固定首台相机、曝光调整事务保存、触发0/1和工艺参数固定地址/顺序等既有合同。
+- [x] 检测运行状态只以`InspectionRuntimeController`为真源，UI通过`RuntimeSnapshot`信号/查询派生按钮状态；模板Preview/Frozen继续作为独立UI编辑状态，不再与第二份检测状态并存。
+
+### 旧路径删除与工程清单
+
+- [x] 删除`InspectionStartController`、`InspectionStopController`及对应两个`friend`，并从主工程清单移除；启动预检迁到`application/inspection_start_preflight.*`，现有两个使用该纯规则的测试工程同步更新唯一源文件路径。
+- [x] 删除Widget中的`isCollecting`、`m_operationState`、`m_bOpenDevice`、`hasRunningInspectionThread`及采集控制器同名辅助API；删除停止路径中的`QCoreApplication::processEvents`兜底。相机打开状态和运行状态均由只读应用快照提供。
+- [x] 主qmake工程登记全部应用层源码/头文件；`tests/runtime_tests`登记新的`application_service_test`子工程，测试工程显式使用MSVC `/utf-8`并复用既有Qt/OpenCV运行库部署脚本。旧Start/Stop和旧runtime预检工程项为0。
+
+### 测试源码与当前门禁状态
+
+- [x] 新增`application_service_test` 6项测试源码：设置草稿/应用/丢弃/默认/清空，五模式新配方启动-停止-重启，模板制作/相机/dirty/重复启动预检顺序，PLC触发未连接拒绝，应用层PLC连接/断开/触发/工艺参数/拍照距离Fake边界，以及PLC失败不阻止开相机和检测中拒绝关相机。
+- [x] 既有`recipe_store_test`和`detection_completion_test`只把启动预检引用切换到application唯一位置，保留原业务断言；未引入旧实现副本或双路径。
+- [x] 2026-08-17首次Qt Creator复编译在`inspection_run_configuration.h:29`报告`DetectionMode`未声明；根因是该枚举实际定义于`recipes/product_recipe.h`而非`DetectionModes.h`。未用补配方头制造runtime→recipes反向依赖，改为`InspectionRunConfiguration`只接受自身的`InspectionTrackingKind`和二维码运行标记，由`InspectionApplicationService`把稳定`DetectionMode`映射为运行计划；四处运行计划测试调用同步更新，五模式跟踪/软硬触发语义不变。
+- [x] 2026-08-17首次运行`application_service_test`在进入任何测试前因缺少Qt `windows`平台插件退出；该测试不创建Widget、Pixmap、字体或GUI事件对象，问题来自误用`QTEST_MAIN`而构造`QApplication`。现改为与现有runtime/recipe测试一致的`QTEST_GUILESS_MAIN`，使用`QCoreApplication`运行，不通过额外复制`qwindows.dll`掩盖无GUI测试的错误依赖。
+- [x] 2026-08-17主工程复编译在`widget.cpp:595`报告旧构造参数名`startupSettings`未声明；Widget已经改为接收设置应用服务，该处初始化页面改为读取`SettingsApplicationService::current()`的已加载只读快照。全仓同名搜索确认`startupSettings`只保留在`ApplicationStartup`组合根的加载局部变量中。
+- [x] 阶段2最终Agent静态门禁通过：旧Start/Stop控制器、两个friend、三项重复状态、旧线程探测API、旧runtime预检路径和`processEvents`停止兜底在生产/测试中均为0引用；application无Widget/UI/对话框/vendor引用，runtime无application/UI反向依赖，recipes无application/detection/UI反向依赖；主工程新增/删除项、runtime测试子工程、本地include大小写、6/6应用服务测试声明定义和27/27 Widget自动槽均核对通过；正式状态统计为0/0/12/75/0/3，暂存区为空，`app.zip`不存在，`git diff --check`通过，差异只包含阶段2源码、测试、qmake清单、功能表和执行记录。
+- [x] Agent只完成源码、测试源码、qmake清单和静态检查，未运行或间接触发qmake、nmake、jom、msbuild、cmake构建、Qt Creator构建、项目测试可执行文件、主程序或任何编译/链接/启动脚本。
+- [x] 2026-08-17用户反馈阶段2Qt Creator统一门禁“都没问题”；本阶段12项功能全部恢复为`已验证`。真实PLC在线连接、现场读回和机械动作仍按功能表既有记录延期，未以Fake或无PLC结果冒充现场验收。
+- [x] 阶段2提交前最终静态门禁通过：90个正式功能ID唯一且状态为`0/0/0/87/0/3`；37个差异路径全部命中阶段2白名单，暂存区为空且`app.zip`不存在；旧Start/Stop控制器、重复运行状态、旧线程探测、旧runtime预检和停止路径`processEvents`引用均为0；application、runtime、recipes依赖边界核对通过；主工程新增/删除项、runtime测试工程、应用服务测试声明/定义`6/6`和Widget自动槽声明/定义`27/27`一致；`git diff --check`通过。Agent未运行构建、测试可执行文件或主程序，允许精确暂存并创建唯一阶段2本地提交，不推送。

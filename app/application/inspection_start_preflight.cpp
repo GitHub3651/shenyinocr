@@ -1,4 +1,4 @@
-#include "runtime/inspection_start_preflight.h"
+#include "application/inspection_start_preflight.h"
 
 namespace {
 InspectionStartPreflightResult rejected(
@@ -138,7 +138,7 @@ InspectionStartPreflightResult InspectionStartPreflight::evaluateResources(
                         QString::fromWCharArray(
                             L"\u55b7\u7801\u68c0\u6d4b\u533a\u57df "
                             L"calibrate_config.yaml/date_poly "
-                                 L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
+                            L"\u7f3a\u5931\u6216\u8bfb\u53d6\u5931\u8d25"));
         }
         if (input.targetTextRequired && !input.targetTextReady) {
             errors.append(

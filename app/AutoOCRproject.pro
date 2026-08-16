@@ -53,6 +53,10 @@ CONFIG(release, debug|release) {
 }
 
 SOURCES += \
+    application/inspection_application_service.cpp \
+    application/inspection_runtime_port.cpp \
+    application/inspection_start_preflight.cpp \
+    application/settings_application_service.cpp \
     recipes/product_recipe.cpp \
     recipes/recipe_store.cpp \
     recipes/prepared_recipe.cpp \
@@ -62,8 +66,6 @@ SOURCES += \
     ui/controllers/detection_completion_controller.cpp \
     ui/controllers/inspection_result_coordinator.cpp \
     ui/controllers/inspection_runtime_ui_coordinator.cpp \
-    ui/controllers/inspection_start_controller.cpp \
-    ui/controllers/inspection_stop_controller.cpp \
     ui/controllers/machine_settings_page_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
@@ -91,7 +93,6 @@ SOURCES += \
     runtime/inspection_acquisition_stop_coordinator.cpp \
     runtime/inspection_camera_start_transition.cpp \
     runtime/inspection_camera_recovery_transition.cpp \
-    runtime/inspection_start_preflight.cpp \
     runtime/inspection_worker_configurator.cpp \
     runtime/detection_shadow_comparator.cpp \
     runtime/frame_queue.cpp \
@@ -143,6 +144,13 @@ SOURCES += \
         widget.cpp
 
 HEADERS += \
+    application/application_result.h \
+    application/inspection_application_service.h \
+    application/inspection_run_context.h \
+    application/inspection_runtime_port.h \
+    application/inspection_start_preflight.h \
+    application/runtime_snapshot.h \
+    application/settings_application_service.h \
     contracts/barcode_parameter_defaults.h \
     recipes/product_recipe.h \
     recipes/recipe_store.h \
@@ -153,8 +161,6 @@ HEADERS += \
     ui/controllers/detection_completion_controller.h \
     ui/controllers/inspection_result_coordinator.h \
     ui/controllers/inspection_runtime_ui_coordinator.h \
-    ui/controllers/inspection_start_controller.h \
-    ui/controllers/inspection_stop_controller.h \
     ui/controllers/machine_settings_page_controller.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
@@ -185,7 +191,6 @@ HEADERS += \
     runtime/inspection_acquisition_stop_coordinator.h \
     runtime/inspection_camera_start_transition.h \
     runtime/inspection_camera_recovery_transition.h \
-    runtime/inspection_start_preflight.h \
     runtime/inspection_worker_configurator.h \
     runtime/detection_shadow_comparator.h \
     runtime/frame_queue.h \

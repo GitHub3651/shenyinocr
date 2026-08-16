@@ -3,7 +3,7 @@
 #include "recipes/prepared_recipe.h"
 #include "recipes/recipe_editor_session.h"
 #include "recipes/recipe_store.h"
-#include "runtime/inspection_start_preflight.h"
+#include "application/inspection_start_preflight.h"
 
 #include <QDir>
 #include <QFile>

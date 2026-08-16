@@ -1,7 +1,5 @@
 #pragma once
 
-#include "runtime/inspection_start_preflight.h"
-
 enum class InspectionAcquisitionKind {
     SoftwareTrigger,
     HardwareTrigger
@@ -26,6 +24,7 @@ class InspectionRunConfiguration
 {
 public:
     static InspectionRunPlan createPlan(
-        InspectionStartModeKind modeKind,
-        bool hardwareTriggerEnabled);
+        InspectionTrackingKind trackingKind,
+        bool hardwareTriggerEnabled,
+        bool barcodeWordMode = false);
 };

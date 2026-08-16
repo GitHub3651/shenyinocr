@@ -592,8 +592,9 @@ TemplateEditorController::TemplateEditorController(
       imageLabel(editorImageLabel),
       m_barcodeDecoder(barcodeDecoder),
       m_recipeEditorSession(
-          host && host->m_machineSettingsStore
-          ? host->m_machineSettingsStore->editorWorkspacesRootPath()
+          host && host->m_settingsApplicationService
+          ? host->m_settingsApplicationService
+            ->editorWorkspacesRootPath()
           : QString())
 {
 }
@@ -688,8 +689,7 @@ void TemplateEditorController::resetTemplateCaptureState()
 
 void TemplateEditorController::selectPublishedRecipeForCurrentMode()
 {
-    if (m_host->m_operationState == Widget::OperationState::Detecting
-            || m_host->m_operationState == Widget::OperationState::Stopping
+    if (m_host->isInspectionBusy()
             || m_host->m_templateCaptureState
                != Widget::TemplateCaptureState::Idle) {
         QMessageBox::warning(
@@ -703,9 +703,8 @@ void TemplateEditorController::selectPublishedRecipeForCurrentMode()
 
 void TemplateEditorController::saveCurrentTemplate()
 {
-    if (m_host->m_operationState == Widget::OperationState::Detecting
-            || m_host->m_operationState == Widget::OperationState::Stopping
-            || m_host->m_operationState
+    if (m_host->isInspectionBusy()
+            || m_host->operationUiState()
                == Widget::OperationState::TemplatePreviewing) {
         showParameterWarning(
                     QStringLiteral("提示"),
@@ -1103,7 +1102,7 @@ void TemplateEditorController::saveCurrentTemplate()
     hideTemplateGuide();
     resetTemplateCaptureState();
     ui->statusLabel->setText(
-                m_host->m_bOpenDevice
+                m_host->isCameraOpen()
                 ? QStringLiteral("配方保存完成，相机已打开")
                 : QStringLiteral("配方保存完成，相机已关闭"));
     if (characterMode) {
@@ -2696,8 +2695,7 @@ void TemplateEditorController::publishCurrentRecipeSession()
 
 void TemplateEditorController::selectPublishedRecipe()
 {
-    if (m_host->m_operationState == Widget::OperationState::Detecting
-            || m_host->m_operationState == Widget::OperationState::Stopping
+    if (m_host->isInspectionBusy()
             || m_host->m_templateCaptureState != Widget::TemplateCaptureState::Idle) {
         showParameterWarning(
                     QStringLiteral("\u63D0\u793A"),
@@ -3343,8 +3341,7 @@ bool TemplateEditorController::publishWordTemplateRecipeEdits(
 
 void TemplateEditorController::applyCurrentTargetText()
 {
-    if (m_host->hasRunningInspectionThread()
-            || m_host->isCollecting) {
+    if (m_host->isInspectionBusy()) {
         showParameterWarning(
                     QStringLiteral("提示"),
                     QStringLiteral("请先停止检测后再修改目标字符。"));
@@ -3492,8 +3489,7 @@ void TemplateEditorController::applyBatchTargetText()
         applyCurrentTargetText();
         return;
     }
-    if (m_host->hasRunningInspectionThread()
-            || m_host->isCollecting) {
+    if (m_host->isInspectionBusy()) {
         showParameterWarning(
                     QStringLiteral("提示"),
                     QStringLiteral("请先停止检测后再批量修改模板字符。"));
@@ -3579,8 +3575,7 @@ void TemplateEditorController::applyBatchTargetText()
 
 void TemplateEditorController::applyCurrentImageThreshold()
 {
-    if (m_host->hasRunningInspectionThread()
-            || m_host->isCollecting) {
+    if (m_host->isInspectionBusy()) {
         showParameterWarning(
                     QStringLiteral("提示"),
                     QStringLiteral("请先停止检测后再修改模板阈值。"));
@@ -3681,8 +3676,7 @@ void TemplateEditorController::applyCurrentImageThreshold()
 
 void TemplateEditorController::applyCurrentTissueThreshold()
 {
-    if (m_host->hasRunningInspectionThread()
-            || m_host->isCollecting) {
+    if (m_host->isInspectionBusy()) {
         showParameterWarning(
                     QStringLiteral("提示"),
                     QStringLiteral("请先停止检测后再修改纸巾配方阈值。"));
@@ -3748,8 +3742,7 @@ void TemplateEditorController::applyBatchImageThreshold()
         applyCurrentImageThreshold();
         return;
     }
-    if (m_host->hasRunningInspectionThread()
-            || m_host->isCollecting) {
+    if (m_host->isInspectionBusy()) {
         showParameterWarning(
                     QStringLiteral("提示"),
                     QStringLiteral("请先停止检测后再批量修改模板阈值。"));

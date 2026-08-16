@@ -1,0 +1,758 @@
+#include "application/inspection_application_service.h"
+
+#include "DetectionModes.h"
+#include "application/settings_application_service.h"
+#include "recipes/recipe_store.h"
+#include "runtime/inspection_runtime_controller.h"
+#include "runtime/inspection_runtime_start_transaction.h"
+#include "runtime/inspection_runtime_stop_transaction.h"
+
+#include <QDateTime>
+#include <QVector>
+
+namespace {
+
+ApplicationRuntimeState applicationState(
+    InspectionRuntimeState state)
+{
+    switch (state) {
+    case InspectionRuntimeState::Starting:
+        return ApplicationRuntimeState::Starting;
+    case InspectionRuntimeState::Running:
+        return ApplicationRuntimeState::Running;
+    case InspectionRuntimeState::Stopping:
+        return ApplicationRuntimeState::Stopping;
+    case InspectionRuntimeState::Fault:
+        return ApplicationRuntimeState::Fault;
+    case InspectionRuntimeState::Idle:
+    default:
+        return ApplicationRuntimeState::Idle;
+    }
+}
+
+InspectionStartModeKind modeKind(DetectionMode mode)
+{
+    switch (mode) {
+    case DetectionMode::Tissue:
+        return InspectionStartModeKind::Tissue;
+    case DetectionMode::Word:
+        return InspectionStartModeKind::WordProfiles;
+    case DetectionMode::BarcodeWord:
+        return InspectionStartModeKind::BarcodeWordProfiles;
+    case DetectionMode::Stamp:
+    case DetectionMode::Ocr:
+    default:
+        return InspectionStartModeKind::SingleTemplate;
+    }
+}
+
+InspectionTrackingKind trackingKind(DetectionMode mode)
+{
+    switch (mode) {
+    case DetectionMode::Tissue:
+        return InspectionTrackingKind::WholeFrame;
+    case DetectionMode::Word:
+    case DetectionMode::BarcodeWord:
+        return InspectionTrackingKind::WordProfiles;
+    case DetectionMode::Stamp:
+    case DetectionMode::Ocr:
+    default:
+        return InspectionTrackingKind::SingleTemplate;
+    }
+}
+
+bool hasCompleteCharacterTemplates(
+    const PreparedRecipeProfile &profile)
+{
+    const int targetCount = preparedRecipeTargetUnits(
+                profile.definition.targetText).size();
+    if (targetCount <= 0
+            || profile.characterTemplates.empty()
+            || profile.characterTemplates.size()
+               != profile.characterTemplateTargetIndexes.size()) {
+        return false;
+    }
+    QVector<bool> found(targetCount, false);
+    for (const int index : profile.characterTemplateTargetIndexes) {
+        if (index >= 0 && index < targetCount) {
+            found[index] = true;
+        }
+    }
+    for (const bool value : found) {
+        if (!value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+InspectionProfileSnapshot profileSnapshotFromPreparedRecipe(
+    const PreparedRecipe &prepared)
+{
+    std::vector<InspectionProfileSource> sources;
+    sources.reserve(static_cast<std::size_t>(prepared.profiles.size()));
+    for (const PreparedRecipeProfile &profile : prepared.profiles) {
+        InspectionProfileSource source;
+        source.name = profile.definition.name;
+        source.trackingTemplate = profile.trackingTemplate;
+        source.barcodePoly = profile.barcodePolygon;
+        source.datePoly = profile.datePolygon;
+        source.targetText = profile.definition.targetText;
+        source.imageThreshold =
+                profile.definition.imageThresholdPercent;
+        source.digitTemplates = profile.characterTemplates;
+        source.digitTemplateTargetIndexes =
+                profile.characterTemplateTargetIndexes;
+        source.barcodeOptions.formatMask =
+                profile.definition.barcodeParameters.formatMask;
+        source.barcodeOptions.roiPaddingPercent =
+                profile.definition.barcodeParameters.roiPaddingPercent;
+        source.barcodeOptions.maxDecodeTimeMs =
+                profile.definition.barcodeParameters.maxDecodeTimeMs;
+        source.barcodeOptions.enableFallback =
+                profile.definition.barcodeParameters.enableFallback;
+        sources.push_back(source);
+    }
+    return InspectionProfileSnapshotBuilder::create(sources);
+}
+
+InspectionStartResourceInput resourceInputFor(
+    const PreparedRecipe &prepared,
+    DetectionMode mode,
+    const BarcodeRuntimeReadiness &barcode)
+{
+    InspectionStartResourceInput input;
+    input.modeKind = modeKind(mode);
+    input.preparedRecipeReady = static_cast<bool>(prepared.recipe);
+    if (prepared.profiles.isEmpty()) {
+        return input;
+    }
+
+    const PreparedRecipeProfile &first = prepared.profiles.first();
+    input.trackingTemplateReady = !first.trackingTemplate.empty();
+    input.dateRegionReady = first.datePolygon.size() >= 3;
+    input.targetTextRequired = mode == DetectionMode::Stamp
+            || mode == DetectionMode::Ocr;
+    input.targetTextReady =
+            !first.definition.targetText.trimmed().isEmpty();
+    input.characterTemplatesRequired =
+            mode == DetectionMode::Stamp;
+    input.characterTemplatesReady =
+            hasCompleteCharacterTemplates(first);
+    input.barcodeDecoderReady = barcode.ready;
+    input.barcodeDecoderError = barcode.errorMessage;
+
+    if (mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord) {
+        for (const PreparedRecipeProfile &profile : prepared.profiles) {
+            InspectionStartProfileReadiness readiness;
+            readiness.displayName = profile.definition.name;
+            readiness.trackingTemplateReady =
+                    !profile.trackingTemplate.empty();
+            readiness.calibrationReady =
+                    profile.datePolygon.size() >= 3;
+            readiness.barcodeRegionReady =
+                    mode != DetectionMode::BarcodeWord
+                    || profile.barcodePolygon.size() == 4;
+            readiness.dateRegionReady =
+                    profile.datePolygon.size() >= 3;
+            readiness.targetTextReady =
+                    !profile.definition.targetText.trimmed().isEmpty();
+            readiness.characterTemplatesReady =
+                    hasCompleteCharacterTemplates(profile);
+            input.profiles.push_back(readiness);
+        }
+    }
+    return input;
+}
+
+QString startIssueCode(InspectionStartIssue issue)
+{
+    switch (issue) {
+    case InspectionStartIssue::TemplateOperationActive:
+        return QStringLiteral("INSPECTION_TEMPLATE_OPERATION_ACTIVE");
+    case InspectionStartIssue::RuntimeBusy:
+        return QStringLiteral("INSPECTION_RUNTIME_BUSY");
+    case InspectionStartIssue::CameraClosed:
+        return QStringLiteral("INSPECTION_CAMERA_CLOSED");
+    case InspectionStartIssue::DirtySettingsConfirmationRequired:
+        return QStringLiteral("INSPECTION_UNAPPLIED_CHANGES");
+    case InspectionStartIssue::PlcDisconnected:
+        return QStringLiteral("INSPECTION_PLC_DISCONNECTED");
+    case InspectionStartIssue::PreparedRecipeMissing:
+        return QStringLiteral("INSPECTION_RECIPE_NOT_PREPARED");
+    case InspectionStartIssue::WordProfilesMissing:
+        return QStringLiteral("INSPECTION_PROFILE_MISSING");
+    case InspectionStartIssue::BarcodeResourcesInvalid:
+        return QStringLiteral("INSPECTION_BARCODE_RESOURCE_INVALID");
+    case InspectionStartIssue::ProductTemplateIncomplete:
+        return QStringLiteral("INSPECTION_PRODUCT_TEMPLATE_INCOMPLETE");
+    case InspectionStartIssue::WordProfilesIncomplete:
+        return QStringLiteral("INSPECTION_PROFILE_INCOMPLETE");
+    case InspectionStartIssue::None:
+    default:
+        return QString();
+    }
+}
+
+QString startIssueMessage(InspectionStartIssue issue)
+{
+    switch (issue) {
+    case InspectionStartIssue::TemplateOperationActive:
+        return QStringLiteral("当前正在制作模板，请先点击【退出模板制作】。");
+    case InspectionStartIssue::RuntimeBusy:
+        return QStringLiteral("当前正在识别或停止中，请勿重复启动。");
+    case InspectionStartIssue::CameraClosed:
+        return QStringLiteral("请先点击【打开相机】！");
+    case InspectionStartIssue::DirtySettingsConfirmationRequired:
+        return QStringLiteral("存在尚未应用的参数修改。");
+    case InspectionStartIssue::PlcDisconnected:
+        return QStringLiteral("已启用 PLC 触发，但 PLC 未连接，请先连接 PLC。");
+    case InspectionStartIssue::PreparedRecipeMissing:
+        return QStringLiteral("当前模式没有已完整准备的产品配方，请先创建或加载新格式配方。");
+    case InspectionStartIssue::WordProfilesMissing:
+        return QStringLiteral("当前配方没有可用的Profile，请重新创建或加载产品配方。");
+    case InspectionStartIssue::BarcodeResourcesInvalid:
+        return QStringLiteral("二维码+三期模板资源预检失败。");
+    case InspectionStartIssue::ProductTemplateIncomplete:
+        return QStringLiteral("缺少可用产品模板，无法启动检测。");
+    case InspectionStartIssue::WordProfilesIncomplete:
+        return QStringLiteral("部分产品模板还没有确认目标字符，不能启动检测。");
+    case InspectionStartIssue::None:
+    default:
+        return QString();
+    }
+}
+
+} // namespace
+
+InspectionApplicationService::InspectionApplicationService(
+    const std::shared_ptr<InspectionRuntimeController> &runtime,
+    const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+    const std::shared_ptr<SettingsApplicationService> &settings,
+    const std::shared_ptr<RecipeStore> &recipes,
+    QObject *parent)
+    : QObject(parent),
+      m_runtime(runtime),
+      m_runtimePort(runtimePort),
+      m_settings(settings),
+      m_recipes(recipes)
+{
+    qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
+}
+
+StartInspectionResult InspectionApplicationService::start(
+    const StartInspectionCommand &command)
+{
+    const MachineSettings settings = m_settings->current();
+    InspectionStartAccessInput access;
+    access.templateOperationActive = command.templateOperationActive;
+    access.runtimeBusy = m_runtime->isBusy();
+    access.cameraOpen = m_cameraOpen;
+    access.dirtySettings = m_settings->hasUnappliedChanges()
+            || !command.unappliedChanges.isEmpty();
+    access.plcTriggerEnabled = settings.triggerEnabled;
+    access.plcConnected = m_runtime->isPlcConnected();
+
+    const InspectionStartPreflightResult accessResult =
+            InspectionStartPreflight::evaluateAccess(access);
+    if (!accessResult.isAccepted()) {
+        return rejectStart(
+                    accessResult.issue,
+                    startIssueCode(accessResult.issue),
+                    startIssueMessage(accessResult.issue),
+                    command.unappliedChanges);
+    }
+
+    DetectionMode detectionMode;
+    if (!detectionModeFromUiId(
+                settings.detectModeId, &detectionMode)) {
+        return rejectStart(
+                    InspectionStartIssue::PreparedRecipeMissing,
+                    QStringLiteral("INSPECTION_DETECTION_MODE_INVALID"),
+                    QStringLiteral("机器设置中的检测模式无效。"));
+    }
+    const int modeIndex = machineSettingsDetectionModeIds()
+            .indexOf(settings.detectModeId);
+    const QString recipeId = settings.publishedRecipeIdsByMode
+            .value(settings.detectModeId).trimmed();
+    if (recipeId.isEmpty()) {
+        return rejectStart(
+                    InspectionStartIssue::PreparedRecipeMissing,
+                    startIssueCode(
+                        InspectionStartIssue::PreparedRecipeMissing),
+                    startIssueMessage(
+                        InspectionStartIssue::PreparedRecipeMissing));
+    }
+
+    PreparedRecipeSnapshot prepared;
+    QString recipeError;
+    if (!m_recipes
+            || !m_recipes->loadPreparedRecipe(
+                recipeId, &prepared, &recipeError)
+            || !prepared
+            || !prepared->recipe
+            || prepared->recipe->detectionMode != detectionMode) {
+        return rejectStart(
+                    InspectionStartIssue::PreparedRecipeMissing,
+                    QStringLiteral("INSPECTION_RECIPE_PREPARE_FAILED"),
+                    QStringLiteral("当前产品配方无效或与检测模式不匹配。"),
+                    QStringList(),
+                    recipeError);
+    }
+
+    BarcodeRuntimeReadiness barcode;
+    if (detectionMode == DetectionMode::BarcodeWord) {
+        barcode = m_runtimePort->prepareBarcodeDecoder();
+    }
+    const InspectionStartResourceInput resourceInput =
+            resourceInputFor(*prepared, detectionMode, barcode);
+    const InspectionStartPreflightResult resourceResult =
+            InspectionStartPreflight::evaluateResources(resourceInput);
+    if (!resourceResult.isAccepted()) {
+        return rejectStart(
+                    resourceResult.issue,
+                    startIssueCode(resourceResult.issue),
+                    startIssueMessage(resourceResult.issue),
+                    resourceResult.details);
+    }
+
+    InspectionStartExecutionCommand execution;
+    execution.context.machineSettings = settings;
+    execution.context.preparedRecipe = prepared;
+    execution.runPlan = InspectionRunConfiguration::createPlan(
+                trackingKind(detectionMode),
+                settings.triggerEnabled,
+                detectionMode == DetectionMode::BarcodeWord);
+    execution.detectionMode = detectionMode;
+    execution.modeId = settings.detectModeId;
+    execution.modeIndex = modeIndex;
+    execution.barcodeWordMode =
+            detectionMode == DetectionMode::BarcodeWord;
+    if (detectionMode == DetectionMode::Word
+            || detectionMode == DetectionMode::BarcodeWord) {
+        execution.profileSnapshot =
+                profileSnapshotFromPreparedRecipe(*prepared);
+        if (!execution.profileSnapshot.isValid()) {
+            return rejectStart(
+                        InspectionStartIssue::WordProfilesMissing,
+                        QStringLiteral("INSPECTION_PROFILE_SNAPSHOT_INVALID"),
+                        QStringLiteral("没有可用的字库定位配置。"));
+        }
+    }
+
+    InspectionRuntimeStartTransaction transaction(*m_runtime);
+    if (!transaction.begin()) {
+        return rejectStart(
+                    InspectionStartIssue::RuntimeBusy,
+                    startIssueCode(InspectionStartIssue::RuntimeBusy),
+                    startIssueMessage(InspectionStartIssue::RuntimeBusy));
+    }
+    execution.context.runId = transaction.runId();
+    execution.context.startedAtUtc = QDateTime::currentDateTimeUtc();
+    publishSnapshot();
+
+    QString executionError;
+    if (!m_runtimePort->startInspection(
+                execution, transaction, &executionError)) {
+        m_runtimePort->rollbackStart();
+        transaction.rollback();
+        publishSnapshot();
+        return rejectStart(
+                    InspectionStartIssue::RuntimeBusy,
+                    QStringLiteral("INSPECTION_START_EXECUTION_FAILED"),
+                    executionError.isEmpty()
+                    ? QStringLiteral("启动识别失败。")
+                    : executionError,
+                    QStringList(),
+                    executionError);
+    }
+    if (!transaction.commit()) {
+        m_runtimePort->rollbackStart();
+        transaction.rollback();
+        publishSnapshot();
+        return rejectStart(
+                    InspectionStartIssue::RuntimeBusy,
+                    QStringLiteral("INSPECTION_START_COMMIT_FAILED"),
+                    QStringLiteral("运行状态提交失败。"));
+    }
+
+    m_activeRecipeId = recipeId;
+    publishSnapshot();
+    StartInspectionResult result;
+    result.acquisitionKind = execution.runPlan.acquisitionKind;
+    result.snapshot = runtimeSnapshot();
+    return result;
+}
+
+StopInspectionResult InspectionApplicationService::stop(
+    const StopInspectionCommand &command)
+{
+    StopInspectionResult result;
+    const InspectionRuntimeState initialState = m_runtime->state();
+    const bool recoveringFault =
+            initialState == InspectionRuntimeState::Fault;
+    result.recoveredFault = recoveringFault;
+    if (recoveringFault && !command.acknowledgeFault) {
+        result.issue = StopInspectionIssue::FaultConfirmationRequired;
+        result.error.code = QStringLiteral(
+                    "INSPECTION_FAULT_CONFIRMATION_REQUIRED");
+        result.error.userMessage = QStringLiteral(
+                    "需要操作员确认后才能解除故障锁定。");
+        result.snapshot = runtimeSnapshot();
+        return result;
+    }
+    if (initialState == InspectionRuntimeState::Idle) {
+        result.snapshot = runtimeSnapshot();
+        return result;
+    }
+
+    InspectionRuntimeStopTransaction transaction(*m_runtime);
+    transaction.begin();
+    publishSnapshot();
+    const InspectionAcquisitionStopResult acquisition =
+            m_runtimePort->stopAcquisition();
+    transaction.waitForDetectionWorker();
+    if (!acquisition.allStopped()) {
+        result.issue = StopInspectionIssue::AcquisitionStillStopping;
+        result.error.code = QStringLiteral(
+                    "INSPECTION_ACQUISITION_STILL_STOPPING");
+        result.error.userMessage = QStringLiteral(
+                    "停止中，请稍后再关闭相机。");
+        result.snapshot = runtimeSnapshot();
+        return result;
+    }
+
+    const MachineSettings settings = m_settings->current();
+    const InspectionRuntimePort::PersistAdjustedExposure persistExposure =
+            [this](int adjustedExposure, QString *errorMessage) {
+        MachineSettings adjusted = m_settings->current();
+        adjusted.cameraExposure = adjustedExposure;
+        m_settings->updateDraft(adjusted);
+        const OperationResult saved = m_settings->applyDraft();
+        if (!saved.isSuccess() && errorMessage) {
+            *errorMessage = saved.error.userMessage;
+        }
+        return saved.isSuccess();
+    };
+    result.cameraRecovery = m_runtimePort->recoverCamera(
+                acquisition.shouldRestoreCamera(),
+                m_cameraOpen,
+                settings,
+                persistExposure);
+    m_cameraOpen = result.cameraRecovery.cameraOpen;
+    transaction.commit();
+
+    if (!recoveringFault
+            && m_runtime->state() == InspectionRuntimeState::Fault) {
+        result.issue = StopInspectionIssue::RuntimeFault;
+        result.error.code = QStringLiteral(
+                    "INSPECTION_RUNTIME_FAULT_DURING_STOP");
+        result.error.userMessage = QStringLiteral(
+                    "停止过程中检测运行时进入故障状态。");
+        result.snapshot = runtimeSnapshot();
+        publishSnapshot();
+        return result;
+    }
+
+    if (recoveringFault) {
+        QString reconciliationError;
+        if (!m_runtimePort->reconcileFaultProducts(
+                    &result.reconciliationSummary,
+                    &reconciliationError)) {
+            result.issue = StopInspectionIssue::FaultReconciliationFailed;
+            result.error.code = QStringLiteral(
+                        "INSPECTION_FAULT_RECONCILIATION_FAILED");
+            result.error.userMessage = QStringLiteral(
+                        "故障产品收口失败。");
+            result.error.diagnostic = reconciliationError;
+            result.snapshot = runtimeSnapshot();
+            publishSnapshot();
+            return result;
+        }
+        if (!m_runtime->acknowledgeFault()) {
+            result.issue = StopInspectionIssue::FaultReconciliationFailed;
+            result.error.code = QStringLiteral(
+                        "INSPECTION_FAULT_ACKNOWLEDGE_REJECTED");
+            result.error.userMessage = QStringLiteral(
+                        "故障仍有未完成产品，不能解除锁定。");
+            result.snapshot = runtimeSnapshot();
+            publishSnapshot();
+            return result;
+        }
+    }
+
+    m_activeRecipeId.clear();
+    if (result.cameraRecovery.issue
+            == InspectionCameraRecoveryIssue::ExposureRejected) {
+        result.issue = StopInspectionIssue::CameraRecoveryFailed;
+        result.error.code = QStringLiteral(
+                    "INSPECTION_CAMERA_EXPOSURE_RECOVERY_FAILED");
+        result.error.userMessage = QStringLiteral(
+                    "停止识别后恢复相机曝光失败。");
+        result.error.diagnostic =
+                result.cameraRecovery.errorMessage;
+    }
+    result.snapshot = runtimeSnapshot();
+    publishSnapshot();
+    return result;
+}
+
+OpenCameraResult InspectionApplicationService::openCamera(
+    const PlcConnectionCommand &plcCommand)
+{
+    OpenCameraResult result;
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        result.operation = OperationResult::rejected(
+                    QStringLiteral("CAMERA_RUNTIME_BUSY"),
+                    QStringLiteral("当前有任务正在运行，不能重新打开相机。"));
+        result.snapshot = runtimeSnapshot();
+        return result;
+    }
+    if (m_cameraOpen) {
+        result.operation = OperationResult::rejected(
+                    QStringLiteral("CAMERA_ALREADY_OPEN"),
+                    QStringLiteral("相机已连接！"));
+        result.snapshot = runtimeSnapshot();
+        return result;
+    }
+
+    const MachineSettings settings = m_settings->current();
+    const PlcOperationResult plc = m_runtime->connectPlc(
+                plcCommand.address,
+                plcCommand.rack,
+                plcCommand.slot);
+    result.plcConnectionFailed = !plc.isSuccess();
+    result.plcNativeErrorCode = plc.nativeErrorCode;
+
+    const InspectionRuntimePort::PersistAdjustedExposure persistExposure =
+            [this](int adjustedExposure, QString *errorMessage) {
+        MachineSettings adjusted = m_settings->current();
+        adjusted.cameraExposure = adjustedExposure;
+        m_settings->updateDraft(adjusted);
+        const OperationResult saved = m_settings->applyDraft();
+        if (!saved.isSuccess() && errorMessage) {
+            *errorMessage = saved.error.userMessage;
+        }
+        return saved.isSuccess();
+    };
+    result.camera = m_runtimePort->openCamera(
+                settings, persistExposure);
+    if (!result.camera.isSuccess()) {
+        result.operation = OperationResult::rejected(
+                    QStringLiteral("CAMERA_OPEN_FAILED"),
+                    QStringLiteral("打开相机失败。"),
+                    result.camera.diagnostic);
+        result.snapshot = runtimeSnapshot();
+        publishSnapshot();
+        return result;
+    }
+    m_cameraOpen = true;
+    result.operation = OperationResult::accepted();
+    result.snapshot = runtimeSnapshot();
+    publishSnapshot();
+    return result;
+}
+
+OperationResult InspectionApplicationService::closeCamera()
+{
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("CAMERA_RUNTIME_BUSY"),
+                    QStringLiteral("相机正在检测采图中，请先停止识别。"));
+    }
+    if (m_cameraOpen) {
+        m_runtimePort->closeCamera();
+    }
+    m_cameraOpen = false;
+    m_runtime->resetStatistics();
+    publishSnapshot();
+    return OperationResult::accepted();
+}
+
+OperationResult InspectionApplicationService::connectPlc(
+    const PlcConnectionCommand &command)
+{
+    const PlcOperationResult result = m_runtime->connectPlc(
+                command.address, command.rack, command.slot);
+    publishSnapshot();
+    return result.isSuccess()
+            ? OperationResult::accepted()
+            : plcFailure(
+                QStringLiteral("PLC_CONNECT_FAILED"),
+                QStringLiteral("PLC连接失败"),
+                result.nativeErrorCode);
+}
+
+OperationResult InspectionApplicationService::disconnectPlc()
+{
+    const PlcOperationResult result = m_runtime->disconnectPlc();
+    publishSnapshot();
+    return result.isSuccess()
+            ? OperationResult::accepted()
+            : plcFailure(
+                QStringLiteral("PLC_DISCONNECT_FAILED"),
+                QStringLiteral("PLC断开失败"),
+                result.nativeErrorCode);
+}
+
+OperationResult InspectionApplicationService::applyPlcTriggerMode(
+    const QString &modeId)
+{
+    if (!m_runtime->isPlcConnected()) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_NOT_CONNECTED"),
+                    QStringLiteral("PLC未连接！"));
+    }
+    const int modeIndex = machineSettingsTriggerModeIds().indexOf(modeId);
+    if (modeIndex < 0) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_TRIGGER_MODE_INVALID"),
+                    QStringLiteral("PLC触发模式无效"));
+    }
+    const PlcOperationResult result =
+            m_runtime->writePlcTriggerMode(modeIndex);
+    return result.isSuccess()
+            ? OperationResult::accepted()
+            : plcFailure(
+                QStringLiteral("PLC_TRIGGER_MODE_WRITE_FAILED"),
+                modeIndex == 0
+                ? QStringLiteral("设置连续模式失败")
+                : QStringLiteral("设置间歇模式失败"),
+                result.nativeErrorCode);
+}
+
+OperationResult InspectionApplicationService::applyPlcRunSettings(
+    const InspectionPlcRunSettings &plcSettings)
+{
+    if (!m_runtime->isPlcConnected()) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_NOT_CONNECTED"),
+                    QStringLiteral("PLC未连接！"));
+    }
+    const InspectionPlcRunSettingsResult result =
+            m_runtime->applyPlcRunSettings(plcSettings);
+    if (result.isSuccess()) {
+        return OperationResult::accepted();
+    }
+    QString code = QStringLiteral("PLC_RUN_SETTINGS_WRITE_FAILED");
+    QString message = QStringLiteral("PLC运行参数下发失败");
+    switch (result.failedField) {
+    case InspectionPlcRunSettingField::RejectTime:
+        code = QStringLiteral("PLC_REJECT_TIME_WRITE_FAILED");
+        message = QStringLiteral("设置剔除时间失败");
+        break;
+    case InspectionPlcRunSettingField::RejectDistance:
+        code = QStringLiteral("PLC_REJECT_DISTANCE_WRITE_FAILED");
+        message = QStringLiteral("设置剔除距离失败");
+        break;
+    case InspectionPlcRunSettingField::PhotoTime:
+        code = QStringLiteral("PLC_PHOTO_TIME_WRITE_FAILED");
+        message = QStringLiteral("设置拍照时间失败");
+        break;
+    case InspectionPlcRunSettingField::PhotoDistance:
+        code = QStringLiteral("PLC_PHOTO_DISTANCE_WRITE_FAILED");
+        message = QStringLiteral("设置拍照距离失败");
+        break;
+    case InspectionPlcRunSettingField::None:
+    default:
+        break;
+    }
+    return plcFailure(
+                code, message, result.operation.nativeErrorCode);
+}
+
+OperationResult InspectionApplicationService::writePlcPhotoDistance(
+    std::uint32_t value)
+{
+    if (!m_runtime->isPlcConnected()) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_NOT_CONNECTED"),
+                    QStringLiteral("PLC未连接！"));
+    }
+    const PlcOperationResult result =
+            m_runtime->writePlcPhotoDistance(value);
+    return result.isSuccess()
+            ? OperationResult::accepted()
+            : plcFailure(
+                QStringLiteral("PLC_PHOTO_DISTANCE_WRITE_FAILED"),
+                QStringLiteral("设置拍照距离失败"),
+                result.nativeErrorCode);
+}
+
+void InspectionApplicationService::shutdown()
+{
+    m_runtime->requestStop();
+    m_runtimePort->stopAcquisition();
+    m_runtime->waitForDetectionWorkerStop();
+    if (m_cameraOpen) {
+        m_runtimePort->closeCamera();
+        m_cameraOpen = false;
+    }
+    if (m_runtime->isPlcConnected()) {
+        m_runtime->disconnectPlc();
+    }
+    m_runtime->finishStop();
+    m_activeRecipeId.clear();
+    publishSnapshot();
+}
+
+void InspectionApplicationService::completeUnexpectedAcquisitionStop()
+{
+    const InspectionRuntimeState state = m_runtime->state();
+    if (state != InspectionRuntimeState::Running
+            && state != InspectionRuntimeState::Stopping) {
+        return;
+    }
+    InspectionRuntimeStopTransaction transaction(*m_runtime);
+    transaction.begin();
+    transaction.waitForDetectionWorker();
+    transaction.commit();
+    m_activeRecipeId.clear();
+    publishSnapshot();
+}
+
+RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
+{
+    RuntimeSnapshot snapshot;
+    snapshot.state = applicationState(m_runtime->state());
+    snapshot.cameraOpen = m_cameraOpen;
+    snapshot.plcConnected = m_runtime->isPlcConnected();
+    snapshot.runId = m_runtime->runId();
+    snapshot.recipeId = m_activeRecipeId;
+    return snapshot;
+}
+
+StartInspectionResult InspectionApplicationService::rejectStart(
+    InspectionStartIssue issue,
+    const QString &code,
+    const QString &userMessage,
+    const QStringList &details,
+    const QString &diagnostic) const
+{
+    StartInspectionResult result;
+    result.issue = issue;
+    result.error.code = code;
+    result.error.userMessage = userMessage;
+    result.error.diagnostic = diagnostic;
+    result.details = details;
+    result.snapshot = runtimeSnapshot();
+    return result;
+}
+
+OperationResult InspectionApplicationService::plcFailure(
+    const QString &code,
+    const QString &userMessage,
+    int nativeErrorCode) const
+{
+    return OperationResult::rejected(
+                code,
+                userMessage,
+                QStringLiteral("nativeErrorCode=%1")
+                .arg(nativeErrorCode));
+}
+
+void InspectionApplicationService::publishSnapshot()
+{
+    emit runtimeSnapshotChanged(runtimeSnapshot());
+}

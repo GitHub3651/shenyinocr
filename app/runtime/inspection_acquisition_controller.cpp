@@ -42,13 +42,6 @@ bool InspectionAcquisitionController::isHardwareRunning() const
     return m_hardwareWorker && m_hardwareWorker->isRunning();
 }
 
-bool InspectionAcquisitionController::hasRunningInspectionThread(
-    bool templatePreviewActive) const
-{
-    return (isSoftwareRunning() && !templatePreviewActive)
-            || isHardwareRunning();
-}
-
 CameraOperationResult InspectionAcquisitionController::enumerateDevices(
     int *deviceCount)
 {

@@ -116,8 +116,7 @@ QString text(const wchar_t *value)
 
 MachineSettingsPageController::MachineSettingsPageController(
     Ui::Widget *ui,
-    MachineSettings *appliedSettings,
-    MachineSettingsStore *settingsStore,
+    SettingsApplicationService *settingsService,
     SettingsEditState *editState,
     QString *selectedDirectory,
     bool *applyingSettings,
@@ -126,8 +125,10 @@ MachineSettingsPageController::MachineSettingsPageController(
     QObject *parent)
     : QObject(parent),
       m_ui(ui),
-      m_appliedSettings(appliedSettings),
-      m_settingsStore(settingsStore),
+      m_appliedSettings(settingsService
+                        ? &settingsService->editableDraft()
+                        : nullptr),
+      m_settingsService(settingsService),
       m_editState(editState),
       m_selectedDirectory(selectedDirectory),
       m_applyingSettings(applyingSettings),
@@ -321,29 +322,34 @@ bool MachineSettingsPageController::save(
         return false;
     }
     syncImmediateSettings();
-    MachineSettingsStoreError storeError;
-    const bool saved = m_settingsStore
-            && m_settingsStore->save(*m_appliedSettings, &storeError);
-    if (!saved && errorMessage) {
-        *errorMessage = storeError.userMessage;
+    const OperationResult saved = m_settingsService
+            ? m_settingsService->applyDraft()
+            : OperationResult::rejected(
+                QStringLiteral("MACHINE_SETTINGS_SERVICE_MISSING"),
+                QStringLiteral("机器设置服务不可用。"));
+    if (!saved.isSuccess() && errorMessage) {
+        *errorMessage = saved.error.userMessage;
     }
-    return saved;
+    return saved.isSuccess();
 }
 
 bool MachineSettingsPageController::clear(QString *errorMessage)
 {
-    MachineSettingsStoreError storeError;
-    if (!m_settingsStore
-            || !m_settingsStore->clear(&storeError)) {
+    const OperationResult cleared = m_settingsService
+            ? m_settingsService->clearSettings()
+            : OperationResult::rejected(
+                QStringLiteral("MACHINE_SETTINGS_SERVICE_MISSING"),
+                QStringLiteral("机器设置服务不可用。"));
+    if (!cleared.isSuccess()) {
         if (errorMessage) {
-            *errorMessage = storeError.userMessage;
+            *errorMessage = cleared.error.userMessage;
         }
         return false;
     }
     if (!m_appliedSettings) {
         return false;
     }
-    *m_appliedSettings = MachineSettings::defaults();
+    *m_appliedSettings = m_settingsService->current();
     applyToUi(*m_appliedSettings);
     return true;
 }

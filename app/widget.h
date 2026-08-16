@@ -60,7 +60,8 @@
 #include <templatematch.h>
 #include <Detector.h>
 #include "TrackingTypes.h"
-#include "system_support/settings/machine_settings_store.h"
+#include "application/inspection_application_service.h"
+#include "application/settings_application_service.h"
 #include "recipes/product_recipe.h"
 #include "recipes/recipe_store.h"
 #include "recipes/template_mode_memory.h"
@@ -68,7 +69,6 @@
 #include "devices/barcode/barcode_decoder.h"
 #include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
-#include "runtime/inspection_start_preflight.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
@@ -88,8 +88,6 @@ class QPushButton;
 class InspectionResultCoordinator;
 class InspectionAcquisitionController;
 class InspectionRuntimeUiCoordinator;
-class InspectionStartController;
-class InspectionStopController;
 class MachineSettingsPageController;
 class TemplateEditorController;
 struct InspectionProfileSnapshot;
@@ -115,11 +113,12 @@ public:
 
     explicit Widget(
         const std::shared_ptr<ICameraDevice> &cameraDevice,
-        const std::shared_ptr<InspectionPlcController> &plcController,
         const OcrEngineFactory &ocrEngineFactory,
         const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
-        const MachineSettings &startupSettings,
-        const std::shared_ptr<MachineSettingsStore> &settingsStore,
+        const std::shared_ptr<InspectionRuntimeController> &runtimeController,
+        const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+        const std::shared_ptr<InspectionApplicationService> &inspectionService,
+        const std::shared_ptr<SettingsApplicationService> &settingsService,
         const std::shared_ptr<RecipeStore> &recipeStore,
         QWidget *parent = nullptr);
     ~Widget();
@@ -213,8 +212,6 @@ protected:
 
 private:
     friend class TemplateEditorController;
-    friend class InspectionStartController;
-    friend class InspectionStopController;
 
     cv::Mat m_loadedTrackingTemplate;
     void showParameterInfo(const QString &title, const QString &message);
@@ -231,12 +228,19 @@ private:
     bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
-    bool applyCameraHardwareSettingsForRun(QStringList *errors);
+    bool applyCameraHardwareSettingsForRun(
+        const MachineSettings &settings,
+        QStringList *errors);
     bool applyRuntimeThreadSettingsForRun(
+        const MachineSettings &settings,
         const PreparedRecipeSnapshot &prepared,
         QStringList *errors);
-    bool applyPlcTriggerModeForRun(QStringList *errors);
-    bool applyPlcRunSettingsForRun(QStringList *errors);
+    bool applyPlcTriggerModeForRun(
+        const MachineSettings &settings,
+        QStringList *errors);
+    bool applyPlcRunSettingsForRun(
+        const MachineSettings &settings,
+        QStringList *errors);
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
@@ -286,10 +290,35 @@ private:
     bool stopTemplatePreview(int waitTimeMs = 1500);
     void resetTemplateCaptureState();
     void updateOperationUiState();
-    bool hasRunningInspectionThread() const;
+    OperationUiState operationUiState() const;
+    bool isCameraOpen() const;
+    bool isInspectionBusy() const;
+    const MachineSettings &machineSettings() const;
+    void updateMachineSettingsDraft(const MachineSettings &settings);
+    void bindInspectionRuntimePort();
+    bool executeInspectionStart(
+        const InspectionStartExecutionCommand &command,
+        InspectionRuntimeStartTransaction &startTransaction,
+        QString *errorMessage);
+    void rollbackInspectionStart();
+    InspectionAcquisitionStopResult stopInspectionAcquisition();
+    InspectionCameraRecoveryResult recoverInspectionCamera(
+        bool recoveryRequired,
+        bool cameraWasOpen,
+        const MachineSettings &settings,
+        const InspectionRuntimePort::PersistAdjustedExposure
+            &persistAdjustedExposure);
+    InspectionCameraOpenResult openInspectionCamera(
+        const MachineSettings &settings,
+        const InspectionRuntimePort::PersistAdjustedExposure
+            &persistAdjustedExposure);
+    void closeInspectionCamera();
+    void presentStartFailure(const StartInspectionResult &result);
+    void finishInspectionStopUi(const StopInspectionResult &result);
     bool startDetectionWorkerForMode(
         InspectionRuntimeStartTransaction &startTransaction,
         int modeIndex,
+        const MachineSettings &settings,
         const PreparedRecipeSnapshot &prepared,
         const InspectionProfileSnapshot &profileSnapshot,
         QString *errorMessage);
@@ -315,8 +344,12 @@ private:
     Ui::Widget *ui;                     ///< UI界面指针
     MultiCameraWidget *m_multiCameraWidget = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
-    MachineSettings m_appliedMachineSettings;
-    std::shared_ptr<MachineSettingsStore> m_machineSettingsStore;
+    std::shared_ptr<InspectionApplicationService>
+            m_inspectionApplicationService;
+    std::shared_ptr<SettingsApplicationService>
+            m_settingsApplicationService;
+    std::shared_ptr<InspectionRuntimePort> m_inspectionRuntimePort;
+    MachineSettings &m_appliedMachineSettings;
     std::shared_ptr<RecipeStore> m_recipeStore;
     QString m_currentDetectModeId;
     bool m_applyingMachineSettings = false;
@@ -336,11 +369,9 @@ private:
     quint64 m_templatePreviewSessionId = 0;
 
     using OperationState = OperationUiState;
-    OperationState m_operationState =
-            OperationState::CameraClosed;
     std::atomic<bool> m_resultBoundDisplayActive{false};
     bool m_applicationExitInProgress = false;
-    InspectionRuntimeController m_runtimeController;
+    InspectionRuntimeController &m_runtimeController;
     std::unique_ptr<InspectionAcquisitionController>
             m_acquisitionController;
     std::unique_ptr<InspectionResultCoordinator> m_resultCoordinator;
@@ -369,9 +400,6 @@ private:
     int m_x1, m_x2, m_y1, m_y2;        ///< 识别框的四个坐标
 
     // ========== 采集和设备相关 ==========
-    bool isCollecting;                  ///< 是否正在采集
-    bool m_bOpenDevice;                 ///< 设备是否打开
-
     // ========== 图像对象 ==========
     Mat *processedImage = NULL;         ///< 处理后图像
     Mat *rotatedImage = NULL;           ///< 旋转后图像

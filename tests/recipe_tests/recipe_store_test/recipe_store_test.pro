@@ -16,7 +16,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_editor_session.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_start_preflight.cpp
+    $$PROJECT_ROOT/app/application/inspection_start_preflight.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
@@ -24,7 +24,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/recipes/recipe_store.h \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.h \
     $$PROJECT_ROOT/app/recipes/recipe_editor_session.h \
-    $$PROJECT_ROOT/app/runtime/inspection_start_preflight.h
+    $$PROJECT_ROOT/app/application/inspection_start_preflight.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

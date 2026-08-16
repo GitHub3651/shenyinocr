@@ -1,6 +1,6 @@
 #pragma once
 
-#include "system_support/settings/machine_settings_store.h"
+#include "application/settings_application_service.h"
 
 #include <QList>
 #include <QMap>
@@ -35,8 +35,7 @@ public:
 
     MachineSettingsPageController(
         Ui::Widget *ui,
-        MachineSettings *appliedSettings,
-        MachineSettingsStore *settingsStore,
+        SettingsApplicationService *settingsService,
         SettingsEditState *editState,
         QString *selectedDirectory,
         bool *applyingSettings,
@@ -125,7 +124,7 @@ private:
 
     Ui::Widget *m_ui = nullptr;
     MachineSettings *m_appliedSettings = nullptr;
-    MachineSettingsStore *m_settingsStore = nullptr;
+    SettingsApplicationService *m_settingsService = nullptr;
     SettingsEditState *m_editState = nullptr;
     QString *m_selectedDirectory = nullptr;
     bool *m_applyingSettings = nullptr;
