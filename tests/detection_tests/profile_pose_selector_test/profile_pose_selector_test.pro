@@ -21,7 +21,7 @@ SOURCES += \
 
 HEADERS += \
     $$PROJECT_ROOT/app/detection/common/profile_pose_selector.h \
-    $$PROJECT_ROOT/app/TrackingTypes.h
+    $$PROJECT_ROOT/app/detection/positioning/detection_pose.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

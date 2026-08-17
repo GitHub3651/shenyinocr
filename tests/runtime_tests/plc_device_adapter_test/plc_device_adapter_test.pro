@@ -13,13 +13,13 @@ THIRD_PARTY = $$PROJECT_ROOT/third_party
 
 SOURCES += \
     plc_device_adapter_test.cpp \
-    $$PROJECT_ROOT/app/devices/plc/snap7_plc_device.cpp \
-    $$PROJECT_ROOT/app/snap7.cpp
+    $$PROJECT_ROOT/app/devices/plc/vendor/snap7_plc_device.cpp \
+    $$PROJECT_ROOT/app/devices/plc/vendor/snap7.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/devices/plc/plc_device.h \
-    $$PROJECT_ROOT/app/devices/plc/snap7_plc_device.h \
-    $$PROJECT_ROOT/app/snap7.h
+    $$PROJECT_ROOT/app/devices/plc/vendor/snap7_plc_device.h \
+    $$PROJECT_ROOT/app/devices/plc/vendor/snap7.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

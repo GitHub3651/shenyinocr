@@ -1,6 +1,6 @@
 #include <QtTest>
 
-#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/barcode/vendor/barcode_decoder_adapter.h"
 
 #include <cstring>
 #include <vector>

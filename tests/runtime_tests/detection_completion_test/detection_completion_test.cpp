@@ -6,6 +6,7 @@
 
 #include "devices/barcode/barcode_decoder.h"
 #include "devices/ocr/ocr_engine.h"
+#include "devices/plc/plc_device.h"
 #include "runtime/image_save_service.h"
 #include "runtime/inspection_runtime.h"
 #include "runtime/pipeline_registry.h"

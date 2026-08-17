@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BarcodeTypes.h"
+#include "devices/barcode/barcode_types.h"
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
 #include "detection/stamp/stamp_detection_pipeline.h"

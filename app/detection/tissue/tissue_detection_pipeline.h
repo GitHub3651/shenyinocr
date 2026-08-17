@@ -1,8 +1,8 @@
 #ifndef DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
 #define DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
 
-#include "TissueRollDetector.h"
-#include "TrackingTypes.h"
+#include "detection/tissue/tissue_roll_detector.h"
+#include "detection/positioning/detection_pose.h"
 #include "recipes/product_recipe.h"
 
 class TissueDetectionPipeline

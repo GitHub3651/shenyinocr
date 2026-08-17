@@ -1,6 +1,6 @@
 #pragma once
 
-#include "runtime/inspection_runtime.h"
+#include "application/inspection_ui_contract.h"
 
 #include <QString>
 
@@ -19,5 +19,5 @@ class InspectionFaultPresenter
 {
 public:
     static InspectionFaultPresentation create(
-        const InspectionFaultSnapshot &snapshot);
+        const ApplicationFaultSnapshot &snapshot);
 };

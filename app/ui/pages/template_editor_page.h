@@ -1,9 +1,6 @@
 #pragma once
 
-#include "BarcodeTypes.h"
 #include "application/template_application_service.h"
-#include "recipes/prepared_recipe.h"
-#include "runtime/template_runtime_profile.h"
 
 #include <QMap>
 #include <QObject>
@@ -17,7 +14,7 @@
 
 class ImageLabel;
 class InspectionApplicationService;
-class MachineSettingsPageController;
+class MachineSettingsPage;
 class SettingsApplicationService;
 class SettingsEditState;
 class QCheckBox;
@@ -108,7 +105,7 @@ public:
         TemplateApplicationService *templateService,
         InspectionApplicationService *inspectionService,
         SettingsApplicationService *settingsService,
-        MachineSettingsPageController *settingsPageController,
+        MachineSettingsPage *settingsPageController,
         SettingsEditState *settingsEditState,
         const TemplateEditorPageCallbacks &callbacks,
         QObject *parent = nullptr);
@@ -130,10 +127,11 @@ public:
     void clearBarcodeTemplateValidation();
     bool validateBarcodeTemplateRect(
         const QRect &uiBarcodeRect,
-        const BarcodeDecodeOptions &options,
-        BarcodeReadResult *barcode,
+        const TemplateBarcodeValidationOptions &options,
+        TemplateBarcodeValidationResult *barcode,
         QString *failureReason);
-    BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
+    TemplateBarcodeValidationOptions
+    barcodeTemplateValidationOptions() const;
 
     void updateCurrentTemplateName();
     void setupTemplateGuide();
@@ -259,7 +257,7 @@ private:
     TemplateApplicationService *m_templateService = nullptr;
     InspectionApplicationService *m_inspectionService = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;
-    MachineSettingsPageController *m_settingsPageController = nullptr;
+    MachineSettingsPage *m_settingsPageController = nullptr;
     SettingsEditState *m_settingsEditState = nullptr;
     TemplateEditorPageCallbacks m_callbacks;
     ImageLabel *imageLabel = nullptr;

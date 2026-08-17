@@ -1,7 +1,7 @@
 #ifndef BARCODE_DECODER_H
 #define BARCODE_DECODER_H
 
-#include "BarcodeTypes.h"
+#include "devices/barcode/barcode_types.h"
 
 #include <QString>
 
@@ -17,7 +17,7 @@ public:
         const BarcodeDecodeOptions &options,
         int preferredStrategyId = -1,
         unsigned int preferredOptionFlags =
-            BARCODE_DECODER_OPTION_NONE,
+            BarcodeDecodeOptionFlags::None,
         int *successfulStrategyId = nullptr,
         unsigned int *successfulOptionFlags = nullptr) = 0;
 };

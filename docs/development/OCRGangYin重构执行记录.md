@@ -1422,3 +1422,40 @@
 - [x] 2026-08-17用户确认阶段5Qt Creator统一门禁完成；39项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
 - [x] 阶段5门禁通过后只执行最终静态检查、精确暂存和唯一阶段5本地提交；不推送，提交完成后才进入阶段6。
 - [x] 阶段5提交前最终静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`；23个差异路径全部属于阶段5模板应用/页面/资产/几何、计划内旧路径删除、startup/Widget薄接入、测试/qmake、功能表和执行记录；旧模板控制器、旧字符裁切对话框及对应生产/测试/qmake引用为0，模板UI边界和recipes反向依赖命中为0；主工程160个源码/头/UI文件项与新测试工程20个文件项全部存在且无重复，新测试声明/定义6/6，Widget自动连接槽26/26；差异文本严格UTF-8、无尾随空白且均有末尾换行，暂存区为空、`app.zip`不存在，`git diff --check`通过。Agent未运行qmake、构建、测试可执行文件或主程序。
+- [x] 阶段5已创建本地提交`393f07974421e9332bf68abf3672e15066db41ed refactor(template): 完成阶段5模板编辑器替换`；未推送，提交后工作区干净且`app.zip`不存在。
+
+## 新架构完全替换阶段：阶段 6 MainWindow与页面（2026-08-17，进行中）
+
+### 开始基准与真实影响范围
+
+- [x] 开始时分支为`codex/ocrgangyin-refactor`，HEAD为`393f07974421e9332bf68abf3672e15066db41ed refactor(template): 完成阶段5模板编辑器替换`，工作区干净且`app.zip`不存在；阶段5用户统一门禁、功能状态恢复、最终静态检查和本地提交均已完成。
+- [x] 从`ApplicationStartup`对象图、`Widget`构造/析构/自动槽、运行结果与Fault呈现、相机/PLC命令、MachineSettings页面、TemplateEditor页面、ImageLabel绘图、五模式启动与根目录共享类型、Qt信号槽、UI XML、翻译和主/测试qmake清单双向追踪。旧`Widget`仍是全部保留功能的唯一窗口与页面入口；阶段6又必须移动五模式共用的DetectionMode、定位Pose、纸巾检测器和vendor具体源，因此本轮实际影响除已删除多相机外的全部87项保留功能。
+- [x] 87项保留功能统一改为`迁移中`，`MC-001..003`保持`已确认删除`；本轮集中门禁通过前不恢复状态、不提交且不进入阶段7。
+
+### MainWindow、页面和纯组合根替换
+
+- [x] 新建唯一顶层`ui/MainWindow`并沿用原`widget.ui`视觉结构、对象名、中文提示语义、自动槽和操作入口；UI表单改为`ui/main_window.ui`，Qt翻译上下文同步改为`MainWindow`。`ApplicationStartup`显式构造vendor设备实现、Store、Runtime、三个应用服务、`InspectionPage`、`MachineSettingsPage`、`TemplateEditorPage`和`MainWindow`，页面由组合根注入，startup未加入算法、设备时序、结果判定或UI用例规则。
+- [x] 新`InspectionPage`接管检测结果绑定、Fault呈现、图像与状态区域；新`MachineSettingsPage`接管机器设置控件映射、dirty状态、默认/清空/保存、滚轮保护与数值校验；阶段5`TemplateEditorPage`继续作为唯一模板交互页。`MainWindow`只持有页面、应用服务和纯UI状态，负责顶层槽连接、结构化结果/错误呈现及窗口生命周期，不持有相机设备、PLC设备、生产线程、Pipeline、算法、存图服务或RecipeStore。
+- [x] 新增`camera_application_contract.h`、`inspection_ui_contract.h`和`template_editor_contract.h`，把相机操作结果、检测View绑定/Fault快照、模板目录/二维码验证/Profile编辑快照收口为应用层命令、查询和DTO。UI不再包含`runtime/`、`devices/`、`detection/`或`recipes/`实现；跟踪Pose和完整结果呈现继续由Application转给唯一Runtime/ResultService，不恢复Widget信号中转。
+- [x] 将原单体窗口实现按职责拆为`main_window.cpp`、`main_window_inspection.cpp`和`main_window_settings.cpp`；核心`main_window.cpp`为509个非空行。所有自研、非生成、非纯算法`.cpp`均不超过1500个非空行，最大的页面实现为1015行；没有为旧Widget保留兼容外壳或并行入口。
+
+### 根目录旧类型迁移和同轮删除
+
+- [x] `DetectionModes`迁为`contracts/detection_mode.*`，`TrackingTypes`中的定位Pose迁为`detection/positioning/detection_pose.h`，纸巾检测器迁为`detection/tissue/tissue_roll_detector.*`，重叠检测器迁为`detection/stamp/overlap_detector.*`，ImageLabel迁为`ui/widgets/image_label.*`；所有调用方和测试工程统一改用新路径与稳定类型。
+- [x] Barcode公共值类型迁到`devices/barcode/barcode_types.h`，Barcode DLL API/适配器迁到`devices/barcode/vendor`；Paddle OCR实现及其内部源码迁到`devices/ocr/vendor/paddle`；Snap7设备实现与C++包装源码迁到`devices/plc/vendor`。供应商SDK类型和头文件只保留在对应vendor目录，startup是唯一构造具体设备实现的位置。
+- [x] 同轮删除`widget.cpp/.h/.ui`、`TemplateMatch`、旧`InspectionRuntimeUiCoordinator`、旧`MachineSettingsPageController`、旧`imagelabel`、根目录DetectionModes/TrackingTypes/TissueRollDetector/Detector、根目录Barcode/Snap7和旧PaddleOCR路径；旧Widget信号、旧类名、旧include、生产/测试/qmake工程项均为0引用，不保留桥、别名或双路径。Git历史保留删除前版本；未触碰任何用户文件。
+
+### 测试源码、工程清单与当前Agent门禁
+
+- [x] 新增`tests/ui_tests/ui_architecture_test`及tests子目录工程，使用`QTEST_APPLESS_MAIN`静态覆盖MainWindow/ImageLabel目标类型、三个页面显式注入和页面不可复制合同；更新Application、Template、Recipe、五模式Pipeline、Camera/PLC/Barcode适配器等受影响测试源码及qmake路径。测试源码只验证新架构入口，不构造第二套运行或配方实现。
+- [x] 全仓23个`.pro/.pri`静态解析结果为文件项缺失0、大小写错误0、重复0；阶段6新增/移动的52个生产源码、头、UI和资源文件全部登记在主工程。UI XML的根类/对象均为`MainWindow`，自定义ImageLabel头为`ui/widgets/image_label.h`；新增及拆分类型的声明/定义、Qt信号槽和自动连接槽已静态核对。
+- [x] 阶段6静态依赖门禁通过：UI对Runtime/设备/Detection/Recipes实现直接include为0；runtime对Widget/MainWindow/`Ui::*`/QMessageBox为0；detection对UI/磁盘/PLC/相机SDK为0；recipes对Detection实现/UI/Runtime/设备/旧设置管理器为0；业务`friend`为0；vendor SDK引用未越出对应vendor实现和既有部署/链接清单。
+- [x] 90个正式功能ID唯一，当前状态为`迁移中87/已确认删除3`；阶段6差异只包含MainWindow/页面/Application DTO边界、根目录与vendor迁移、计划内旧路径删除、测试/qmake、翻译、功能表和本记录。差异文本严格UTF-8，本地include、文件名大小写和源文件体积检查通过，`git diff --check`通过；暂存区为空且`app.zip`不存在。Agent未运行或间接触发qmake、构建、测试可执行文件或主程序。
+- [x] 2026-08-17阶段6首次Qt Creator Rebuild在`template_editor_support.cpp:38`报告`DetectionMode`未声明并产生转换函数连锁错误；根因不是页面缺少旧Recipes include，而是首版`contracts/detection_mode.*`只迁入了旧Barcode模式字符串，没有把稳定`DetectionMode`枚举及JSON/UI ID转换从`product_recipe.*`一并收口。现已将枚举和四个转换函数迁入Application/UI可依赖的合同层，`ProductRecipe`反向包含该稳定合同并删除重复声明/定义；UI继续不包含Recipes实现。主工程及所有使用ProductRecipe/MachineSettings/ApplicationService的测试目标只链接这一份`detection_mode.cpp`，并为`recipe_store_test`补齐工程项；五种枚举值和持久化/UI字符串保持不变，等待同轮Run qmake、Rebuild复验。
+- [x] 同轮Rebuild随后在`main_window_inspection.cpp`报告`Ui::MainWindow`未定义、`QSignalBlocker`无匹配构造及`cv::destroyAllWindows`不可见等连锁错误。拆分单元本身已直接包含`ui_main_window.h`，真实根因是手写`ui/main_window.h`与uic生成头同时使用`UI_MAIN_WINDOW_H`保护宏：手写头先定义宏后导致生成UI头被整份跳过。现将手写保护宏改为唯一`OCRGANGYIN_UI_MAIN_WINDOW_H`，并为两个直接调用`destroyAllWindows`的窗口实现文件补`opencv2/highgui.hpp`；未修改生成文件、UI对象、槽或运行行为，等待同轮Rebuild复验。
+- [x] 同轮Rebuild继续在`main_window_settings.cpp:681/692`报告`InspectionPlcRunSettings`不完整；该类型属于Runtime层，Application头仅为内部签名前置声明，UI既不能构造不完整类型，也不得为此包含Runtime头。现新增应用层`PlcRunSettingsCommand`，UI和应用服务测试只构造该命令；Application实现文件逐字段转换为唯一Runtime `InspectionPlcRunSettings`后下发。字段类型、数值和PLC写入顺序不变，UI对Runtime直接include仍为0，等待同轮Rebuild复验。
+- [x] 测试工程Rebuild在`application_service_test.cpp:120`报告`ICameraDevice`未定义并产生全部`override`连锁错误；阶段6移除Application头对CameraSession的间接包含后，Fake设备测试没有直接包含自身继承的端口。现为ApplicationService测试直接包含camera/plc端口，并同步为CameraSession、DetectionCompletion和OCR Pipeline中的Fake基类补齐各自端口头；相关头原已登记在测试qmake中，不增加实现或链接项，等待同轮Rebuild复验。
+- [x] 同一测试继续在`application_service_test.cpp:456`报告`CameraSession`不完整；Application公开头刻意只前置声明该实现类型，但测试夹具直接构造Session，必须声明自己的实现依赖。现为该测试直接包含`runtime/camera_session.h`；工程项原已登记，Application/UI边界不回退，等待同轮Rebuild复验。
+- [x] 2026-08-17用户确认阶段6Qt Creator统一门禁“都没问题”；87项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
+- [x] 阶段6门禁通过后只执行最终静态检查、精确暂存和唯一阶段6本地提交；不推送，提交完成后才进入阶段7。
+- [x] 阶段6提交前最终静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`；163个差异路径全部属于阶段6 MainWindow/页面/Application DTO边界、根目录与vendor迁移、计划内旧路径删除、受影响测试/qmake、翻译、功能表和执行记录；旧Widget/TemplateMatch/两个旧UI Controller及历史设置、多相机、相机线程类的精确生产引用为0，业务`friend`为0，UI/Runtime/Recipes依赖边界未回退；163个差异文件均已纳入范围核对，严格UTF-8、无尾随空白且有末尾换行，暂存区为空、`app.zip`不存在，`git diff --check`通过。Agent未运行qmake、构建、测试可执行文件或主程序。阶段7已知qmake重复部署、重复OpenCV项和续行问题留待阶段6提交后按既定阶段边界统一处理。

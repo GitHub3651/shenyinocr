@@ -14,13 +14,13 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 SOURCES += \
     $$PWD/../tissue_roll_detector_baseline_test.cpp \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.cpp \
-    $$PROJECT_ROOT/app/TissueRollDetector.cpp
+    $$PROJECT_ROOT/app/detection/tissue/tissue_roll_detector.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/detection/positioning/detection_pose.h \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
-    $$PROJECT_ROOT/app/TissueRollDetector.h
+    $$PROJECT_ROOT/app/detection/tissue/tissue_roll_detector.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

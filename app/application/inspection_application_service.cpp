@@ -1,8 +1,9 @@
 #include "application/inspection_application_service.h"
 
-#include "DetectionModes.h"
+#include "contracts/detection_mode.h"
 #include "application/settings_application_service.h"
 #include "recipes/recipe_store.h"
+#include "runtime/camera_session.h"
 #include "runtime/inspection_runtime.h"
 
 #include <QDateTime>
@@ -217,9 +218,9 @@ ResultServiceRunConfiguration resultConfiguration(
     return configuration;
 }
 
-InspectionPlcRunSettings plcRunSettings(const MachineSettings &settings)
+PlcRunSettingsCommand plcRunSettings(const MachineSettings &settings)
 {
-    InspectionPlcRunSettings output;
+    PlcRunSettingsCommand output;
     output.rejectTime = static_cast<std::uint16_t>(settings.rejectTime);
     output.rejectDistance = static_cast<std::uint32_t>(
                 settings.rejectDistance);
@@ -287,6 +288,107 @@ QString startIssueMessage(InspectionStartIssue issue)
     }
 }
 
+QString faultReasonText(InspectionFaultReason reason)
+{
+    switch (reason) {
+    case InspectionFaultReason::CameraDisconnected:
+        return QStringLiteral("相机断连或正式采集异常");
+    case InspectionFaultReason::PlcDisconnected:
+        return QStringLiteral("PLC连接或结果输出异常");
+    case InspectionFaultReason::HardTriggerQueueOverflow:
+        return QStringLiteral("硬触发检测队列已满");
+    case InspectionFaultReason::ProductIdentityAmbiguous:
+        return QStringLiteral("产品身份无法唯一确定");
+    case InspectionFaultReason::RuntimeInvariantViolation:
+        return QStringLiteral("检测运行约束被破坏");
+    case InspectionFaultReason::None:
+        break;
+    }
+    return QString();
+}
+
+InspectionAcquisitionDto acquisitionDto(
+        InspectionAcquisitionKind kind)
+{
+    return kind == InspectionAcquisitionKind::HardwareTrigger
+            ? InspectionAcquisitionDto::HardwareTrigger
+            : InspectionAcquisitionDto::SoftwareTrigger;
+}
+
+CameraParameterResultDto cameraParameterDto(
+        const InspectionCameraParameterResult &source)
+{
+    CameraParameterResultDto result;
+    result.success = source.success;
+    result.minimumValue = source.minimumValue;
+    result.maximumValue = source.maximumValue;
+    result.actualValue = source.actualValue;
+    result.nativeErrorCode = source.nativeErrorCode;
+    result.diagnostic = source.diagnostic;
+    return result;
+}
+
+CameraOpenIssueDto cameraOpenIssueDto(
+        InspectionCameraOpenIssue issue)
+{
+    switch (issue) {
+    case InspectionCameraOpenIssue::DeviceNotFound:
+        return CameraOpenIssueDto::DeviceNotFound;
+    case InspectionCameraOpenIssue::DeviceOpenFailed:
+        return CameraOpenIssueDto::DeviceOpenFailed;
+    case InspectionCameraOpenIssue::ExposureFailed:
+        return CameraOpenIssueDto::ExposureFailed;
+    case InspectionCameraOpenIssue::InitializationFailed:
+        return CameraOpenIssueDto::InitializationFailed;
+    case InspectionCameraOpenIssue::None:
+    default:
+        return CameraOpenIssueDto::None;
+    }
+}
+
+CameraOpenResultDto cameraOpenDto(
+        const InspectionCameraOpenResult &source)
+{
+    CameraOpenResultDto result;
+    result.issue = cameraOpenIssueDto(source.issue);
+    result.deviceCount = source.deviceCount;
+    result.appliedExposure = source.appliedExposure;
+    result.exposureMinimum = source.exposureMinimum;
+    result.exposureMaximum = source.exposureMaximum;
+    result.exposureAdjusted = source.exposureAdjusted;
+    result.adjustmentMessage = source.adjustmentMessage;
+    result.diagnostic = source.diagnostic;
+    return result;
+}
+
+CameraRecoveryIssueDto cameraRecoveryIssueDto(
+        InspectionCameraRecoveryIssue issue)
+{
+    switch (issue) {
+    case InspectionCameraRecoveryIssue::MissingCamera:
+        return CameraRecoveryIssueDto::MissingCamera;
+    case InspectionCameraRecoveryIssue::ExposureRejected:
+        return CameraRecoveryIssueDto::ExposureRejected;
+    case InspectionCameraRecoveryIssue::InitializationFailed:
+        return CameraRecoveryIssueDto::InitializationFailed;
+    case InspectionCameraRecoveryIssue::None:
+    default:
+        return CameraRecoveryIssueDto::None;
+    }
+}
+
+CameraRecoveryResultDto cameraRecoveryDto(
+        const InspectionCameraRecoveryResult &source)
+{
+    CameraRecoveryResultDto result;
+    result.issue = cameraRecoveryIssueDto(source.issue);
+    result.recoveryAttempted = source.recoveryAttempted;
+    result.cameraOpen = source.cameraOpen;
+    result.adjustmentMessage = source.adjustmentMessage;
+    result.errorMessage = source.errorMessage;
+    return result;
+}
+
 } // namespace
 
 InspectionApplicationService::InspectionApplicationService(
@@ -309,7 +411,7 @@ InspectionApplicationService::InspectionApplicationService(
         emit streamingFrameReady(image.clone());
     };
     callbacks.trackingPoseReady = [this](const DetectionPose &pose) {
-        emit trackingPoseReady(pose);
+        m_runtime->resultService().updatePose(pose);
     };
     callbacks.previewFrameReady = [this](
             quint64 sessionId,
@@ -327,7 +429,7 @@ InspectionApplicationService::InspectionApplicationService(
     callbacks.enterFault = [this](
             InspectionFaultReason reason,
             const QString &diagnostic) {
-        emit acquisitionFault(reason, diagnostic);
+        enterFault(reason, diagnostic);
     };
     m_cameraSession->setCallbacks(callbacks);
 }
@@ -557,7 +659,7 @@ StartInspectionResult InspectionApplicationService::start(
     m_activeRecipeId = recipeId;
     publishSnapshot();
     StartInspectionResult result;
-    result.acquisitionKind = runPlan.acquisitionKind;
+    result.acquisitionKind = acquisitionDto(runPlan.acquisitionKind);
     result.snapshot = runtimeSnapshot();
     return result;
 }
@@ -612,9 +714,10 @@ StopInspectionResult InspectionApplicationService::stop(
         return saved.isSuccess();
     };
     if (acquisition.shouldRestoreCamera()) {
-        result.cameraRecovery = m_cameraSession->restorePreviewReady(
-                    settings.cameraExposure,
-                    persistExposure);
+        result.cameraRecovery = cameraRecoveryDto(
+                    m_cameraSession->restorePreviewReady(
+                        settings.cameraExposure,
+                        persistExposure));
     } else {
         result.cameraRecovery.cameraOpen = m_cameraOpen;
     }
@@ -654,7 +757,7 @@ StopInspectionResult InspectionApplicationService::stop(
 
     m_activeRecipeId.clear();
     if (result.cameraRecovery.issue
-            == InspectionCameraRecoveryIssue::ExposureRejected) {
+            == CameraRecoveryIssueDto::ExposureRejected) {
         result.issue = StopInspectionIssue::CameraRecoveryFailed;
         result.error.code = QStringLiteral(
                     "INSPECTION_CAMERA_EXPOSURE_RECOVERY_FAILED");
@@ -706,8 +809,9 @@ OpenCameraResult InspectionApplicationService::openCamera(
         }
         return saved.isSuccess();
     };
-    result.camera = m_cameraSession->openFirst(
-                settings.cameraExposure, persistExposure);
+    result.camera = cameraOpenDto(
+                m_cameraSession->openFirst(
+                    settings.cameraExposure, persistExposure));
     if (!result.camera.isSuccess()) {
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_OPEN_FAILED"),
@@ -793,13 +897,18 @@ OperationResult InspectionApplicationService::applyPlcTriggerMode(
 }
 
 OperationResult InspectionApplicationService::applyPlcRunSettings(
-    const InspectionPlcRunSettings &plcSettings)
+    const PlcRunSettingsCommand &command)
 {
     if (!m_runtime->isPlcConnected()) {
         return OperationResult::rejected(
                     QStringLiteral("PLC_NOT_CONNECTED"),
                     QStringLiteral("PLC未连接！"));
     }
+    InspectionPlcRunSettings plcSettings;
+    plcSettings.rejectTime = command.rejectTime;
+    plcSettings.rejectDistance = command.rejectDistance;
+    plcSettings.photoTime = command.photoTime;
+    plcSettings.photoDistance = command.photoDistance;
     const InspectionPlcRunSettingsResult result =
             m_runtime->applyPlcRunSettings(plcSettings);
     if (result.isSuccess()) {
@@ -850,28 +959,28 @@ OperationResult InspectionApplicationService::writePlcPhotoDistance(
                 result.nativeErrorCode);
 }
 
-InspectionCameraParameterResult
+CameraParameterResultDto
 InspectionApplicationService::queryCameraExposureRange()
 {
-    return m_cameraSession->queryExposureRange();
+    return cameraParameterDto(m_cameraSession->queryExposureRange());
 }
 
-InspectionCameraParameterResult
+CameraParameterResultDto
 InspectionApplicationService::queryCameraGainRange()
 {
-    return m_cameraSession->queryGainRange();
+    return cameraParameterDto(m_cameraSession->queryGainRange());
 }
 
-InspectionCameraParameterResult
+CameraParameterResultDto
 InspectionApplicationService::applyCameraExposure(int exposure)
 {
-    return m_cameraSession->applyExposure(exposure);
+    return cameraParameterDto(m_cameraSession->applyExposure(exposure));
 }
 
-InspectionCameraParameterResult
+CameraParameterResultDto
 InspectionApplicationService::applyCameraGain(int gain)
 {
-    return m_cameraSession->applyGain(gain);
+    return cameraParameterDto(m_cameraSession->applyGain(gain));
 }
 
 bool InspectionApplicationService::startTemplatePreview(
@@ -973,6 +1082,135 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     m_runtime->finishStop();
     m_activeRecipeId.clear();
     publishSnapshot();
+}
+
+void InspectionApplicationService::setUiCallbacks(
+    const InspectionUiCallbacks &callbacks)
+{
+    ResultServiceCallbacks runtimeCallbacks;
+    runtimeCallbacks.runtimeFaulted = [this]() {
+        publishSnapshot();
+        emit faultEntered();
+    };
+    runtimeCallbacks.warnMissingAnnotatedImage =
+            callbacks.warnMissingAnnotatedImage;
+    runtimeCallbacks.reportImageSaveFailure =
+            callbacks.reportImageSaveFailure;
+    runtimeCallbacks.clearPreviousOverlay =
+            callbacks.clearPreviousOverlay;
+    runtimeCallbacks.showDetectionRoiWarning =
+            callbacks.showDetectionRoiWarning;
+    runtimeCallbacks.clearDetectionRoiWarning =
+            callbacks.clearDetectionRoiWarning;
+    m_runtime->resultService().setCallbacks(runtimeCallbacks);
+}
+
+void InspectionApplicationService::bindView(
+    const InspectionViewBindingsDto &bindings)
+{
+    InspectionPresentationViewBindings runtimeBindings;
+    runtimeBindings.showImage = bindings.showImage;
+    runtimeBindings.showVerdictText = bindings.showVerdictText;
+    runtimeBindings.showRecognitionText = bindings.showRecognitionText;
+    runtimeBindings.showTemplateName = bindings.showTemplateName;
+    runtimeBindings.showTotalCount = bindings.showTotalCount;
+    runtimeBindings.showNgCount = bindings.showNgCount;
+    runtimeBindings.showPassRate = bindings.showPassRate;
+    runtimeBindings.showElapsedText = bindings.showElapsedText;
+    runtimeBindings.showVerdictStyle = [bindings](
+            DetectionVerdictViewStyle style) {
+        if (bindings.showVerdictStyle) {
+            bindings.showVerdictStyle(
+                        style == DetectionVerdictViewStyle::Correct
+                        ? InspectionVerdictStyleDto::Correct
+                        : InspectionVerdictStyleDto::Incorrect);
+        }
+    };
+    m_runtime->resultService().bindView(runtimeBindings);
+}
+
+void InspectionApplicationService::clearUiBindings()
+{
+    m_runtime->resultService().setCallbacks(ResultServiceCallbacks());
+    m_runtime->resultService().bindView(
+                InspectionPresentationViewBindings());
+}
+
+void InspectionApplicationService::clearResultView()
+{
+    m_runtime->resultService().clear();
+}
+
+void InspectionApplicationService::clearTransientView()
+{
+    m_runtime->resultService().clearTransientView();
+}
+
+void InspectionApplicationService::presentPreviewFrame(
+    const cv::Mat &image,
+    bool tissueMode,
+    bool productionRunning)
+{
+    m_runtime->resultService().presentPreviewFrame(
+                image, tissueMode, productionRunning);
+}
+
+void InspectionApplicationService::resetStatistics()
+{
+    m_runtime->resetStatistics();
+    m_runtime->resultService().presentTotalAndNgCounts(
+                m_runtime->totalCount(), m_runtime->ngCount());
+}
+
+void InspectionApplicationService::resetNgCount()
+{
+    m_runtime->resetNgCount();
+    m_runtime->resultService().presentNgCount(m_runtime->ngCount());
+}
+
+void InspectionApplicationService::clearPendingDelayedNgRequests()
+{
+    m_runtime->clearPendingDelayedNgRequests();
+}
+
+void InspectionApplicationService::checkPlcHealth()
+{
+    if (!m_runtime->isRunning()
+            || !m_runtime->resultService().requiresPlcForRun()
+            || m_runtime->isPlcConnected()) {
+        return;
+    }
+    enterFault(
+                InspectionFaultReason::PlcDisconnected,
+                QStringLiteral("运行中 PLC 连接状态已断开。"));
+}
+
+ApplicationFaultSnapshot
+InspectionApplicationService::faultSnapshot() const
+{
+    const InspectionFaultSnapshot source = m_runtime->faultSnapshot();
+    ApplicationFaultSnapshot snapshot;
+    snapshot.active = source.isActive();
+    snapshot.reasonText = faultReasonText(source.reason);
+    snapshot.diagnostic = source.diagnostic;
+    snapshot.runId = source.runId;
+    snapshot.acceptedProductCount = source.acceptedProductCount;
+    snapshot.completedProductCount = source.completedProductCount;
+    snapshot.postFaultDroppedFrameCount =
+            source.postFaultDroppedFrameCount;
+    snapshot.occurredAtUtc = source.occurredAtUtc;
+    return snapshot;
+}
+
+void InspectionApplicationService::enterFault(
+    InspectionFaultReason reason,
+    const QString &diagnostic)
+{
+    if (!m_runtime->enterFault(reason, diagnostic)) {
+        return;
+    }
+    publishSnapshot();
+    emit faultEntered();
 }
 
 RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const

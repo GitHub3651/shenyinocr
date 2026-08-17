@@ -1,12 +1,11 @@
 #pragma once
 
-#include "BarcodeTypes.h"
+#include "application/template_editor_contract.h"
 #include "application/template_geometry_service.h"
 #include "recipes/prepared_recipe.h"
 #include "recipes/recipe_asset_service.h"
 #include "recipes/recipe_editor_session.h"
 #include "recipes/template_mode_memory.h"
-#include "runtime/template_runtime_profile.h"
 
 #include <QMap>
 #include <QString>
@@ -16,7 +15,6 @@
 
 class IBarcodeDecoder;
 class RecipeStore;
-struct RecipeCatalog;
 
 // The only application boundary for the complete template editing use case.
 // UI code supplies user intent and immutable images; this service owns the
@@ -48,7 +46,7 @@ public:
     bool publish(PreparedRecipeSnapshot *preparedRecipe,
                  QString *errorMessage = nullptr);
 
-    bool listRecipes(RecipeCatalog *catalog,
+    bool listRecipes(TemplateRecipeCatalog *catalog,
                      QString *errorMessage = nullptr) const;
     bool loadPreparedRecipe(
         const QString &recipeId,
@@ -81,8 +79,8 @@ public:
     bool validateBarcodeTemplate(
         const cv::Mat &sourceImage,
         const QRect &sourceRect,
-        const BarcodeDecodeOptions &options,
-        BarcodeReadResult *result,
+        const TemplateBarcodeValidationOptions &options,
+        TemplateBarcodeValidationResult *result,
         QString *failureReason) const;
 
     const TemplateModeMemory &modeMemory() const;

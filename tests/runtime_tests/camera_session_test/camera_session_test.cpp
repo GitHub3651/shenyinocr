@@ -2,6 +2,7 @@
 
 #include "detection/common/frame_preprocessor.h"
 #include "detection/positioning/inspection_positioner.h"
+#include "devices/camera/camera_device.h"
 #include "runtime/capture_worker.h"
 
 #include <atomic>

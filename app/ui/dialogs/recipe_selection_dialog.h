@@ -1,7 +1,7 @@
 #ifndef UI_DIALOGS_RECIPE_SELECTION_DIALOG_H
 #define UI_DIALOGS_RECIPE_SELECTION_DIALOG_H
 
-#include "recipes/recipe_store.h"
+#include "application/template_editor_contract.h"
 
 #include <QDialog>
 #include <QVector>
@@ -16,7 +16,7 @@ class RecipeSelectionDialog : public QDialog
 
 public:
     explicit RecipeSelectionDialog(
-        const QVector<RecipeCatalogEntry> &recipes,
+        const QVector<TemplateRecipeCatalogEntry> &recipes,
         QWidget *parent = nullptr);
 
     QString selectedRecipeId() const;

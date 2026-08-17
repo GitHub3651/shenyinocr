@@ -5,10 +5,10 @@
 #include "system_support/crash/windows_crash_handler.h"
 #include "system_support/logging/application_logger.h"
 
-#include "devices/barcode/barcode_decoder_adapter.h"
+#include "devices/barcode/vendor/barcode_decoder_adapter.h"
 #include "devices/camera/vendor/hikvision_camera_device.h"
-#include "devices/ocr/paddle_ocr_engine.h"
-#include "devices/plc/snap7_plc_device.h"
+#include "devices/ocr/vendor/paddle_ocr_engine.h"
+#include "devices/plc/vendor/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
 #include "application/template_application_service.h"
 #include "runtime/pipeline_registry.h"
@@ -18,7 +18,10 @@
 #include "runtime/camera_session.h"
 #include "recipes/recipe_store.h"
 #include "system_support/settings/machine_settings_store.h"
-#include "widget.h"
+#include "ui/main_window.h"
+#include "ui/pages/inspection_page.h"
+#include "ui/pages/machine_settings_page.h"
+#include "ui/pages/template_editor_page.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -225,13 +228,41 @@ int ApplicationStartup::run(int argc, char *argv[])
                 templateService(
                     new TemplateApplicationService(
                         recipeStore,
-                        barcodeDecoder,
-                        settingsService->editorWorkspacesRootPath()));
-        Widget window(
-                    runtime,
+                         barcodeDecoder,
+                         settingsService->editorWorkspacesRootPath()));
+        std::unique_ptr<InspectionPage> inspectionPage;
+        std::unique_ptr<MachineSettingsPage> machineSettingsPage;
+        std::unique_ptr<TemplateEditorPage> templateEditorPage;
+        MainWindow window(
                     inspectionService,
                     settingsService,
                     templateService);
+        inspectionPage.reset(new InspectionPage(
+                    &window,
+                    window.viewForComposition(),
+                    window.templateAttentionTimerForComposition(),
+                    window.templateAttentionFlagForComposition(),
+                    window.inspectionPageCallbacks()));
+        machineSettingsPage.reset(new MachineSettingsPage(
+                    window.viewForComposition(),
+                    settingsService.get(),
+                    window.settingsEditStateForComposition(),
+                    window.selectedDirectoryForComposition(),
+                    window.applyingSettingsFlagForComposition(),
+                    window.updatingSettingsUiFlagForComposition(),
+                    window.machineSettingsPageCallbacks()));
+        templateEditorPage.reset(new TemplateEditorPage(
+                    window.templateEditorViewBindings(),
+                    templateService.get(),
+                    inspectionService.get(),
+                    settingsService.get(),
+                    machineSettingsPage.get(),
+                    window.settingsEditStateForComposition(),
+                    window.templateEditorPageCallbacks()));
+        window.attachPages(
+                    inspectionPage.get(),
+                    machineSettingsPage.get(),
+                    templateEditorPage.get());
         window.showMaximized();
         result = application.exec();
     }

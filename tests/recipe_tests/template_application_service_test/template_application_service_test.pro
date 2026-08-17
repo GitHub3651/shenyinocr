@@ -22,10 +22,11 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/template_mode_memory.cpp \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.cpp \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
-    $$PROJECT_ROOT/app/DetectionModes.cpp
+    $$PROJECT_ROOT/app/contracts/detection_mode.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/application/template_application_service.h \
+    $$PROJECT_ROOT/app/application/template_editor_contract.h \
     $$PROJECT_ROOT/app/application/template_geometry_service.h \
     $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
     $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \

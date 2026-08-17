@@ -2,29 +2,6 @@
 
 #include <QStringList>
 
-namespace {
-
-QString faultReasonText(InspectionFaultReason reason)
-{
-    switch (reason) {
-    case InspectionFaultReason::CameraDisconnected:
-        return QStringLiteral("相机断连或正式采集异常");
-    case InspectionFaultReason::PlcDisconnected:
-        return QStringLiteral("PLC\u8fde\u63a5\u6216\u7ed3\u679c\u8f93\u51fa\u5f02\u5e38");
-    case InspectionFaultReason::HardTriggerQueueOverflow:
-        return QStringLiteral("\u786c\u89e6\u53d1\u68c0\u6d4b\u961f\u5217\u5df2\u6ee1");
-    case InspectionFaultReason::ProductIdentityAmbiguous:
-        return QStringLiteral("\u4ea7\u54c1\u8eab\u4efd\u65e0\u6cd5\u552f\u4e00\u786e\u5b9a");
-    case InspectionFaultReason::RuntimeInvariantViolation:
-        return QStringLiteral("\u68c0\u6d4b\u8fd0\u884c\u7ea6\u675f\u88ab\u7834\u574f");
-    case InspectionFaultReason::None:
-        break;
-    }
-    return QString();
-}
-
-}
-
 bool InspectionFaultPresentation::isValid() const
 {
     return !statusText.isEmpty()
@@ -33,14 +10,13 @@ bool InspectionFaultPresentation::isValid() const
 }
 
 InspectionFaultPresentation InspectionFaultPresenter::create(
-    const InspectionFaultSnapshot &snapshot)
+    const ApplicationFaultSnapshot &snapshot)
 {
     InspectionFaultPresentation presentation;
     if (!snapshot.isActive()) {
         return presentation;
     }
 
-    const QString reasonText = faultReasonText(snapshot.reason);
     presentation.statusText = QStringLiteral("视觉检测已暂停");
     presentation.resultText = QStringLiteral("检测暂停");
     presentation.statusStyleSheet = QStringLiteral(
@@ -53,7 +29,8 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
                 " border:2px solid #d32f2f;}");
 
     QStringList details;
-    details << QStringLiteral("\u6545\u969c\u539f\u56e0\uff1a%1").arg(reasonText);
+    details << QStringLiteral("\u6545\u969c\u539f\u56e0\uff1a%1")
+               .arg(snapshot.reasonText);
     if (!snapshot.diagnostic.isEmpty()) {
         details << QStringLiteral("\u8bca\u65ad\u4fe1\u606f\uff1a%1")
                    .arg(snapshot.diagnostic);

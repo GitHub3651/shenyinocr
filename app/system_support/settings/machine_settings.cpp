@@ -1,6 +1,6 @@
 #include "system_support/settings/machine_settings.h"
 
-#include "DetectionModes.h"
+#include "contracts/detection_mode.h"
 
 const int MachineSettings::CurrentSchemaVersion;
 

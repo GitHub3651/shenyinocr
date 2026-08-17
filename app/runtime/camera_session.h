@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TrackingTypes.h"
+#include "detection/positioning/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
 #include "detection/positioning/inspection_positioner.h"
 #include "devices/camera/camera_device.h"

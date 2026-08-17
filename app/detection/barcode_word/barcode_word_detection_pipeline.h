@@ -1,7 +1,7 @@
 #ifndef DETECTION_BARCODE_WORD_BARCODE_WORD_DETECTION_PIPELINE_H
 #define DETECTION_BARCODE_WORD_BARCODE_WORD_DETECTION_PIPELINE_H
 
-#include "BarcodeTypes.h"
+#include "devices/barcode/barcode_types.h"
 #include "detection/word/word_detection_pipeline.h"
 
 #include <QString>
@@ -30,7 +30,7 @@ struct BarcodeWordDecodeStrategyState
 {
     int preferredStrategyId = -1;
     unsigned int preferredOptionFlags =
-            BARCODE_DECODER_OPTION_NONE;
+            BarcodeDecodeOptionFlags::None;
     int consecutiveFailures = 0;
 };
 

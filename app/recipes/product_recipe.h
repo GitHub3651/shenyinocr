@@ -2,6 +2,7 @@
 #define RECIPES_PRODUCT_RECIPE_H
 
 #include "contracts/barcode_parameter_defaults.h"
+#include "contracts/detection_mode.h"
 
 #include <QJsonObject>
 #include <QMap>
@@ -13,15 +14,6 @@
 #include <QVector>
 
 #include <memory>
-
-enum class DetectionMode
-{
-    Stamp,
-    Word,
-    Ocr,
-    Tissue,
-    BarcodeWord
-};
 
 struct TissueRecipeParameters
 {
@@ -75,10 +67,6 @@ struct ProductRecipe
 
 typedef std::shared_ptr<const ProductRecipe> ProductRecipeSnapshot;
 
-QString detectionModeId(DetectionMode mode);
-bool detectionModeFromId(const QString &modeId, DetectionMode *mode);
-QString detectionModeUiId(DetectionMode mode);
-bool detectionModeFromUiId(const QString &modeId, DetectionMode *mode);
 bool isTemplateRecipeMode(DetectionMode mode);
 QStringList requiredTemplateProfileAssetRoles(DetectionMode mode);
 

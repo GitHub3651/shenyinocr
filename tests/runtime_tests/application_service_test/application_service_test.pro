@@ -18,7 +18,7 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     application_service_test.cpp \
-    $$PROJECT_ROOT/app/DetectionModes.cpp \
+    $$PROJECT_ROOT/app/contracts/detection_mode.cpp \
     $$PROJECT_ROOT/app/application/inspection_application_service.cpp \
     $$PROJECT_ROOT/app/application/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/application/settings_application_service.cpp \
@@ -50,14 +50,16 @@ SOURCES += \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_presentation_renderer.cpp \
-    $$PROJECT_ROOT/app/Detector.cpp \
-    $$PROJECT_ROOT/app/TissueRollDetector.cpp
+    $$PROJECT_ROOT/app/detection/stamp/overlap_detector.cpp \
+    $$PROJECT_ROOT/app/detection/tissue/tissue_roll_detector.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/DetectionModes.h \
+    $$PROJECT_ROOT/app/contracts/detection_mode.h \
     $$PROJECT_ROOT/app/application/application_result.h \
+    $$PROJECT_ROOT/app/application/camera_application_contract.h \
     $$PROJECT_ROOT/app/application/inspection_application_service.h \
     $$PROJECT_ROOT/app/application/inspection_start_preflight.h \
+    $$PROJECT_ROOT/app/application/inspection_ui_contract.h \
     $$PROJECT_ROOT/app/application/runtime_snapshot.h \
     $$PROJECT_ROOT/app/application/settings_application_service.h \
     $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
@@ -95,8 +97,8 @@ HEADERS += \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.h \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.h \
     $$PROJECT_ROOT/app/runtime/inspection_presentation_renderer.h \
-    $$PROJECT_ROOT/app/Detector.h \
-    $$PROJECT_ROOT/app/TissueRollDetector.h
+    $$PROJECT_ROOT/app/detection/stamp/overlap_detector.h \
+    $$PROJECT_ROOT/app/detection/tissue/tissue_roll_detector.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

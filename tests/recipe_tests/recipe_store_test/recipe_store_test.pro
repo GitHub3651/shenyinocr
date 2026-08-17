@@ -12,6 +12,7 @@ PROJECT_ROOT = $$clean_path($$PWD/../../..)
 
 SOURCES += \
     recipe_store_test.cpp \
+    $$PROJECT_ROOT/app/contracts/detection_mode.cpp \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.cpp \
@@ -20,6 +21,7 @@ SOURCES += \
 
 HEADERS += \
     $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
+    $$PROJECT_ROOT/app/contracts/detection_mode.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
     $$PROJECT_ROOT/app/recipes/recipe_store.h \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.h \

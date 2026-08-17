@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TrackingTypes.h"
+#include "detection/positioning/detection_pose.h"
 #include "detection/positioning/tracking_pose_matcher.h"
 #include "runtime/inspection_run_configuration.h"
 

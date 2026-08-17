@@ -1,11 +1,14 @@
 #include <QtTest>
 
-#include "DetectionModes.h"
+#include "contracts/detection_mode.h"
 #include "application/inspection_application_service.h"
 #include "application/settings_application_service.h"
 #include "devices/barcode/barcode_decoder.h"
+#include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
+#include "devices/plc/plc_device.h"
 #include "recipes/recipe_store.h"
+#include "runtime/camera_session.h"
 #include "runtime/inspection_runtime.h"
 #include "runtime/pipeline_registry.h"
 #include "system_support/settings/machine_settings_store.h"
@@ -666,7 +669,7 @@ void ApplicationServiceTest::plcCommandsUseApplicationBoundary()
 
     QVERIFY(service.applyPlcTriggerMode(
                 machineSettingsTriggerModeIds().at(1)).isSuccess());
-    InspectionPlcRunSettings runSettings;
+    PlcRunSettingsCommand runSettings;
     runSettings.rejectTime = 12;
     runSettings.rejectDistance = 345;
     runSettings.photoTime = 67;
@@ -732,7 +735,7 @@ void ApplicationServiceTest::hardTriggerUsesSharedCameraSession()
              qPrintable(started.error.userMessage
                         + started.error.diagnostic));
     QCOMPARE(started.acquisitionKind,
-             InspectionAcquisitionKind::HardwareTrigger);
+             InspectionAcquisitionDto::HardwareTrigger);
     QVERIFY(fixture.camera->triggerModes.contains(
                 CameraTriggerMode::HardwareLine0));
     QCOMPARE(fixture.camera->softwareTriggerCount.load(), 0);

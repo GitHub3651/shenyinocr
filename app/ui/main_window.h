@@ -1,0 +1,244 @@
+// ui/main_window.h
+// 主窗口类 - 视觉检测跟踪系统
+// 已修改以兼容简化版线程类（只有1个检测框）
+
+#ifndef OCRGANGYIN_UI_MAIN_WINDOW_H
+#define OCRGANGYIN_UI_MAIN_WINDOW_H
+
+#ifndef GLOG_NO_ABBREVIATED_SEVERITIES
+#define GLOG_NO_ABBREVIATED_SEVERITIES
+#define GOOGLE_GLOG_DLL_DECL
+#endif
+
+#include <QPointer>
+#include <QStringList>
+#include <QWidget>
+
+#include <opencv2/core.hpp>
+
+#include <atomic>
+#include <memory>
+
+#include "application/inspection_application_service.h"
+#include "application/settings_application_service.h"
+#include "application/template_editor_contract.h"
+#include "ui/controllers/operation_ui_policy.h"
+#include "ui/controllers/settings_edit_state.h"
+#include "ui/pages/inspection_page.h"
+#include "ui/pages/machine_settings_page.h"
+#include "ui/pages/template_editor_page.h"
+#include "ui/widgets/image_label.h"
+
+
+namespace Ui {
+class MainWindow;
+}
+
+class QLabel;
+class QComboBox;
+class QFrame;
+class QDialog;
+class QPushButton;
+class QLineEdit;
+class QTimer;
+class QCloseEvent;
+class TemplateApplicationService;
+
+/**
+ * @brief 主窗口类
+ *
+ * 功能：
+ * - 相机控制和图像采集
+ * - OCR识别和检测
+ * - 模板匹配和字库匹配
+ * - PLC通信
+ * - 图像跟踪
+ */
+class MainWindow : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit MainWindow(
+        const std::shared_ptr<InspectionApplicationService> &inspectionService,
+        const std::shared_ptr<SettingsApplicationService> &settingsService,
+        const std::shared_ptr<TemplateApplicationService> &templateService,
+        QWidget *parent = nullptr);
+    ~MainWindow();
+
+    Ui::MainWindow *viewForComposition() const;
+    QTimer *templateAttentionTimerForComposition() const;
+    bool *templateAttentionFlagForComposition();
+    SettingsEditState *settingsEditStateForComposition();
+    QString *selectedDirectoryForComposition();
+    bool *applyingSettingsFlagForComposition();
+    bool *updatingSettingsUiFlagForComposition();
+    InspectionPage::Callbacks inspectionPageCallbacks();
+    MachineSettingsPage::Callbacks machineSettingsPageCallbacks();
+    TemplateEditorViewBindings templateEditorViewBindings() const;
+    TemplateEditorPageCallbacks templateEditorPageCallbacks();
+    void attachPages(
+        InspectionPage *inspectionPage,
+        MachineSettingsPage *machineSettingsPage,
+        TemplateEditorPage *templateEditorPage);
+
+private slots:
+    // ========== 界面相关槽函数 ==========
+    void showscreen();                  ///< 显示屏幕
+    void slot_displayAndDetect(cv::Mat *image);  ///< 显示和检测槽
+
+    // ========== 按钮点击槽函数 ==========
+    void on_VideoShoot_clicked();       ///< 单词采集按钮
+//    void on_ReShoot_clicked();          ///< 重新采集按钮
+    void on_HandwareDetect_clicked();   ///< 相机检测按钮
+    void on_CloseCamera_clicked();      ///< 关闭相机按钮
+    void on_sureButton_clicked();       ///< 确定按钮
+
+    // ========== 工具函数 ==========
+
+
+    // ========== PLC相关槽函数 ==========
+    void on_plcbtn_clicked();           ///< PLC按钮
+    void on_ConnectpushButton_clicked(); ///< 连接PLC按钮
+    void on_DisconnectpushButton_clicked(); ///< 断开PLC按钮
+    void on_WriteVDpushButton_clicked(); ///< 写入VD按钮
+
+    // ========== 其他槽函数 ==========
+    void on_textsure_btn_clicked();     ///< 文本确定按钮
+    void on_batchTextsure_btn_clicked(); ///< 批量文本确定按钮
+    void on_batchImageThresholdButton_clicked(); ///< 批量设置字库模板图像阈值
+    void on_cancel_clicked();           ///< 取消按钮
+    void slot_clearResultLabel();       ///< 清除结果标签
+    void closeEvent(QCloseEvent *event) override; ///< 关闭事件
+
+    // ========== 模式和功能按钮 ==========
+    void on_plcmodebtn_clicked();       ///< PLC模式按钮
+    void on_eliminatebutton_clicked();  ///< 消除按钮
+
+    // ========== 其他按钮 ==========
+    void on_pushButton_3_clicked();
+    void on_pushButton_5_clicked();
+    void on_pushButton_4_clicked();
+    void on_pushButton_browseImageSavePath_clicked();
+    void on_pushButton_8_clicked();
+    void on_pushButton_9_clicked();
+    void on_cut_cancelButton_2_clicked();
+    void on_cut_cancelButton_3_clicked();
+
+
+    void on_pushButton_10_clicked();
+
+    void on_pushButton_7_clicked();
+
+
+    void on_pushButton_12_clicked();
+
+    void on_pushButton_tissueRoughnessThreshold_clicked();
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
+    void showParameterInfo(const QString &title, const QString &message);
+    void showParameterInfoWithRedWarning(const QString &title,
+                                         const QString &message,
+                                         const QString &warningMessage);
+    void showParameterInfoAsError(const QString &title, const QString &message);
+    void showParameterWarning(const QString &title, const QString &message);
+    void showParameterCritical(const QString &title, const QString &message);
+    bool applyCameraExposureValue(int exposureValue, QString *errorMessage);
+    bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
+    bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    bool hasDirtySettings() const;
+    QString dirtySettingsMessage() const;
+    void restoreUnappliedSettingsFromApplied();
+    void setupRecipeProfileDirtyTracking();
+    void refreshRecipeProfileDirty();
+    void clearRecipeProfileDirty();
+    void updateHardwareParameterUiEnabled();
+    void updateCurrentTemplateName();
+    void updateSaveDirButtonText();
+    void updateImageSaveOptionsVisibility();
+    void updateTissueRoughnessUiVisibility();
+    void setupTemplateGuide();
+    void adjustTemplateGuideHeight();
+    void hideTemplateGuide();
+    void updateImageDisplayStatusText(const QString &body);
+    void handleTemplateGuideEvent(const QString &eventName, int pointCount);
+    void setupManualCharacterCropUi();
+    void setupSoftwareSettingsPage();
+    void clearCurrentSoftwareData();
+    void restoreDefaultMachineSettings();
+    QString detectModeIdForIndex(int index) const;
+    QString currentDetectModeId() const;
+    void restoreTemplatesForMode(const QString &modeId, bool showMessage);
+    bool startTemplatePreview();
+    bool freezeTemplatePreview();
+    bool stopTemplatePreview(int waitTimeMs = 1500);
+    void resetTemplateCaptureState();
+    void updateOperationUiState();
+    OperationUiState operationUiState() const;
+    bool isCameraOpen() const;
+    bool isInspectionBusy() const;
+    const MachineSettings &machineSettings() const;
+    void updateMachineSettingsDraft(const MachineSettings &settings);
+    void presentStartFailure(const StartInspectionResult &result);
+    void finishInspectionStopUi(const StopInspectionResult &result);
+    void presentInspectionFault();
+    bool confirmInspectionFaultRecovery();
+    void checkInspectionPlcHealth();
+    void restoreNormalFaultUi();
+
+    // ========== UI对象 ==========
+    Ui::MainWindow *ui;                     ///< UI界面指针
+    QLineEdit *m_softwareDataDirLineEdit = nullptr;
+    std::shared_ptr<InspectionApplicationService>
+            m_inspectionApplicationService;
+    std::shared_ptr<SettingsApplicationService>
+            m_settingsApplicationService;
+    MachineSettings &m_appliedMachineSettings;
+    std::shared_ptr<TemplateApplicationService>
+            m_templateApplicationService;
+    QString m_currentDetectModeId;
+    bool m_applyingMachineSettings = false;
+    bool m_updatingMachineSettingsUi = false;
+    SettingsEditState m_settingsEditState;
+    MachineSettingsPage *m_machineSettingsPage = nullptr;
+    TemplateEditorPage *m_templateEditorPage = nullptr;
+
+    using OperationState = OperationUiState;
+    std::atomic<bool> m_resultBoundDisplayActive{false};
+    bool m_applicationExitInProgress = false;
+    InspectionPage *m_inspectionPage = nullptr;
+    bool m_faultAlarmPresented = false;
+
+    // ========== 定时器 ==========
+    QTimer *m_plcHealthTimer = nullptr; ///< 运行中PLC连接监视
+    QTimer *m_templateCaptureAttentionTimer = nullptr;
+    bool m_templateCaptureAttentionOn = false;
+
+    int PLCmode = 0;
+    QPointer<ImageLabel> imageLabel;
+    QString selectedDir;
+
+    bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
+    void setupWordTemplateEditorCombo();
+    void setupDetectModeChangeTracking();
+    void clearWordMultiTemplateState();
+    void clearSingleTemplateRecipeState();
+    void refreshWordTemplateEditorCombo();
+    int currentWordTemplateProfileIndex() const;
+    void clearBarcodeTemplateValidation();
+
+    // ========== 设置相关函数 ==========
+    bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
+    void applyMachineSettingsToUi(const MachineSettings &settings);
+    void applyRecipeProfileToUi(const RecipeProfile &settings);
+    void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
+    void initStyle();  // 声明后才能在 cpp 中实现和调用
+};
+
+#endif // OCRGANGYIN_UI_MAIN_WINDOW_H

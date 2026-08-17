@@ -1,6 +1,7 @@
 #include <QtTest/QtTest>
 
 #include "detection/ocr/ocr_detection_pipeline.h"
+#include "devices/ocr/ocr_engine.h"
 
 class FakeOcrEngine : public IOcrEngine
 {

@@ -15,13 +15,13 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     barcode_decoder_adapter_test.cpp \
-    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder_adapter.cpp
+    $$PROJECT_ROOT/app/devices/barcode/vendor/barcode_decoder_adapter.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/devices/barcode/barcode_decoder_adapter.h \
+    $$PROJECT_ROOT/app/devices/barcode/vendor/barcode_decoder_adapter.h \
     $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \
-    $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
-    $$PROJECT_ROOT/app/BarcodeTypes.h
+    $$PROJECT_ROOT/app/devices/barcode/vendor/barcode_decoder_api.h \
+    $$PROJECT_ROOT/app/devices/barcode/barcode_types.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

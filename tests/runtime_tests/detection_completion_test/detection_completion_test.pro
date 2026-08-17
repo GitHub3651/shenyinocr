@@ -18,7 +18,7 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
     detection_completion_test.cpp \
-    $$PROJECT_ROOT/app/DetectionModes.cpp \
+    $$PROJECT_ROOT/app/contracts/detection_mode.cpp \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
     $$PROJECT_ROOT/app/runtime/pipeline_registry.cpp \
@@ -35,14 +35,14 @@ SOURCES += \
     $$PROJECT_ROOT/app/detection/stamp/stamp_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.cpp \
-    $$PROJECT_ROOT/app/Detector.cpp \
-    $$PROJECT_ROOT/app/TissueRollDetector.cpp \
+    $$PROJECT_ROOT/app/detection/stamp/overlap_detector.cpp \
+    $$PROJECT_ROOT/app/detection/tissue/tissue_roll_detector.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_presentation_renderer.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/DetectionModes.h \
+    $$PROJECT_ROOT/app/contracts/detection_mode.h \
     $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
-    $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/detection/positioning/detection_pose.h \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
     $$PROJECT_ROOT/app/runtime/detection_worker.h \
     $$PROJECT_ROOT/app/runtime/pipeline_registry.h \
@@ -55,9 +55,9 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_presentation.h \
     $$PROJECT_ROOT/app/runtime/result_service.h \
     $$PROJECT_ROOT/app/system_support/settings/machine_settings.h \
-    $$PROJECT_ROOT/app/BarcodeTypes.h \
-    $$PROJECT_ROOT/app/Detector.h \
-    $$PROJECT_ROOT/app/TissueRollDetector.h \
+    $$PROJECT_ROOT/app/devices/barcode/barcode_types.h \
+    $$PROJECT_ROOT/app/detection/stamp/overlap_detector.h \
+    $$PROJECT_ROOT/app/detection/tissue/tissue_roll_detector.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.h \
     $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \

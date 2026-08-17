@@ -66,11 +66,15 @@ SOURCES += \
     recipes/template_mode_memory.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     ui/dialogs/character_template_editor_dialog.cpp \
-    ui/controllers/inspection_runtime_ui_coordinator.cpp \
-    ui/controllers/machine_settings_page_controller.cpp \
+    ui/pages/inspection_page.cpp \
+    ui/pages/machine_settings_page.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
     ui/pages/template_editor_page.cpp \
+    ui/pages/template_editor_view.cpp \
+    ui/pages/template_editor_recipe.cpp \
+    ui/pages/template_editor_profile_commands.cpp \
+    ui/pages/template_editor_support.cpp \
     system_support/machine_settings_policy.cpp \
     system_support/settings/machine_settings.cpp \
     system_support/settings/machine_settings_store.cpp \
@@ -83,10 +87,10 @@ SOURCES += \
     startup/application_startup.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
     runtime/inspection_presentation_renderer.cpp \
-    devices/barcode/barcode_decoder_adapter.cpp \
+    devices/barcode/vendor/barcode_decoder_adapter.cpp \
     devices/camera/vendor/hikvision_camera_device.cpp \
-    devices/ocr/paddle_ocr_engine.cpp \
-    devices/plc/snap7_plc_device.cpp \
+    devices/ocr/vendor/paddle_ocr_engine.cpp \
+    devices/plc/vendor/snap7_plc_device.cpp \
     runtime/inspection_run_configuration.cpp \
     runtime/camera_session.cpp \
     runtime/capture_worker.cpp \
@@ -110,27 +114,30 @@ SOURCES += \
     detection/stamp/stamp_detection_pipeline.cpp \
     detection/tissue/tissue_detection_pipeline.cpp \
     detection/word/word_detection_pipeline.cpp \
-    DetectionModes.cpp \
-    Detector.cpp \
-    PaddleOCR/src/clipper.cpp \
-    PaddleOCR/src/config.cpp \
-    PaddleOCR/src/ocr_cls.cpp \
-    PaddleOCR/src/ocr_det.cpp \
-    PaddleOCR/src/ocr_rec.cpp \
-    PaddleOCR/src/postprocess_op.cpp \
-    PaddleOCR/src/preprocess_op.cpp \
-    PaddleOCR/src/utility.cpp \
-    TissueRollDetector.cpp \
-    imagelabel.cpp \
+    contracts/detection_mode.cpp \
+    detection/stamp/overlap_detector.cpp \
+    devices/ocr/vendor/paddle/src/clipper.cpp \
+    devices/ocr/vendor/paddle/src/config.cpp \
+    devices/ocr/vendor/paddle/src/ocr_cls.cpp \
+    devices/ocr/vendor/paddle/src/ocr_det.cpp \
+    devices/ocr/vendor/paddle/src/ocr_rec.cpp \
+    devices/ocr/vendor/paddle/src/postprocess_op.cpp \
+    devices/ocr/vendor/paddle/src/preprocess_op.cpp \
+    devices/ocr/vendor/paddle/src/utility.cpp \
+    detection/tissue/tissue_roll_detector.cpp \
+    ui/widgets/image_label.cpp \
     startup/main.cpp \
-    snap7.cpp \
-    templatematch.cpp \
-        widget.cpp
+    devices/plc/vendor/snap7.cpp \
+    ui/main_window.cpp \
+    ui/main_window_inspection.cpp \
+    ui/main_window_settings.cpp
 
 HEADERS += \
     application/application_result.h \
+    application/camera_application_contract.h \
     application/inspection_application_service.h \
     application/inspection_start_preflight.h \
+    application/inspection_ui_contract.h \
     application/runtime_snapshot.h \
     application/settings_application_service.h \
     application/template_application_service.h \
@@ -146,11 +153,12 @@ HEADERS += \
     ui/dialogs/character_template_editor_dialog.h \
     runtime/inspection_presentation.h \
     runtime/result_service.h \
-    ui/controllers/inspection_runtime_ui_coordinator.h \
-    ui/controllers/machine_settings_page_controller.h \
+    ui/pages/inspection_page.h \
+    ui/pages/machine_settings_page.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
     ui/pages/template_editor_page.h \
+    ui/pages/template_editor_support.h \
     system_support/machine_settings_policy.h \
     system_support/settings/machine_settings.h \
     system_support/settings/machine_settings_store.h \
@@ -163,14 +171,14 @@ HEADERS += \
     startup/application_startup.h \
     ui/presenters/inspection_fault_presenter.h \
     runtime/inspection_presentation_renderer.h \
-    devices/barcode/barcode_decoder_adapter.h \
+    devices/barcode/vendor/barcode_decoder_adapter.h \
     devices/barcode/barcode_decoder.h \
     devices/camera/camera_device.h \
     devices/camera/vendor/hikvision_camera_device.h \
     devices/ocr/ocr_engine.h \
-    devices/ocr/paddle_ocr_engine.h \
+    devices/ocr/vendor/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
-    devices/plc/snap7_plc_device.h \
+    devices/plc/vendor/snap7_plc_device.h \
     runtime/inspection_run_configuration.h \
     runtime/camera_session.h \
     runtime/capture_worker.h \
@@ -179,7 +187,7 @@ HEADERS += \
     runtime/detection_worker.h \
     runtime/pipeline_registry.h \
     runtime/inspection_profile_snapshot.h \
-    runtime/template_runtime_profile.h \
+    application/template_editor_contract.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_plc_controller.h \
     runtime/inspection_run_context.h \
@@ -196,27 +204,26 @@ HEADERS += \
     detection/stamp/stamp_detection_pipeline.h \
     detection/tissue/tissue_detection_pipeline.h \
     detection/word/word_detection_pipeline.h \
-    BarcodeDecoderApi.h \
-    BarcodeTypes.h \
-    DetectionModes.h \
-    Detector.h \
-    PaddleOCR/include/clipper.h \
-    PaddleOCR/include/config.h \
-    PaddleOCR/include/ocr_cls.h \
-    PaddleOCR/include/ocr_det.h \
-    PaddleOCR/include/ocr_rec.h \
-    PaddleOCR/include/postprocess_op.h \
-    PaddleOCR/include/preprocess_op.h \
-    PaddleOCR/include/utility.h \
-    TrackingTypes.h \
-    TissueRollDetector.h \
-    imagelabel.h \
-    snap7.h \
-    templatematch.h \
-        widget.h
+    devices/barcode/vendor/barcode_decoder_api.h \
+    devices/barcode/barcode_types.h \
+    contracts/detection_mode.h \
+    detection/stamp/overlap_detector.h \
+    devices/ocr/vendor/paddle/include/clipper.h \
+    devices/ocr/vendor/paddle/include/config.h \
+    devices/ocr/vendor/paddle/include/ocr_cls.h \
+    devices/ocr/vendor/paddle/include/ocr_det.h \
+    devices/ocr/vendor/paddle/include/ocr_rec.h \
+    devices/ocr/vendor/paddle/include/postprocess_op.h \
+    devices/ocr/vendor/paddle/include/preprocess_op.h \
+    devices/ocr/vendor/paddle/include/utility.h \
+    detection/positioning/detection_pose.h \
+    detection/tissue/tissue_roll_detector.h \
+    ui/widgets/image_label.h \
+    devices/plc/vendor/snap7.h \
+    ui/main_window.h
 
 FORMS += \
-        widget.ui
+    ui/main_window.ui
 
 RESOURCES += \
     image/image.qrc

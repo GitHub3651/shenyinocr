@@ -146,7 +146,7 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
 
     int successfulStrategyId = -1;
     unsigned int successfulOptionFlags =
-            BARCODE_DECODER_OPTION_NONE;
+            BarcodeDecodeOptionFlags::None;
     output.barcode = decoder->decode(
                 oriented.barcode.grayRoi,
                 decodeOptions,
@@ -167,7 +167,7 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         if (output.nextDecodeStrategy.consecutiveFailures >= 3) {
             output.nextDecodeStrategy.preferredStrategyId = -1;
             output.nextDecodeStrategy.preferredOptionFlags =
-                    BARCODE_DECODER_OPTION_NONE;
+                    BarcodeDecodeOptionFlags::None;
         }
     }
 

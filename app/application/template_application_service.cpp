@@ -132,10 +132,33 @@ bool TemplateApplicationService::publish(
 }
 
 bool TemplateApplicationService::listRecipes(
-        RecipeCatalog *catalog,
+        TemplateRecipeCatalog *catalog,
         QString *errorMessage) const
 {
-    return m_store->listRecipes(catalog, errorMessage);
+    RecipeCatalog storedCatalog;
+    if (!m_store->listRecipes(&storedCatalog, errorMessage)) {
+        return false;
+    }
+    if (!catalog) {
+        return true;
+    }
+    catalog->recipes.clear();
+    catalog->invalidRecipes.clear();
+    for (const RecipeCatalogEntry &entry : storedCatalog.recipes) {
+        TemplateRecipeCatalogEntry dto;
+        dto.recipeId = entry.recipeId;
+        dto.displayName = entry.displayName;
+        dto.detectionMode = entry.detectionMode;
+        dto.profileCount = entry.profileCount;
+        catalog->recipes.append(dto);
+    }
+    for (const RecipeCatalogIssue &issue : storedCatalog.invalidRecipes) {
+        TemplateRecipeCatalogIssue dto;
+        dto.directoryName = issue.directoryName;
+        dto.message = issue.message;
+        catalog->invalidRecipes.append(dto);
+    }
+    return true;
 }
 
 bool TemplateApplicationService::loadPreparedRecipe(
@@ -197,19 +220,23 @@ TemplateApplicationService::buildProfileGeometry(
 bool TemplateApplicationService::validateBarcodeTemplate(
         const cv::Mat &sourceImage,
         const QRect &sourceRect,
-        const BarcodeDecodeOptions &options,
-        BarcodeReadResult *result,
+        const TemplateBarcodeValidationOptions &options,
+        TemplateBarcodeValidationResult *result,
         QString *failureReason) const
 {
     BarcodeReadResult decoded;
+    auto publishResult = [&]() {
+        if (result) {
+            result->readable = decoded.readable;
+            result->text = decoded.text;
+        }
+    };
     auto fail = [&](BarcodeReadStatus status,
                     const QString &diagnostic) {
         decoded.status = status;
         decoded.readable = false;
         decoded.errorReason = diagnostic;
-        if (result) {
-            *result = decoded;
-        }
+        publishResult();
         if (failureReason) {
             *failureReason = barcodeFailureMessage(decoded);
         }
@@ -257,7 +284,12 @@ bool TemplateApplicationService::validateBarcodeTemplate(
         gray = gray.clone();
     }
 
-    decoded = m_barcodeDecoder->decode(gray, options);
+    BarcodeDecodeOptions decodeOptions;
+    decodeOptions.formatMask = options.formatMask;
+    decodeOptions.roiPaddingPercent = options.roiPaddingPercent;
+    decodeOptions.maxDecodeTimeMs = options.maxDecodeTimeMs;
+    decodeOptions.enableFallback = options.enableFallback;
+    decoded = m_barcodeDecoder->decode(gray, decodeOptions);
     decoded.cornersInOriginal.clear();
     decoded.cornersInOriginal.reserve(decoded.cornersInRoi.size());
     for (const cv::Point2f &point : decoded.cornersInRoi) {
@@ -270,17 +302,13 @@ bool TemplateApplicationService::validateBarcodeTemplate(
             && (!decoded.rawBytes.isEmpty() || !decoded.text.isEmpty());
     if (!readable) {
         decoded.readable = false;
-        if (result) {
-            *result = decoded;
-        }
+        publishResult();
         if (failureReason) {
             *failureReason = barcodeFailureMessage(decoded);
         }
         return false;
     }
-    if (result) {
-        *result = decoded;
-    }
+    publishResult();
     if (failureReason) {
         failureReason->clear();
     }

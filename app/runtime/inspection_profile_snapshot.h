@@ -1,7 +1,7 @@
 #pragma once
 
-#include "BarcodeTypes.h"
-#include "TrackingTypes.h"
+#include "devices/barcode/barcode_types.h"
+#include "detection/positioning/detection_pose.h"
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
 #include "recipes/product_recipe.h"

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TrackingTypes.h"
+#include "detection/positioning/detection_pose.h"
 #include "runtime/inspection_presentation.h"
 
 #include <QImage>

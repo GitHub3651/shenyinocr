@@ -1,7 +1,7 @@
 #ifndef DETECTION_STAMP_STAMP_DETECTION_PIPELINE_H
 #define DETECTION_STAMP_STAMP_DETECTION_PIPELINE_H
 
-#include "TrackingTypes.h"
+#include "detection/positioning/detection_pose.h"
 #include "detection/common/character_template_matcher.h"
 
 #include <QString>

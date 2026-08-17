@@ -1,7 +1,7 @@
 #ifndef DETECTION_COMMON_PROFILE_POSE_SELECTOR_H
 #define DETECTION_COMMON_PROFILE_POSE_SELECTOR_H
 
-#include "TrackingTypes.h"
+#include "detection/positioning/detection_pose.h"
 
 #include <QString>
 

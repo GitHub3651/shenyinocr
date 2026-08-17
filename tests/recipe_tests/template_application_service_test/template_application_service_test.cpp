@@ -201,12 +201,12 @@ void TemplateApplicationServiceTest::geometryMapsSingleAndMultiProfileRois()
     QCOMPARE(profile.datePolygon.size(), std::size_t(4));
     QCOMPARE(profile.barcodePolygon.size(), std::size_t(4));
 
-    BarcodeReadResult barcode;
+    TemplateBarcodeValidationResult barcode;
     QString failureReason;
     QVERIFY(service->validateBarcodeTemplate(
                 cv::Mat(80, 100, CV_8UC3, cv::Scalar(20, 30, 40)),
                 QRect(10, 12, 30, 24),
-                BarcodeDecodeOptions(),
+                TemplateBarcodeValidationOptions(),
                 &barcode,
                 &failureReason));
     QVERIFY(barcode.readable);

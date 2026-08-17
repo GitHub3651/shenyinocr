@@ -15,7 +15,7 @@ const int kRecipeIdRole = Qt::UserRole + 1;
 } // namespace
 
 RecipeSelectionDialog::RecipeSelectionDialog(
-        const QVector<RecipeCatalogEntry> &recipes,
+        const QVector<TemplateRecipeCatalogEntry> &recipes,
         QWidget *parent)
     : QDialog(parent)
 {
@@ -35,7 +35,7 @@ RecipeSelectionDialog::RecipeSelectionDialog(
 
     m_recipeList = new QListWidget(this);
     m_recipeList->setSelectionMode(QAbstractItemView::SingleSelection);
-    for (const RecipeCatalogEntry &recipe : recipes) {
+    for (const TemplateRecipeCatalogEntry &recipe : recipes) {
         const QString displayName = recipe.displayName.trimmed().isEmpty()
                 ? recipe.recipeId
                 : recipe.displayName.trimmed();

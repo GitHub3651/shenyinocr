@@ -22,9 +22,9 @@ SOURCES += \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
-    $$PROJECT_ROOT/app/BarcodeTypes.h \
-    $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/devices/barcode/vendor/barcode_decoder_api.h \
+    $$PROJECT_ROOT/app/devices/barcode/barcode_types.h \
+    $$PROJECT_ROOT/app/detection/positioning/detection_pose.h \
     $$PROJECT_ROOT/app/detection/barcode_word/barcode_word_detection_pipeline.h \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.h \
     $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \

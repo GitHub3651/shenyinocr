@@ -9,7 +9,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "recipes/product_recipe.h"
+#include "application/template_editor_contract.h"
 
 class QLabel;
 class QLineEdit;

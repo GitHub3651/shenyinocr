@@ -1,6 +1,6 @@
 #include <QtTest>
 
-#include "devices/plc/snap7_plc_device.h"
+#include "devices/plc/vendor/snap7_plc_device.h"
 
 class PlcDeviceAdapterTest : public QObject
 {

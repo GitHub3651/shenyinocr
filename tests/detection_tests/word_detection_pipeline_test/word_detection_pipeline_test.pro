@@ -17,7 +17,7 @@ SOURCES += \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.cpp
 
 HEADERS += \
-    $$PROJECT_ROOT/app/TrackingTypes.h \
+    $$PROJECT_ROOT/app/detection/positioning/detection_pose.h \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.h \
     $$PROJECT_ROOT/app/detection/common/detection_roi_geometry.h \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.h
