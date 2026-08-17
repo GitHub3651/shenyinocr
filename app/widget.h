@@ -40,12 +40,10 @@
 #include <cstring>
 #include <numeric>
 #include <QImage>
-#include <QThread>
 #include <QtWidgets/QMainWindow>
 #include "TissueRollDetector.h"
 #include <QImage>
 #include "imagelabel.h"
-#include "Zhuizong.h"
 #include <opencv2/opencv.hpp>
 #include <opencv2/tracking.hpp>
 #include <opencv2/tracking/feature.hpp>
@@ -67,7 +65,6 @@
 #include "recipes/template_mode_memory.h"
 #include "runtime/template_runtime_profile.h"
 #include "devices/barcode/barcode_decoder.h"
-#include "devices/camera/camera_device.h"
 #include "devices/ocr/ocr_engine.h"
 #include "runtime/inspection_runtime_controller.h"
 #include "ui/controllers/operation_ui_policy.h"
@@ -79,14 +76,12 @@ namespace Ui {
 class Widget;
 }
 
-class MultiCameraWidget;
 class QLabel;
 class QComboBox;
 class QFrame;
 class QDialog;
 class QPushButton;
 class InspectionResultCoordinator;
-class InspectionAcquisitionController;
 class InspectionRuntimeUiCoordinator;
 class MachineSettingsPageController;
 class TemplateEditorController;
@@ -112,7 +107,6 @@ public:
         std::function<std::shared_ptr<IOcrEngine>()>;
 
     explicit Widget(
-        const std::shared_ptr<ICameraDevice> &cameraDevice,
         const OcrEngineFactory &ocrEngineFactory,
         const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
         const std::shared_ptr<InspectionRuntimeController> &runtimeController,
@@ -130,10 +124,6 @@ public:
         return QString::fromUtf8(str.data());
     }
 
-    // ========== 相机相关 ==========
-    int nRet = -1;                      ///< 返回值
-    void* m_handle = NULL;              ///< 句柄
-
     // ========== 公共方法 ==========
     void initWidget();                  ///< 初始化界面
 //    void saveImageByMVS(QString savePath, QString format);  ///通过MVS自带的函数保存
@@ -141,8 +131,6 @@ public:
 
 signals:
     // ========== 信号定义 ==========
-    void captureFrame(Mat image);       ///< 捕获帧信号
-    void pipei();                       ///< 匹配信号
     void imgshibie(Mat *img);           ///< 识别图像信号
     void jiancestring(String targetstring1);  ///< 检测字符串信号
     void ssim(int s);                   ///< SSIM信号
@@ -205,8 +193,6 @@ private slots:
 
     void on_pushButton_tissueRoughnessThreshold_clicked();
 
-    void on_MultiCameraMode_clicked();
-
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -222,19 +208,11 @@ private:
     void showParameterWarning(const QString &title, const QString &message);
     void showParameterCritical(const QString &title, const QString &message);
     bool applyCameraExposureValue(int exposureValue, QString *errorMessage);
-    bool applySavedCameraExposure(QString *adjustmentMessage, QString *errorMessage);
     bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
-    bool applyCameraHardwareSettingsForRun(
-        const MachineSettings &settings,
-        QStringList *errors);
-    bool applyRuntimeThreadSettingsForRun(
-        const MachineSettings &settings,
-        const PreparedRecipeSnapshot &prepared,
-        QStringList *errors);
     bool applyPlcTriggerModeForRun(
         const MachineSettings &settings,
         QStringList *errors);
@@ -301,18 +279,6 @@ private:
         InspectionRuntimeStartTransaction &startTransaction,
         QString *errorMessage);
     void rollbackInspectionStart();
-    InspectionAcquisitionStopResult stopInspectionAcquisition();
-    InspectionCameraRecoveryResult recoverInspectionCamera(
-        bool recoveryRequired,
-        bool cameraWasOpen,
-        const MachineSettings &settings,
-        const InspectionRuntimePort::PersistAdjustedExposure
-            &persistAdjustedExposure);
-    InspectionCameraOpenResult openInspectionCamera(
-        const MachineSettings &settings,
-        const InspectionRuntimePort::PersistAdjustedExposure
-            &persistAdjustedExposure);
-    void closeInspectionCamera();
     void presentStartFailure(const StartInspectionResult &result);
     void finishInspectionStopUi(const StopInspectionResult &result);
     bool startDetectionWorkerForMode(
@@ -342,7 +308,6 @@ private:
 
     // ========== UI对象 ==========
     Ui::Widget *ui;                     ///< UI界面指针
-    MultiCameraWidget *m_multiCameraWidget = nullptr;
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     std::shared_ptr<InspectionApplicationService>
             m_inspectionApplicationService;
@@ -372,8 +337,6 @@ private:
     std::atomic<bool> m_resultBoundDisplayActive{false};
     bool m_applicationExitInProgress = false;
     InspectionRuntimeController &m_runtimeController;
-    std::unique_ptr<InspectionAcquisitionController>
-            m_acquisitionController;
     std::unique_ptr<InspectionResultCoordinator> m_resultCoordinator;
     std::unique_ptr<InspectionRuntimeUiCoordinator>
             m_runtimeUiCoordinator;
@@ -439,7 +402,7 @@ private:
     bool first;                         ///< 第一次标志
 
     // ========== 检测框相关 ==========
-    vector<vector<QRect>> allDetectedRects; ///< 所有检测到的矩形
+    std::vector<std::vector<QRect>> allDetectedRects; ///< 所有检测到的矩形
     std::vector<QRect> detectedRects;   ///< 检测到的矩形
     QRect dingweiRect;                  ///< 定位矩形
     QRect selectionRect;                ///< 选择矩形
@@ -458,10 +421,9 @@ private:
 
     // ========== 跟踪相关 ==========
     bool tracking;                      ///< 是否正在跟踪
-    Zhuizong *zhuizong;                 ///< 跟踪对象
     TemplateMatch* templatematch;       ///< 模板匹配对象
     cv::Rect trackWindow;               ///< 跟踪窗口
-    vector<Scalar> colors;              ///< 颜色向量
+    std::vector<Scalar> colors;         ///< 颜色向量
     cv::Ptr<cv::MultiTracker> multiTracker; ///< 多目标跟踪器
     std::chrono::steady_clock::time_point lastDetectionTime; ///< 上次检测时间
 
@@ -481,9 +443,9 @@ private:
     // ========== 统计相关 ==========
 
     // ========== 模板匹配相关 ==========
-    vector<Mat> digitTemplates;         ///< 数字模板
+    std::vector<Mat> digitTemplates;    ///< 数字模板
     std::vector<int> digitTemplateTargetIndexes; ///< 字库模板图对应的目标字符位置
-    vector<Mat> digitRegions;           ///< 数字区域
+    std::vector<Mat> digitRegions;      ///< 数字区域
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
 

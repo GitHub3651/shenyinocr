@@ -25,10 +25,6 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/inspection_plc_controller.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_camera_recovery_transition.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_camera_operations.cpp \
     $$PROJECT_ROOT/app/application/inspection_start_preflight.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.cpp \
@@ -66,10 +62,6 @@ HEADERS += \
     $$PROJECT_ROOT/app/runtime/inspection_plc_controller.h \
     $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.h \
     $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
-    $$PROJECT_ROOT/app/runtime/inspection_acquisition_stop_coordinator.h \
-    $$PROJECT_ROOT/app/runtime/inspection_camera_start_transition.h \
-    $$PROJECT_ROOT/app/runtime/inspection_camera_recovery_transition.h \
-    $$PROJECT_ROOT/app/runtime/inspection_camera_operations.h \
     $$PROJECT_ROOT/app/application/inspection_start_preflight.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
     $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.h \

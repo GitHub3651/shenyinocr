@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDateTime>
+#include <QMetaType>
 #include <QString>
 #include <QtGlobal>
 
@@ -11,6 +12,8 @@ enum class InspectionFaultReason {
     ProductIdentityAmbiguous,
     RuntimeInvariantViolation
 };
+
+Q_DECLARE_METATYPE(InspectionFaultReason)
 
 struct InspectionFaultSnapshot {
     InspectionFaultReason reason = InspectionFaultReason::None;

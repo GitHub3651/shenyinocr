@@ -4,6 +4,7 @@
 #include "application/inspection_runtime_port.h"
 #include "application/inspection_start_preflight.h"
 #include "application/runtime_snapshot.h"
+#include "runtime/camera_session.h"
 
 #include <QObject>
 #include <QStringList>
@@ -91,9 +92,11 @@ public:
     InspectionApplicationService(
         const std::shared_ptr<InspectionRuntimeController> &runtime,
         const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+        const std::shared_ptr<CameraSession> &cameraSession,
         const std::shared_ptr<SettingsApplicationService> &settings,
         const std::shared_ptr<RecipeStore> &recipes,
         QObject *parent = nullptr);
+    ~InspectionApplicationService() override;
 
     StartInspectionResult start(const StartInspectionCommand &command);
     StopInspectionResult stop(const StopInspectionCommand &command =
@@ -106,6 +109,22 @@ public:
     OperationResult applyPlcRunSettings(
         const InspectionPlcRunSettings &settings);
     OperationResult writePlcPhotoDistance(std::uint32_t value);
+    InspectionCameraParameterResult queryCameraExposureRange();
+    InspectionCameraParameterResult queryCameraGainRange();
+    InspectionCameraParameterResult applyCameraExposure(int exposure);
+    InspectionCameraParameterResult applyCameraGain(int gain);
+    bool startTemplatePreview(
+        quint64 sessionId,
+        int rotationCode,
+        int colorChannelCode,
+        QString *errorMessage);
+    bool stopTemplatePreview();
+    void acknowledgeTemplatePreviewFrame(quint64 sessionId);
+    bool hasCurrentCameraImage() const;
+    cv::Mat currentCameraImageClone() const;
+    void replaceCurrentCameraImage(const cv::Mat &image);
+    bool isCameraOpen() const;
+    bool isCapturing() const;
     void shutdown();
     void completeUnexpectedAcquisitionStop();
 
@@ -113,6 +132,14 @@ public:
 
 signals:
     void runtimeSnapshotChanged(RuntimeSnapshot snapshot);
+    void streamingFrameReady(cv::Mat image);
+    void trackingPoseReady(DetectionPose pose);
+    void templatePreviewFrameReady(quint64 sessionId, cv::Mat image);
+    void templatePreviewFailed(quint64 sessionId, QString reason);
+    void captureStopped(bool preview);
+    void acquisitionFault(
+        InspectionFaultReason reason,
+        QString diagnostic);
 
 private:
     StartInspectionResult rejectStart(
@@ -129,6 +156,7 @@ private:
 
     std::shared_ptr<InspectionRuntimeController> m_runtime;
     std::shared_ptr<InspectionRuntimePort> m_runtimePort;
+    std::shared_ptr<CameraSession> m_cameraSession;
     std::shared_ptr<SettingsApplicationService> m_settings;
     std::shared_ptr<RecipeStore> m_recipes;
     bool m_cameraOpen = false;

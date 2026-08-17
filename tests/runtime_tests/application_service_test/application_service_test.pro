@@ -26,6 +26,8 @@ SOURCES += \
     $$PROJECT_ROOT/app/recipes/product_recipe.cpp \
     $$PROJECT_ROOT/app/recipes/recipe_store.cpp \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.cpp \
+    $$PROJECT_ROOT/app/runtime/camera_session.cpp \
+    $$PROJECT_ROOT/app/runtime/capture_worker.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
     $$PROJECT_ROOT/app/runtime/detection_session.cpp \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
@@ -42,7 +44,11 @@ SOURCES += \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
     $$PROJECT_ROOT/app/system_support/settings/machine_settings.cpp \
     $$PROJECT_ROOT/app/system_support/settings/machine_settings_store.cpp \
-    $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp
+    $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp \
+    $$PROJECT_ROOT/app/detection/common/frame_preprocessor.cpp \
+    $$PROJECT_ROOT/app/detection/common/profile_pose_selector.cpp \
+    $$PROJECT_ROOT/app/detection/positioning/tracking_pose_matcher.cpp \
+    $$PROJECT_ROOT/app/detection/positioning/inspection_positioner.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/DetectionModes.h \
@@ -57,6 +63,9 @@ HEADERS += \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
     $$PROJECT_ROOT/app/recipes/recipe_store.h \
     $$PROJECT_ROOT/app/recipes/prepared_recipe.h \
+    $$PROJECT_ROOT/app/devices/camera/camera_device.h \
+    $$PROJECT_ROOT/app/runtime/camera_session.h \
+    $$PROJECT_ROOT/app/runtime/capture_worker.h \
     $$PROJECT_ROOT/app/runtime/detection_worker.h \
     $$PROJECT_ROOT/app/runtime/detection_session.h \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
@@ -76,7 +85,11 @@ HEADERS += \
     $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \
     $$PROJECT_ROOT/app/devices/ocr/ocr_engine.h \
     $$PROJECT_ROOT/app/devices/plc/plc_device.h \
-    $$PROJECT_ROOT/app/detection/common/character_template_matcher.h
+    $$PROJECT_ROOT/app/detection/common/character_template_matcher.h \
+    $$PROJECT_ROOT/app/detection/common/frame_preprocessor.h \
+    $$PROJECT_ROOT/app/detection/common/profile_pose_selector.h \
+    $$PROJECT_ROOT/app/detection/positioning/tracking_pose_matcher.h \
+    $$PROJECT_ROOT/app/detection/positioning/inspection_positioner.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

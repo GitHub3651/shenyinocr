@@ -5,11 +5,11 @@
 
 #include "DetectionModes.h"
 #include "TrackingTypes.h"
+#include "application/inspection_application_service.h"
 #include "charactertemplatecropdialog.h"
 #include "devices/barcode/barcode_decoder.h"
 #include "detection/common/detection_roi_geometry.h"
 #include "imagelabel.h"
-#include "runtime/inspection_acquisition_controller.h"
 #include "ui/controllers/machine_settings_page_controller.h"
 #include "ui/dialogs/recipe_selection_dialog.h"
 
@@ -600,10 +600,10 @@ TemplateEditorController::TemplateEditorController(
 }
 
 void TemplateEditorController::bindRuntimeDependencies(
-    InspectionAcquisitionController *acquisitionController,
+    InspectionApplicationService *inspectionService,
     MachineSettingsPageController *settingsPageController)
 {
-    m_acquisitionController = acquisitionController;
+    m_inspectionService = inspectionService;
     m_settingsPageController = settingsPageController;
 }
 
@@ -780,8 +780,8 @@ void TemplateEditorController::saveCurrentTemplate()
         return;
     }
     if (!m_host->m_recipeStore
-            || !m_acquisitionController
-            || !m_acquisitionController->hasCurrentImage()
+            || !m_inspectionService
+            || !m_inspectionService->hasCurrentCameraImage()
             || !imageLabel
             || !imageLabel->isTemplateDrawingEnabled()) {
         showParameterWarning(
@@ -872,7 +872,7 @@ void TemplateEditorController::saveCurrentTemplate()
     }
 
     const cv::Mat rawImage =
-            m_acquisitionController->currentImageClone();
+            m_inspectionService->currentCameraImageClone();
     const QSize labelSize = imageLabel->size();
     const QSize imageSize(rawImage.cols, rawImage.rows);
     const QPixmap *pixmap = imageLabel->pixmap();
@@ -1256,8 +1256,8 @@ bool TemplateEditorController::validateBarcodeTemplateRect(
         return false;
     };
 
-    const cv::Mat templateImage = m_acquisitionController
-            ? m_acquisitionController->currentImageClone()
+    const cv::Mat templateImage = m_inspectionService
+            ? m_inspectionService->currentCameraImageClone()
             : cv::Mat();
     if (templateImage.empty() || !imageLabel) {
         return finishFailure(

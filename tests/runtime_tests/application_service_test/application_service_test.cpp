@@ -15,7 +15,11 @@
 
 #include <opencv2/imgcodecs.hpp>
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <utility>
 
 namespace {
@@ -72,6 +76,132 @@ public:
     int connectedRack = -1;
     int connectedSlot = -1;
     QVector<PlcWrite> writes;
+};
+
+class ApplicationFakeCamera : public ICameraDevice
+{
+public:
+    CameraResult enumerate(int *deviceCount) override
+    {
+        if (deviceCount) {
+            *deviceCount = 1;
+        }
+        ++enumerateCount;
+        return CameraResult();
+    }
+
+    CameraResult openFirst() override
+    {
+        ++openCount;
+        opened = true;
+        return CameraResult();
+    }
+
+    CameraResult applySettings(const CameraSettings &settings) override
+    {
+        CameraResult result;
+        result.exposureRange.minimum = 100.0f;
+        result.exposureRange.maximum = 100000.0f;
+        result.gainRange.minimum = 0.0f;
+        result.gainRange.maximum = 24.0f;
+        if (settings.updateExposure) {
+            if (settings.exposure < result.exposureRange.minimum
+                    || settings.exposure
+                       > result.exposureRange.maximum) {
+                result.code = CameraResultCode::InvalidSettings;
+            } else {
+                exposure = settings.exposure;
+            }
+        }
+        if (settings.updateGain) {
+            if (settings.gain < result.gainRange.minimum
+                    || settings.gain > result.gainRange.maximum) {
+                result.code = CameraResultCode::InvalidSettings;
+            } else {
+                gain = settings.gain;
+            }
+        }
+        result.exposureRange.current = exposure;
+        result.gainRange.current = gain;
+        return result;
+    }
+
+    CameraResult setTriggerMode(CameraTriggerMode mode) override
+    {
+        triggerMode = mode;
+        triggerModes.append(mode);
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_interrupted = false;
+        }
+        return CameraResult();
+    }
+
+    CameraResult startGrabbing() override
+    {
+        grabbing = true;
+        return CameraResult();
+    }
+
+    CameraResult triggerSoftware() override
+    {
+        ++softwareTriggerCount;
+        return CameraResult();
+    }
+
+    CameraFrameResult waitNextFrame(int timeoutMs) override
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_condition.wait_for(
+                    lock,
+                    std::chrono::milliseconds(timeoutMs),
+                    [this]() { return m_interrupted; });
+        CameraFrameResult result;
+        result.status = m_interrupted
+                ? CameraFrameStatus::Interrupted
+                : CameraFrameStatus::Timeout;
+        return result;
+    }
+
+    void interruptWait() override
+    {
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_interrupted = true;
+        }
+        m_condition.notify_all();
+    }
+
+    CameraResult stopGrabbing() override
+    {
+        grabbing = false;
+        return CameraResult();
+    }
+
+    CameraResult close() override
+    {
+        ++closeCount;
+        opened = false;
+        grabbing = false;
+        interruptWait();
+        return CameraResult();
+    }
+
+    int enumerateCount = 0;
+    int openCount = 0;
+    int closeCount = 0;
+    std::atomic<int> softwareTriggerCount{0};
+    bool opened = false;
+    bool grabbing = false;
+    float exposure = 800.0f;
+    float gain = 1.0f;
+    CameraTriggerMode triggerMode = CameraTriggerMode::Software;
+    QVector<CameraTriggerMode> triggerModes;
+
+private:
+    std::mutex m_mutex;
+    std::condition_variable m_condition;
+    bool m_interrupted = false;
 };
 
 bool writeImage(const QString &path,
@@ -248,21 +378,35 @@ struct ServiceFixture
     std::shared_ptr<SettingsApplicationService> settings;
     std::shared_ptr<RecipeStore> recipes;
     std::shared_ptr<InspectionRuntimeController> runtime;
+    std::shared_ptr<InspectionPlcController> plcController;
     std::shared_ptr<InspectionRuntimePort> port;
+    PlcCommandFakeDevice *plcDevice = nullptr;
+    std::shared_ptr<ApplicationFakeCamera> camera;
+    std::shared_ptr<CameraSession> cameraSession;
     std::shared_ptr<InspectionApplicationService> service;
     int starts = 0;
-    int stops = 0;
-    int opens = 0;
-    int closes = 0;
 
-    ServiceFixture()
+    explicit ServiceFixture(bool providePlc = false)
     {
         settingsStore.reset(new MachineSettingsStore(root.path()));
         settings.reset(new SettingsApplicationService(
                            settingsStore, MachineSettings::defaults()));
         recipes.reset(new RecipeStore(settingsStore->recipesRootPath()));
-        runtime.reset(new InspectionRuntimeController);
+        if (providePlc) {
+            plcDevice = new PlcCommandFakeDevice;
+            std::unique_ptr<IPlcDevice> device(plcDevice);
+            plcController.reset(new InspectionPlcController(
+                                    std::move(device),
+                                    InspectionPlcAddressMap()));
+            runtime.reset(new InspectionRuntimeController(
+                              InspectionRuntimeController::RunIdFactory(),
+                              plcController));
+        } else {
+            runtime.reset(new InspectionRuntimeController);
+        }
         port.reset(new InspectionRuntimePort);
+        camera.reset(new ApplicationFakeCamera);
+        cameraSession.reset(new CameraSession(camera, runtime.get()));
 
         InspectionRuntimePort::Callbacks callbacks;
         callbacks.prepareBarcodeDecoder = []() {
@@ -276,41 +420,14 @@ struct ServiceFixture
             return true;
         };
         callbacks.rollbackStart = []() {};
-        callbacks.stopAcquisition = [this]() {
-            ++stops;
-            InspectionAcquisitionStopResult result;
-            result.softwareWasRunning = true;
-            return result;
-        };
-        callbacks.recoverCamera = [](
-                bool,
-                bool cameraWasOpen,
-                const MachineSettings &,
-                const InspectionRuntimePort::PersistAdjustedExposure &) {
-            InspectionCameraRecoveryResult result;
-            result.cameraOpen = cameraWasOpen;
-            return result;
-        };
-        callbacks.openCamera = [this](
-                const MachineSettings &settings,
-                const InspectionRuntimePort::PersistAdjustedExposure &) {
-            ++opens;
-            InspectionCameraOpenResult result;
-            result.appliedExposure = settings.cameraExposure;
-            result.exposureMinimum = 1;
-            result.exposureMaximum = 100000;
-            return result;
-        };
-        callbacks.closeCamera = [this]() {
-            ++closes;
-        };
         callbacks.reconcileFaultProducts = [](
                 QString *, QString *) {
             return true;
         };
         port->bind(callbacks);
         service.reset(new InspectionApplicationService(
-                          runtime, port, settings, recipes));
+                          runtime, port, cameraSession,
+                          settings, recipes));
     }
 
     bool publishRecipe(DetectionMode mode,
@@ -360,6 +477,7 @@ private slots:
     void plcTriggerDisconnectedBlocksStart();
     void plcCommandsUseApplicationBoundary();
     void cameraCommandsUseApplicationState();
+    void hardTriggerUsesSharedCameraSession();
 };
 
 void ApplicationServiceTest::settingsDraftApplyDiscardDefaultsAndClear()
@@ -499,8 +617,12 @@ void ApplicationServiceTest::plcCommandsUseApplicationBoundary()
                     InspectionRuntimeController::RunIdFactory(), plc));
     const std::shared_ptr<InspectionRuntimePort> port(
                 new InspectionRuntimePort);
+    const std::shared_ptr<ApplicationFakeCamera> camera(
+                new ApplicationFakeCamera);
+    const std::shared_ptr<CameraSession> cameraSession(
+                new CameraSession(camera, runtime.get()));
     InspectionApplicationService service(
-                runtime, port, settings, recipes);
+                runtime, port, cameraSession, settings, recipes);
 
     PlcConnectionCommand connection;
     connection.address = QStringLiteral("192.168.10.10");
@@ -543,11 +665,48 @@ void ApplicationServiceTest::cameraCommandsUseApplicationState()
     QVERIFY(opened.operation.isSuccess());
     QVERIFY(opened.plcConnectionFailed);
     QVERIFY(opened.snapshot.cameraOpen);
+    QVERIFY(fixture.service->queryCameraExposureRange().success);
+    QVERIFY(fixture.service->queryCameraGainRange().success);
+    QVERIFY(fixture.service->applyCameraExposure(4321).success);
+    QVERIFY(fixture.service->applyCameraGain(5).success);
+    QString previewError;
+    QVERIFY2(fixture.service->startTemplatePreview(
+                 17, 0, 0, &previewError), qPrintable(previewError));
+    QVERIFY(fixture.service->isCapturing());
+    QVERIFY(fixture.service->stopTemplatePreview());
+    QVERIFY(!fixture.service->isCapturing());
     QVERIFY(fixture.service->start(StartInspectionCommand()).isAccepted());
     QVERIFY(!fixture.service->closeCamera().isSuccess());
     QVERIFY(fixture.service->stop().isAccepted());
     QVERIFY(fixture.service->closeCamera().isSuccess());
-    QCOMPARE(fixture.closes, 1);
+    QCOMPARE(fixture.camera->closeCount, 2);
+}
+
+void ApplicationServiceTest::hardTriggerUsesSharedCameraSession()
+{
+    ServiceFixture fixture(true);
+    QString error;
+    QVERIFY(fixture.publishRecipe(DetectionMode::Tissue, &error));
+    QVERIFY(fixture.openCamera().operation.isSuccess());
+    QVERIFY(fixture.plcDevice && fixture.plcDevice->connected);
+
+    MachineSettings settings = fixture.settings->current();
+    settings.triggerEnabled = true;
+    fixture.settings->updateDraft(settings);
+    QVERIFY(fixture.settings->applyDraft().isSuccess());
+
+    const StartInspectionResult started =
+            fixture.service->start(StartInspectionCommand());
+    QVERIFY2(started.isAccepted(),
+             qPrintable(started.error.userMessage
+                        + started.error.diagnostic));
+    QCOMPARE(started.acquisitionKind,
+             InspectionAcquisitionKind::HardwareTrigger);
+    QVERIFY(fixture.camera->triggerModes.contains(
+                CameraTriggerMode::HardwareLine0));
+    QCOMPARE(fixture.camera->softwareTriggerCount.load(), 0);
+    QVERIFY(fixture.service->stop().isAccepted());
+    QCOMPARE(fixture.camera->softwareTriggerCount.load(), 0);
 }
 
 QTEST_GUILESS_MAIN(ApplicationServiceTest)

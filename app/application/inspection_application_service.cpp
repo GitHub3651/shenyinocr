@@ -166,6 +166,44 @@ InspectionStartResourceInput resourceInputFor(
     return input;
 }
 
+FramePreprocessSettings framePreprocessSettings(
+    const MachineSettings &settings)
+{
+    FramePreprocessSettings output;
+    const int rotation = machineSettingsRotationIds().indexOf(
+                settings.imageRotationId);
+    const int channel = machineSettingsColorChannelIds().indexOf(
+                settings.colorChannelId);
+    output.rotation = static_cast<FrameRotation>(rotation);
+    output.colorChannel = static_cast<FrameColorChannel>(channel);
+    return output;
+}
+
+CameraSessionCaptureConfiguration cameraConfiguration(
+    const InspectionStartExecutionCommand &execution)
+{
+    CameraSessionCaptureConfiguration output;
+    output.runPlan = execution.runPlan;
+    output.framePreprocess = framePreprocessSettings(
+                execution.context.machineSettings);
+    output.minimumIntervalMs =
+            execution.context.machineSettings.cameraDelay;
+    output.exposure =
+            execution.context.machineSettings.cameraExposure;
+    output.gain = execution.context.machineSettings.cameraGain;
+    output.trackingProfiles =
+            execution.profileSnapshot.trackingProfiles;
+    const PreparedRecipeSnapshot &prepared =
+            execution.context.preparedRecipe;
+    if (prepared && !prepared->profiles.isEmpty()) {
+        const PreparedRecipeProfile &profile = prepared->profiles.first();
+        output.singleDatePolygon = profile.datePolygon;
+        output.singleTrackingTemplate =
+                profile.trackingTemplate.clone();
+    }
+    return output;
+}
+
 QString startIssueCode(InspectionStartIssue issue)
 {
     switch (issue) {
@@ -229,16 +267,51 @@ QString startIssueMessage(InspectionStartIssue issue)
 InspectionApplicationService::InspectionApplicationService(
     const std::shared_ptr<InspectionRuntimeController> &runtime,
     const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+    const std::shared_ptr<CameraSession> &cameraSession,
     const std::shared_ptr<SettingsApplicationService> &settings,
     const std::shared_ptr<RecipeStore> &recipes,
     QObject *parent)
     : QObject(parent),
       m_runtime(runtime),
       m_runtimePort(runtimePort),
+      m_cameraSession(cameraSession),
       m_settings(settings),
       m_recipes(recipes)
 {
     qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
+    qRegisterMetaType<InspectionFaultReason>(
+                "InspectionFaultReason");
+    CameraSessionCallbacks callbacks;
+    callbacks.streamingFrameReady = [this](const cv::Mat &image) {
+        emit streamingFrameReady(image.clone());
+    };
+    callbacks.trackingPoseReady = [this](const DetectionPose &pose) {
+        emit trackingPoseReady(pose);
+    };
+    callbacks.previewFrameReady = [this](
+            quint64 sessionId,
+            const cv::Mat &image) {
+        emit templatePreviewFrameReady(sessionId, image.clone());
+    };
+    callbacks.previewFailed = [this](
+            quint64 sessionId,
+            const QString &reason) {
+        emit templatePreviewFailed(sessionId, reason);
+    };
+    callbacks.captureStopped = [this](bool preview) {
+        emit captureStopped(preview);
+    };
+    callbacks.enterFault = [this](
+            InspectionFaultReason reason,
+            const QString &diagnostic) {
+        emit acquisitionFault(reason, diagnostic);
+    };
+    m_cameraSession->setCallbacks(callbacks);
+}
+
+InspectionApplicationService::~InspectionApplicationService()
+{
+    m_cameraSession->setCallbacks(CameraSessionCallbacks());
 }
 
 StartInspectionResult InspectionApplicationService::start(
@@ -352,10 +425,45 @@ StartInspectionResult InspectionApplicationService::start(
     execution.context.startedAtUtc = QDateTime::currentDateTimeUtc();
     publishSnapshot();
 
+    const CameraSession::PersistAdjustedExposure persistExposure =
+            [this](int adjustedExposure, QString *errorMessage) {
+        MachineSettings adjusted = m_settings->current();
+        adjusted.cameraExposure = adjustedExposure;
+        m_settings->updateDraft(adjusted);
+        const OperationResult saved = m_settings->applyDraft();
+        if (!saved.isSuccess() && errorMessage) {
+            *errorMessage = saved.error.userMessage;
+        }
+        return saved.isSuccess();
+    };
+    QString cameraError;
+    if (!m_cameraSession->prepareInspection(
+                cameraConfiguration(execution), &cameraError)) {
+        const InspectionCameraRecoveryResult recovery =
+                m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure, persistExposure);
+        m_cameraOpen = recovery.cameraOpen;
+        transaction.rollback();
+        publishSnapshot();
+        return rejectStart(
+                    InspectionStartIssue::RuntimeBusy,
+                    QStringLiteral("INSPECTION_CAMERA_PREPARE_FAILED"),
+                    cameraError.isEmpty()
+                    ? QStringLiteral("启动识别前相机准备失败。")
+                    : cameraError,
+                    QStringList(),
+                    cameraError);
+    }
+
     QString executionError;
     if (!m_runtimePort->startInspection(
                 execution, transaction, &executionError)) {
         m_runtimePort->rollbackStart();
+        m_cameraSession->stopInspection();
+        const InspectionCameraRecoveryResult recovery =
+                m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure, persistExposure);
+        m_cameraOpen = recovery.cameraOpen;
         transaction.rollback();
         publishSnapshot();
         return rejectStart(
@@ -367,8 +475,31 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringList(),
                     executionError);
     }
+    if (!m_cameraSession->startInspection(&cameraError)) {
+        m_runtimePort->rollbackStart();
+        m_cameraSession->stopInspection();
+        const InspectionCameraRecoveryResult recovery =
+                m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure, persistExposure);
+        m_cameraOpen = recovery.cameraOpen;
+        transaction.rollback();
+        publishSnapshot();
+        return rejectStart(
+                    InspectionStartIssue::RuntimeBusy,
+                    QStringLiteral("INSPECTION_CAPTURE_START_FAILED"),
+                    cameraError.isEmpty()
+                    ? QStringLiteral("相机采集线程启动失败。")
+                    : cameraError,
+                    QStringList(),
+                    cameraError);
+    }
     if (!transaction.commit()) {
         m_runtimePort->rollbackStart();
+        m_cameraSession->stopInspection();
+        const InspectionCameraRecoveryResult recovery =
+                m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure, persistExposure);
+        m_cameraOpen = recovery.cameraOpen;
         transaction.rollback();
         publishSnapshot();
         return rejectStart(
@@ -410,8 +541,8 @@ StopInspectionResult InspectionApplicationService::stop(
     InspectionRuntimeStopTransaction transaction(*m_runtime);
     transaction.begin();
     publishSnapshot();
-    const InspectionAcquisitionStopResult acquisition =
-            m_runtimePort->stopAcquisition();
+    const CameraCaptureStopResult acquisition =
+            m_cameraSession->stopInspection();
     transaction.waitForDetectionWorker();
     if (!acquisition.allStopped()) {
         result.issue = StopInspectionIssue::AcquisitionStillStopping;
@@ -424,7 +555,7 @@ StopInspectionResult InspectionApplicationService::stop(
     }
 
     const MachineSettings settings = m_settings->current();
-    const InspectionRuntimePort::PersistAdjustedExposure persistExposure =
+    const CameraSession::PersistAdjustedExposure persistExposure =
             [this](int adjustedExposure, QString *errorMessage) {
         MachineSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
@@ -435,11 +566,13 @@ StopInspectionResult InspectionApplicationService::stop(
         }
         return saved.isSuccess();
     };
-    result.cameraRecovery = m_runtimePort->recoverCamera(
-                acquisition.shouldRestoreCamera(),
-                m_cameraOpen,
-                settings,
-                persistExposure);
+    if (acquisition.shouldRestoreCamera()) {
+        result.cameraRecovery = m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure,
+                    persistExposure);
+    } else {
+        result.cameraRecovery.cameraOpen = m_cameraOpen;
+    }
     m_cameraOpen = result.cameraRecovery.cameraOpen;
     transaction.commit();
 
@@ -525,7 +658,7 @@ OpenCameraResult InspectionApplicationService::openCamera(
     result.plcConnectionFailed = !plc.isSuccess();
     result.plcNativeErrorCode = plc.nativeErrorCode;
 
-    const InspectionRuntimePort::PersistAdjustedExposure persistExposure =
+    const CameraSession::PersistAdjustedExposure persistExposure =
             [this](int adjustedExposure, QString *errorMessage) {
         MachineSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
@@ -536,8 +669,8 @@ OpenCameraResult InspectionApplicationService::openCamera(
         }
         return saved.isSuccess();
     };
-    result.camera = m_runtimePort->openCamera(
-                settings, persistExposure);
+    result.camera = m_cameraSession->openFirst(
+                settings.cameraExposure, persistExposure);
     if (!result.camera.isSuccess()) {
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_OPEN_FAILED"),
@@ -562,7 +695,7 @@ OperationResult InspectionApplicationService::closeCamera()
                     QStringLiteral("相机正在检测采图中，请先停止识别。"));
     }
     if (m_cameraOpen) {
-        m_runtimePort->closeCamera();
+        m_cameraSession->close();
     }
     m_cameraOpen = false;
     m_runtime->resetStatistics();
@@ -680,13 +813,88 @@ OperationResult InspectionApplicationService::writePlcPhotoDistance(
                 result.nativeErrorCode);
 }
 
+InspectionCameraParameterResult
+InspectionApplicationService::queryCameraExposureRange()
+{
+    return m_cameraSession->queryExposureRange();
+}
+
+InspectionCameraParameterResult
+InspectionApplicationService::queryCameraGainRange()
+{
+    return m_cameraSession->queryGainRange();
+}
+
+InspectionCameraParameterResult
+InspectionApplicationService::applyCameraExposure(int exposure)
+{
+    return m_cameraSession->applyExposure(exposure);
+}
+
+InspectionCameraParameterResult
+InspectionApplicationService::applyCameraGain(int gain)
+{
+    return m_cameraSession->applyGain(gain);
+}
+
+bool InspectionApplicationService::startTemplatePreview(
+    quint64 sessionId,
+    int rotationCode,
+    int colorChannelCode,
+    QString *errorMessage)
+{
+    FramePreprocessSettings settings;
+    settings.rotation = static_cast<FrameRotation>(rotationCode);
+    settings.colorChannel =
+            static_cast<FrameColorChannel>(colorChannelCode);
+    return m_cameraSession->startPreview(
+                sessionId, settings, errorMessage);
+}
+
+bool InspectionApplicationService::stopTemplatePreview()
+{
+    return m_cameraSession->stopPreview();
+}
+
+void InspectionApplicationService::acknowledgeTemplatePreviewFrame(
+    quint64 sessionId)
+{
+    m_cameraSession->acknowledgePreviewFrame(sessionId);
+}
+
+bool InspectionApplicationService::hasCurrentCameraImage() const
+{
+    return m_cameraSession->hasCurrentImage();
+}
+
+cv::Mat InspectionApplicationService::currentCameraImageClone() const
+{
+    return m_cameraSession->currentImageClone();
+}
+
+void InspectionApplicationService::replaceCurrentCameraImage(
+    const cv::Mat &image)
+{
+    m_cameraSession->replaceCurrentImage(image);
+}
+
+bool InspectionApplicationService::isCameraOpen() const
+{
+    return m_cameraOpen && m_cameraSession->isOpen();
+}
+
+bool InspectionApplicationService::isCapturing() const
+{
+    return m_cameraSession->isCapturing();
+}
+
 void InspectionApplicationService::shutdown()
 {
     m_runtime->requestStop();
-    m_runtimePort->stopAcquisition();
+    m_cameraSession->stopInspection();
     m_runtime->waitForDetectionWorkerStop();
     if (m_cameraOpen) {
-        m_runtimePort->closeCamera();
+        m_cameraSession->close();
         m_cameraOpen = false;
     }
     if (m_runtime->isPlcConnected()) {
@@ -706,7 +914,26 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     }
     InspectionRuntimeStopTransaction transaction(*m_runtime);
     transaction.begin();
+    m_cameraSession->stopInspection();
     transaction.waitForDetectionWorker();
+    if (m_cameraOpen) {
+        const MachineSettings settings = m_settings->current();
+        const CameraSession::PersistAdjustedExposure persistExposure =
+                [this](int adjustedExposure, QString *errorMessage) {
+            MachineSettings adjusted = m_settings->current();
+            adjusted.cameraExposure = adjustedExposure;
+            m_settings->updateDraft(adjusted);
+            const OperationResult saved = m_settings->applyDraft();
+            if (!saved.isSuccess() && errorMessage) {
+                *errorMessage = saved.error.userMessage;
+            }
+            return saved.isSuccess();
+        };
+        const InspectionCameraRecoveryResult recovery =
+                m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure, persistExposure);
+        m_cameraOpen = recovery.cameraOpen;
+    }
     transaction.commit();
     m_activeRecipeId.clear();
     publishSnapshot();

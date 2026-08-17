@@ -83,17 +83,12 @@ SOURCES += \
     ui/presenters/inspection_fault_presenter.cpp \
     ui/presenters/detection_result_presenter.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
-    devices/camera/hikvision_camera_device.cpp \
-    devices/camera/hikvision_camera_device_native.cpp \
+    devices/camera/vendor/hikvision_camera_device.cpp \
     devices/ocr/paddle_ocr_engine.cpp \
     devices/plc/snap7_plc_device.cpp \
     runtime/inspection_run_configuration.cpp \
-    runtime/inspection_acquisition_controller.cpp \
-    runtime/inspection_camera_operations.cpp \
-    runtime/inspection_acquisition_stop_coordinator.cpp \
-    runtime/inspection_camera_start_transition.cpp \
-    runtime/inspection_camera_recovery_transition.cpp \
-    runtime/inspection_worker_configurator.cpp \
+    runtime/camera_session.cpp \
+    runtime/capture_worker.cpp \
     runtime/detection_shadow_comparator.cpp \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
@@ -110,18 +105,17 @@ SOURCES += \
     runtime/result_handler.cpp \
     runtime/image_save_service.cpp \
     detection/common/character_template_matcher.cpp \
+    detection/common/frame_preprocessor.cpp \
     detection/common/profile_pose_selector.cpp \
+    detection/positioning/inspection_positioner.cpp \
+    detection/positioning/tracking_pose_matcher.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
     detection/barcode_word/barcode_word_detection_pipeline.cpp \
     detection/stamp/stamp_detection_pipeline.cpp \
     detection/tissue/tissue_detection_pipeline.cpp \
     detection/word/word_detection_pipeline.cpp \
-    CameraThread.cpp \
     DetectionModes.cpp \
     Detector.cpp \
-    MultiCameraController.cpp \
-    MultiCameraSyncManager.cpp \
-    MultiCameraUnit.cpp \
     PaddleOCR/src/clipper.cpp \
     PaddleOCR/src/config.cpp \
     PaddleOCR/src/ocr_cls.cpp \
@@ -130,15 +124,10 @@ SOURCES += \
     PaddleOCR/src/postprocess_op.cpp \
     PaddleOCR/src/preprocess_op.cpp \
     PaddleOCR/src/utility.cpp \
-    TrackingPoseMatcher.cpp \
     TissueRollDetector.cpp \
-    Zhuizong.cpp \
     charactertemplatecropdialog.cpp \
-    cmvcamera.cpp \
     imagelabel.cpp \
     startup/main.cpp \
-    multicamerawidget.cpp \
-    mythread.cpp \
     snap7.cpp \
     templatematch.cpp \
         widget.cpp
@@ -180,18 +169,14 @@ HEADERS += \
     devices/barcode/barcode_decoder_adapter.h \
     devices/barcode/barcode_decoder.h \
     devices/camera/camera_device.h \
-    devices/camera/hikvision_camera_device.h \
+    devices/camera/vendor/hikvision_camera_device.h \
     devices/ocr/ocr_engine.h \
     devices/ocr/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
     devices/plc/snap7_plc_device.h \
     runtime/inspection_run_configuration.h \
-    runtime/inspection_acquisition_controller.h \
-    runtime/inspection_camera_operations.h \
-    runtime/inspection_acquisition_stop_coordinator.h \
-    runtime/inspection_camera_start_transition.h \
-    runtime/inspection_camera_recovery_transition.h \
-    runtime/inspection_worker_configurator.h \
+    runtime/camera_session.h \
+    runtime/capture_worker.h \
     runtime/detection_shadow_comparator.h \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
@@ -210,7 +195,10 @@ HEADERS += \
     runtime/image_save_service.h \
     detection/common/character_template_matcher.h \
     detection/common/detection_roi_geometry.h \
+    detection/common/frame_preprocessor.h \
     detection/common/profile_pose_selector.h \
+    detection/positioning/inspection_positioner.h \
+    detection/positioning/tracking_pose_matcher.h \
     detection/ocr/ocr_detection_pipeline.h \
     detection/barcode_word/barcode_word_detection_pipeline.h \
     detection/stamp/stamp_detection_pipeline.h \
@@ -218,14 +206,8 @@ HEADERS += \
     detection/word/word_detection_pipeline.h \
     BarcodeDecoderApi.h \
     BarcodeTypes.h \
-    CameraThread.h \
     DetectionModes.h \
     Detector.h \
-    IMultiCameraProvider.h \
-    MultiCameraController.h \
-    MultiCameraSyncManager.h \
-    MultiCameraTypes.h \
-    MultiCameraUnit.h \
     PaddleOCR/include/clipper.h \
     PaddleOCR/include/config.h \
     PaddleOCR/include/ocr_cls.h \
@@ -234,21 +216,15 @@ HEADERS += \
     PaddleOCR/include/postprocess_op.h \
     PaddleOCR/include/preprocess_op.h \
     PaddleOCR/include/utility.h \
-    TrackingPoseMatcher.h \
     TrackingTypes.h \
     TissueRollDetector.h \
-    Zhuizong.h \
     charactertemplatecropdialog.h \
-    cmvcamera.h \
     imagelabel.h \
-    multicamerawidget.h \
-    mythread.h \
     snap7.h \
     templatematch.h \
         widget.h
 
 FORMS += \
-        multicamerawidget.ui \
         widget.ui
 
 RESOURCES += \
@@ -291,9 +267,6 @@ LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/protobu
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xxhash/lib -lxxhash
 
 
-
-#win32:CONFIG(release, debug|release): LIBS += -L$$PWD/SDK/Lib/ -lMvCameraControl
-#else:win32:CONFIG(debug, debug|release): LIBS += -L$$PWD/SDK/Lib/ -lMvCameraControld
 
 INCLUDEPATH += $$THIRD_PARTY/hikvision_mvs_sdk/include
 DEPENDPATH += $$THIRD_PARTY/hikvision_mvs_sdk/include

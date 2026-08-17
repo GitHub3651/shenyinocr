@@ -1293,3 +1293,50 @@
 - [x] Agent只完成源码、测试源码、qmake清单和静态检查，未运行或间接触发qmake、nmake、jom、msbuild、cmake构建、Qt Creator构建、项目测试可执行文件、主程序或任何编译/链接/启动脚本。
 - [x] 2026-08-17用户反馈阶段2Qt Creator统一门禁“都没问题”；本阶段12项功能全部恢复为`已验证`。真实PLC在线连接、现场读回和机械动作仍按功能表既有记录延期，未以Fake或无PLC结果冒充现场验收。
 - [x] 阶段2提交前最终静态门禁通过：90个正式功能ID唯一且状态为`0/0/0/87/0/3`；37个差异路径全部命中阶段2白名单，暂存区为空且`app.zip`不存在；旧Start/Stop控制器、重复运行状态、旧线程探测、旧runtime预检和停止路径`processEvents`引用均为0；application、runtime、recipes依赖边界核对通过；主工程新增/删除项、runtime测试工程、应用服务测试声明/定义`6/6`和Widget自动槽声明/定义`27/27`一致；`git diff --check`通过。Agent未运行构建、测试可执行文件或主程序，允许精确暂存并创建唯一阶段2本地提交，不推送。
+
+## 新架构完全替换阶段：阶段 3 相机、采集与多相机删除（2026-08-17，待用户集中门禁）
+
+### 开始基准与真实影响范围
+
+- [x] 开始时复核分支`codex/ocrgangyin-refactor`、HEAD `41014c60686d9476e414e9ec67f1d7ae11b03505 refactor(application): 完成阶段2应用层与启停边界`和干净工作区；`app.zip`不存在，本阶段未创建、修改、移动、删除、暂存或提交该用户文件。
+- [x] 从启动组合根、相机开关/参数按钮、模板实时预览、五模式启动、软硬采集、旋转/通道、单/多Profile定位、检测提交、停止/恢复/退出、Qt信号槽、隐藏多相机按钮和qmake清单双向追踪；实际影响33项：`SYS-009、UI-002..003、SET-006..010、TPL-001..002、DET-001..007、CAM-001..006、RUN-001..006、PLC-001、MC-001..003`。
+- [x] `MC-001..003`继续保持用户确认的`已确认删除`；其余30项逐行改为`迁移中`。当前正式功能状态为待盘点0、已基线0、迁移中30、已验证57、已延期0、已确认删除3；用户集中门禁通过前不恢复状态，不进入阶段4。
+
+### 唯一相机端口、Session与采集线程
+
+- [x] 将`ICameraDevice`收口为`enumerate/openFirst/applySettings/setTriggerMode/startGrabbing/triggerSoftware/waitNextFrame/interruptWait/stopGrabbing/close`，帧等待只返回`FrameReady/Timeout/Interrupted/DeviceError`；设备接口不再暴露SDK节点、共享图像、ReadBuffer、非阻塞开关或主线程取图细节。
+- [x] 新`devices/camera/vendor/HikvisionCameraDevice`直接调用MVS SDK，vendor内部独占设备句柄、回调、条件变量、像素转换、帧序号和图像所有权；MVS类型/函数只存在vendor目录。保持既有Mono8/10/12处理和其他格式BGR8转换，SDK回调只产生独立`CameraFrame`，转换/分配失败形成DeviceError并结束本次采集，不捕获全部异常后继续检测。
+- [x] 新`CameraSession`成为相机打开、关闭、曝光/增益、模板预览、正式运行准备、停止与恢复的唯一所有者；`ApplicationStartup`只在组合根构造vendor设备、Session、Runtime、应用服务和Widget。Widget与模板控制器只调用应用服务，不持有设备或生产采集线程。
+- [x] 软触发、硬触发和预览共用一个`CaptureWorker`及一个`std::thread`。软件模式按“上一帧提交完成→最小cameraDelay→软触发→等待新帧”串行；硬触发只等待下一帧且不增加cameraDelay；预览只发布相机会话ID/图像并限制一个待处理UI帧，不创建`ProductKey`或进入检测、统计、存图、PLC链。
+- [x] 停止固定执行停止标志、`interruptWait()`和`join()`；自然结束的旧线程在下一次启动前同样先join。不存在detach、`QThread::terminate()`、超时放弃对象/缓冲区或故意泄漏。正式采集意外结束按阶段3前既有语义收口运行并恢复相机，不提前引入阶段4的新Fault结论。
+- [x] 保持相机正常时序：打开时软件TriggerSource=7、曝光、TriggerDelay=0、回调/start；硬触发时stop、约200ms、TriggerMode/Line0、曝光/增益/TriggerDelay=0、回调/start、LineDebouncerTime=5000、约100ms；停止后按旧合同关闭、约100ms、重开软件触发并恢复保存曝光。曝光越界继续调整并事务保存；任一步骤失败直接返回结构化错误。
+
+### 公共预处理、定位与正式运行接入
+
+- [x] 新`FramePreprocessor`统一四种旋转和彩色/红/绿/蓝通道处理；MachineSettings只在应用服务建立运行快照时映射一次。旧软/硬线程中的两套旋转、通道和间隔逻辑已删除。
+- [x] 将原根目录`TrackingPoseMatcher`按原-45..45度/2度步长、0.2金字塔和0.3阈值迁到`detection/positioning`；新`InspectionPositioner`统一WholeFrame、SingleTemplate和WordProfiles，多个Profile共享一次灰度/缩略预处理并通过既有`ProfilePoseSelector`选择结果。运行资产不完整直接拒绝准备，不跳过坏Profile或切换其他算法。
+- [x] `InspectionApplicationService::start/stop/open/close/shutdown`直接编排CameraSession；运行执行继续把同一PreparedRecipe和MachineSettings快照交给阶段4前现有Runtime/五Pipeline/结果链。五种算法实现、阈值、正常统计、存图和PLC `OK=0/NG=49→约100ms→0`合同未改；本阶段没有实施阶段4简化Fault或结果链重写。
+- [x] UI跨线程只接收应用服务的`cv::Mat`副本、`DetectionPose`、预览会话ID和采集状态信号；`InspectionFaultReason`补充Qt元类型登记以保证既有硬触发队列溢出信号可排队传递。模板冻结后只把克隆图像写回Session当前图查询，不恢复设备穿透。
+
+### 旧路径、多相机与工程清单删除
+
+- [x] 删除`MyThread`、`CameraThread`、`InspectionAcquisitionController`、`InspectionWorkerConfigurator`、`InspectionCameraStartTransition`、`InspectionCameraRecoveryTransition`、`InspectionAcquisitionStopCoordinator`、`InspectionCameraOperations`及对应头/实现/qmake项。
+- [x] 删除根目录`CMvCamera`、`Zhuizong`、旧`TrackingPoseMatcher`和旧`devices/camera/HikvisionCameraDevice`函数表/Native桥；TemplateMatch不再构造旧采集线程，Widget删除相机句柄、旧采集成员、重复相机启动/恢复/停止函数和无调用相机信号。
+- [x] 删除`MultiCameraWidget`、`MultiCameraController`、`MultiCameraUnit`、`MultiCameraSyncManager`、`IMultiCameraProvider`、`MultiCameraTypes`、隐藏`MultiCameraMode`按钮、独立UI文件及全部主工程项；不保留占位入口、兼容桥或未来扩建API。
+- [x] 主qmake工程登记vendor、CameraSession、CaptureWorker、FramePreprocessor和positioning文件；runtime测试子工程用`camera_session_test`替换旧camera adapter目标，应用服务和检测完成测试同步删除旧Transition/Operations源码清单。所有受影响工程项存在、大小写一致且无重复登记。
+
+### 测试源码与Agent静态门禁
+
+- [x] 新`camera_session_test` 7项Fake测试源码覆盖软件触发新帧、硬触发不发送软件命令且忽略cameraDelay、预览帧不进入产品受理、cameraDelay 0/非0、等待中interrupt+join及重启、旋转/通道、单Profile/多Profile定位。
+- [x] `application_service_test`保持五模式启动/停止/重启并使用真实CameraSession+Fake ICameraDevice，新增模板预览共享Session、曝光/增益查询设置以及PLC Fake连接下的硬触发应用入口；仍使用`QTEST_GUILESS_MAIN`，不会依赖Windows平台插件。当前声明/定义为7/7。
+- [x] `detection_completion_test`删除只验证已移除Transition/Operations/StopCoordinator的14项旧测试及其大Fake，保留Runtime、五Pipeline、结果、正常PLC和Fault历史合同测试；声明/定义为126/126。Agent只编写测试源码和工程清单，没有运行测试目标。
+- [x] Agent静态核对：CameraSession/CaptureWorker/vendor/application/Widget定义均有声明；Widget自动连接槽26/26；三组受影响测试7/7、7/7、126/126；`widget.ui` XML有效；主工程和测试工程文件存在、大小写一致、无重复项；Runtime/Detection/Device无Widget、Ui、QMessageBox依赖；MVS符号只在vendor；旧相机方法、旧线程/控制器和全部MultiCamera代码/UI/qmake生产引用均为0。
+- [x] 功能表90个正式ID状态为迁移中30、已验证57、已确认删除3；差异只包含阶段3相机/采集/预处理/定位接入、计划内旧路径删除、测试/qmake、功能表和本执行记录；暂存区为空，`app.zip`不存在；tracked及新增文件空白检查和`git diff --check`通过。
+- [x] Agent未运行或间接触发qmake、nmake、jom、msbuild、cmake构建、Qt Creator构建、任何项目测试可执行文件、主程序或编译/链接/启动脚本。
+
+### 当前门禁状态
+
+- [x] 2026-08-17阶段3首次Qt Creator Rebuild在`widget.h:405/426/446/448`报C2143/C4430/C2238；原因是4处历史裸`vector`声明曾偶然依赖已删除旧头文件导入`std`命名空间。现已全部改为显式`std::vector`，没有恢复旧include或全局`using namespace std`，不改变检测框、颜色表、字符模板和字符区域的数据类型或业务行为；全仓同类裸`vector`生产引用为0，`git diff --check`通过，等待同轮Rebuild复验。
+- [x] 2026-08-17用户确认阶段3当前最终差异的集中门禁验证完成；30项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
+- [x] 用户在门禁后追溯提交`47e7115e7e5992267e348b2327a32c3076e5ff0b`和`e5a73c6f3171955f616ace544dfc0b98816f818a`的“相机延时(ms)”行为，确认历史UI `cameraDelay`是线程检测/循环节流而非SDK `TriggerDelay`；后者固定为0且没有UI入口。用户提出软件触发未来可改为“上一帧检测结束后立即取下一帧”，随后明确回退本轮尝试、要求以后再处理。该问题只登记为功能表`DIFF-011`，阶段3生产代码保持用户已验证版本，不纳入阶段4。
+- [x] 阶段3门禁已通过，允许执行最终静态检查、精确暂存并自动创建唯一阶段3本地提交；不推送，提交完成后才进入阶段4。

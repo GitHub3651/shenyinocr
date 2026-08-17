@@ -8,8 +8,6 @@
 #include <time.h>
 #include <QtCore>
 #include <QObject>
-#include <mythread.h>
-#include <CameraThread.h>
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <tuple>
@@ -24,8 +22,6 @@ public:
     cv::Mat img;
     Mat *img1=nullptr;
     Mat *imgshibie=nullptr;
-    MyThread *myThread = NULL;
-    CameraThread *cameraThread=NULL;
     cv::Mat templ,result;
     char window_title_1;
     char window_title_2;

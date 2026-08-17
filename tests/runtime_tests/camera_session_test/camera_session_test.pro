@@ -2,7 +2,7 @@ QT += core testlib
 QT -= gui
 
 TEMPLATE = app
-TARGET = camera_device_adapter_test
+TARGET = camera_session_test
 CONFIG += console testcase c++11
 CONFIG -= app_bundle
 
@@ -14,12 +14,20 @@ THIRD_PARTY = $$PROJECT_ROOT/third_party
 DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 
 SOURCES += \
-    camera_device_adapter_test.cpp \
-    $$PROJECT_ROOT/app/devices/camera/hikvision_camera_device.cpp
+    camera_session_test.cpp \
+    $$PROJECT_ROOT/app/runtime/capture_worker.cpp \
+    $$PROJECT_ROOT/app/detection/common/frame_preprocessor.cpp \
+    $$PROJECT_ROOT/app/detection/common/profile_pose_selector.cpp \
+    $$PROJECT_ROOT/app/detection/positioning/tracking_pose_matcher.cpp \
+    $$PROJECT_ROOT/app/detection/positioning/inspection_positioner.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/devices/camera/camera_device.h \
-    $$PROJECT_ROOT/app/devices/camera/hikvision_camera_device.h
+    $$PROJECT_ROOT/app/runtime/capture_worker.h \
+    $$PROJECT_ROOT/app/detection/common/frame_preprocessor.h \
+    $$PROJECT_ROOT/app/detection/common/profile_pose_selector.h \
+    $$PROJECT_ROOT/app/detection/positioning/tracking_pose_matcher.h \
+    $$PROJECT_ROOT/app/detection/positioning/inspection_positioner.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \
@@ -51,7 +59,7 @@ win32 {
         TEST_QT_CORE_RUNTIME = $$shell_path($$TEST_QT_RUNTIME_DIR/Qt5Core.dll)
         TEST_QT_TEST_RUNTIME = $$shell_path($$TEST_QT_RUNTIME_DIR/Qt5Test.dll)
         TEST_RUNTIME_DESTINATION = $$shell_path($$OUT_PWD/release)
-        TEST_TARGET_EXECUTABLE = $$shell_path($$OUT_PWD/release/camera_device_adapter_test.exe)
+        TEST_TARGET_EXECUTABLE = $$shell_path($$OUT_PWD/release/camera_session_test.exe)
     }
 
     CONFIG(debug, debug|release) {
@@ -59,7 +67,7 @@ win32 {
         TEST_QT_CORE_RUNTIME = $$shell_path($$TEST_QT_RUNTIME_DIR/Qt5Cored.dll)
         TEST_QT_TEST_RUNTIME = $$shell_path($$TEST_QT_RUNTIME_DIR/Qt5Testd.dll)
         TEST_RUNTIME_DESTINATION = $$shell_path($$OUT_PWD/debug)
-        TEST_TARGET_EXECUTABLE = $$shell_path($$OUT_PWD/debug/camera_device_adapter_test.exe)
+        TEST_TARGET_EXECUTABLE = $$shell_path($$OUT_PWD/debug/camera_session_test.exe)
     }
 
     QMAKE_POST_LINK += powershell -NoProfile -ExecutionPolicy Bypass -File $$TEST_RUNTIME_DEPLOY_SCRIPT -SourceDll $$TEST_OPENCV_RUNTIME -QtCoreDll $$TEST_QT_CORE_RUNTIME -QtTestDll $$TEST_QT_TEST_RUNTIME -TargetExecutable $$TEST_TARGET_EXECUTABLE -Destination $$TEST_RUNTIME_DESTINATION

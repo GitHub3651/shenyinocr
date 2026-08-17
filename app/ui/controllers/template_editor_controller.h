@@ -19,7 +19,7 @@
 
 class IBarcodeDecoder;
 class ImageLabel;
-class InspectionAcquisitionController;
+class InspectionApplicationService;
 class MachineSettingsPageController;
 class QComboBox;
 class QFrame;
@@ -43,7 +43,7 @@ public:
         QObject *parent = nullptr);
 
     void bindRuntimeDependencies(
-        InspectionAcquisitionController *acquisitionController,
+        InspectionApplicationService *inspectionService,
         MachineSettingsPageController *settingsPageController);
 
     void setEditorsEnabled(bool enabled);
@@ -186,7 +186,7 @@ private:
     Ui::Widget *ui = nullptr;
     QPointer<ImageLabel> imageLabel;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
-    InspectionAcquisitionController *m_acquisitionController = nullptr;
+    InspectionApplicationService *m_inspectionService = nullptr;
     MachineSettingsPageController *m_settingsPageController = nullptr;
 
     bool m_currentTemplateNameVisible = false;

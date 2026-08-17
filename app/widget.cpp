@@ -7,10 +7,8 @@
  */
 
 #include "widget.h"
-#include "runtime/inspection_acquisition_controller.h"
 #include "runtime/inspection_runtime_start_transaction.h"
 #include "ui_widget.h"
-#include "multicamerawidget.h"
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
 #include "ui/controllers/inspection_result_coordinator.h"
@@ -21,7 +19,6 @@
 
 // Qt核心组件
 #include <QTimer>
-#include <QThread>
 #include <QFileDialog>
 #include <QFileSystemModel>
 #include <QAbstractItemView>
@@ -155,7 +152,6 @@ bool isSingleTemplateRecipeMode(const QString &modeId)
  * @details 初始化UI、相机、OCR模型、定时器等核心组件
  */
 Widget::Widget(
-    const std::shared_ptr<ICameraDevice> &cameraDevice,
     const OcrEngineFactory &ocrEngineFactory,
     const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
     const std::shared_ptr<InspectionRuntimeController> &runtimeController,
@@ -179,7 +175,6 @@ Widget::Widget(
       color(1),
       templatematch(nullptr),
       tracking(true),
-      zhuizong(nullptr),
       first(false),
       savefirst(false),
       imageLabel(nullptr)
@@ -362,7 +357,6 @@ Widget::Widget(
                 new InspectionRuntimeUiCoordinator(
                     this,
                     ui,
-                    m_multiCameraWidget,
                     m_templateCaptureAttentionTimer,
                     &m_templateCaptureAttentionOn,
                     runtimeUiCallbacks));
@@ -395,9 +389,6 @@ Widget::Widget(
     qRegisterMetaType<TissueRollResult>("TissueRollResult");
     qRegisterMetaType<QString>("QString");
 
-    // 初始化追踪对象（使用智能指针）
-    unique_ptr<Zhuizong> zhuizong = make_unique<Zhuizong>();
-
     m_plcHealthTimer = new QTimer(this);
     m_plcHealthTimer->setInterval(500);
     connect(m_plcHealthTimer,
@@ -405,28 +396,31 @@ Widget::Widget(
             this,
             &Widget::checkInspectionPlcHealth);
     m_plcHealthTimer->start();
-    InspectionAcquisitionCallbacks acquisitionCallbacks;
-    acquisitionCallbacks.suppressStreamingFrame = [this]() {
-        return m_resultBoundDisplayActive.load();
-    };
-    acquisitionCallbacks.presentStreamingFrame = [this](
-            const cv::Mat &image) {
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::streamingFrameReady,
+            this,
+            [this](cv::Mat image) {
         if (image.empty() || m_resultBoundDisplayActive.load()) {
             return;
         }
-        cv::Mat displayFrame = image;
-        slot_displayAndDetect(&displayFrame);
-    };
-    acquisitionCallbacks.presentTrackingPose = [this](
-            const DetectionPose &pose) {
+        slot_displayAndDetect(&image);
+    },
+    Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::trackingPoseReady,
+            this,
+            [this](DetectionPose pose) {
         slot_saveBoxesFromThread(pose);
-    };
-    acquisitionCallbacks.clearResultText = [this]() {
-        slot_clearResultLabel();
-    };
-    acquisitionCallbacks.presentTemplatePreview = [this](
+    },
+    Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::templatePreviewFrameReady,
+            this,
+            [this](
             quint64 sessionId,
-            const cv::Mat &image) {
+            cv::Mat image) {
+        m_inspectionApplicationService
+                ->acknowledgeTemplatePreviewFrame(sessionId);
         if (m_templateCaptureState
                 != TemplateCaptureState::Previewing
                 || sessionId != m_templatePreviewSessionId
@@ -438,10 +432,14 @@ Widget::Widget(
         updateImageDisplayStatusText(
                     "\u5b9e\u65f6\u53d6\u666f\u4e2d\uff0c\u8bf7\u8c03\u6574\u4ea7\u54c1\u4f4d\u7f6e\uff0c"
                     "\u786e\u8ba4\u540e\u70b9\u51fb\u3010\u62cd\u7167\u5e76\u5f00\u59cb\u6846\u9009\u3011\u3002");
-    };
-    acquisitionCallbacks.reportTemplatePreviewError = [this](
+    },
+    Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::templatePreviewFailed,
+            this,
+            [this](
             quint64 sessionId,
-            const QString &reason) {
+            QString reason) {
         if (m_templateCaptureState
                 != TemplateCaptureState::Previewing
                 || sessionId != m_templatePreviewSessionId) {
@@ -461,9 +459,13 @@ Widget::Widget(
                     this,
                     "\u5b9e\u65f6\u53d6\u666f\u5931\u8d25",
                     reason);
-    };
-    acquisitionCallbacks.softwareThreadFinished = [this]() {
-        if (m_templateCaptureState
+    },
+    Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::captureStopped,
+            this,
+            [this](bool preview) {
+        if (preview && m_templateCaptureState
                 == TemplateCaptureState::Previewing) {
             ++m_templatePreviewSessionId;
             m_templateCaptureState = TemplateCaptureState::Idle;
@@ -483,29 +485,17 @@ Widget::Widget(
             ui->statusLabel->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
             updateOperationUiState();
         }
-    };
-    acquisitionCallbacks.hardwareThreadFinished = [this]() {
-        if (operationUiState() != OperationState::Detecting) {
-            return;
-        }
-        m_inspectionApplicationService
-                ->completeUnexpectedAcquisitionStop();
-        m_resultBoundDisplayActive.store(false);
-        m_barcodeWordRunActive = false;
-        ui->statusLabel->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
-        updateOperationUiState();
-    };
-    acquisitionCallbacks.enterFault = [this](
+    },
+    Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::acquisitionFault,
+            this,
+            [this](
             InspectionFaultReason reason,
-            const QString &diagnostic) {
+            QString diagnostic) {
         enterInspectionFault(reason, diagnostic);
-    };
-    m_acquisitionController.reset(
-                new InspectionAcquisitionController(
-                    cameraDevice,
-                    &m_runtimeController,
-                    acquisitionCallbacks,
-                    this));
+    },
+    Qt::QueuedConnection);
     bindInspectionRuntimePort();
 
     // 初始化窗口组件
@@ -553,7 +543,7 @@ Widget::Widget(
                     &m_updatingMachineSettingsUi,
                     settingsCallbacks));
     m_templateEditorController->bindRuntimeDependencies(
-                m_acquisitionController.get(),
+                m_inspectionApplicationService.get(),
                 m_settingsPageController.get());
 
     m_ocrEngine = ocrEngineFactory
@@ -1056,31 +1046,6 @@ void Widget::bindInspectionRuntimePort()
     callbacks.rollbackStart = [this]() {
         rollbackInspectionStart();
     };
-    callbacks.stopAcquisition = [this]() {
-        return stopInspectionAcquisition();
-    };
-    callbacks.recoverCamera = [this](
-            bool recoveryRequired,
-            bool cameraWasOpen,
-            const MachineSettings &settings,
-            const InspectionRuntimePort::PersistAdjustedExposure
-                &persistAdjustedExposure) {
-        return recoverInspectionCamera(
-                    recoveryRequired,
-                    cameraWasOpen,
-                    settings,
-                    persistAdjustedExposure);
-    };
-    callbacks.openCamera = [this](
-            const MachineSettings &settings,
-            const InspectionRuntimePort::PersistAdjustedExposure
-                &persistAdjustedExposure) {
-        return openInspectionCamera(
-                    settings, persistAdjustedExposure);
-    };
-    callbacks.closeCamera = [this]() {
-        closeInspectionCamera();
-    };
     callbacks.reconcileFaultProducts = [this](
             QString *summary,
             QString *errorMessage) {
@@ -1101,20 +1066,6 @@ bool Widget::executeInspectionStart(
             command.context.preparedRecipe;
     const MachineSettings &settings =
             command.context.machineSettings;
-    std::vector<cv::Point2f> singleDatePolygon;
-    cv::Rect2d singleTrackingBox;
-    cv::Mat singleTrackingTemplate;
-    if (prepared && !prepared->profiles.isEmpty()) {
-        const PreparedRecipeProfile &profile = prepared->profiles.first();
-        singleDatePolygon = profile.datePolygon;
-        singleTrackingBox = cv::Rect2d(
-                    profile.definition.trackingRoi.x(),
-                    profile.definition.trackingRoi.y(),
-                    profile.definition.trackingRoi.width(),
-                    profile.definition.trackingRoi.height());
-        singleTrackingTemplate = profile.trackingTemplate.clone();
-    }
-
     m_barcodeWordRunActive = false;
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -1124,19 +1075,6 @@ bool Widget::executeInspectionStart(
         m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
     }
 
-    QStringList applyErrors;
-    if (!applyCameraHardwareSettingsForRun(
-                settings, &applyErrors)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "启动识别前相机参数应用失败：\n")
-                    + applyErrors.join(QStringLiteral("\n"));
-        }
-        return false;
-    }
-    const float gainValue = static_cast<float>(
-                command.context.machineSettings.cameraGain);
-
     if (command.runPlan.acquisitionKind
             == InspectionAcquisitionKind::HardwareTrigger) {
         ui->image_undetected->clear();
@@ -1145,54 +1083,8 @@ bool Widget::executeInspectionStart(
         ui->resultlabel_7->clear();
         ui->speedLabel->clear();
         m_runtimeController.resetStatistics();
-
-        const InspectionCameraStartResult cameraStartResult =
-                m_acquisitionController->applyCameraStart(
-                    InspectionAcquisitionKind::HardwareTrigger,
-                    gainValue,
-                    [this, &command](QString *cameraError) {
-            return applyCameraExposureValue(
-                        command.context.machineSettings.cameraExposure,
-                        cameraError);
-        });
-        if (!cameraStartResult.isAccepted()) {
-            if (errorMessage) {
-                *errorMessage = cameraStartResult.issue
-                        == InspectionCameraStartIssue::ExposureRejected
-                        ? QStringLiteral(
-                            "切换硬触发模式后恢复相机曝光失败：\n%1")
-                          .arg(cameraStartResult.errorMessage)
-                        : QStringLiteral("相机初始化失败！");
-            }
-            return false;
-        }
-
-        m_acquisitionController->configureHardwareWorker(
-                    command.runPlan,
-                    command.profileSnapshot.trackingProfiles,
-                    singleDatePolygon,
-                    singleTrackingBox,
-                    singleTrackingTemplate);
-    } else {
-        m_acquisitionController->ensureWorkersReady();
-        m_acquisitionController->configureSoftwareWorker(
-                    command.runPlan,
-                    command.profileSnapshot.trackingProfiles,
-                    singleDatePolygon,
-                    singleTrackingBox,
-                    singleTrackingTemplate);
     }
-
-    applyErrors.clear();
-    if (!applyRuntimeThreadSettingsForRun(
-                settings, prepared, &applyErrors)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "启动识别前运行参数应用失败：\n")
-                    + applyErrors.join(QStringLiteral("\n"));
-        }
-        return false;
-    }
+    QStringList applyErrors;
     applyErrors.clear();
     if (!applyPlcTriggerModeForRun(settings, &applyErrors)
             || !applyPlcRunSettingsForRun(
@@ -1203,30 +1095,6 @@ bool Widget::executeInspectionStart(
                     + applyErrors.join(QStringLiteral("\n"));
         }
         return false;
-    }
-
-    if (command.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::SoftwareTrigger) {
-        const InspectionCameraStartResult cameraStartResult =
-                m_acquisitionController->applyCameraStart(
-                    InspectionAcquisitionKind::SoftwareTrigger,
-                    gainValue,
-                    [this, &command](QString *cameraError) {
-            return applyCameraExposureValue(
-                        command.context.machineSettings.cameraExposure,
-                        cameraError);
-        });
-        if (!cameraStartResult.isAccepted()) {
-            if (errorMessage) {
-                *errorMessage = cameraStartResult.issue
-                        == InspectionCameraStartIssue::ExposureRejected
-                        ? QStringLiteral(
-                            "切换软触发模式后恢复相机曝光失败：\n%1")
-                          .arg(cameraStartResult.errorMessage)
-                        : QStringLiteral("相机初始化失败！");
-            }
-            return false;
-        }
     }
 
     m_barcodeWordRunActive = command.barcodeWordMode;
@@ -1247,96 +1115,13 @@ bool Widget::executeInspectionStart(
         return false;
     }
 
-    const bool acquisitionStarted =
-            command.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger
-            ? m_acquisitionController->startHardwareWorker()
-            : (!m_acquisitionController->isSoftwareRunning()
-               && m_acquisitionController->startSoftwareWorker());
-    if (!acquisitionStarted) {
-        m_resultBoundDisplayActive.store(false);
-        m_barcodeWordRunActive = false;
-        if (errorMessage) {
-            *errorMessage = command.runPlan.acquisitionKind
-                    == InspectionAcquisitionKind::HardwareTrigger
-                    ? QStringLiteral("硬触发采集线程启动失败。")
-                    : QStringLiteral("软触发采集线程启动失败。");
-        }
-        return false;
-    }
     return true;
 }
 
 void Widget::rollbackInspectionStart()
 {
-    if (m_acquisitionController) {
-        m_acquisitionController->stopInspection();
-    }
     m_resultBoundDisplayActive.store(false);
     m_barcodeWordRunActive = false;
-}
-
-InspectionAcquisitionStopResult Widget::stopInspectionAcquisition()
-{
-    return m_acquisitionController
-            ? m_acquisitionController->stopInspection()
-            : InspectionAcquisitionStopResult();
-}
-
-InspectionCameraRecoveryResult Widget::recoverInspectionCamera(
-    bool recoveryRequired,
-    bool cameraWasOpen,
-    const MachineSettings &settings,
-    const InspectionRuntimePort::PersistAdjustedExposure
-        &persistAdjustedExposure)
-{
-    return m_acquisitionController->recoverCamera(
-                recoveryRequired,
-                cameraWasOpen,
-                [this, &settings, &persistAdjustedExposure](
-                    QString *adjustmentMessage,
-                    QString *cameraError) {
-        const InspectionCameraParameterResult applied =
-                m_acquisitionController->applySavedExposure(
-                    settings.cameraExposure,
-                    persistAdjustedExposure);
-        if (!applied.success) {
-            if (cameraError) {
-                *cameraError = applied.diagnostic;
-            }
-            return false;
-        }
-        const int adjustedExposure =
-                static_cast<int>(applied.actualValue);
-        if (adjustedExposure != settings.cameraExposure
-                && adjustmentMessage) {
-            *adjustmentMessage = QString(
-                        "原曝光值 %1 超出当前相机允许范围（%2 ~ %3），已调整为 %4。")
-                    .arg(settings.cameraExposure)
-                    .arg(applied.minimumValue)
-                    .arg(applied.maximumValue)
-                    .arg(adjustedExposure);
-        }
-        return true;
-    });
-}
-
-InspectionCameraOpenResult Widget::openInspectionCamera(
-    const MachineSettings &settings,
-    const InspectionRuntimePort::PersistAdjustedExposure
-        &persistAdjustedExposure)
-{
-    return m_acquisitionController->openFirstCamera(
-                settings.cameraExposure,
-                persistAdjustedExposure);
-}
-
-void Widget::closeInspectionCamera()
-{
-    if (m_acquisitionController
-            && m_acquisitionController->hasCamera()) {
-        m_acquisitionController->closeCamera();
-    }
 }
 
 void Widget::presentStartFailure(
@@ -1704,8 +1489,6 @@ void Widget::updateMachineSettingsDraft(
 void Widget::updateOperationUiState()
 {
     if (m_runtimeUiCoordinator) {
-        m_runtimeUiCoordinator->setMultiCameraWidget(
-                    m_multiCameraWidget);
         m_runtimeUiCoordinator->updateOperationState(
                     operationUiState(),
                     operationUiState() == OperationState::Fault);
@@ -1714,6 +1497,7 @@ void Widget::updateOperationUiState()
 
 bool Widget::stopTemplatePreview(int waitTimeMs)
 {
+    Q_UNUSED(waitTimeMs)
     if (m_templateCaptureState
             != TemplateCaptureState::Previewing) {
         return true;
@@ -1721,10 +1505,7 @@ bool Widget::stopTemplatePreview(int waitTimeMs)
 
     // 先使当前会话失效，已进入事件队列的旧帧将被直接忽略。
     ++m_templatePreviewSessionId;
-    return !m_acquisitionController
-            || m_acquisitionController->stopTemplatePreview(
-                m_templatePreviewSessionId,
-                waitTimeMs);
+    return m_inspectionApplicationService->stopTemplatePreview();
 }
 
 void Widget::resetTemplateCaptureState()
@@ -1744,28 +1525,14 @@ void Widget::resetTemplateCaptureState()
     m_templateCaptureState = TemplateCaptureState::Idle;
     m_lastTemplatePreviewFrame.release();
 
-    if (m_acquisitionController) {
-        m_acquisitionController->disableTemplatePreview(
-                    m_templatePreviewSessionId);
-    }
     Q_UNUSED(wasTemplateOperation)
     updateOperationUiState();
 }
 
 bool Widget::startTemplatePreview()
 {
-    if (!isCameraOpen()
-            || !m_acquisitionController
-            || !m_acquisitionController->hasCamera()) {
+    if (!isCameraOpen()) {
         QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
-        return false;
-    }
-    if (isInspectionBusy()
-            || m_acquisitionController->isHardwareRunning()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前正在进行正式检测，请先点击【停止识别】。");
         return false;
     }
     if (isInspectionBusy()) {
@@ -1775,40 +1542,13 @@ bool Widget::startTemplatePreview()
                     "当前正在进行正式检测，请先点击【停止识别】。");
         return false;
     }
-    if (m_acquisitionController->isSoftwareRunning()) {
+    if (m_inspectionApplicationService->isCapturing()) {
         QMessageBox::warning(
                     this,
                     "提示",
                     "相机采集线程仍在运行，请先停止当前任务。");
         return false;
     }
-    m_acquisitionController->ensureWorkersReady();
-    if (!m_acquisitionController->hasCamera()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "实时取景线程初始化失败。");
-        return false;
-    }
-
-    try {
-        if (!m_acquisitionController->setEnumValue(
-                "TriggerMode",
-                1).isSuccess()
-                || !m_acquisitionController->setEnumValue(
-                "TriggerSource",
-                7).isSuccess()) {
-            QMessageBox::warning(
-                        this,
-                        "警告",
-                        "相机切换到软件触发模式失败！");
-            return false;
-        }
-    } catch (...) {
-        QMessageBox::warning(this, "警告", "相机配置失败！");
-        return false;
-    }
-
     QString exposureError;
     if (!applyCameraExposureValue(
                 m_appliedMachineSettings.cameraExposure,
@@ -1839,14 +1579,18 @@ bool Widget::startTemplatePreview()
     allResults.clear();
     updateOperationUiState();
 
-    if (!m_acquisitionController->startTemplatePreview(
+    QString previewError;
+    if (!m_inspectionApplicationService->startTemplatePreview(
                 m_templatePreviewSessionId,
                 angleValue,
-                colorchannel)) {
+                colorchannel,
+                &previewError)) {
         QMessageBox::warning(
                     this,
                     "\u63d0\u793a",
-                    "\u5b9e\u65f6\u53d6\u666f\u7ebf\u7a0b\u542f\u52a8\u5931\u8d25\u3002");
+                    previewError.isEmpty()
+                    ? "\u5b9e\u65f6\u53d6\u666f\u7ebf\u7a0b\u542f\u52a8\u5931\u8d25\u3002"
+                    : previewError);
         resetTemplateCaptureState();
         return false;
     }
@@ -1880,10 +1624,8 @@ bool Widget::freezeTemplatePreview()
 
     m_templateCaptureState =
             TemplateCaptureState::Frozen;
-    if (m_acquisitionController) {
-        m_acquisitionController->replaceCurrentImage(
-                    m_lastTemplatePreviewFrame);
-    }
+    m_inspectionApplicationService->replaceCurrentCameraImage(
+                m_lastTemplatePreviewFrame);
     cv::Mat frozenImage = m_lastTemplatePreviewFrame.clone();
     slot_displayAndDetect(&frozenImage);
 
@@ -2253,9 +1995,7 @@ void Widget::restoreDefaultMachineSettings()
         return;
     }
 
-    const bool cameraOpen = (m_acquisitionController
-                             && m_acquisitionController->hasCamera()
-                             && isCameraOpen());
+    const bool cameraOpen = isCameraOpen();
     const bool plcConnected =
             m_runtimeController.isPlcConnected();
     const MachineSettings editableDefaults =
@@ -2302,9 +2042,7 @@ void Widget::updateHardwareParameterUiEnabled()
     if (!m_settingsPageController) {
         return;
     }
-    const bool cameraOpen = m_acquisitionController
-            && m_acquisitionController->hasCamera()
-            && isCameraOpen();
+    const bool cameraOpen = isCameraOpen();
     const bool operationBusy =
             isInspectionBusy()
             || m_templateCaptureState != TemplateCaptureState::Idle;
@@ -2639,14 +2377,9 @@ bool Widget::applyCameraExposureValue(
     if (errorMessage) {
         errorMessage->clear();
     }
-    if (!m_acquisitionController) {
-        if (errorMessage) {
-            *errorMessage = "相机未初始化，无法设置曝光";
-        }
-        return false;
-    }
     const InspectionCameraParameterResult result =
-            m_acquisitionController->applyExposure(exposureValue);
+            m_inspectionApplicationService
+            ->applyCameraExposure(exposureValue);
     if (result.minimumValue <= result.maximumValue) {
         QSignalBlocker blocker(ui->spinBox);
         ui->spinBox->setRange(
@@ -2658,74 +2391,11 @@ bool Widget::applyCameraExposureValue(
     return result.success;
 }
 
-bool Widget::applySavedCameraExposure(
-    QString *adjustmentMessage,
-    QString *errorMessage)
-{
-    if (adjustmentMessage) {
-        adjustmentMessage->clear();
-    }
-    if (errorMessage) {
-        errorMessage->clear();
-    }
-    if (!m_acquisitionController) {
-        if (errorMessage) {
-            *errorMessage = "相机未初始化，无法设置曝光";
-        }
-        return false;
-    }
-    const int savedValue =
-            m_appliedMachineSettings.cameraExposure;
-    const InspectionCameraParameterResult result =
-            m_acquisitionController->applySavedExposure(
-                savedValue,
-                [this, savedValue](int adjustedValue,
-                                   QString *saveError) {
-        m_appliedMachineSettings.cameraExposure = adjustedValue;
-        if (saveSettings(false)) {
-            return true;
-        }
-        m_appliedMachineSettings.cameraExposure = savedValue;
-        if (saveError) {
-            *saveError = "曝光值已根据相机范围调整，但公共配置保存失败";
-        }
-        return false;
-    });
-    if (result.minimumValue <= result.maximumValue) {
-        QSignalBlocker blocker(ui->spinBox);
-        ui->spinBox->setRange(
-            result.minimumValue, result.maximumValue);
-        if (result.success) {
-            ui->spinBox->setValue(
-                static_cast<int>(result.actualValue));
-        }
-    }
-    if (!result.success) {
-        if (errorMessage) {
-            *errorMessage = result.diagnostic;
-        }
-        return false;
-    }
-    const int adjustedValue = static_cast<int>(result.actualValue);
-    if (adjustedValue != savedValue && adjustmentMessage) {
-        *adjustmentMessage = QString(
-            "原曝光值 %1 超出当前相机允许范围（%2 ~ %3），已调整为 %4。")
-            .arg(savedValue)
-            .arg(result.minimumValue)
-            .arg(result.maximumValue)
-            .arg(adjustedValue);
-    }
-    m_settingsPageController->refreshDirty("camera.exposure");
-    return true;
-}
-
 bool Widget::applyCameraExposureFromUi(
     QStringList *errors,
     bool showSuccessMessage)
 {
-    if (!m_acquisitionController
-            || !m_acquisitionController->hasCamera()
-            || !isCameraOpen()) {
+    if (!isCameraOpen()) {
         const QString message = "未打开相机，无法设置曝光！";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("警告", message);
@@ -2750,9 +2420,7 @@ bool Widget::applyCameraGainFromUi(
     QStringList *errors,
     bool showSuccessMessage)
 {
-    if (!m_acquisitionController
-            || !m_acquisitionController->hasCamera()
-            || !isCameraOpen()) {
+    if (!isCameraOpen()) {
         const QString message =
                 "相机未初始化或未打开，无法设置增益！";
         if (errors) errors->append(message);
@@ -2762,7 +2430,8 @@ bool Widget::applyCameraGainFromUi(
     int gainValue = 0;
     if (!parseIntValue(ui->lineEdit_14->text(), &gainValue)) {
         const InspectionCameraParameterResult range =
-                m_acquisitionController->queryGainRange();
+                m_inspectionApplicationService
+                ->queryCameraGainRange();
         const QString message = QString(
             "请输入有效的整数增益！当前相机允许范围：%1 ~ %2")
             .arg(range.minimumValue)
@@ -2772,7 +2441,7 @@ bool Widget::applyCameraGainFromUi(
         return false;
     }
     const InspectionCameraParameterResult result =
-            m_acquisitionController->applyGain(gainValue);
+            m_inspectionApplicationService->applyCameraGain(gainValue);
     if (!result.success) {
         if (errors) errors->append(result.diagnostic);
         if (showSuccessMessage) {
@@ -2801,61 +2470,6 @@ bool Widget::applyCameraHardwareSettingsFromUi(
         saveSettings(false);
     }
     return ok;
-}
-
-bool Widget::applyCameraHardwareSettingsForRun(
-        const MachineSettings &settings,
-        QStringList *errors)
-{
-    QString exposureError;
-    if (!applyCameraExposureValue(
-                settings.cameraExposure,
-                &exposureError)) {
-        if (errors) errors->append(exposureError);
-        return false;
-    }
-    if (!m_acquisitionController
-            || !m_acquisitionController->hasCamera()
-            || !isCameraOpen()) {
-        if (errors) errors->append(
-                    QStringLiteral("相机未初始化或未打开。"));
-        return false;
-    }
-    const InspectionCameraParameterResult gain =
-            m_acquisitionController->applyGain(
-                settings.cameraGain);
-    if (!gain.success && errors) {
-        errors->append(gain.diagnostic);
-    }
-    return gain.success;
-}
-
-bool Widget::applyRuntimeThreadSettingsForRun(
-        const MachineSettings &settings,
-        const PreparedRecipeSnapshot &prepared,
-        QStringList *errors)
-{
-    if (!prepared || !prepared->recipe
-            || !m_acquisitionController) {
-        if (errors) errors->append(
-                    QStringLiteral("运行配方或采集控制器不可用。"));
-        return false;
-    }
-    angleValue = machineSettingsRotationIds().indexOf(
-                settings.imageRotationId);
-    colorchannel = machineSettingsColorChannelIds().indexOf(
-                settings.colorChannelId);
-    if (angleValue < 0 || colorchannel < 0) {
-        if (errors) errors->append(
-                    QStringLiteral("机器设置中的旋转或颜色通道无效。"));
-        return false;
-    }
-    m_acquisitionController->applyThreadSettings(
-                angleValue,
-                colorchannel,
-                QString::number(
-                    settings.cameraDelay));
-    return true;
 }
 
 bool Widget::applyPlcTriggerModeForRun(
@@ -2973,13 +2587,6 @@ bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMess
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
         return false;
-    }
-
-    if (m_acquisitionController) {
-        m_acquisitionController->applyThreadSettings(
-                    angleValue,
-                    colorchannel,
-                    ui->lineEdit_4->text());
     }
 
     if (showSuccessMessage) {
@@ -3231,10 +2838,6 @@ void Widget::closeEvent(QCloseEvent *event)
     m_templateCaptureState = TemplateCaptureState::Idle;
     m_lastTemplatePreviewFrame.release();
 
-    if (m_acquisitionController) {
-        m_acquisitionController->disableTemplatePreview(
-                    m_templatePreviewSessionId);
-    }
     m_inspectionApplicationService->shutdown();
 
     try {
@@ -3337,12 +2940,6 @@ void Widget::on_pushButton_9_clicked()
         angleValue = 0;
     }
 
-    if (m_acquisitionController) {
-        m_acquisitionController->applyThreadSettings(
-                    angleValue,
-                    colorchannel,
-                    ui->lineEdit_4->text());
-    }
     m_settingsPageController->updateAppliedFromUi("image.rotation");
     m_settingsPageController->refreshDirty("image.rotation");
     saveSettings(false);
@@ -3562,31 +3159,6 @@ void Widget::on_CloseCamera_clicked()
     updateOperationUiState();
 }
 
-void Widget::on_MultiCameraMode_clicked()
-{
-    if (isInspectionBusy()
-            || m_templateCaptureState
-               != TemplateCaptureState::Idle) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "请先停止当前识别或退出模板制作。");
-        return;
-    }
-    if (!m_multiCameraWidget) {
-        m_multiCameraWidget = new MultiCameraWidget(this);
-        m_multiCameraWidget->setAttribute(Qt::WA_DeleteOnClose);
-        connect(m_multiCameraWidget, &QObject::destroyed, this, [this]() {
-            m_multiCameraWidget = nullptr;
-        });
-    }
-
-    m_multiCameraWidget->show();
-    m_multiCameraWidget->raise();
-    m_multiCameraWidget->activateWindow();
-}
-
-
 void Widget::on_plcbtn_clicked()
 {
     updateHardwareParameterUiEnabled();
@@ -3700,6 +3272,8 @@ void Widget::on_HandwareDetect_clicked()
         return;
     }
 
+    m_appliedMachineSettings =
+            m_settingsApplicationService->current();
     {
         QSignalBlocker blocker(ui->spinBox);
         ui->spinBox->setRange(
@@ -3815,12 +3389,6 @@ void Widget::on_pushButton_7_clicked()
         colorchannel = 0;
     }
 
-    if (m_acquisitionController) {
-        m_acquisitionController->applyThreadSettings(
-                    angleValue,
-                    colorchannel,
-                    ui->lineEdit_4->text());
-    }
     m_settingsPageController->updateAppliedFromUi("image.color_channel");
     m_settingsPageController->refreshDirty("image.color_channel");
     saveSettings(false);

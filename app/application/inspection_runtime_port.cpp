@@ -41,60 +41,6 @@ void InspectionRuntimePort::rollbackStart() const
     }
 }
 
-InspectionAcquisitionStopResult
-InspectionRuntimePort::stopAcquisition() const
-{
-    if (m_callbacks.stopAcquisition) {
-        return m_callbacks.stopAcquisition();
-    }
-    InspectionAcquisitionStopResult result;
-    result.softwareStopped = false;
-    result.hardwareStopped = false;
-    return result;
-}
-
-InspectionCameraRecoveryResult InspectionRuntimePort::recoverCamera(
-    bool recoveryRequired,
-    bool cameraWasOpen,
-    const MachineSettings &settings,
-    const PersistAdjustedExposure &persistAdjustedExposure) const
-{
-    if (m_callbacks.recoverCamera) {
-        return m_callbacks.recoverCamera(
-                    recoveryRequired,
-                    cameraWasOpen,
-                    settings,
-                    persistAdjustedExposure);
-    }
-    InspectionCameraRecoveryResult result;
-    result.issue = InspectionCameraRecoveryIssue::MissingCamera;
-    result.errorMessage = QStringLiteral(
-                "Inspection runtime camera recovery is not bound.");
-    return result;
-}
-
-InspectionCameraOpenResult InspectionRuntimePort::openCamera(
-    const MachineSettings &settings,
-    const PersistAdjustedExposure &persistAdjustedExposure) const
-{
-    if (m_callbacks.openCamera) {
-        return m_callbacks.openCamera(
-                    settings, persistAdjustedExposure);
-    }
-    InspectionCameraOpenResult result;
-    result.issue = InspectionCameraOpenIssue::CameraUnavailable;
-    result.diagnostic = QStringLiteral(
-                "Inspection runtime camera port is not bound.");
-    return result;
-}
-
-void InspectionRuntimePort::closeCamera() const
-{
-    if (m_callbacks.closeCamera) {
-        m_callbacks.closeCamera();
-    }
-}
-
 bool InspectionRuntimePort::reconcileFaultProducts(
     QString *summary,
     QString *errorMessage) const

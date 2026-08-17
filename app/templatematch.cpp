@@ -14,8 +14,6 @@ using namespace cv::xfeatures2d;
 TemplateMatch::TemplateMatch(QObject* parent)
     : QThread(parent)
 {
-    myThread = new MyThread();
-    cameraThread = new CameraThread();
     qRegisterMetaType<cv::Mat>("cv::Mat");
     qRegisterMetaType<cv::Mat*>("cv::Mat*");
 }

@@ -26,13 +26,11 @@ void setLabelTextIfChanged(QLabel *label, const QString &text)
 InspectionRuntimeUiCoordinator::InspectionRuntimeUiCoordinator(
     QWidget *rootWidget,
     Ui::Widget *ui,
-    QWidget *multiCameraWidget,
     QTimer *templateAttentionTimer,
     bool *templateAttentionOn,
     const Callbacks &callbacks)
     : m_rootWidget(rootWidget),
       m_ui(ui),
-      m_multiCameraWidget(multiCameraWidget),
       m_templateAttentionTimer(templateAttentionTimer),
       m_templateAttentionOn(templateAttentionOn),
       m_callbacks(callbacks)
@@ -118,12 +116,6 @@ InspectionRuntimeUiCoordinator::resultViewBindings() const
     return bindings;
 }
 
-void InspectionRuntimeUiCoordinator::setMultiCameraWidget(
-    QWidget *multiCameraWidget)
-{
-    m_multiCameraWidget = multiCameraWidget;
-}
-
 void InspectionRuntimeUiCoordinator::updateOperationState(
     OperationUiState requestedState,
     bool runtimeFaulted)
@@ -135,9 +127,7 @@ void InspectionRuntimeUiCoordinator::updateOperationState(
     const QList<QAbstractButton *> operationButtons =
             m_rootWidget->findChildren<QAbstractButton *>();
     for (QAbstractButton *button : operationButtons) {
-        if (!button
-                || (m_multiCameraWidget
-                    && m_multiCameraWidget->isAncestorOf(button))) {
+        if (!button) {
             continue;
         }
         const QString marker = QStringLiteral(
@@ -165,9 +155,7 @@ void InspectionRuntimeUiCoordinator::updateOperationState(
             OperationUiPolicy::create(effectiveState);
     if (operationUi.enableAllOperations) {
         for (QAbstractButton *button : operationButtons) {
-            if (button
-                    && (!m_multiCameraWidget
-                        || !m_multiCameraWidget->isAncestorOf(button))) {
+            if (button) {
                 button->setEnabled(true);
             }
         }

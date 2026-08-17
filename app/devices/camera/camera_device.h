@@ -1,69 +1,101 @@
-#ifndef CAMERA_DEVICE_H
-#define CAMERA_DEVICE_H
+#pragma once
 
-#include <cstdint>
+#include <QDateTime>
 
 #include <opencv2/core.hpp>
 
-struct CameraOperationResult
+#include <cstdint>
+
+enum class CameraResultCode
 {
-    explicit CameraOperationResult(int errorCode = 0)
-        : nativeErrorCode(errorCode)
-    {
-    }
+    Success,
+    InvalidState,
+    InvalidSettings,
+    DeviceError
+};
+
+struct CameraSettings
+{
+    bool updateExposure = false;
+    float exposure = 0.0f;
+    bool updateGain = false;
+    float gain = 0.0f;
+    bool updateTriggerDelay = false;
+    float triggerDelay = 0.0f;
+    bool updateLineDebouncerTime = false;
+    unsigned int lineDebouncerTime = 5000U;
+};
+
+struct CameraSettingRange
+{
+    float minimum = 0.0f;
+    float maximum = 0.0f;
+    float current = 0.0f;
+};
+
+struct CameraResult
+{
+    CameraResultCode code = CameraResultCode::Success;
+    int nativeErrorCode = 0;
+    CameraSettingRange exposureRange;
+    CameraSettingRange gainRange;
 
     bool isSuccess() const
     {
-        return nativeErrorCode == 0;
+        return code == CameraResultCode::Success;
     }
 
-    int nativeErrorCode;
+    static CameraResult deviceError(int nativeErrorCode)
+    {
+        CameraResult result;
+        result.code = CameraResultCode::DeviceError;
+        result.nativeErrorCode = nativeErrorCode;
+        return result;
+    }
 };
 
-struct CameraFloatValue
+enum class CameraTriggerMode
 {
-    float currentValue = 0.0f;
-    float minimumValue = 0.0f;
-    float maximumValue = 0.0f;
+    Software,
+    HardwareLine0
+};
+
+struct CameraFrame
+{
+    std::uint64_t sequence = 0;
+    QDateTime timestampUtc;
+    cv::Mat image;
+};
+
+enum class CameraFrameStatus
+{
+    FrameReady,
+    Timeout,
+    Interrupted,
+    DeviceError
+};
+
+struct CameraFrameResult
+{
+    CameraFrameStatus status = CameraFrameStatus::Timeout;
+    CameraFrame frame;
+    int nativeErrorCode = 0;
 };
 
 class ICameraDevice
 {
 public:
-    virtual ~ICameraDevice() = default;
+    virtual ~ICameraDevice() {}
 
-    virtual CameraOperationResult enumerateDevices(int *deviceCount) = 0;
-    virtual CameraOperationResult openDevice(int deviceIndex) = 0;
-    virtual CameraOperationResult close() = 0;
-
-    virtual CameraOperationResult registerImageCallback() = 0;
-    virtual CameraOperationResult startGrabbing() = 0;
-    virtual CameraOperationResult stopGrabbing() = 0;
-
-    virtual CameraOperationResult setEnumValue(
-        const char *key,
-        unsigned int value) = 0;
-    virtual CameraOperationResult setFloatValue(
-        const char *key,
-        float value) = 0;
-    virtual CameraOperationResult getFloatValue(
-        const char *key,
-        CameraFloatValue *value) = 0;
-    virtual CameraOperationResult getBoolValue(
-        const char *key,
-        bool *value) = 0;
-    virtual CameraOperationResult executeCommand(const char *key) = 0;
-
-    virtual CameraOperationResult readBuffer(cv::Mat &image) = 0;
-    virtual cv::Mat latestImage() = 0;
-    virtual cv::Mat waitForImage() = 0;
-    virtual bool takeImageForMainIfReady(cv::Mat &image) = 0;
-    virtual std::uint64_t frameSequence() const = 0;
-    virtual bool isImageReadyForMain() = 0;
-
-    virtual void setNonBlocking(bool enabled) = 0;
-    virtual void deferSwitchToBlockingAfterNextFrame() = 0;
-    virtual void requestStop() = 0;
+    virtual CameraResult enumerate(int *deviceCount) = 0;
+    virtual CameraResult openFirst() = 0;
+    virtual CameraResult applySettings(
+        const CameraSettings &settings) = 0;
+    virtual CameraResult setTriggerMode(CameraTriggerMode mode) = 0;
+    virtual CameraResult startGrabbing() = 0;
+    virtual CameraResult triggerSoftware() = 0;
+    virtual CameraFrameResult waitNextFrame(int timeoutMs) = 0;
+    virtual void interruptWait() = 0;
+    virtual CameraResult stopGrabbing() = 0;
+    virtual CameraResult close() = 0;
 };
-
-#endif // CAMERA_DEVICE_H

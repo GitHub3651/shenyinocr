@@ -28,13 +28,11 @@ public:
     InspectionRuntimeUiCoordinator(
         QWidget *rootWidget,
         Ui::Widget *ui,
-        QWidget *multiCameraWidget,
         QTimer *templateAttentionTimer,
         bool *templateAttentionOn,
         const Callbacks &callbacks);
 
     DetectionResultViewBindings resultViewBindings() const;
-    void setMultiCameraWidget(QWidget *multiCameraWidget);
     void updateOperationState(
         OperationUiState requestedState,
         bool runtimeFaulted);
@@ -54,7 +52,6 @@ public:
 private:
     QWidget *m_rootWidget = nullptr;
     Ui::Widget *m_ui = nullptr;
-    QWidget *m_multiCameraWidget = nullptr;
     QTimer *m_templateAttentionTimer = nullptr;
     bool *m_templateAttentionOn = nullptr;
     Callbacks m_callbacks;

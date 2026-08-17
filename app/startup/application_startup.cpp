@@ -6,7 +6,7 @@
 #include "system_support/logging/application_logger.h"
 
 #include "devices/barcode/barcode_decoder_adapter.h"
-#include "devices/camera/hikvision_camera_device.h"
+#include "devices/camera/vendor/hikvision_camera_device.h"
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
@@ -14,6 +14,7 @@
 #include "application/settings_application_service.h"
 #include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_runtime_controller.h"
+#include "runtime/camera_session.h"
 #include "recipes/recipe_store.h"
 #include "system_support/settings/machine_settings_store.h"
 #include "widget.h"
@@ -201,11 +202,16 @@ int ApplicationStartup::run(int argc, char *argv[])
                         plcController));
         const std::shared_ptr<InspectionRuntimePort> runtimePort(
                     new InspectionRuntimePort);
+        const std::shared_ptr<CameraSession> cameraSession(
+                    new CameraSession(
+                        cameraDevice,
+                        runtimeController.get()));
         const std::shared_ptr<InspectionApplicationService>
                 inspectionService(
                     new InspectionApplicationService(
                         runtimeController,
                         runtimePort,
+                        cameraSession,
                         settingsService,
                         recipeStore));
         const QString ocrConfigPath = QDir(applicationDirectory).filePath(
@@ -219,7 +225,6 @@ int ApplicationStartup::run(int argc, char *argv[])
                     new BarcodeDecoderAdapter);
 
         Widget window(
-                    cameraDevice,
                     ocrEngineFactory,
                     barcodeDecoder,
                     runtimeController,
