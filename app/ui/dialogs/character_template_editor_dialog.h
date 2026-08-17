@@ -1,13 +1,13 @@
-#ifndef CHARACTERTEMPLATECROPDIALOG_H
-#define CHARACTERTEMPLATECROPDIALOG_H
+#ifndef UI_DIALOGS_CHARACTER_TEMPLATE_EDITOR_DIALOG_H
+#define UI_DIALOGS_CHARACTER_TEMPLATE_EDITOR_DIALOG_H
 
 #include <QDialog>
 #include <QImage>
 #include <QList>
+#include <QMap>
 #include <QRect>
 #include <QString>
 #include <QStringList>
-#include <QMap>
 
 #include "recipes/product_recipe.h"
 
@@ -18,12 +18,15 @@ class QStackedWidget;
 class QVBoxLayout;
 class QGridLayout;
 
-class CharacterTemplateCropDialog : public QDialog
+// Pure UI dialog: returns boxes, names and cropped images. It never writes
+// recipe files, settings or formal assets.
+class CharacterTemplateEditorDialog : public QDialog
 {
 public:
-    explicit CharacterTemplateCropDialog(const QImage &sourceImage,
-                                         const RecipeProfile &initialProfile,
-                                         QWidget *parent = nullptr);
+    explicit CharacterTemplateEditorDialog(
+        const QImage &sourceImage,
+        const RecipeProfile &initialProfile,
+        QWidget *parent = nullptr);
 
     int savedCount() const;
     RecipeProfile resultProfile() const;
@@ -43,7 +46,9 @@ private:
     void loadSavedCharacterBoxes();
     void refreshCharacterPreviewList();
     bool isSystemTemplateFile(const QString &fileName) const;
-    QString nextAvailableFileName(const QString &baseName, const QStringList &reservedFileNames = QStringList()) const;
+    QString nextAvailableFileName(
+        const QString &baseName,
+        const QStringList &reservedFileNames = QStringList()) const;
     void refreshSaveNamePreviews();
     bool saveTemplates();
 
@@ -65,4 +70,4 @@ private:
     int m_savedCount = 0;
 };
 
-#endif // CHARACTERTEMPLATECROPDIALOG_H
+#endif // UI_DIALOGS_CHARACTER_TEMPLATE_EDITOR_DIALOG_H

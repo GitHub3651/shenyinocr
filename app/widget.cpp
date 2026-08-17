@@ -8,28 +8,21 @@
 
 #include "widget.h"
 #include "ui_widget.h"
-#include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
 #include "runtime/result_service.h"
 #include "ui/controllers/inspection_runtime_ui_coordinator.h"
 #include "ui/controllers/machine_settings_page_controller.h"
-#include "ui/controllers/template_editor_controller.h"
+#include "ui/pages/template_editor_page.h"
 
 
 // Qt核心组件
 #include <QTimer>
 #include <QFileDialog>
-#include <QFileSystemModel>
-#include <QAbstractItemView>
 #include <QImageReader>
 #include <QLabel>
 #include <QFontMetrics>
-#include <QListView>
 #include <QLineEdit>
-#include <QInputDialog>
 #include <QMetaType>
-#include <QStandardItemModel>
-#include <QHeaderView>
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
@@ -49,24 +42,18 @@
 #include <QTextCodec>
 #include <QDir>
 #include <QStandardPaths>
-#include <QTreeView>
 #include <QComboBox>
 #include <QCheckBox>
-#include <QGridLayout>
-#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QToolTip>
-#include <QWhatsThis>
 #include <QCursor>
 #include <QFrame>
 #include <QTextEdit>
 #include <QScrollArea>
-#include <QSortFilterProxyModel>
-#include <QSet>
 #include <QEvent>
 #include <QRegularExpression>
 #include <QSplitterHandle>
@@ -87,7 +74,6 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
-#include <cmath>
 
 #pragma execution_character_set("utf-8")
 using namespace std;
@@ -123,11 +109,10 @@ bool isSingleTemplateRecipeMode(const QString &modeId)
  * @details 初始化UI、相机、OCR模型、定时器等核心组件
  */
 Widget::Widget(
-    const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
     const std::shared_ptr<InspectionRuntime> &runtime,
     const std::shared_ptr<InspectionApplicationService> &inspectionService,
     const std::shared_ptr<SettingsApplicationService> &settingsService,
-    const std::shared_ptr<RecipeStore> &recipeStore,
+    const std::shared_ptr<TemplateApplicationService> &templateService,
     QWidget *parent)
     : QWidget(parent),
       ui(new Ui::Widget),
@@ -135,7 +120,7 @@ Widget::Widget(
       m_settingsApplicationService(settingsService),
       m_appliedMachineSettings(
           m_settingsApplicationService->editableDraft()),
-      m_recipeStore(recipeStore),
+      m_templateApplicationService(templateService),
       m_runtime(*runtime),
       timer1(new QTimer(this)),
       imageIndex(0),
@@ -146,7 +131,6 @@ Widget::Widget(
       savefirst(false),
       imageLabel(nullptr)
 {
-    m_barcodeDecoder = barcodeDecoder;
     ui->setupUi(this);
     ResultServiceCallbacks resultCallbacks;
     resultCallbacks.runtimeFaulted = [this]() {
@@ -295,8 +279,8 @@ Widget::Widget(
         if (ui->comboBox_4) {
             ui->comboBox_4->setEnabled(enabled);
         }
-        if (m_templateEditorController) {
-            m_templateEditorController->setEditorsEnabled(enabled);
+        if (m_templateEditorPage) {
+            m_templateEditorPage->setEditorsEnabled(enabled);
         }
     };
     runtimeUiCallbacks.refreshHardwareSettingsEnabled = [this]() {
@@ -321,15 +305,8 @@ Widget::Widget(
         updateHardwareParameterUiEnabled();
     });
 
-    // UI 文件中已经是 ImageLabel，直接使用
-    imageLabel=ui->image_undetected;
-    m_templateEditorController.reset(
-                new TemplateEditorController(
-                    this,
-                    ui,
-                    imageLabel,
-                    barcodeDecoder,
-                    this));
+    // UI 文件中已经是 ImageLabel，直接使用。
+    imageLabel = ui->image_undetected;
     m_resultService->bindView(
                 m_runtimeUiCoordinator->resultViewBindings());
 
@@ -367,67 +344,10 @@ Widget::Widget(
     },
     Qt::QueuedConnection);
     connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::templatePreviewFrameReady,
-            this,
-            [this](
-            quint64 sessionId,
-            cv::Mat image) {
-        m_inspectionApplicationService
-                ->acknowledgeTemplatePreviewFrame(sessionId);
-        if (m_templateCaptureState
-                != TemplateCaptureState::Previewing
-                || sessionId != m_templatePreviewSessionId
-                || image.empty()) {
-            return;
-        }
-        m_lastTemplatePreviewFrame = image.clone();
-        slot_displayAndDetect(&m_lastTemplatePreviewFrame);
-        updateImageDisplayStatusText(
-                    "\u5b9e\u65f6\u53d6\u666f\u4e2d\uff0c\u8bf7\u8c03\u6574\u4ea7\u54c1\u4f4d\u7f6e\uff0c"
-                    "\u786e\u8ba4\u540e\u70b9\u51fb\u3010\u62cd\u7167\u5e76\u5f00\u59cb\u6846\u9009\u3011\u3002");
-    },
-    Qt::QueuedConnection);
-    connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::templatePreviewFailed,
-            this,
-            [this](
-            quint64 sessionId,
-            QString reason) {
-        if (m_templateCaptureState
-                != TemplateCaptureState::Previewing
-                || sessionId != m_templatePreviewSessionId) {
-            return;
-        }
-        resetTemplateCaptureState();
-        if (imageLabel) {
-            imageLabel->setTemplateDrawingEnabled(false);
-        }
-        ui->statusLabel->setText(
-                    isCameraOpen()
-                    ? "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5931\u8d25\uff0c\u76f8\u673a\u5df2\u6253\u5f00"
-                    : "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5931\u8d25\uff0c\u76f8\u673a\u5df2\u5173\u95ed");
-        updateImageDisplayStatusText(
-                    "\u5b9e\u65f6\u53d6\u666f\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u76f8\u673a\u540e\u91cd\u8bd5\u3002");
-        QMessageBox::warning(
-                    this,
-                    "\u5b9e\u65f6\u53d6\u666f\u5931\u8d25",
-                    reason);
-    },
-    Qt::QueuedConnection);
-    connect(m_inspectionApplicationService.get(),
             &InspectionApplicationService::captureStopped,
             this,
             [this](bool preview) {
-        if (preview && m_templateCaptureState
-                == TemplateCaptureState::Previewing) {
-            ++m_templatePreviewSessionId;
-            m_templateCaptureState = TemplateCaptureState::Idle;
-            m_lastTemplatePreviewFrame.release();
-            ui->statusLabel->setText(
-                        isCameraOpen()
-                        ? "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5df2\u505c\u6b62\uff0c\u76f8\u673a\u5df2\u6253\u5f00"
-                        : "\u6a21\u677f\u5b9e\u65f6\u53d6\u666f\u5df2\u505c\u6b62\uff0c\u76f8\u673a\u5df2\u5173\u95ed");
-            updateOperationUiState();
+        if (preview) {
             return;
         }
         if (operationUiState() == OperationState::Detecting) {
@@ -464,7 +384,7 @@ Widget::Widget(
             return;
         }
         settings->publishedRecipeIdsByMode =
-                m_templateEditorController->modeMemory()
+                m_templateApplicationService->modeMemory()
                 .publishedRecipeIdsByMode();
     };
     settingsCallbacks.updateImageSaveOptionsVisibility = [this]() {
@@ -494,15 +414,100 @@ Widget::Widget(
                     &m_applyingMachineSettings,
                     &m_updatingMachineSettingsUi,
                     settingsCallbacks));
-    m_templateEditorController->bindRuntimeDependencies(
-                m_inspectionApplicationService.get(),
-                m_settingsPageController.get());
+
+    TemplateEditorViewBindings templateView;
+    templateView.parentWidget = this;
+    templateView.eventFilterTarget = this;
+    templateView.imageLabel = imageLabel;
+    templateView.dateEdit = ui->dateEdit;
+    templateView.lineEdit_yuzhi = ui->lineEdit_yuzhi;
+    templateView.lineEdit_tissueRoughnessThreshold =
+            ui->lineEdit_tissueRoughnessThreshold;
+    templateView.comboBox_2 = ui->comboBox_2;
+    templateView.comboBox_3 = ui->comboBox_3;
+    templateView.comboBox_4 = ui->comboBox_4;
+    templateView.comboBox_5 = ui->comboBox_5;
+    templateView.currentTemplateName = ui->currentTemplateName;
+    templateView.statusLabel = ui->statusLabel;
+    templateView.label = ui->label;
+    templateView.label_4 = ui->label_4;
+    templateView.label_6 = ui->label_6;
+    templateView.label_8 = ui->label_8;
+    templateView.label_10 = ui->label_10;
+    templateView.label_13 = ui->label_13;
+    templateView.label_14 = ui->label_14;
+    templateView.label_16 = ui->label_16;
+    templateView.label_17 = ui->label_17;
+    templateView.label_27 = ui->label_27;
+    templateView.image_undetected = ui->image_undetected;
+    templateView.imagedisplayBox = ui->imagedisplayBox;
+    templateView.verticalLayout_InnerImg = ui->verticalLayout_InnerImg;
+    templateView.manualCharacterCropButton =
+            ui->manualCharacterCropButton;
+    templateView.textsure_btn = ui->textsure_btn;
+    templateView.batchTextsure_btn = ui->batchTextsure_btn;
+    templateView.batchImageThresholdButton =
+            ui->batchImageThresholdButton;
+    templateView.WriteVDpushButton = ui->WriteVDpushButton;
+    templateView.pushButton_3 = ui->pushButton_3;
+    templateView.pushButton_7 = ui->pushButton_7;
+    templateView.pushButton_8 = ui->pushButton_8;
+    templateView.pushButton_9 = ui->pushButton_9;
+    templateView.pushButton_10 = ui->pushButton_10;
+    templateView.pushButton_12 = ui->pushButton_12;
+    templateView.sureButton = ui->sureButton;
+    templateView.pushButton_tissueRoughnessThreshold =
+            ui->pushButton_tissueRoughnessThreshold;
+    templateView.plcmodebtn = ui->plcmodebtn;
+    templateView.ConnectpushButton = ui->ConnectpushButton;
+    templateView.DisconnectpushButton = ui->DisconnectpushButton;
+    templateView.pushButton_browseImageSavePath =
+            ui->pushButton_browseImageSavePath;
+    templateView.VideoShoot = ui->VideoShoot;
+    templateView.checkBox = ui->checkBox;
+
+    TemplateEditorPageCallbacks templateCallbacks;
+    templateCallbacks.updateOperationUiState = [this]() {
+        updateOperationUiState();
+    };
+    templateCallbacks.updateTissueVisibility = [this]() {
+        updateTissueRoughnessUiVisibility();
+    };
+    templateCallbacks.clearTransientView = [this]() {
+        if (m_resultService) {
+            m_resultService->clearTransientView();
+        }
+    };
+    templateCallbacks.displayPreviewFrame = [this](
+            const cv::Mat &image) {
+        cv::Mat displayImage = image.clone();
+        slot_displayAndDetect(&displayImage);
+    };
+    templateCallbacks.isApplyingSettings = [this]() {
+        return m_applyingMachineSettings;
+    };
+    templateCallbacks.isUpdatingSettingsUi = [this]() {
+        return m_updatingMachineSettingsUi;
+    };
+    templateCallbacks.saveSettings = [this](bool showErrorMessage) {
+        return saveSettings(showErrorMessage);
+    };
+    templateCallbacks.applyRecipeProfileToUi = [this](
+            const RecipeProfile &profile) {
+        applyRecipeProfileToUi(profile);
+    };
+    m_templateEditorPage.reset(
+                new TemplateEditorPage(
+                    templateView,
+                    m_templateApplicationService.get(),
+                    m_inspectionApplicationService.get(),
+                    m_settingsApplicationService.get(),
+                    m_settingsPageController.get(),
+                    &m_settingsEditState,
+                    templateCallbacks,
+                    this));
 
     // 初始化统计变量
-    hasValidBoxes = false;
-    savedTrackingBox = cv::Rect2d(0, 0, 0, 0);
-    savedBarcodePoly.clear();
-    savedDatePoly.clear();
     recognitionCompletedFlag = false;
     m_runtime.resetStatistics();
 
@@ -529,8 +534,8 @@ Widget::Widget(
 
     m_settingsPageController->initialize(
                 m_settingsApplicationService->current());
-    m_templateEditorController->modeMemory().publishedRecipeIdsByMode() =
-            m_appliedMachineSettings.publishedRecipeIdsByMode;
+    m_templateApplicationService->replacePublishedRecipeIdsByMode(
+                m_appliedMachineSettings.publishedRecipeIdsByMode);
     m_currentDetectModeId = currentDetectModeId();
     restoreTemplatesForMode(m_currentDetectModeId, false);
     qDebug() << "8. MachineSettings 快照已应用";
@@ -865,41 +870,19 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
 
 void Widget::clearBarcodeTemplateValidation()
 {
-    m_templateEditorController->clearBarcodeTemplateValidation();
-}
-
-QString Widget::barcodeTemplateValidationFailureText(
-        const BarcodeReadResult &result) const
-{
-    return m_templateEditorController
-            ->barcodeTemplateValidationFailureText(result);
-}
-
-bool Widget::validateBarcodeTemplateRect(
-        const QRect &uiBarcodeRect,
-        const BarcodeDecodeOptions &options,
-        BarcodeReadResult *barcode,
-        QString *failureReason)
-{
-    return m_templateEditorController->validateBarcodeTemplateRect(
-                uiBarcodeRect,
-                options,
-                barcode,
-                failureReason);
-}
-
-BarcodeDecodeOptions Widget::barcodeTemplateValidationOptions() const
-{
-    return m_templateEditorController
-            ->barcodeTemplateValidationOptions();
+    m_templateEditorPage->clearBarcodeTemplateValidation();
 }
 
 OperationUiState Widget::operationUiState() const
 {
-    if (m_templateCaptureState == TemplateCaptureState::Previewing) {
+    if (m_templateEditorPage
+            && m_templateEditorPage->captureState()
+               == TemplateEditorPage::CaptureState::Previewing) {
         return OperationState::TemplatePreviewing;
     }
-    if (m_templateCaptureState == TemplateCaptureState::Frozen) {
+    if (m_templateEditorPage
+            && m_templateEditorPage->captureState()
+               == TemplateEditorPage::CaptureState::Frozen) {
         return OperationState::TemplateFrozen;
     }
     const RuntimeSnapshot snapshot =
@@ -955,210 +938,39 @@ void Widget::updateOperationUiState()
 bool Widget::stopTemplatePreview(int waitTimeMs)
 {
     Q_UNUSED(waitTimeMs)
-    if (m_templateCaptureState
-            != TemplateCaptureState::Previewing) {
-        return true;
-    }
-
-    // 先使当前会话失效，已进入事件队列的旧帧将被直接忽略。
-    ++m_templatePreviewSessionId;
-    return m_inspectionApplicationService->stopTemplatePreview();
+    return m_templateEditorPage
+            && m_templateEditorPage->stopTemplatePreview();
 }
 
 void Widget::resetTemplateCaptureState()
 {
-    const bool wasTemplateOperation =
-            m_templateCaptureState
-               != TemplateCaptureState::Idle;
-    if (!stopTemplatePreview()) {
-        updateOperationUiState();
-        return;
+    if (m_templateEditorPage) {
+        m_templateEditorPage->resetTemplateCaptureState();
     }
-
-    if (m_templateCaptureState
-            != TemplateCaptureState::Previewing) {
-        ++m_templatePreviewSessionId;
-    }
-    m_templateCaptureState = TemplateCaptureState::Idle;
-    m_lastTemplatePreviewFrame.release();
-
-    Q_UNUSED(wasTemplateOperation)
-    updateOperationUiState();
 }
 
 bool Widget::startTemplatePreview()
 {
-    if (!isCameraOpen()) {
-        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
-        return false;
-    }
-    if (isInspectionBusy()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前正在进行正式检测，请先点击【停止识别】。");
-        return false;
-    }
-    if (m_inspectionApplicationService->isCapturing()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "相机采集线程仍在运行，请先停止当前任务。");
-        return false;
-    }
-    QString exposureError;
-    if (!applyCameraExposureValue(
-                m_appliedMachineSettings.cameraExposure,
-                &exposureError)) {
-        QMessageBox::warning(
-                    this,
-                    "警告",
-                    QString("制作模板前应用相机曝光失败：\n%1")
-                    .arg(exposureError));
-        return false;
-    }
-
-    angleValue = ui->comboBox_2->currentIndex();
-    colorchannel = ui->comboBox_5->currentIndex();
-
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearSelection();
-    }
-    clearBarcodeTemplateValidation();
-    m_lastTemplatePreviewFrame.release();
-    ++m_templatePreviewSessionId;
-    m_templateCaptureState =
-            TemplateCaptureState::Previewing;
-    if (m_resultService) {
-        m_resultService->clearTransientView();
-    }
-    updateOperationUiState();
-
-    QString previewError;
-    if (!m_inspectionApplicationService->startTemplatePreview(
-                m_templatePreviewSessionId,
-                angleValue,
-                colorchannel,
-                &previewError)) {
-        QMessageBox::warning(
-                    this,
-                    "\u63d0\u793a",
-                    previewError.isEmpty()
-                    ? "\u5b9e\u65f6\u53d6\u666f\u7ebf\u7a0b\u542f\u52a8\u5931\u8d25\u3002"
-                    : previewError);
-        resetTemplateCaptureState();
-        return false;
-    }
-
-    updateImageDisplayStatusText(
-                "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。");
-    return true;
+    return m_templateEditorPage
+            && m_templateEditorPage->startTemplatePreview();
 }
 
 bool Widget::freezeTemplatePreview()
 {
-    if (m_templateCaptureState
-            != TemplateCaptureState::Previewing) {
-        return false;
-    }
-    if (m_lastTemplatePreviewFrame.empty()) {
-        QMessageBox::information(
-                    this,
-                    "提示",
-                    "相机尚未返回有效画面，请稍候再点击。");
-        return false;
-    }
-
-    if (!stopTemplatePreview()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "实时取景线程尚未停止，请稍后重试。");
-        return false;
-    }
-
-    m_templateCaptureState =
-            TemplateCaptureState::Frozen;
-    m_inspectionApplicationService->replaceCurrentCameraImage(
-                m_lastTemplatePreviewFrame);
-    cv::Mat frozenImage = m_lastTemplatePreviewFrame.clone();
-    slot_displayAndDetect(&frozenImage);
-
-    const QString modeId = currentDetectModeId();
-    const bool needsTemplateDrawing =
-            isSingleTemplateRecipeMode(modeId)
-            || isWordFamilyMode(modeId);
-    clearBarcodeTemplateValidation();
-    imageLabel->setBarcodeRegionRequired(
-                modeId == BarcodeWordDetectionMode);
-    imageLabel->setTemplateDrawingEnabled(
-                needsTemplateDrawing);
-    if (needsTemplateDrawing) {
-        imageLabel->resetDrawingStep();
-        showTemplateGuideForCurrentMode();
-    } else {
-        hideTemplateGuide();
-        updateImageDisplayStatusText(
-                    "当前画面已冻结，如需调整请点击【重新取景】。");
-    }
-    updateOperationUiState();
-    return true;
+    return m_templateEditorPage
+            && m_templateEditorPage->freezeTemplatePreview();
 }
 
 /**
  * @brief 制作模板按钮点击槽函数
- * @details 第一次点击进入实时取景，第二次点击冻结画面并开始框选
  */
 void Widget::on_VideoShoot_clicked()
 {
-    if (isInspectionBusy()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前正在进行正式检测，请先点击【停止识别】。");
-        return;
+    if (m_templateEditorPage) {
+        m_templateEditorPage->handleTemplateCaptureButton();
     }
-    if (!isCameraOpen()) {
-        QMessageBox::warning(this, "提示", "请先点击【打开相机】！");
-        return;
-    }
-
-    if (m_templateCaptureState
-            == TemplateCaptureState::Previewing) {
-        freezeTemplatePreview();
-        return;
-    }
-
-    if (m_templateCaptureState
-            == TemplateCaptureState::Frozen
-            && imageLabel
-            && (!imageLabel->getTrackingRect().isNull()
-                || !imageLabel->getBarcodeRect().isNull()
-                || !imageLabel->getDetectionPoly().isEmpty())) {
-        QMessageBox confirmBox(this);
-        confirmBox.setIcon(QMessageBox::Question);
-        confirmBox.setWindowTitle("重新取景");
-        confirmBox.setText(
-                    "重新取景会清空当前已经绘制的框线。\n\n是否继续？");
-        QPushButton *continueButton =
-                confirmBox.addButton(
-                    "重新取景",
-                    QMessageBox::AcceptRole);
-        QPushButton *cancelButton =
-                confirmBox.addButton(
-                    "取消",
-                    QMessageBox::RejectRole);
-        confirmBox.setDefaultButton(cancelButton);
-        confirmBox.exec();
-        if (confirmBox.clickedButton()
-                != continueButton) {
-            return;
-        }
-    }
-
-    startTemplatePreview();
 }
+
 /**
  * @brief 曝光值变化槽函数
  * @param value 新的曝光值
@@ -1229,7 +1041,7 @@ void Widget::showParameterCritical(const QString &title, const QString &message)
 
 void Widget::updateCurrentTemplateName()
 {
-    m_templateEditorController->updateCurrentTemplateName();
+    m_templateEditorPage->updateCurrentTemplateName();
 }
 
 void Widget::updateSaveDirButtonText()
@@ -1294,48 +1106,36 @@ void Widget::updateTissueRoughnessUiVisibility()
 
 void Widget::setupTemplateGuide()
 {
-    m_templateEditorController->setupTemplateGuide();
+    m_templateEditorPage->setupTemplateGuide();
 }
 
 void Widget::adjustTemplateGuideHeight()
 {
-    m_templateEditorController->adjustTemplateGuideHeight();
-}
-
-void Widget::updateTemplateGuideText(
-        const QString &title,
-        const QString &body)
-{
-    m_templateEditorController->updateTemplateGuideText(title, body);
+    m_templateEditorPage->adjustTemplateGuideHeight();
 }
 
 void Widget::hideTemplateGuide()
 {
-    m_templateEditorController->hideTemplateGuide();
+    m_templateEditorPage->hideTemplateGuide();
 }
 
 void Widget::updateImageDisplayStatusText(const QString &body)
 {
-    m_templateEditorController->updateImageDisplayStatusText(body);
-}
-
-void Widget::showTemplateGuideForCurrentMode()
-{
-    m_templateEditorController->showTemplateGuideForCurrentMode();
+    m_templateEditorPage->updateImageDisplayStatusText(body);
 }
 
 void Widget::handleTemplateGuideEvent(
         const QString &eventName,
         int pointCount)
 {
-    m_templateEditorController->handleTemplateGuideEvent(
+    m_templateEditorPage->handleTemplateGuideEvent(
                 eventName,
                 pointCount);
 }
 
 void Widget::setupManualCharacterCropUi()
 {
-    m_templateEditorController->setupManualCharacterCropUi();
+    m_templateEditorPage->setupManualCharacterCropUi();
 }
 
 void Widget::setupSoftwareSettingsPage()
@@ -1414,17 +1214,10 @@ void Widget::clearCurrentSoftwareData()
         return;
     }
 
-    m_templateEditorController->modeMemory().publishedRecipeIdsByMode() =
-            m_appliedMachineSettings.publishedRecipeIdsByMode;
+    m_templateApplicationService->replacePublishedRecipeIdsByMode(
+                m_appliedMachineSettings.publishedRecipeIdsByMode);
     clearWordMultiTemplateState();
-    m_loadedTrackingTemplate.release();
-    savedBarcodePoly.clear();
-    savedDatePoly.clear();
-    savedTrackingBox = cv::Rect2d();
-    hasValidBoxes = false;
-    digitTemplates.clear();
-    digitTemplateTargetIndexes.clear();
-    m_templateEditorController->setCurrentTemplateNameVisible(false);
+    m_templateEditorPage->setCurrentTemplateNameVisible(false);
     updateCurrentTemplateName();
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -1460,14 +1253,7 @@ void Widget::restoreDefaultMachineSettings()
 
     applyMachineSettingsToUi(editableDefaults);
     clearWordMultiTemplateState();
-    m_loadedTrackingTemplate.release();
-    savedBarcodePoly.clear();
-    savedDatePoly.clear();
-    savedTrackingBox = cv::Rect2d();
-    hasValidBoxes = false;
-    digitTemplates.clear();
-    digitTemplateTargetIndexes.clear();
-    m_templateEditorController->setCurrentTemplateNameVisible(false);
+    m_templateEditorPage->setCurrentTemplateNameVisible(false);
     updateCurrentTemplateName();
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -1501,7 +1287,8 @@ void Widget::updateHardwareParameterUiEnabled()
     const bool cameraOpen = isCameraOpen();
     const bool operationBusy =
             isInspectionBusy()
-            || m_templateCaptureState != TemplateCaptureState::Idle;
+            || (m_templateEditorPage
+                && m_templateEditorPage->templateOperationActive());
     m_settingsPageController->updateHardwareEnabled(
                 cameraOpen,
                 m_runtime.isPlcConnected(),
@@ -1525,9 +1312,9 @@ void Widget::restoreUnappliedSettingsFromApplied()
     if (isWordFamilyMode(currentDetectModeId())
             && profileIndex >= 0
             && profileIndex < static_cast<int>(
-                m_templateEditorController->wordTemplateProfiles().size())) {
+                m_templateEditorPage->wordTemplateProfiles().size())) {
         const RecipeProfile &settings =
-                m_templateEditorController->wordTemplateProfiles()[
+                m_templateEditorPage->wordTemplateProfiles()[
                     static_cast<size_t>(profileIndex)].settings;
         QSignalBlocker targetTextBlocker(ui->dateEdit);
         QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
@@ -1535,12 +1322,12 @@ void Widget::restoreUnappliedSettingsFromApplied()
         ui->lineEdit_yuzhi->setText(QString::number(
             static_cast<int>(settings.imageThresholdPercent)));
     } else if (isSingleTemplateRecipeMode(currentDetectModeId())
-               && m_templateEditorController->activePreparedRecipe()
-               && m_templateEditorController->activePreparedRecipe()->recipe
-               && m_templateEditorController->activePreparedRecipe()
+               && m_templateEditorPage->activePreparedRecipe()
+               && m_templateEditorPage->activePreparedRecipe()->recipe
+               && m_templateEditorPage->activePreparedRecipe()
                   ->recipe->profiles.size() == 1) {
         const RecipeProfile settings =
-                m_templateEditorController->activePreparedRecipe()
+                m_templateEditorPage->activePreparedRecipe()
                 ->recipe->profiles.first();
         QSignalBlocker targetTextBlocker(ui->dateEdit);
         QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
@@ -1554,74 +1341,22 @@ void Widget::restoreUnappliedSettingsFromApplied()
 
 void Widget::setupRecipeProfileDirtyTracking()
 {
-    m_templateEditorController->setupRecipeProfileDirtyTracking();
-}
-
-void Widget::refreshTemplateTargetTextDirty()
-{
-    m_templateEditorController->refreshTemplateTargetTextDirty();
-}
-
-void Widget::refreshTemplateImageThresholdDirty()
-{
-    m_templateEditorController->refreshTemplateImageThresholdDirty();
+    m_templateEditorPage->setupRecipeProfileDirtyTracking();
 }
 
 void Widget::refreshRecipeProfileDirty()
 {
-    m_templateEditorController->refreshRecipeProfileDirty();
-}
-
-void Widget::markTemplateTargetTextDirty()
-{
-    m_templateEditorController->markTemplateTargetTextDirty();
-}
-
-void Widget::markTemplateImageThresholdDirty()
-{
-    m_templateEditorController->markTemplateImageThresholdDirty();
-}
-
-void Widget::clearTemplateTargetTextDirty()
-{
-    m_templateEditorController->clearTemplateTargetTextDirty();
-}
-
-void Widget::clearTemplateImageThresholdDirty()
-{
-    m_templateEditorController->clearTemplateImageThresholdDirty();
+    m_templateEditorPage->refreshRecipeProfileDirty();
 }
 
 void Widget::clearRecipeProfileDirty()
 {
-    m_templateEditorController->clearRecipeProfileDirty();
-}
-
-void Widget::updateRecipeProfileDirtyUi()
-{
-    m_templateEditorController->updateRecipeProfileDirtyUi();
-}
-
-void Widget::showManualCharacterTemplateCropDialog()
-{
-    m_templateEditorController->showManualCharacterTemplateCropDialog();
-}
-
-void Widget::showStampCharacterTemplateCropDialog()
-{
-    m_templateEditorController->showStampCharacterTemplateCropDialog();
-}
-
-void Widget::showPublishedRecipeCharacterTemplateCropDialog(
-        int profileIndex)
-{
-    m_templateEditorController
-            ->showPublishedRecipeCharacterTemplateCropDialog(profileIndex);
+    m_templateEditorPage->clearRecipeProfileDirty();
 }
 
 void Widget::setupWordTemplateEditorCombo()
 {
-    m_templateEditorController->setupWordTemplateEditorCombo();
+    m_templateEditorPage->setupWordTemplateEditorCombo();
 }
 
 void Widget::setupDetectModeChangeTracking()
@@ -1665,165 +1400,42 @@ void Widget::setupDetectModeChangeTracking()
 
 void Widget::clearWordMultiTemplateState()
 {
-    m_templateEditorController->clearWordMultiTemplateState();
+    m_templateEditorPage->clearWordMultiTemplateState();
 }
 
 void Widget::clearSingleTemplateRecipeState()
 {
-    m_templateEditorController->clearSingleTemplateRecipeState();
+    m_templateEditorPage->clearSingleTemplateRecipeState();
 }
 
 QString Widget::detectModeIdForIndex(int index) const
 {
-    return m_templateEditorController->detectModeIdForIndex(index);
+    return m_templateEditorPage->detectModeIdForIndex(index);
 }
 
 QString Widget::currentDetectModeId() const
 {
-    return m_templateEditorController->currentDetectModeId();
+    return m_templateEditorPage->currentDetectModeId();
 }
 
 void Widget::restoreTemplatesForMode(
         const QString &modeId,
         bool showMessage)
 {
-    m_templateEditorController->restoreTemplatesForMode(
+    m_templateEditorPage->restoreTemplatesForMode(
                 modeId,
                 showMessage);
 }
 
 void Widget::refreshWordTemplateEditorCombo()
 {
-    m_templateEditorController->refreshWordTemplateEditorCombo();
-}
-
-void Widget::applyWordTemplateEditorSelection(int comboIndex)
-{
-    m_templateEditorController
-            ->applyWordTemplateEditorSelection(comboIndex);
-}
-
-void Widget::setCurrentWordTemplateEditIndex(int profileIndex)
-{
-    m_templateEditorController
-            ->setCurrentWordTemplateEditIndex(profileIndex);
-}
-
-void Widget::publishCurrentWordTemplateGroup()
-{
-    m_templateEditorController->publishCurrentWordTemplateGroup();
-}
-
-void Widget::publishCurrentSingleTemplateRecipe()
-{
-    m_templateEditorController->publishCurrentSingleTemplateRecipe();
-}
-
-void Widget::selectPublishedRecipe()
-{
-    m_templateEditorController->selectPublishedRecipe();
-}
-
-bool Widget::activatePublishedWordRecipe(
-        const QString &recipeId,
-        const QString &modeId,
-        bool showErrorMessage,
-        QStringList *pendingMessages,
-        QString *errorMessage)
-{
-    return m_templateEditorController->activatePublishedWordRecipe(
-                recipeId,
-                modeId,
-                showErrorMessage,
-                pendingMessages,
-                errorMessage);
-}
-
-bool Widget::activatePublishedSingleTemplateRecipe(
-        const QString &recipeId,
-        const QString &modeId,
-        bool showErrorMessage,
-        QString *errorMessage)
-{
-    return m_templateEditorController
-            ->activatePublishedSingleTemplateRecipe(
-                recipeId,
-                modeId,
-                showErrorMessage,
-                errorMessage);
-}
-
-bool Widget::republishSingleTemplateRecipeSettings(
-        const RecipeProfile &settings,
-        QString *errorMessage)
-{
-    return m_templateEditorController
-            ->republishSingleTemplateRecipeSettings(
-                settings,
-                errorMessage);
+    m_templateEditorPage->refreshWordTemplateEditorCombo();
 }
 
 int Widget::currentWordTemplateProfileIndex() const
 {
-    return m_templateEditorController
+    return m_templateEditorPage
             ->currentWordTemplateProfileIndex();
-}
-
-void Widget::displayWordTemplateRawImage(
-        const WordTemplateProfile &profile)
-{
-    m_templateEditorController->displayWordTemplateRawImage(profile);
-}
-
-bool Widget::loadWordDigitTemplatesFromProfile(
-        const WordTemplateProfile &profile,
-        const QStringList &baseNames,
-        std::vector<cv::Mat> *templates,
-        std::vector<int> *templateTargetIndexes,
-        QString *errorMessage) const
-{
-    return m_templateEditorController->loadWordDigitTemplatesFromProfile(
-                profile,
-                baseNames,
-                templates,
-                templateTargetIndexes,
-                errorMessage);
-}
-
-void Widget::refreshWordTemplateRecipeProfile(
-        WordTemplateProfile *profile) const
-{
-    m_templateEditorController
-            ->refreshWordTemplateRecipeProfile(profile);
-}
-
-bool Widget::saveWordRecipeProfile(
-        int profileIndex,
-        const RecipeProfile &settings,
-        QString *errorMessage)
-{
-    return m_templateEditorController->saveWordRecipeProfile(
-                profileIndex,
-                settings,
-                errorMessage);
-}
-
-bool Widget::publishWordTemplateRecipeEdit(
-        int profileIndex,
-        QString *errorMessage)
-{
-    return m_templateEditorController->publishWordTemplateRecipeEdit(
-                profileIndex,
-                errorMessage);
-}
-
-bool Widget::publishWordTemplateRecipeEdits(
-        const QVector<int> &profileIndexes,
-        QString *errorMessage)
-{
-    return m_templateEditorController->publishWordTemplateRecipeEdits(
-                profileIndexes,
-                errorMessage);
 }
 
 bool Widget::applyCameraExposureValue(
@@ -2118,7 +1730,8 @@ void Widget::on_cancel_clicked()
         command.acknowledgeFault = true;
     }
 
-    if (m_templateCaptureState != TemplateCaptureState::Idle) {
+    if (m_templateEditorPage
+            && m_templateEditorPage->templateOperationActive()) {
         resetTemplateCaptureState();
         if (imageLabel) {
             imageLabel->setTemplateDrawingEnabled(false);
@@ -2152,17 +1765,17 @@ void Widget::on_cancel_clicked()
 
 void Widget::on_textsure_btn_clicked()
 {
-    m_templateEditorController->applyCurrentTargetText();
+    m_templateEditorPage->applyCurrentTargetText();
 }
 
 void Widget::on_batchTextsure_btn_clicked()
 {
-    m_templateEditorController->applyBatchTargetText();
+    m_templateEditorPage->applyBatchTargetText();
 }
 
 void Widget::on_batchImageThresholdButton_clicked()
 {
-    m_templateEditorController->applyBatchImageThreshold();
+    m_templateEditorPage->applyBatchImageThreshold();
 }
 Mat *Widget::QImageToMat(const QImage &image)
 {
@@ -2245,10 +1858,7 @@ void Widget::closeEvent(QCloseEvent *event)
         m_templateCaptureAttentionTimer->stop();
     }
 
-    // 立即废弃当前模板取景会话，禁止迟到帧继续进入UI。
-    ++m_templatePreviewSessionId;
-    m_templateCaptureState = TemplateCaptureState::Idle;
-    m_lastTemplatePreviewFrame.release();
+    resetTemplateCaptureState();
 
     m_inspectionApplicationService->shutdown();
 
@@ -2266,7 +1876,7 @@ void Widget::closeEvent(QCloseEvent *event)
  */
 void Widget::on_pushButton_3_clicked()
 {
-    m_templateEditorController->applyCurrentImageThreshold();
+    m_templateEditorPage->applyCurrentImageThreshold();
 }
 
 /**
@@ -2275,13 +1885,13 @@ void Widget::on_pushButton_3_clicked()
  */
 void Widget::on_pushButton_5_clicked()
 {
-    m_templateEditorController->saveCurrentTemplate();
+    m_templateEditorPage->saveCurrentTemplate();
 }
 
 // 先定义一个保存参数到指定文件夹的函数（可放在Widget类中）
 void Widget::on_pushButton_4_clicked()
 {
-    m_templateEditorController->selectPublishedRecipeForCurrentMode();
+    m_templateEditorPage->selectPublishedRecipeForCurrentMode();
 }
 
 /**
@@ -2383,8 +1993,8 @@ bool Widget::saveSettings(bool showErrorMessage)
 void Widget::applyMachineSettingsToUi(
     const MachineSettings &settings)
 {
-    m_templateEditorController->modeMemory().publishedRecipeIdsByMode() =
-            settings.publishedRecipeIdsByMode;
+    m_templateApplicationService->replacePublishedRecipeIdsByMode(
+                settings.publishedRecipeIdsByMode);
     if (m_settingsPageController) {
         m_settingsPageController->applyToUi(settings);
     }
@@ -2419,7 +2029,7 @@ void Widget::setupNonPersistentDefaults()
 // ================= 拦截滚轮误操作事件 =================
 bool Widget::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_templateEditorController->guideFrame()
+    if (watched == m_templateEditorPage->guideFrame()
             && event->type() == QEvent::Resize) {
         QTimer::singleShot(0, this, [this]() {
             adjustTemplateGuideHeight();
@@ -2444,7 +2054,7 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
             || watched == ui->label_17
             || watched == ui->label_8
             || watched == ui->comboBox_3
-            || watched == m_templateEditorController->manualCharacterCropButton()
+            || watched == m_templateEditorPage->manualCharacterCropButton()
             || watched == ui->VideoShoot) {
         QWidget *button = qobject_cast<QWidget *>(watched);
         if (!button) {
@@ -2528,8 +2138,8 @@ bool Widget::eventFilter(QObject *watched, QEvent *event)
 //关闭相机按钮
 void Widget::on_CloseCamera_clicked()
 {
-    if (m_templateCaptureState
-            != TemplateCaptureState::Idle) {
+    if (m_templateEditorPage
+            && m_templateEditorPage->templateOperationActive()) {
         QMessageBox::warning(
                     this,
                     "提示",
@@ -2560,12 +2170,10 @@ void Widget::on_CloseCamera_clicked()
     ui->speedLabel->clear();
     //    qDebug()<<"totaltime"<<totalTime<<"s";
     //    totalTime=0;
-    m_templateCaptureState =
-            TemplateCaptureState::Idle;
+    resetTemplateCaptureState();
     if (m_runtimeUiCoordinator) {
         m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
     }
-    m_lastTemplatePreviewFrame.release();
     ui->statusLabel->setText("相机已关闭");
     ui->statusLabel->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
     updateOperationUiState();
@@ -2580,7 +2188,8 @@ void Widget::on_plcbtn_clicked()
 
     StartInspectionCommand command;
     command.templateOperationActive =
-            m_templateCaptureState != TemplateCaptureState::Idle;
+            m_templateEditorPage
+            && m_templateEditorPage->templateOperationActive();
     command.unappliedChanges = m_settingsEditState.dirtyNames();
     StartInspectionResult result =
             m_inspectionApplicationService->start(command);
@@ -2643,8 +2252,8 @@ void Widget::on_plcbtn_clicked()
 void Widget::on_HandwareDetect_clicked()
 {
     if (isInspectionBusy()
-            || m_templateCaptureState
-               != TemplateCaptureState::Idle) {
+            || (m_templateEditorPage
+                && m_templateEditorPage->templateOperationActive())) {
         QMessageBox::warning(
                     this,
                     "提示",
@@ -2843,7 +2452,7 @@ void Widget::on_pushButton_12_clicked()
 
 void Widget::on_pushButton_tissueRoughnessThreshold_clicked()
 {
-    m_templateEditorController->applyCurrentTissueThreshold();
+    m_templateEditorPage->applyCurrentTissueThreshold();
 }
 
 

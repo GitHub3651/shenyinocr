@@ -1,9 +1,5 @@
-#include "charactertemplatecropdialog.h"
+#include "ui/dialogs/character_template_editor_dialog.h"
 
-#include <QApplication>
-#include <QCoreApplication>
-#include <QDir>
-#include <QFileInfo>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -24,7 +20,7 @@
 
 #pragma execution_character_set("utf-8")
 
-class CharacterTemplateCropDialog::CropImageLabel : public QLabel
+class CharacterTemplateEditorDialog::CropImageLabel : public QLabel
 {
 public:
     explicit CropImageLabel(QWidget *parent = nullptr)
@@ -48,12 +44,12 @@ public:
         update();
     }
 
-    void setItems(const QList<CharacterTemplateCropDialog::CharacterBox> &items)
+    void setItems(const QList<CharacterTemplateEditorDialog::CharacterBox> &items)
     {
         m_items.clear();
         const QRect imageBounds(0, 0, m_image.width(), m_image.height());
-        for (const CharacterTemplateCropDialog::CharacterBox &item : items) {
-            CharacterTemplateCropDialog::CharacterBox normalizedItem = item;
+        for (const CharacterTemplateEditorDialog::CharacterBox &item : items) {
+            CharacterTemplateEditorDialog::CharacterBox normalizedItem = item;
             normalizedItem.rect = item.rect.normalized().intersected(imageBounds);
             if (normalizedItem.rect.width() > 2 && normalizedItem.rect.height() > 2) {
                 m_items.append(normalizedItem);
@@ -63,11 +59,11 @@ public:
         notifyChanged();
     }
 
-    QList<CharacterTemplateCropDialog::CharacterBox> items() const
+    QList<CharacterTemplateEditorDialog::CharacterBox> items() const
     {
-        QList<CharacterTemplateCropDialog::CharacterBox> normalizedItems;
-        for (const CharacterTemplateCropDialog::CharacterBox &item : m_items) {
-            CharacterTemplateCropDialog::CharacterBox normalizedItem = item;
+        QList<CharacterTemplateEditorDialog::CharacterBox> normalizedItems;
+        for (const CharacterTemplateEditorDialog::CharacterBox &item : m_items) {
+            CharacterTemplateEditorDialog::CharacterBox normalizedItem = item;
             normalizedItem.rect = item.rect.normalized();
             if (normalizedItem.rect.width() > 2 && normalizedItem.rect.height() > 2) {
                 normalizedItems.append(normalizedItem);
@@ -76,11 +72,11 @@ public:
         return normalizedItems;
     }
 
-    QList<CharacterTemplateCropDialog::CharacterBox> previewItems() const
+    QList<CharacterTemplateEditorDialog::CharacterBox> previewItems() const
     {
-        QList<CharacterTemplateCropDialog::CharacterBox> normalizedItems = items();
+        QList<CharacterTemplateEditorDialog::CharacterBox> normalizedItems = items();
         if (m_drawing && !m_currentRect.isNull()) {
-            CharacterTemplateCropDialog::CharacterBox currentItem;
+            CharacterTemplateEditorDialog::CharacterBox currentItem;
             currentItem.rect = m_currentRect.normalized().intersected(QRect(0, 0, m_image.width(), m_image.height()));
             if (currentItem.rect.width() > 2 && currentItem.rect.height() > 2) {
                 normalizedItems.append(currentItem);
@@ -126,7 +122,7 @@ protected:
 
         int index = 1;
         for (int i = 0; i < m_items.size(); ++i) {
-            const CharacterTemplateCropDialog::CharacterBox &item = m_items.at(i);
+            const CharacterTemplateEditorDialog::CharacterBox &item = m_items.at(i);
             const QRect widgetRect = imageToWidgetRect(item.rect.normalized(), targetRect);
             painter.setPen(QPen(QColor(0, 120, 255), 2));
             painter.drawRect(widgetRect);
@@ -183,7 +179,7 @@ protected:
         QRect finalRect = m_currentRect.normalized();
         finalRect = finalRect.intersected(QRect(0, 0, m_image.width(), m_image.height()));
         if (finalRect.width() > 2 && finalRect.height() > 2) {
-            CharacterTemplateCropDialog::CharacterBox item;
+            CharacterTemplateEditorDialog::CharacterBox item;
             item.rect = finalRect;
             m_items.append(item);
         }
@@ -238,14 +234,14 @@ private:
     }
 
     QImage m_image;
-    QList<CharacterTemplateCropDialog::CharacterBox> m_items;
+    QList<CharacterTemplateEditorDialog::CharacterBox> m_items;
     std::function<void()> m_changedCallback;
     bool m_drawing = false;
     QPoint m_startPoint;
     QRect m_currentRect;
 };
 
-CharacterTemplateCropDialog::CharacterTemplateCropDialog(const QImage &sourceImage,
+CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(const QImage &sourceImage,
                                                          const RecipeProfile &initialProfile,
                                                          QWidget *parent)
     : QDialog(parent),
@@ -256,22 +252,22 @@ CharacterTemplateCropDialog::CharacterTemplateCropDialog(const QImage &sourceIma
     buildUi();
 }
 
-int CharacterTemplateCropDialog::savedCount() const
+int CharacterTemplateEditorDialog::savedCount() const
 {
     return m_savedCount;
 }
 
-RecipeProfile CharacterTemplateCropDialog::resultProfile() const
+RecipeProfile CharacterTemplateEditorDialog::resultProfile() const
 {
     return m_resultProfile;
 }
 
-QMap<QString, QImage> CharacterTemplateCropDialog::characterImages() const
+QMap<QString, QImage> CharacterTemplateEditorDialog::characterImages() const
 {
     return m_characterImages;
 }
 
-void CharacterTemplateCropDialog::buildUi()
+void CharacterTemplateEditorDialog::buildUi()
 {
     setWindowTitle(QStringLiteral("\u5206\u5272\u5B57\u7B26\u6A21\u677F"));
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
@@ -309,12 +305,6 @@ void CharacterTemplateCropDialog::buildUi()
     leftLayout->addWidget(m_cropLabel, 1);
 
     QImage sampleImage(":/sample1.png");
-    if (sampleImage.isNull()) {
-        sampleImage.load(QCoreApplication::applicationDirPath() + "/image/sample1.png");
-    }
-    if (sampleImage.isNull()) {
-        sampleImage.load("image/sample1.png");
-    }
     if (!sampleImage.isNull()) {
         QLabel *sampleTitle = new QLabel(QStringLiteral("\u7ED3\u679C\u793A\u610F\u56FE\uFF1A"), m_drawPage);
         sampleTitle->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
@@ -433,7 +423,7 @@ void CharacterTemplateCropDialog::buildUi()
     mainLayout->addWidget(m_stack);
 }
 
-void CharacterTemplateCropDialog::rebuildNamePage()
+void CharacterTemplateEditorDialog::rebuildNamePage()
 {
     QLayoutItem *item = nullptr;
     while ((item = m_nameListLayout->takeAt(0)) != nullptr) {
@@ -501,7 +491,7 @@ void CharacterTemplateCropDialog::rebuildNamePage()
     refreshSaveNamePreviews();
 }
 
-void CharacterTemplateCropDialog::loadSavedCharacterBoxes()
+void CharacterTemplateEditorDialog::loadSavedCharacterBoxes()
 {
     m_initialBoxes.clear();
 
@@ -516,7 +506,7 @@ void CharacterTemplateCropDialog::loadSavedCharacterBoxes()
     }
 }
 
-void CharacterTemplateCropDialog::refreshCharacterPreviewList()
+void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
 {
     if (!m_previewGrid) {
         return;
@@ -588,7 +578,7 @@ void CharacterTemplateCropDialog::refreshCharacterPreviewList()
     }
 }
 
-bool CharacterTemplateCropDialog::isSystemTemplateFile(const QString &fileName) const
+bool CharacterTemplateEditorDialog::isSystemTemplateFile(const QString &fileName) const
 {
     const QString lowerName = fileName.trimmed().toLower();
     return lowerName == "template_raw.png"
@@ -596,7 +586,7 @@ bool CharacterTemplateCropDialog::isSystemTemplateFile(const QString &fileName) 
             || lowerName == "template_ring.bmp";
 }
 
-QString CharacterTemplateCropDialog::nextAvailableFileName(const QString &baseName,
+QString CharacterTemplateEditorDialog::nextAvailableFileName(const QString &baseName,
                                                            const QStringList &reservedFileNames) const
 {
     auto isUsed = [this, &reservedFileNames](const QString &fileName) {
@@ -619,7 +609,7 @@ QString CharacterTemplateCropDialog::nextAvailableFileName(const QString &baseNa
     }
 }
 
-void CharacterTemplateCropDialog::refreshSaveNamePreviews()
+void CharacterTemplateEditorDialog::refreshSaveNamePreviews()
 {
     QStringList reservedFileNames;
     for (int i = 0; i < m_nameEdits.size() && i < m_saveNameLabels.size(); ++i) {
@@ -637,7 +627,7 @@ void CharacterTemplateCropDialog::refreshSaveNamePreviews()
     }
 }
 
-bool CharacterTemplateCropDialog::saveTemplates()
+bool CharacterTemplateEditorDialog::saveTemplates()
 {
     if (m_sortedBoxes.isEmpty()
             || m_nameEdits.size() != m_sortedBoxes.size()) {

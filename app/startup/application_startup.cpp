@@ -10,6 +10,7 @@
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
+#include "application/template_application_service.h"
 #include "runtime/pipeline_registry.h"
 #include "application/settings_application_service.h"
 #include "runtime/inspection_plc_controller.h"
@@ -220,12 +221,17 @@ int ApplicationStartup::run(int argc, char *argv[])
                         cameraSession,
                         settingsService,
                         recipeStore));
+        const std::shared_ptr<TemplateApplicationService>
+                templateService(
+                    new TemplateApplicationService(
+                        recipeStore,
+                        barcodeDecoder,
+                        settingsService->editorWorkspacesRootPath()));
         Widget window(
-                    barcodeDecoder,
                     runtime,
                     inspectionService,
                     settingsService,
-                    recipeStore);
+                    templateService);
         window.showMaximized();
         result = application.exec();
     }

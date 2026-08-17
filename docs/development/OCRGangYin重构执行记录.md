@@ -1380,3 +1380,45 @@
 - [x] 2026-08-17阶段4再次链接`detection_completion_test`时报告`BarcodeWordDetectionMode`未解析；引用来自该测试目标已登记的`machine_settings.cpp`，唯一定义位于漏列的`DetectionModes.cpp`。现已在`detection_completion_test.pro`补齐`DetectionModes.cpp/.h`，与主工程、`application_service_test`及`product_recipe_test`的唯一实现清单一致；没有复制常量、增加第二定义或改变检测模式行为，等待同轮重新Run qmake、Rebuild复验。
 - [x] 2026-08-17用户确认阶段4Qt Creator集中门禁“没问题”；41项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
 - [x] 阶段4提交前最终静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`；53个差异路径全部属于阶段4Runtime/Pipeline/结果事务、计划内旧路径删除、测试/qmake、功能表和执行记录；旧Runtime/Transaction/Fault/Reconciler/Session/ResultHandler/WorkerFactory/结果协调器/完成控制器/旧Presenter、Fault兜底49及runtime对UI引用均为0；主工程及两个runtime测试工程共283个文件项存在、大小写一致、无重复，测试声明/定义为14/14和7/7；两次编译修复的直接include与`DetectionModes.cpp/.h`工程项唯一；23个现存差异C/C++文件严格UTF-8且本地include可解析；暂存区为空、`app.zip`不存在，`git diff --check`通过。允许精确暂存并创建唯一阶段4本地提交，不推送。
+- [x] 阶段4已创建本地提交`d446b6155c04180acaeb1775e096b71c935fb162 refactor(runtime): 完成阶段4统一运行与结果事务`；未推送，提交后工作区干净且`app.zip`不存在。
+
+## 新架构完全替换阶段：阶段 5 模板编辑器（2026-08-17，已完成）
+
+### 开始基准与真实影响范围
+
+- [x] 开始时分支为`codex/ocrgangyin-refactor`，HEAD为`d446b6155c04180acaeb1775e096b71c935fb162 refactor(runtime): 完成阶段4统一运行与结果事务`，工作区干净且`app.zip`不存在；阶段4用户集中门禁、功能状态恢复、最终静态检查和本地提交均已完成。
+- [x] 从制作模板按钮、相机预览/冻结/重拍/退出、ImageLabel鼠标与绘图事件、二维码即时验证、显示/原图坐标换算、钢印环/定位/日期/二维码资源、字符裁切命名、单/多Profile、单项/批量编辑、配方发布/选择/同UUID重发、跨模式记忆、启动资源预检、相机关闭和程序退出双向追踪；阶段5实际影响39项：`SYS-007、SYS-009、UI-001..003、UI-006、SET-003..006、SET-008..010、TPL-001..016、DET-002..006、CAM-001..002、CAM-006、RUN-001..002`。
+- [x] 39项已统一改为`迁移中`，其余48项保持`已验证`，`MC-001..003`保持`已确认删除`。本阶段不改变五种算法判定/阈值/模型、正常统计、存图或PLC `0/49→约100ms→0`合同；用户集中门禁通过前不提交且不进入阶段6。
+
+### 模板应用边界、编辑会话与只读状态
+
+- [x] 新增唯一`TemplateApplicationService`，由`ApplicationStartup`组合根构造并注入；服务独占`RecipeStore`、二维码解码端口、`RecipeEditorSession`、编辑工作区、模式UUID记忆、当前`PreparedRecipeSnapshot`和字库Profile运行资产。Widget与模板页面不再持有Store、解码器或可变编辑会话。
+- [x] 模板UI只能读取`const ProductRecipe`草稿、`const PreparedRecipeSnapshot`、`const TemplateModeMemory`和`const std::vector<WordTemplateProfile>`；新建/加载、草稿替换、Profile替换、模式记忆、资源暂存、事务发布和失败回滚均通过应用服务命令。删除页面对Profile容器、模式映射和PreparedRecipe的可变引用出口，同一状态不再由Widget和模板控制器各持一份。
+- [x] 新增纯`TemplateGeometryService`统一显示图到原图矩形换算，并生成定位ROI、日期多边形和二维码多边形；新增`RecipeAssetService`统一在编辑会话工作区编码原图、定位模板、钢印环、`calibrate_config.yaml`和字符PNG，正式目录仍只由`RecipeStore`整目录事务发布。页面不直接读写模板文件、旧目录或INI。
+
+### 模板页面、字符对话框与预览生命周期
+
+- [x] 新建`TemplateEditorPage`并通过显式`TemplateEditorViewBindings`绑定现有控件；页面只调用Inspection/Settings/Template应用服务并负责模板交互呈现、引导文字、鼠标绘图和结构化错误显示，不包含`Widget*`、`Ui::Widget*`、RecipeStore、相机设备、生产线程、检测实现、PLC时序或存图服务。
+- [x] 模板Preview/Freeze/重拍/退出状态、预览会话ID和最后一帧归页面所有；预览仍经阶段3唯一`InspectionApplicationService`/`CameraSession`命令，迟到帧按会话ID丢弃，停止/关闭相机/关闭程序继续协作结束采集。Widget删除第二份模板采集状态和重复预览信号处理。
+- [x] 新`CharacterTemplateEditorDialog`只返回字符框、名称和裁剪后的`QImage`，不持久化配方或资源；示意图只从qrc读取，不使用外部目录fallback。字符资源由应用服务暂存并随同一UUID配方事务重发；取消或发布失败时正式配方保持上一完整版本。
+- [x] 保持四种有模板模式的基础模板保存不受目标字符阻断；字符切割、目标确认、当前/批量阈值修改仍是独立编辑命令。纸巾模式继续发布零模板资产配方；五模式正式启动仍由既有资源预检决定是否允许运行。
+
+### 旧路径删除、测试源码与工程清单
+
+- [x] 删除`TemplateEditorController`及其业务`friend`、`CharacterTemplateCropDialog`、Widget模板几何/字符资产/Overlap缓存、旧模板目录选择和旧控制器对Widget私有成员的穿透；生产、测试和qmake中旧类名、旧文件名及对应include均为0引用，不保留兼容桥或并行保存/重发路径。
+- [x] Widget只保留当前阶段尚需的主窗事件薄桥，并进一步删除29个无人调用的模板转发API；模板操作直接进入`TemplateEditorPage`。主工程登记Template应用/几何/资产服务、新页面和新字符对话框，并移除旧控制器/旧对话框工程项。
+- [x] 新增`template_application_service_test` 6项测试源码，覆盖四种模板模式发布Prepared资产、单/多Profile几何与二维码即时验证、字符资产同UUID重发、事务失败不破坏正式配方、跨模式切换与纸巾无模板配方，以及Profile/模式状态只能经应用命令替换；测试工程显式登记`TemplateModeMemory`实现并使用`QTEST_APPLESS_MAIN`，不会创建GUI平台插件依赖。
+
+### 当前Agent静态门禁
+
+- [x] 阶段5生产依赖检查通过：模板页面/字符对话框对`Ui::Widget`、Widget、RecipeStore、二维码解码实现、相机/采集线程、Runtime实现、检测算法、PLC和存图服务均为0；application对Widget/UI/对话框/vendor为0；recipes对UI、detection实现、devices和旧设置管理器为0；业务`friend`为0。
+- [x] 主工程159个C/C++文件项和新测试工程20个文件项均存在、大小写一致且无重复；TemplateApplicationService 29项、Geometry 2项、Asset 2项和TemplateEditorPage 90项定义均有声明，新测试声明/定义为6/6，Widget现存自动槽为26/26。14个受影响C/C++文件均为严格UTF-8，本地include核对通过。
+- [x] 90个正式功能ID唯一，当前状态为待盘点0、已基线0、迁移中39、已验证48、已延期0、已确认删除3；阶段5差异只包含模板应用/页面/资产/几何、计划内旧路径删除、Widget与startup接入、测试/qmake、功能表和本记录。暂存区为空，`app.zip`不存在，`git diff --check`通过。
+- [x] Agent未运行或间接触发qmake、nmake、jom、msbuild、cmake构建、Qt Creator构建、任何项目测试可执行文件、主程序或会编译、链接、启动项目的脚本。等待用户对本轮最终差异执行一次Qt Creator集中门禁；通过前39项保持`迁移中`，不提交且不进入阶段6。
+- [x] 2026-08-17阶段5首次Qt Creator Rebuild在`template_editor_page.cpp:1103`报告`QFrame`构造参数无法转换，并在1815/1819报告`QCheckBox`未定义；根因是新页面头文件只前置声明`QGroupBox/QCheckBox`，实现文件却分别需要`QGroupBox*→QWidget*`基类转换和调用`QCheckBox`成员。现已在实现文件直接包含`QGroupBox`和`QCheckBox`，不依赖`ui_widget.h`或其他间接包含；未改变模板交互、设置、算法、相机或PLC行为，等待同轮Rebuild复验。
+- [x] 同次Rebuild继续在`widget.cpp:430/466`报告`QLineEdit*→QLabel*`和`QToolButton*→QPushButton*`不可转换；逐项解析`widget.ui`后确认`currentTemplateName`真实类型为`QLineEdit`、`VideoShoot`真实类型为`QToolButton`，其余39个模板View绑定类型均与UI XML一致。现将两个绑定改为真实类型并为`QToolButton`补直接include，不做C风格/强制类型转换；控件实例、对象名、信号槽和界面行为均未改变，等待同轮Rebuild复验。
+- [x] 阶段5新`template_application_service_test`首次编译三份含中文的生产源码时报告C2001/C1057及后续语法连锁错误；主工程已经统一使用MSVC `/utf-8`，但新测试目标漏列同一选项。现按既有runtime测试工程做法在该测试`.pro`的`msvc`块统一加入`QMAKE_CXXFLAGS += /utf-8`，不逐文件混用BOM、不改中文提示或业务逻辑；本修复需要对该测试工程重新Run qmake后Rebuild。
+- [x] `template_application_service_test`复验为7通过/1失败，失败项`characterAssetsRepublishSameUuid`把字符源图尺寸硬编码为`40×20`，与生产流程按日期ROI实际裁剪出的尺寸不一致，PreparedRecipe正确以`PREPARE_CHARACTER_ASSETS_FAILED`拒绝。现将测试夹具改为从已发布PreparedProfile的定位中心、日期多边形和原图边界计算真实裁剪矩形，并据此生成字符框与字符图；未放宽生产Schema/资源校验。同期`recipe_store_test`为9/9通过，其中损坏YAML触发的OpenCV错误日志属于预期拒绝路径。
+- [x] 2026-08-17用户确认阶段5Qt Creator统一门禁完成；39项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
+- [x] 阶段5门禁通过后只执行最终静态检查、精确暂存和唯一阶段5本地提交；不推送，提交完成后才进入阶段6。
+- [x] 阶段5提交前最终静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`；23个差异路径全部属于阶段5模板应用/页面/资产/几何、计划内旧路径删除、startup/Widget薄接入、测试/qmake、功能表和执行记录；旧模板控制器、旧字符裁切对话框及对应生产/测试/qmake引用为0，模板UI边界和recipes反向依赖命中为0；主工程160个源码/头/UI文件项与新测试工程20个文件项全部存在且无重复，新测试声明/定义6/6，Widget自动连接槽26/26；差异文本严格UTF-8、无尾随空白且均有末尾换行，暂存区为空、`app.zip`不存在，`git diff --check`通过。Agent未运行qmake、构建、测试可执行文件或主程序。

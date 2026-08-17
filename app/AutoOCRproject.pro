@@ -56,17 +56,21 @@ SOURCES += \
     application/inspection_application_service.cpp \
     application/inspection_start_preflight.cpp \
     application/settings_application_service.cpp \
+    application/template_application_service.cpp \
+    application/template_geometry_service.cpp \
     recipes/product_recipe.cpp \
     recipes/recipe_store.cpp \
     recipes/prepared_recipe.cpp \
     recipes/recipe_editor_session.cpp \
+    recipes/recipe_asset_service.cpp \
     recipes/template_mode_memory.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
+    ui/dialogs/character_template_editor_dialog.cpp \
     ui/controllers/inspection_runtime_ui_coordinator.cpp \
     ui/controllers/machine_settings_page_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
-    ui/controllers/template_editor_controller.cpp \
+    ui/pages/template_editor_page.cpp \
     system_support/machine_settings_policy.cpp \
     system_support/settings/machine_settings.cpp \
     system_support/settings/machine_settings_store.cpp \
@@ -117,7 +121,6 @@ SOURCES += \
     PaddleOCR/src/preprocess_op.cpp \
     PaddleOCR/src/utility.cpp \
     TissueRollDetector.cpp \
-    charactertemplatecropdialog.cpp \
     imagelabel.cpp \
     startup/main.cpp \
     snap7.cpp \
@@ -130,20 +133,24 @@ HEADERS += \
     application/inspection_start_preflight.h \
     application/runtime_snapshot.h \
     application/settings_application_service.h \
+    application/template_application_service.h \
+    application/template_geometry_service.h \
     contracts/barcode_parameter_defaults.h \
     recipes/product_recipe.h \
     recipes/recipe_store.h \
     recipes/prepared_recipe.h \
     recipes/recipe_editor_session.h \
+    recipes/recipe_asset_service.h \
     recipes/template_mode_memory.h \
     ui/dialogs/recipe_selection_dialog.h \
+    ui/dialogs/character_template_editor_dialog.h \
     runtime/inspection_presentation.h \
     runtime/result_service.h \
     ui/controllers/inspection_runtime_ui_coordinator.h \
     ui/controllers/machine_settings_page_controller.h \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
-    ui/controllers/template_editor_controller.h \
+    ui/pages/template_editor_page.h \
     system_support/machine_settings_policy.h \
     system_support/settings/machine_settings.h \
     system_support/settings/machine_settings_store.h \
@@ -203,7 +210,6 @@ HEADERS += \
     PaddleOCR/include/utility.h \
     TrackingTypes.h \
     TissueRollDetector.h \
-    charactertemplatecropdialog.h \
     imagelabel.h \
     snap7.h \
     templatematch.h \

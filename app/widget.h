@@ -60,10 +60,7 @@
 #include "application/inspection_application_service.h"
 #include "application/settings_application_service.h"
 #include "recipes/product_recipe.h"
-#include "recipes/recipe_store.h"
-#include "recipes/template_mode_memory.h"
 #include "runtime/template_runtime_profile.h"
-#include "devices/barcode/barcode_decoder.h"
 #include "runtime/inspection_runtime.h"
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
@@ -82,7 +79,8 @@ class QPushButton;
 class ResultService;
 class InspectionRuntimeUiCoordinator;
 class MachineSettingsPageController;
-class TemplateEditorController;
+class TemplateEditorPage;
+class TemplateApplicationService;
 
 /**
  * @brief 主窗口类
@@ -100,11 +98,10 @@ class Widget : public QWidget
 
 public:
     explicit Widget(
-        const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
         const std::shared_ptr<InspectionRuntime> &runtime,
         const std::shared_ptr<InspectionApplicationService> &inspectionService,
         const std::shared_ptr<SettingsApplicationService> &settingsService,
-        const std::shared_ptr<RecipeStore> &recipeStore,
+        const std::shared_ptr<TemplateApplicationService> &templateService,
         QWidget *parent = nullptr);
     ~Widget();
 
@@ -186,9 +183,6 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    friend class TemplateEditorController;
-
-    cv::Mat m_loadedTrackingTemplate;
     void showParameterInfo(const QString &title, const QString &message);
     void showParameterInfoWithRedWarning(const QString &title,
                                          const QString &message,
@@ -206,15 +200,8 @@ private:
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
     void setupRecipeProfileDirtyTracking();
-    void refreshTemplateTargetTextDirty();
-    void refreshTemplateImageThresholdDirty();
     void refreshRecipeProfileDirty();
-    void markTemplateTargetTextDirty();
-    void markTemplateImageThresholdDirty();
-    void clearTemplateTargetTextDirty();
-    void clearTemplateImageThresholdDirty();
     void clearRecipeProfileDirty();
-    void updateRecipeProfileDirtyUi();
     void updateHardwareParameterUiEnabled();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
@@ -222,30 +209,16 @@ private:
     void updateTissueRoughnessUiVisibility();
     void setupTemplateGuide();
     void adjustTemplateGuideHeight();
-    void showTemplateGuideForCurrentMode();
     void hideTemplateGuide();
     void updateImageDisplayStatusText(const QString &body);
-    void updateTemplateGuideText(const QString &title, const QString &body);
     void handleTemplateGuideEvent(const QString &eventName, int pointCount);
     void setupManualCharacterCropUi();
-    void showManualCharacterTemplateCropDialog();
-    void showStampCharacterTemplateCropDialog();
-    void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
     void restoreDefaultMachineSettings();
     QString detectModeIdForIndex(int index) const;
     QString currentDetectModeId() const;
     void restoreTemplatesForMode(const QString &modeId, bool showMessage);
-    bool activatePublishedWordRecipe(const QString &recipeId,
-                                     const QString &modeId,
-                                     bool showErrorMessage,
-                                     QStringList *pendingMessages,
-                                     QString *errorMessage);
-    bool activatePublishedSingleTemplateRecipe(const QString &recipeId,
-                                               const QString &modeId,
-                                               bool showErrorMessage,
-                                               QString *errorMessage);
     bool startTemplatePreview();
     bool freezeTemplatePreview();
     bool stopTemplatePreview(int waitTimeMs = 1500);
@@ -274,23 +247,14 @@ private:
     std::shared_ptr<SettingsApplicationService>
             m_settingsApplicationService;
     MachineSettings &m_appliedMachineSettings;
-    std::shared_ptr<RecipeStore> m_recipeStore;
+    std::shared_ptr<TemplateApplicationService>
+            m_templateApplicationService;
     QString m_currentDetectModeId;
     bool m_applyingMachineSettings = false;
     bool m_updatingMachineSettingsUi = false;
     SettingsEditState m_settingsEditState;
     std::unique_ptr<MachineSettingsPageController> m_settingsPageController;
-    std::unique_ptr<TemplateEditorController> m_templateEditorController;
-
-    enum class TemplateCaptureState {
-        Idle,
-        Previewing,
-        Frozen
-    };
-    TemplateCaptureState m_templateCaptureState =
-            TemplateCaptureState::Idle;
-    cv::Mat m_lastTemplatePreviewFrame;
-    quint64 m_templatePreviewSessionId = 0;
+    std::unique_ptr<TemplateEditorPage> m_templateEditorPage;
 
     using OperationState = OperationUiState;
     std::atomic<bool> m_resultBoundDisplayActive{false};
@@ -325,7 +289,6 @@ private:
     Mat *muban;                         ///< 模板图像
     Mat *frame;                         ///< 帧图像
     QImage *QmyImage = NULL;            ///< Qt图像对象
-    OverlapDetector overlapDetector;  ///< 防重叠检测引擎实例
 
 
     // ========== 参数设置 ==========
@@ -363,10 +326,6 @@ private:
     QRect selectionRect;                ///< 选择矩形
     QRect selectionRect1;               ///< 选择矩形1
     // 保存的框坐标
-    cv::Rect2d savedTrackingBox;    // 保存的跟踪框
-    std::vector<cv::Point2f> savedBarcodePoly; // 二维码相对于定位锚点中心的四角
-    std::vector<cv::Point2f> savedDatePoly; // 保存的生产日期相对多边形
-    bool hasValidBoxes;              // 是否有有效的框坐标
 
 
     // ========== 识别结果相关 ==========
@@ -395,54 +354,17 @@ private:
     // ========== 统计相关 ==========
 
     // ========== 模板匹配相关 ==========
-    std::vector<Mat> digitTemplates;    ///< 数字模板
-    std::vector<int> digitTemplateTargetIndexes; ///< 字库模板图对应的目标字符位置
     std::vector<Mat> digitRegions;      ///< 数字区域
     bool savefirst;                     ///< 第一次保存标志
     QString selectedDir;                ///< 选择的目录
 
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
-    std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
-    bool loadWordDigitTemplatesFromProfile(
-        const WordTemplateProfile &profile,
-        const QStringList &baseNames,
-        std::vector<cv::Mat> *templates,
-        std::vector<int> *templateTargetIndexes,
-        QString *errorMessage) const;
-    void refreshWordTemplateRecipeProfile(
-        WordTemplateProfile *profile) const;
-    bool saveWordRecipeProfile(
-        int profileIndex,
-        const RecipeProfile &settings,
-        QString *errorMessage);
-    bool publishWordTemplateRecipeEdit(int profileIndex,
-                                       QString *errorMessage);
-    bool publishWordTemplateRecipeEdits(
-        const QVector<int> &profileIndexes,
-        QString *errorMessage);
     void setupWordTemplateEditorCombo();
-    void publishCurrentWordTemplateGroup();
-    void publishCurrentSingleTemplateRecipe();
-    void selectPublishedRecipe();
     void setupDetectModeChangeTracking();
     void clearWordMultiTemplateState();
     void clearSingleTemplateRecipeState();
-    bool republishSingleTemplateRecipeSettings(
-        const RecipeProfile &settings,
-        QString *errorMessage);
     void refreshWordTemplateEditorCombo();
-    void applyWordTemplateEditorSelection(int comboIndex);
-    void setCurrentWordTemplateEditIndex(int profileIndex);
     int currentWordTemplateProfileIndex() const;
-    void displayWordTemplateRawImage(const WordTemplateProfile &profile);
-    BarcodeDecodeOptions barcodeTemplateValidationOptions() const;
-    bool validateBarcodeTemplateRect(
-        const QRect &uiBarcodeRect,
-        const BarcodeDecodeOptions &options,
-        BarcodeReadResult *barcode,
-        QString *failureReason);
-    QString barcodeTemplateValidationFailureText(
-        const BarcodeReadResult &barcode) const;
     void clearBarcodeTemplateValidation();
 
     // ========== 设置相关函数 ==========

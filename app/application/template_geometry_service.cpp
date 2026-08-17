@@ -1,0 +1,151 @@
+#include "application/template_geometry_service.h"
+
+#include <QtGlobal>
+
+#include <cmath>
+
+namespace {
+
+bool validGeometry(const TemplateDisplayGeometry &geometry)
+{
+    return geometry.viewSize.width() > 0
+            && geometry.viewSize.height() > 0
+            && geometry.displayedImageSize.width() > 0
+            && geometry.displayedImageSize.height() > 0
+            && geometry.sourceImageSize.width() > 0
+            && geometry.sourceImageSize.height() > 0;
+}
+
+QPointF mapDisplayPoint(
+        const QPoint &point,
+        const TemplateDisplayGeometry &geometry)
+{
+    const double offsetX =
+            (geometry.viewSize.width()
+             - geometry.displayedImageSize.width()) / 2.0;
+    const double offsetY =
+            (geometry.viewSize.height()
+             - geometry.displayedImageSize.height()) / 2.0;
+    const double scaleX =
+            static_cast<double>(geometry.sourceImageSize.width())
+            / geometry.displayedImageSize.width();
+    const double scaleY =
+            static_cast<double>(geometry.sourceImageSize.height())
+            / geometry.displayedImageSize.height();
+    return QPointF((point.x() - offsetX) * scaleX,
+                   (point.y() - offsetY) * scaleY);
+}
+
+QRectF mapProfileRect(
+        const QRect &displayRect,
+        const TemplateDisplayGeometry &geometry)
+{
+    const QRect normalized = displayRect.normalized();
+    const QPointF topLeft = mapDisplayPoint(
+                normalized.topLeft(), geometry);
+    const QPointF bottomRight = mapDisplayPoint(
+                normalized.bottomRight(), geometry);
+    return QRectF(topLeft.x(), topLeft.y(),
+                  bottomRight.x() - topLeft.x(),
+                  bottomRight.y() - topLeft.y())
+            .intersected(QRectF(
+                0.0, 0.0,
+                geometry.sourceImageSize.width(),
+                geometry.sourceImageSize.height()));
+}
+
+} // namespace
+
+QRect TemplateGeometryService::mapDisplayRectToImage(
+        const QRect &displayRect,
+        const TemplateDisplayGeometry &geometry) const
+{
+    if (!validGeometry(geometry)) {
+        return QRect();
+    }
+    const QRect normalized = displayRect.normalized();
+    const QPointF topLeft = mapDisplayPoint(
+                normalized.topLeft(), geometry);
+    const QPointF bottomRight = mapDisplayPoint(
+                QPoint(normalized.right() + 1,
+                       normalized.bottom() + 1),
+                geometry);
+    QRect mapped(
+                static_cast<int>(std::floor(topLeft.x())),
+                static_cast<int>(std::floor(topLeft.y())),
+                static_cast<int>(std::ceil(bottomRight.x()))
+                    - static_cast<int>(std::floor(topLeft.x())),
+                static_cast<int>(std::ceil(bottomRight.y()))
+                    - static_cast<int>(std::floor(topLeft.y())));
+    return mapped.intersected(
+                QRect(QPoint(0, 0), geometry.sourceImageSize));
+}
+
+TemplateProfileGeometry TemplateGeometryService::buildProfileGeometry(
+        const QRect &trackingDisplayRect,
+        const QRect &barcodeDisplayRect,
+        const QPolygon &dateDisplayPolygon,
+        bool includeBarcode,
+        const TemplateDisplayGeometry &geometry) const
+{
+    TemplateProfileGeometry result;
+    if (!validGeometry(geometry)) {
+        result.errorMessage = QStringLiteral(
+                    "模板显示尺寸或原图尺寸无效。");
+        return result;
+    }
+
+    const QRectF trackingPhysical = mapProfileRect(
+                trackingDisplayRect, geometry);
+    const cv::Rect tracking(
+                cvRound(trackingPhysical.x()),
+                cvRound(trackingPhysical.y()),
+                cvRound(trackingPhysical.width()),
+                cvRound(trackingPhysical.height()));
+    if (tracking.width <= 5 || tracking.height <= 5) {
+        result.errorMessage = QStringLiteral(
+                    "定位区域转换后无效，配方未保存。");
+        return result;
+    }
+    if (dateDisplayPolygon.size() < 3) {
+        result.errorMessage = QStringLiteral(
+                    "喷码检测区域点数不足，配方未保存。");
+        return result;
+    }
+
+    result.trackingImageRect = tracking;
+    result.trackingRoi = QRectF(
+                tracking.x, tracking.y,
+                tracking.width, tracking.height);
+    const QPointF center = result.trackingRoi.center();
+    for (const QPoint &displayPoint : dateDisplayPolygon) {
+        const QPointF point = mapDisplayPoint(displayPoint, geometry);
+        result.datePolygon.emplace_back(
+                    static_cast<float>(point.x() - center.x()),
+                    static_cast<float>(point.y() - center.y()));
+    }
+
+    if (includeBarcode) {
+        const QRectF barcode = mapProfileRect(
+                    barcodeDisplayRect, geometry);
+        if (barcode.width() <= 5.0 || barcode.height() <= 5.0) {
+            result.errorMessage = QStringLiteral(
+                        "二维码区域转换后无效，配方未保存。");
+            return result;
+        }
+        const QPointF corners[] = {
+            barcode.topLeft(),
+            QPointF(barcode.right(), barcode.top()),
+            barcode.bottomRight(),
+            QPointF(barcode.left(), barcode.bottom())
+        };
+        for (const QPointF &point : corners) {
+            result.barcodePolygon.emplace_back(
+                        static_cast<float>(point.x() - center.x()),
+                        static_cast<float>(point.y() - center.y()));
+        }
+    }
+
+    result.valid = true;
+    return result;
+}

@@ -1,58 +1,133 @@
 #pragma once
 
 #include "BarcodeTypes.h"
-#include "Detector.h"
+#include "application/template_application_service.h"
 #include "recipes/prepared_recipe.h"
-#include "recipes/recipe_editor_session.h"
-#include "recipes/template_mode_memory.h"
 #include "runtime/template_runtime_profile.h"
 
 #include <QMap>
 #include <QObject>
-#include <QPointer>
 #include <QRect>
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
 #include <memory>
 #include <vector>
 
-class IBarcodeDecoder;
 class ImageLabel;
 class InspectionApplicationService;
 class MachineSettingsPageController;
+class SettingsApplicationService;
+class SettingsEditState;
+class QCheckBox;
 class QComboBox;
 class QFrame;
+class QGroupBox;
+class QHBoxLayout;
 class QLabel;
+class QLineEdit;
 class QPushButton;
+class QTextEdit;
+class QToolButton;
+class QVBoxLayout;
 class QWidget;
-class Widget;
 
-namespace Ui {
-class Widget;
-}
+struct TemplateEditorViewBindings
+{
+    QWidget *parentWidget = nullptr;
+    QObject *eventFilterTarget = nullptr;
+    ImageLabel *imageLabel = nullptr;
+    QTextEdit *dateEdit = nullptr;
+    QLineEdit *lineEdit_yuzhi = nullptr;
+    QLineEdit *lineEdit_tissueRoughnessThreshold = nullptr;
+    QComboBox *comboBox_4 = nullptr;
+    QComboBox *comboBox_3 = nullptr;
+    QComboBox *comboBox_2 = nullptr;
+    QComboBox *comboBox_5 = nullptr;
+    QLineEdit *currentTemplateName = nullptr;
+    QLabel *statusLabel = nullptr;
+    QLabel *label = nullptr;
+    QLabel *label_4 = nullptr;
+    QLabel *label_6 = nullptr;
+    QLabel *label_8 = nullptr;
+    QLabel *label_10 = nullptr;
+    QLabel *label_13 = nullptr;
+    QLabel *label_14 = nullptr;
+    QLabel *label_16 = nullptr;
+    QLabel *label_17 = nullptr;
+    QLabel *label_27 = nullptr;
+    ImageLabel *image_undetected = nullptr;
+    QGroupBox *imagedisplayBox = nullptr;
+    QVBoxLayout *verticalLayout_InnerImg = nullptr;
+    QPushButton *manualCharacterCropButton = nullptr;
+    QPushButton *textsure_btn = nullptr;
+    QPushButton *batchTextsure_btn = nullptr;
+    QPushButton *batchImageThresholdButton = nullptr;
+    QPushButton *WriteVDpushButton = nullptr;
+    QPushButton *pushButton_3 = nullptr;
+    QPushButton *pushButton_7 = nullptr;
+    QPushButton *pushButton_8 = nullptr;
+    QPushButton *pushButton_9 = nullptr;
+    QPushButton *pushButton_10 = nullptr;
+    QPushButton *pushButton_12 = nullptr;
+    QPushButton *sureButton = nullptr;
+    QPushButton *pushButton_tissueRoughnessThreshold = nullptr;
+    QPushButton *plcmodebtn = nullptr;
+    QPushButton *ConnectpushButton = nullptr;
+    QPushButton *DisconnectpushButton = nullptr;
+    QPushButton *pushButton_browseImageSavePath = nullptr;
+    QToolButton *VideoShoot = nullptr;
+    QCheckBox *checkBox = nullptr;
+};
 
-class TemplateEditorController : public QObject
+struct TemplateEditorPageCallbacks
+{
+    std::function<void()> updateOperationUiState;
+    std::function<void()> updateTissueVisibility;
+    std::function<void()> clearTransientView;
+    std::function<void(const cv::Mat &)> displayPreviewFrame;
+    std::function<bool()> isApplyingSettings;
+    std::function<bool()> isUpdatingSettingsUi;
+    std::function<bool(bool)> saveSettings;
+    std::function<void(const RecipeProfile &)> applyRecipeProfileToUi;
+};
+
+class TemplateEditorPage : public QObject
 {
 public:
-    TemplateEditorController(
-        Widget *host,
-        Ui::Widget *ui,
-        ImageLabel *imageLabel,
-        const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
-        QObject *parent = nullptr);
+    enum class CaptureState
+    {
+        Idle,
+        Previewing,
+        Frozen
+    };
 
-    void bindRuntimeDependencies(
+    TemplateEditorPage(
+        const TemplateEditorViewBindings &view,
+        TemplateApplicationService *templateService,
         InspectionApplicationService *inspectionService,
-        MachineSettingsPageController *settingsPageController);
+        SettingsApplicationService *settingsService,
+        MachineSettingsPageController *settingsPageController,
+        SettingsEditState *settingsEditState,
+        const TemplateEditorPageCallbacks &callbacks,
+        QObject *parent = nullptr);
 
     void setEditorsEnabled(bool enabled);
     QFrame *guideFrame() const;
     QPushButton *manualCharacterCropButton() const;
 
+    bool templateOperationActive() const;
+    CaptureState captureState() const;
+    bool startTemplatePreview();
+    bool freezeTemplatePreview();
+    bool stopTemplatePreview();
+    void resetTemplateCaptureState();
+    void handleTemplateCaptureButton();
+    void handlePreviewFrame(quint64 sessionId, const cv::Mat &image);
+    void handlePreviewFailure(quint64 sessionId, const QString &reason);
+
     void clearBarcodeTemplateValidation();
-    QString barcodeTemplateValidationFailureText(
-        const BarcodeReadResult &barcode) const;
     bool validateBarcodeTemplateRect(
         const QRect &uiBarcodeRect,
         const BarcodeDecodeOptions &options,
@@ -83,11 +158,11 @@ public:
     void clearRecipeProfileDirty();
     void updateRecipeProfileDirtyUi();
 
-    void showManualCharacterTemplateCropDialog();
+    void showManualCharacterTemplateEditorDialog();
     void selectPublishedRecipeForCurrentMode();
     void saveCurrentTemplate();
-    void showStampCharacterTemplateCropDialog();
-    void showPublishedRecipeCharacterTemplateCropDialog(int profileIndex);
+    void showStampCharacterTemplateEditorDialog();
+    void showPublishedRecipeCharacterTemplateEditorDialog(int profileIndex);
     void setupWordTemplateEditorCombo();
 
     void clearWordMultiTemplateState();
@@ -142,9 +217,6 @@ public:
     void applyBatchTargetText();
     void applyBatchImageThreshold();
 
-    TemplateModeMemory &modeMemory();
-    const TemplateModeMemory &modeMemory() const;
-    std::vector<WordTemplateProfile> &wordTemplateProfiles();
     const std::vector<WordTemplateProfile> &wordTemplateProfiles() const;
     PreparedRecipeSnapshot activePreparedRecipe() const;
     QString currentTemplateDisplayName() const;
@@ -159,6 +231,9 @@ public:
         const QString &barcodeText);
 
 private:
+    QWidget *dialogParent() const;
+    bool isInspectionBusy() const;
+    bool isCameraOpen() const;
     void showParameterInfo(const QString &title,
                            const QString &message);
     void showParameterInfoWithRedWarning(
@@ -172,9 +247,7 @@ private:
     void showParameterCritical(const QString &title,
                                const QString &message);
     bool saveSettings(bool showErrorMessage = true);
-    void applyRecipeProfileToUi(
-        const RecipeProfile &settings);
-    void resetTemplateCaptureState();
+    void applyRecipeProfileToUi(const RecipeProfile &settings);
     void editActiveRecipeCharacterAssets(int profileIndex);
     void publishCurrentRecipeSession();
     bool activatePublishedTissueRecipe(
@@ -182,13 +255,18 @@ private:
         bool showErrorMessage,
         QString *errorMessage);
 
-    Widget *m_host = nullptr;
-    Ui::Widget *ui = nullptr;
-    QPointer<ImageLabel> imageLabel;
-    std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
+    TemplateEditorViewBindings m_view;
+    TemplateApplicationService *m_templateService = nullptr;
     InspectionApplicationService *m_inspectionService = nullptr;
+    SettingsApplicationService *m_settingsService = nullptr;
     MachineSettingsPageController *m_settingsPageController = nullptr;
+    SettingsEditState *m_settingsEditState = nullptr;
+    TemplateEditorPageCallbacks m_callbacks;
+    ImageLabel *imageLabel = nullptr;
 
+    CaptureState m_captureState = CaptureState::Idle;
+    quint64 m_previewSessionId = 0;
+    cv::Mat m_lastPreviewFrame;
     bool m_currentTemplateNameVisible = false;
     QWidget *m_wordTemplateEditWidget = nullptr;
     QLabel *m_wordTemplateEditLabel = nullptr;
@@ -200,13 +278,8 @@ private:
     QPushButton *m_manualCharacterCropButton = nullptr;
     QPushButton *m_publishedRecipeButton = nullptr;
     int m_currentWordTemplateEditIndex = -1;
-    TemplateModeMemory m_templateModeMemory;
-    RecipeEditorSession m_recipeEditorSession;
-    PreparedRecipeSnapshot m_activePreparedRecipe;
     QString m_templateTargetLabelText;
     QString m_templateThresholdLabelText;
-
-    std::vector<WordTemplateProfile> m_wordTemplateProfiles;
     QString m_currentTemplateDisplayName;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
