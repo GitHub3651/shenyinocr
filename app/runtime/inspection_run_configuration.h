@@ -1,14 +1,10 @@
 #pragma once
 
+#include "detection/positioning/inspection_positioner.h"
+
 enum class InspectionAcquisitionKind {
     SoftwareTrigger,
     HardwareTrigger
-};
-
-enum class InspectionTrackingKind {
-    WholeFrame,
-    SingleTemplate,
-    WordProfiles
 };
 
 struct InspectionRunPlan

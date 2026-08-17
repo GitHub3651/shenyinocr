@@ -522,18 +522,6 @@ void TemplateEditorPage::refreshRecipeProfileDirty()
     refreshTemplateImageThresholdDirty();
 }
 
-void TemplateEditorPage::markTemplateTargetTextDirty()
-{
-    m_settingsEditState->setTemplateTargetDirty(true);
-    updateRecipeProfileDirtyUi();
-}
-
-void TemplateEditorPage::markTemplateImageThresholdDirty()
-{
-    m_settingsEditState->setTemplateThresholdDirty(true);
-    updateRecipeProfileDirtyUi();
-}
-
 void TemplateEditorPage::clearTemplateTargetTextDirty()
 {
     m_settingsEditState->setTemplateTargetDirty(false);
@@ -587,22 +575,6 @@ void TemplateEditorPage::showManualCharacterTemplateEditorDialog()
     }
     const int profileIndex = mode == DetectionMode::Stamp
             ? 0 : currentWordTemplateProfileIndex();
-    editActiveRecipeCharacterAssets(profileIndex);
-}
-
-void TemplateEditorPage::showStampCharacterTemplateEditorDialog()
-{
-    if (m_templateService->activePreparedRecipe()
-            && m_templateService->activePreparedRecipe()->recipe
-            && m_templateService->activePreparedRecipe()->recipe->detectionMode
-               == DetectionMode::Stamp) {
-        editActiveRecipeCharacterAssets(0);
-    }
-}
-
-void TemplateEditorPage::showPublishedRecipeCharacterTemplateEditorDialog(
-        int profileIndex)
-{
     editActiveRecipeCharacterAssets(profileIndex);
 }
 

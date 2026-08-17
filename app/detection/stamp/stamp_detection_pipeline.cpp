@@ -60,7 +60,7 @@ StampDetectionResult StampDetectionPipeline::detect(
 StampDetectionWorkOutput StampDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const QString &targetText,
-        const TemplateMatchPreparedTemplates &preparedTemplates,
+        const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent,
         const OverlapDetectionFunction &detectOverlap) const
@@ -90,8 +90,8 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
     }
     output.roiValid = true;
 
-    const CharacterTemplateMatchResult matchResult =
-            CharacterTemplateMatcher::match(
+    const CharacterMatchResult matchResult =
+            CharacterGlyphMatcher::match(
                 oriented.croppedImage,
                 preparedTemplates,
                 templateTargetIndexes,

@@ -791,25 +791,9 @@ PreparedRecipeSnapshot TemplateEditorPage::activePreparedRecipe() const
     return m_templateService->activePreparedRecipe();
 }
 
-QString TemplateEditorPage::currentTemplateDisplayName() const
-{
-    return m_currentTemplateDisplayName;
-}
-
-void TemplateEditorPage::setCurrentTemplateDisplayName(
-    const QString &displayName)
-{
-    m_currentTemplateDisplayName = displayName;
-}
-
 void TemplateEditorPage::setCurrentTemplateNameVisible(bool visible)
 {
     m_currentTemplateNameVisible = visible;
-}
-
-int TemplateEditorPage::currentWordTemplateEditIndex() const
-{
-    return m_currentWordTemplateEditIndex;
 }
 
 bool TemplateEditorPage::barcodeTemplateReadable() const

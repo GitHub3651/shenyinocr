@@ -179,7 +179,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createWordWorker(
                                 item,
                                 QString(),
                                 QString(),
-                                TemplateMatchPreparedTemplates(),
+                                PreparedCharacterTemplates(),
                                 std::vector<int>(),
                                 0);
                     return state->output.detectionResult;
@@ -243,7 +243,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createBarcodeWordWorker(
                                 item,
                                 QString(),
                                 QString(),
-                                TemplateMatchPreparedTemplates(),
+                                PreparedCharacterTemplates(),
                                 std::vector<int>(),
                                 0,
                                 BarcodeDecodeOptions(),
@@ -305,7 +305,7 @@ bool PipelineRegistry::buildStampConfiguration(
     configuration->targetText = profile.definition.targetText;
     configuration->thresholdPercent =
             profile.definition.imageThresholdPercent;
-    configuration->preparedTemplates = CharacterTemplateMatcher::prepare(
+    configuration->preparedTemplates = CharacterGlyphMatcher::prepare(
                 profile.characterTemplates);
     configuration->templateTargetIndexes =
             profile.characterTemplateTargetIndexes;

@@ -23,11 +23,6 @@ InspectionPlcController::~InspectionPlcController()
     }
 }
 
-bool InspectionPlcController::hasDevice() const
-{
-    return static_cast<bool>(m_device);
-}
-
 bool InspectionPlcController::isConnected() const
 {
     return m_device && m_device->isConnected();

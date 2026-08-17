@@ -56,7 +56,6 @@ public:
         const InspectionPlcAddressMap &addresses);
     ~InspectionPlcController();
 
-    bool hasDevice() const;
     bool isConnected() const;
     PlcOperationResult connectTo(
         const QString &address,

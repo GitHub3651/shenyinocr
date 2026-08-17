@@ -46,55 +46,6 @@ void ImageLabel::resizeEvent(QResizeEvent *event) {
     updateAutoFitPixmap();
 }
 
-// =====================================================================
-// 恢复你原来丢失的函数实现（保持兼容）
-// =====================================================================
-void ImageLabel::setColor(int color) { m_color = color; }
-
-void ImageLabel::addSelectionRect(const QRect &rect, int color) {
-    rectangles.append({rect, color});
-    update();
-}
-
-QRect ImageLabel::getSelectionRect() const { return selectionRect; }
-
-void ImageLabel::setSelectionRect(const QRect &rect) {
-    selectionRect = rect;
-    update();
-}
-
-void ImageLabel::setStartPoint(const QPoint &point) { startPoint = point; }
-
-QPoint ImageLabel::getStartPoint() const { return startPoint; }
-
-void ImageLabel::setDrawing(bool draw) { drawing = draw; }
-
-void ImageLabel::clearGreenRects() {
-    greenRects.clear();
-    update();
-}
-
-void ImageLabel::clearredRects() {
-    redRects.clear();
-    redPolygons.clear();
-    update();
-}
-
-void ImageLabel::clearblueRects() {
-    blueRects.clear();
-    bluePolygons.clear();
-    update();
-}
-
-void ImageLabel::addSelectionPolygon(const QPolygonF &polygon, int color) {
-    if (color == 1) greenPolygons.append(polygon);
-    else if (color == 2) redPolygons.append(polygon);
-    else if (color == 3) bluePolygons.append(polygon);
-    update();
-}
-
-bool ImageLabel::isDrawing() const { return drawing; }
-
 bool ImageLabel::isDetectionPolyComplete() const {
     return m_currentStep == STEP_DONE && m_detectionPoly.size() >= 3;
 }
@@ -143,15 +94,11 @@ void ImageLabel::resetDrawingStep() {
     m_trackingRect = QRect();
     m_barcodeRect = QRect();
     m_detectionPoly.clear();
-    selectionRect = QRect();
     m_isInteracting = false;
     update();
 }
 
 void ImageLabel::clearSelection() {
-    selectionRect = QRect();
-    selectionRect1 = QRect();
-    rectangles.clear();
     resetDrawingStep();
 }
 
@@ -273,18 +220,6 @@ void ImageLabel::paintEvent(QPaintEvent *event) {
     QLabel::paintEvent(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-
-    // 恢复绘制旧的矩形（保持对原有代码的兼容）
-    painter.setPen(QPen(Qt::green, 2));
-    for (const QRect& r : greenRects) painter.drawRect(r);
-    painter.setPen(QPen(Qt::red, 2));
-    for (const QRect& r : redRects) painter.drawRect(r);
-    for (const ColoredRect& cr : rectangles) {
-        if(cr.color == 1) painter.setPen(QPen(Qt::green, 2));
-        else if(cr.color == 2) painter.setPen(QPen(Qt::red, 2));
-        else painter.setPen(QPen(Qt::blue, 2));
-        painter.drawRect(cr.rect);
-    }
 
     // 画追踪框 (蓝色粗框)
     if (!m_trackingRect.isNull()) {

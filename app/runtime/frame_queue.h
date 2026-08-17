@@ -35,7 +35,6 @@ public:
 
     std::size_t capacity() const;
     std::size_t size() const;
-    bool isCancelled() const;
 
 private:
     const std::size_t m_capacity;

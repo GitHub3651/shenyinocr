@@ -100,7 +100,6 @@ public:
     bool replaceWordProfile(
         int profileIndex,
         const WordTemplateProfile &profile);
-    void clearActiveRecipe();
 
 private:
     std::shared_ptr<RecipeStore> m_store;

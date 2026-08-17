@@ -83,15 +83,3 @@ void UiCompletionMailbox::cancel()
     }
     m_spaceAvailable.notify_all();
 }
-
-bool UiCompletionMailbox::hasPendingWork() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_hasPendingWork;
-}
-
-bool UiCompletionMailbox::isProcessing() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_processing;
-}

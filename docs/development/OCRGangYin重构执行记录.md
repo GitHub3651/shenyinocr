@@ -1459,3 +1459,36 @@
 - [x] 2026-08-17用户确认阶段6Qt Creator统一门禁“都没问题”；87项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
 - [x] 阶段6门禁通过后只执行最终静态检查、精确暂存和唯一阶段6本地提交；不推送，提交完成后才进入阶段7。
 - [x] 阶段6提交前最终静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`；163个差异路径全部属于阶段6 MainWindow/页面/Application DTO边界、根目录与vendor迁移、计划内旧路径删除、受影响测试/qmake、翻译、功能表和执行记录；旧Widget/TemplateMatch/两个旧UI Controller及历史设置、多相机、相机线程类的精确生产引用为0，业务`friend`为0，UI/Runtime/Recipes依赖边界未回退；163个差异文件均已纳入范围核对，严格UTF-8、无尾随空白且有末尾换行，暂存区为空、`app.zip`不存在，`git diff --check`通过。Agent未运行qmake、构建、测试可执行文件或主程序。阶段7已知qmake重复部署、重复OpenCV项和续行问题留待阶段6提交后按既定阶段边界统一处理。
+- [x] 阶段6已创建本地提交`0cd9d153ebf4c5b6c58a96a6e7f3e03aad4ce4cd refactor(ui): 完成阶段6主窗口与页面替换`；未推送，提交后工作区干净且`app.zip`不存在。
+
+## 新架构完全替换阶段：阶段 7 qmake、第三方清单与最终清理（2026-08-17，进行中）
+
+### 开始基准与真实影响范围
+
+- [x] 开始时分支为`codex/ocrgangyin-refactor`，HEAD为`0cd9d153ebf4c5b6c58a96a6e7f3e03aad4ce4cd refactor(ui): 完成阶段6主窗口与页面替换`，工作区干净且`app.zip`不存在；阶段6用户统一门禁、功能状态恢复、最终静态检查和本地提交均已完成。
+- [x] 阶段7修改主/测试qmake、链接与部署入口、第三方依赖清单，并要求全部自动化测试和87项保留功能最终验收；因此实际影响除已删除多相机外的全部87项保留功能。87项统一改为`迁移中`，`MC-001..003`保持`已确认删除`；最终统一门禁通过前不恢复状态、不提交。
+
+### qmake、部署和第三方唯一组合
+
+- [x] 主工程删除重复`RC_ICONS`、重复`target.path/INSTALLS`段、无效空`DISTFILES`、重复大小写C++11配置以及与MSVC无关的旧GCC Release参数；`TRANSLATIONS`末项不再错误续接后续赋值。清理未使用的AxContainer、SerialPort、Sql和Multimedia模块及对应窗口冗余include，主工程只声明真实使用的Qt Core/Gui/Widgets。
+- [x] OpenCV删除断裂的组件库列表、两个重复tracking项、重复include/depend路径及未使用的img_hash/xfeatures2d项；主工程与现有测试一样按Release/Debug分别且只链接一次`opencv_world341/341d`。磁盘核对两份import lib均存在，现有Release部署继续从`dist/ShengYin`复制锁定运行库和模型，不改变OpenCV 3.4.1、算法或模型。
+- [x] Snap7收口为唯一组合：主工程和PLC适配器测试各自编译同一份`app/devices/plc/vendor/snap7.cpp/.h`包装，链接`third_party/Libraries/win64/snap7.lib`，运行时部署匹配的`snap7.dll`；全仓不存在第二份Snap7实现。`third_party/DEPENDENCIES.md`已更新PaddleOCR vendor新路径、OpenCV链接事实及Snap7 wrapper/import lib/DLL路径、大小与SHA-256。
+- [x] 全仓23个`.pro/.pri`共426个源码、头、UI、qrc和翻译文件项全部存在、大小写一致且单目标内无重复；主工程磁盘上的自研生产源码/头/UI/qrc/翻译均已登记，无漏列旧路径或虚构工程项。主工程仅有一个图标声明、一个三行平台安装段、一个Release部署入口、一个Snap7包装源和一组Release/Debug OpenCV world链接。
+
+### 注释旧实现、无调用API与最终边界清理
+
+- [x] 删除全仓零调用的40个旧公开/私有方法及对应状态：MainWindow假按钮/旧显示与清理桥、ImageLabel旧矩形/多边形兼容API、RecipeEditorSession未使用原配方/单资源入口、TemplateApplicationService未调用清空入口、Runtime/队列/存图/PLC/Mailbox未使用诊断getter、设置dirty入口和模板页面冗余包装getter；同步删除无入口`on_eliminatebutton_clicked`、注释`on_ReShoot`、隐藏`lineBoxIndex`及ImageLabel无人写入的旧绘图容器。所有真实按钮、模板顺序绘制、统计、剔除队列复位和可达设置入口保持不变。
+- [x] 删除阶段6拆分遗留的注释代码、空QImage转换说明和兼容标记；非vendor生产源码已无`#if 0`、注释旧实现或“以后再删”桥。旧格式相关剩余`legacy`仅为`RecipeStore`明确拒绝旧目录的错误路径，许可证历史载荷测试继续属于保留功能，不构成运行兼容读取。
+- [x] 为满足最终字面零引用门禁，将新检测类型`CharacterTemplateMatcher/TemplateMatchPreparedTemplates/CharacterTemplateMatchResult`分别更名为`CharacterGlyphMatcher/PreparedCharacterTemplates/CharacterMatchResult`并同步三个Pipeline、Runtime快照/Registry及三组测试源码；只清除与旧`TemplateMatch`类名的碰撞，不改变匹配算法、阈值或结果。
+- [x] 将`InspectionTrackingKind`从Runtime头下沉至定位合同，删除Detection对`runtime/inspection_run_configuration.h`的反向include；Detection、Runtime、UI和Recipes最终依赖边界检查均为0命中，枚举值及软/硬触发运行计划不变。
+
+### 测试源码与当前Agent静态门禁
+
+- [x] 三组受Character匹配类型更名影响的Pipeline测试源码已同步唯一新类型；全仓16个测试目标的QtTest槽声明/定义静态核对无缺失，MainWindow 25个自动点击槽均对应`main_window.ui`真实控件。阶段7不复制测试或建立第二套实现，用户最终门禁需运行全部16个既有测试目标。
+- [x] 计划规定的最终生产搜索已执行：`#include "widget.h"`、`MyThread|CameraThread|CMvCamera|TemplateMatch|Zhuizong`、`AppSettingsManager|TemplatePrivateSettings|GlobalSettings`、`MultiCamera|IMultiCameraProvider`、`QThread::terminate|.terminate(`及两个危险所有权模式在`app`均为0；`friend class`仅剩Paddle vendor内Clipper自身3处合法声明，业务`friend`为0。旧Widget/TemplateMatch/根目录类型/两个旧UI Controller精确生产引用为0；测试源码仍以JSON键字符串`TemplatePrivateSettings`构造旧格式拒绝样本，不是生产兼容读取路径。
+- [x] 当前正式功能状态为`迁移中87/已确认删除3`，暂存区为空且`app.zip`不存在。Agent未运行或间接触发qmake、构建、任何测试可执行文件或主程序；真实PLC、机械剔除和现场恢复继续保持待验，不能由Fake结果代替。
+- [x] 阶段7用户门禁前最终Agent静态复核通过：54个差异文件均属于qmake/部署/第三方清单、无调用API与注释旧实现删除、最终字面零引用和对应测试/文档。23个qmake工程共426个声明文件项，路径缺失、大小写错误和单目标重复均为0；主工程图标1处、Release部署1处、OpenCV Release/Debug各1处、Snap7包装源和链接各1处，tracking重复项为0。MainWindow为461非空行，非vendor生产`.cpp`超过1500非空行的文件为0；54个差异文本严格UTF-8、无尾随空白且均有末尾换行，本地include/声明定义/QtTest槽与MainWindow自动槽静态复核无新增缺口，依赖边界未回退；暂存和未跟踪文件均为0，`app.zip`不存在，`git diff --check`通过。Agent未执行任何构建或运行命令。
+- [x] 阶段7首次Qt Creator Rebuild在三个MainWindow拆分实现中报告`QDebug`未定义，并在`main_window.cpp`报告`cv::destroyAllWindows`不可见；这是阶段7清理冗余间接include时漏掉的直接声明依赖。现为三个实际调用`qDebug()`的实现文件分别直接包含`QDebug`，并为实际调用`destroyAllWindows()`的`main_window.cpp`直接包含`opencv2/highgui.hpp`；另一个调用点`main_window_inspection.cpp`原已直接包含该OpenCV头。未修改日志文本、析构顺序、设置保存、相机、算法、PLC或UI行为，关联`SYS-001、SYS-009`，等待同轮Rebuild复验。
+- [x] 2026-08-17用户确认阶段7Qt Creator最终统一门禁“都没问题”：主工程在补齐MainWindow直接include后完成复验，`application_service_test`构建和运行告警显示问题经核对不影响最终结果，全部自动测试与87项人工回归按本轮清单完成。87项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3；真实PLC、机械剔除和现场恢复仍保留待验，不能由Fake或无PLC结果冒充完整现场生产验收。
+- [x] 阶段7门禁通过后只执行最终静态检查、精确暂存和唯一阶段7本地提交；不推送。本提交完成即表示新架构阶段0～7代码替换与软件侧门禁收口，不表示真实PLC现场生产验收完成。
+- [x] 阶段7提交前最终Agent静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`，其他状态均为0；54个差异文件全部属于阶段7 qmake/部署/第三方清单、无调用API和注释旧实现清理、字面零引用、直接include修复、对应测试及治理记录。全仓23个qmake工程共426个声明文件项均存在，大小写错误和单目标重复为0；主工程图标与Release部署各1处、OpenCV Release/Debug各1处、Snap7包装源/链接各1处，tracking重复项为0。计划规定的旧符号、线程强杀和危险所有权模式生产命中为0，业务`friend`为0，UI/Runtime/Detection/Recipes依赖边界未回退；MainWindow为463非空行，非vendor生产`.cpp`超过1500非空行的文件为0。54个差异文本严格UTF-8、无尾随空白且均有末尾换行，暂存前暂存区和未跟踪文件均为0，`app.zip`不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试可执行文件或主程序。

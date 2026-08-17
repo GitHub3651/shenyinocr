@@ -2,11 +2,16 @@
 
 #include "detection/positioning/detection_pose.h"
 #include "detection/positioning/tracking_pose_matcher.h"
-#include "runtime/inspection_run_configuration.h"
 
 #include <opencv2/core.hpp>
 
 #include <vector>
+
+enum class InspectionTrackingKind {
+    WholeFrame,
+    SingleTemplate,
+    WordProfiles
+};
 
 class InspectionPositioner
 {

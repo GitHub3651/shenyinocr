@@ -29,7 +29,7 @@ struct DetectionModeWorkerProfile
 {
     QString templateName;
     QString targetText;
-    TemplateMatchPreparedTemplates preparedTemplates;
+    PreparedCharacterTemplates preparedTemplates;
     std::vector<int> templateTargetIndexes;
     int thresholdPercent = 0;
     BarcodeDecodeOptions barcodeOptions;

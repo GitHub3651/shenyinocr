@@ -246,11 +246,6 @@ int InspectionRuntime::faultUnconfirmedProductCount() const
     return m_faultUnconfirmedProductCount;
 }
 
-bool InspectionRuntime::hasPlcController() const
-{
-    return m_plcController && m_plcController->hasDevice();
-}
-
 bool InspectionRuntime::isPlcConnected() const
 {
     return m_plcController && m_plcController->isConnected();
@@ -365,7 +360,6 @@ bool InspectionRuntime::startPipeline(
             return false;
         }
         m_detectionWorker = creation.worker;
-        m_detectionWorkerMode.store(request.mode);
         m_detectionWorkerActive.store(true);
         m_resultService->configureRun(resultConfiguration);
     }
@@ -525,18 +519,6 @@ InspectionRuntime::runContext() const
 bool InspectionRuntime::isDetectionWorkerActive() const
 {
     return m_detectionWorkerActive.load();
-}
-
-bool InspectionRuntime::isDetectionWorkerActiveForMode(
-    DetectionMode mode) const
-{
-    return m_detectionWorkerActive.load()
-            && m_detectionWorkerMode.load() == mode;
-}
-
-DetectionMode InspectionRuntime::detectionWorkerMode() const
-{
-    return m_detectionWorkerMode.load();
 }
 
 std::size_t InspectionRuntime::detectionWorkerQueueCapacity() const

@@ -70,7 +70,6 @@ void TemplateEditorPage::displayWordTemplateRawImage(
                 QPixmap::fromImage(image));
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearGreenRects();
         imageLabel->clearSelection();
     }
     updateImageDisplayStatusText(
@@ -131,14 +130,6 @@ bool TemplateEditorPage::loadWordDigitTemplatesFromProfile(
     templates->swap(selected);
     templateTargetIndexes->swap(indexes);
     return true;
-}
-
-void TemplateEditorPage::refreshWordTemplateRecipeProfile(
-        WordTemplateProfile *profile) const
-{
-    if (profile) {
-        profile->settings.name = profile->name;
-    }
 }
 
 bool TemplateEditorPage::saveWordRecipeProfile(
@@ -706,13 +697,3 @@ void TemplateEditorPage::applyBatchImageThreshold()
                     "全部Profile图像阈值已事务保存：%1")
                 .arg(threshold));
 }
-
-
-/**
- * @brief QImage转换为cv::Mat指针
- * @param image 输入的QImage对象
- * @return cv::Mat* 转换后的Mat指针
- */
-
-
-// TEMPLATE_EDITOR_IMPLEMENTATIONS

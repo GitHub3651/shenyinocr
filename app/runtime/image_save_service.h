@@ -87,8 +87,6 @@ public:
     ImageSaveSubmitResult submit(const ImageSaveTask &task);
     std::size_t capacity() const;
     std::size_t workerCount() const;
-    std::size_t outstandingTaskCount() const;
-    quint64 failedTaskCount() const;
     void shutdown();
 
 signals:

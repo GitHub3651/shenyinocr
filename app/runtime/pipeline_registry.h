@@ -89,7 +89,7 @@ private:
     struct StampConfiguration
     {
         QString targetText;
-        TemplateMatchPreparedTemplates preparedTemplates;
+        PreparedCharacterTemplates preparedTemplates;
         std::vector<int> templateTargetIndexes;
         int thresholdPercent = 0;
         StampDetectionPipeline::OverlapDetectionFunction detectOverlap;

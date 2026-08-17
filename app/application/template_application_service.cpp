@@ -379,10 +379,3 @@ bool TemplateApplicationService::replaceWordProfile(
     m_wordProfiles[static_cast<std::size_t>(profileIndex)] = profile;
     return true;
 }
-
-void TemplateApplicationService::clearActiveRecipe()
-{
-    m_session.reset();
-    m_activePreparedRecipe.reset();
-    m_wordProfiles.clear();
-}

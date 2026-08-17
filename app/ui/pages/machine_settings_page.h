@@ -61,7 +61,6 @@ public:
     void refreshDirty(const QString &key);
     void refreshDirty(const QStringList &keys);
     void refreshAllDirty();
-    void markDirty(const QString &key);
     void clearDirty(const QString &key);
     void clearDirty(const QStringList &keys);
     void clearAllDirty();

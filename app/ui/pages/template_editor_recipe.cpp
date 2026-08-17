@@ -948,7 +948,6 @@ bool TemplateEditorPage::activatePublishedSingleTemplateRecipe(
     clearBarcodeTemplateValidation();
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearGreenRects();
         imageLabel->clearSelection();
     }
     hideTemplateGuide();

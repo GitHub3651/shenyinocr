@@ -7,7 +7,7 @@
 #include <tuple>
 #include <vector>
 
-struct TemplateMatchPreparedTemplates
+struct PreparedCharacterTemplates
 {
     std::vector<cv::Mat> grayTemplates;
     std::vector<cv::Mat> smallTemplates;
@@ -19,21 +19,21 @@ struct TemplateMatchPreparedTemplates
     }
 };
 
-struct CharacterTemplateMatchResult
+struct CharacterMatchResult
 {
     int detectedCount = 0;
     std::vector<std::tuple<cv::Rect, double, size_t> > matches;
 };
 
-class CharacterTemplateMatcher
+class CharacterGlyphMatcher
 {
 public:
-    static TemplateMatchPreparedTemplates prepare(
+    static PreparedCharacterTemplates prepare(
         const std::vector<cv::Mat> &digitTemplates);
 
-    static CharacterTemplateMatchResult match(
+    static CharacterMatchResult match(
         const cv::Mat &targetImage,
-        const TemplateMatchPreparedTemplates &preparedTemplates,
+        const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent);
 };

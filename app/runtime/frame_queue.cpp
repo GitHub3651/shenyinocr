@@ -140,9 +140,3 @@ std::size_t FrameQueue::size() const
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_items.size();
 }
-
-bool FrameQueue::isCancelled() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_cancelled;
-}

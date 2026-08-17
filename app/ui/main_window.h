@@ -1,7 +1,3 @@
-// ui/main_window.h
-// 主窗口类 - 视觉检测跟踪系统
-// 已修改以兼容简化版线程类（只有1个检测框）
-
 #ifndef OCRGANGYIN_UI_MAIN_WINDOW_H
 #define OCRGANGYIN_UI_MAIN_WINDOW_H
 
@@ -83,39 +79,26 @@ public:
         TemplateEditorPage *templateEditorPage);
 
 private slots:
-    // ========== 界面相关槽函数 ==========
-    void showscreen();                  ///< 显示屏幕
     void slot_displayAndDetect(cv::Mat *image);  ///< 显示和检测槽
 
-    // ========== 按钮点击槽函数 ==========
     void on_VideoShoot_clicked();       ///< 单词采集按钮
-//    void on_ReShoot_clicked();          ///< 重新采集按钮
     void on_HandwareDetect_clicked();   ///< 相机检测按钮
     void on_CloseCamera_clicked();      ///< 关闭相机按钮
     void on_sureButton_clicked();       ///< 确定按钮
 
-    // ========== 工具函数 ==========
-
-
-    // ========== PLC相关槽函数 ==========
     void on_plcbtn_clicked();           ///< PLC按钮
     void on_ConnectpushButton_clicked(); ///< 连接PLC按钮
     void on_DisconnectpushButton_clicked(); ///< 断开PLC按钮
     void on_WriteVDpushButton_clicked(); ///< 写入VD按钮
 
-    // ========== 其他槽函数 ==========
     void on_textsure_btn_clicked();     ///< 文本确定按钮
     void on_batchTextsure_btn_clicked(); ///< 批量文本确定按钮
     void on_batchImageThresholdButton_clicked(); ///< 批量设置字库模板图像阈值
     void on_cancel_clicked();           ///< 取消按钮
-    void slot_clearResultLabel();       ///< 清除结果标签
     void closeEvent(QCloseEvent *event) override; ///< 关闭事件
 
-    // ========== 模式和功能按钮 ==========
     void on_plcmodebtn_clicked();       ///< PLC模式按钮
-    void on_eliminatebutton_clicked();  ///< 消除按钮
 
-    // ========== 其他按钮 ==========
     void on_pushButton_3_clicked();
     void on_pushButton_5_clicked();
     void on_pushButton_4_clicked();
@@ -149,7 +132,6 @@ private:
     bool applyCameraExposureValue(int exposureValue, QString *errorMessage);
     bool applyCameraExposureFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
-    bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool hasDirtySettings() const;
@@ -184,7 +166,6 @@ private:
     bool isCameraOpen() const;
     bool isInspectionBusy() const;
     const MachineSettings &machineSettings() const;
-    void updateMachineSettingsDraft(const MachineSettings &settings);
     void presentStartFailure(const StartInspectionResult &result);
     void finishInspectionStopUi(const StopInspectionResult &result);
     void presentInspectionFault();

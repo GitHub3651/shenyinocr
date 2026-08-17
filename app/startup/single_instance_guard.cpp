@@ -11,8 +11,7 @@ bool SingleInstanceGuard::acquire()
         return false;
     }
 
-    // Preserve the legacy behavior: inability to create the marker does not
-    // block the first process from starting.
+    // Marker creation failure does not prove another instance is running.
     m_sharedMemory.create(1);
     return true;
 }

@@ -149,8 +149,6 @@ public:
     void refreshTemplateTargetTextDirty();
     void refreshTemplateImageThresholdDirty();
     void refreshRecipeProfileDirty();
-    void markTemplateTargetTextDirty();
-    void markTemplateImageThresholdDirty();
     void clearTemplateTargetTextDirty();
     void clearTemplateImageThresholdDirty();
     void clearRecipeProfileDirty();
@@ -159,8 +157,6 @@ public:
     void showManualCharacterTemplateEditorDialog();
     void selectPublishedRecipeForCurrentMode();
     void saveCurrentTemplate();
-    void showStampCharacterTemplateEditorDialog();
-    void showPublishedRecipeCharacterTemplateEditorDialog(int profileIndex);
     void setupWordTemplateEditorCombo();
 
     void clearWordMultiTemplateState();
@@ -196,8 +192,6 @@ public:
         std::vector<cv::Mat> *templates,
         std::vector<int> *templateTargetIndexes,
         QString *errorMessage) const;
-    void refreshWordTemplateRecipeProfile(
-        WordTemplateProfile *profile) const;
     bool saveWordRecipeProfile(
         int profileIndex,
         const RecipeProfile &settings,
@@ -217,10 +211,7 @@ public:
 
     const std::vector<WordTemplateProfile> &wordTemplateProfiles() const;
     PreparedRecipeSnapshot activePreparedRecipe() const;
-    QString currentTemplateDisplayName() const;
-    void setCurrentTemplateDisplayName(const QString &displayName);
     void setCurrentTemplateNameVisible(bool visible);
-    int currentWordTemplateEditIndex() const;
     bool barcodeTemplateReadable() const;
     QRect validatedBarcodeRect() const;
     QString validatedBarcodeText() const;

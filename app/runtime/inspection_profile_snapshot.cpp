@@ -42,7 +42,7 @@ InspectionProfileSnapshot InspectionProfileSnapshotBuilder::create(
         detectionProfile.templateName = templateName;
         detectionProfile.targetText = source.targetText;
         detectionProfile.preparedTemplates =
-                CharacterTemplateMatcher::prepare(
+                CharacterGlyphMatcher::prepare(
                     cloneImages(source.digitTemplates));
         detectionProfile.templateTargetIndexes =
                 source.digitTemplateTargetIndexes;

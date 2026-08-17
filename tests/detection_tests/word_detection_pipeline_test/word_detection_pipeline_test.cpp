@@ -122,7 +122,7 @@ void WordDetectionPipelineTest::positionedWorkProducesGenericResultAndOverlay()
                 item,
                 QStringLiteral("A"),
                 QStringLiteral("profile-a"),
-                CharacterTemplateMatcher::prepare({characterTemplate}),
+                CharacterGlyphMatcher::prepare({characterTemplate}),
                 std::vector<int>(1, 0),
                 80);
 
@@ -146,7 +146,7 @@ void WordDetectionPipelineTest::trackingFailureProducesOneGenericNg()
                 item,
                 QString(),
                 QString(),
-                TemplateMatchPreparedTemplates(),
+                PreparedCharacterTemplates(),
                 std::vector<int>(),
                 0);
 

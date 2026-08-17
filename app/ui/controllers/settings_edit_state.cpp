@@ -26,11 +26,6 @@ void SettingsEditState::registerGlobalSetting(
     m_globalSettings.insert(normalizedKey, entry);
 }
 
-bool SettingsEditState::hasGlobalSetting(const QString &key) const
-{
-    return m_globalSettings.contains(key);
-}
-
 bool SettingsEditState::isGlobalDirty(const QString &key) const
 {
     const auto it = m_globalSettings.constFind(key);

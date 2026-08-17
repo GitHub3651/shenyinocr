@@ -47,7 +47,7 @@ public:
             const DetectionWorkItem &item,
             const QString &targetText,
             const QString &templateName,
-            const TemplateMatchPreparedTemplates &preparedTemplates,
+            const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,
             int thresholdPercent) const;
 
@@ -56,7 +56,7 @@ public:
             const OrientedDateRoi &orientedDateRoi,
             const QString &targetText,
             const QString &templateName,
-            const TemplateMatchPreparedTemplates &preparedTemplates,
+            const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,
             int thresholdPercent) const;
 };

@@ -14,70 +14,21 @@
 #include "ui/pages/template_editor_page.h"
 
 
-// Qt核心组件
 #include <QTimer>
-#include <QFileDialog>
-#include <QImageReader>
 #include <QLabel>
-#include <QFontMetrics>
-#include <QLineEdit>
-#include <QMetaType>
-#include <QDebug>
-#include <QFile>
-#include <QFileInfo>
 #include <QString>
-#include <QPixmap>
 #include <QMessageBox>
-#include <QPushButton>
-#include <QDialog>
-#include <QDateTime>
-#include <QApplication>
-#include <QTranslator>
-#include <QIcon>
-#include <QCamera>
-#include <QCameraInfo>
-#include <QDesktopWidget>
-#include <QSplashScreen>
-#include <QTextCodec>
-#include <QDir>
-#include <QStandardPaths>
-#include <QComboBox>
-#include <QCheckBox>
 #include <QHBoxLayout>
-#include <QVBoxLayout>
-#include <QSignalBlocker>
 #include <QSizePolicy>
-#include <QSpinBox>
-#include <QToolTip>
-#include <QCursor>
 #include <QFrame>
-#include <QTextEdit>
 #include <QScrollArea>
-#include <QEvent>
-#include <QRegularExpression>
 #include <QSplitterHandle>
-
-// Qt串口和SQL
-#include <QtSerialPort/QtSerialPort>
-#include <QtSql/QSqlError>
-#include <QtSql/QSqlQuery>
-#include <QVariantList>
-#include <QtSql/QSqlDatabase>
-
-// 标准库
-#include <array>
-#include <cmath>
-#include <cstdint>
-#include <limits>
-#include <windows.h>
-#include <algorithm>
-#include <iostream>
-#include <memory>
+#include <QTextOption>
+#include <QDebug>
 
 #include <opencv2/highgui.hpp>
 
 #pragma execution_character_set("utf-8")
-using namespace std;
 
 /**
  * @brief MainWindow构造函数
@@ -115,9 +66,9 @@ MainWindow::MainWindow(
         }
     };
     resultCallbacks.clearPreviousOverlay = [this](
-            bool clearImageLabelRects) {
+        bool clearImageLabelRects) {
         if (clearImageLabelRects && imageLabel) {
-            imageLabel->clearGreenRects();
+            imageLabel->clearSelection();
         }
     };
     resultCallbacks.showDetectionRoiWarning = [this]() {

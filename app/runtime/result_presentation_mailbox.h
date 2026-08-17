@@ -23,9 +23,6 @@ public:
     bool processOne();
     void cancel();
 
-    bool hasPendingWork() const;
-    bool isProcessing() const;
-
 private:
     UiCompletionMailbox(const UiCompletionMailbox &) = delete;
     UiCompletionMailbox &operator=(const UiCompletionMailbox &) = delete;

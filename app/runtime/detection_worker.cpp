@@ -147,11 +147,6 @@ std::size_t DetectionWorker::queueCapacity() const
     return m_queue.capacity();
 }
 
-std::size_t DetectionWorker::queuedFrameCount() const
-{
-    return m_queue.size();
-}
-
 quint64 DetectionWorker::processedFrameCount() const
 {
     return m_processedFrameCount.load();

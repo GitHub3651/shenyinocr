@@ -11,70 +11,32 @@
 #include "ui/pages/template_editor_page.h"
 
 
-// Qt核心组件
 #include <QTimer>
 #include <QFileDialog>
-#include <QImageReader>
 #include <QLabel>
-#include <QFontMetrics>
 #include <QLineEdit>
-#include <QMetaType>
-#include <QDebug>
 #include <QFile>
-#include <QFileInfo>
 #include <QString>
-#include <QPixmap>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QDialog>
-#include <QDateTime>
-#include <QApplication>
-#include <QTranslator>
-#include <QIcon>
-#include <QCamera>
-#include <QCameraInfo>
-#include <QDesktopWidget>
-#include <QSplashScreen>
-#include <QTextCodec>
-#include <QDir>
-#include <QStandardPaths>
 #include <QComboBox>
-#include <QCheckBox>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
 #include <QSignalBlocker>
-#include <QSizePolicy>
 #include <QSpinBox>
 #include <QToolTip>
 #include <QCursor>
-#include <QFrame>
 #include <QTextEdit>
-#include <QScrollArea>
 #include <QEvent>
-#include <QRegularExpression>
-#include <QSplitterHandle>
+#include <QCloseEvent>
+#include <QApplication>
+#include <QColor>
+#include <QPalette>
+#include <QDebug>
 
-// Qt串口和SQL
-#include <QtSerialPort/QtSerialPort>
-#include <QtSql/QSqlError>
-#include <QtSql/QSqlQuery>
-#include <QVariantList>
-#include <QtSql/QSqlDatabase>
-
-// 标准库
-#include <array>
-#include <cmath>
-#include <cstdint>
 #include <limits>
-#include <windows.h>
-#include <algorithm>
-#include <iostream>
-#include <memory>
 
 #include <opencv2/highgui.hpp>
 
 #pragma execution_character_set("utf-8")
-using namespace std;
 
 void MainWindow::presentInspectionFault()
 {
@@ -223,8 +185,6 @@ void MainWindow::finishInspectionStopUi(
 
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearGreenRects();
-        imageLabel->setColor(1);
         imageLabel->clearSelection();
     }
     hideTemplateGuide();
@@ -330,12 +290,6 @@ const MachineSettings &MainWindow::machineSettings() const
     return m_settingsApplicationService->current();
 }
 
-void MainWindow::updateMachineSettingsDraft(
-    const MachineSettings &settings)
-{
-    m_settingsApplicationService->updateDraft(settings);
-}
-
 void MainWindow::updateOperationUiState()
 {
     if (m_inspectionPage) {
@@ -379,20 +333,6 @@ void MainWindow::on_VideoShoot_clicked()
     if (m_templateEditorPage) {
         m_templateEditorPage->handleTemplateCaptureButton();
     }
-}
-
-/**
- * @brief 曝光值变化槽函数
- * @param value 新的曝光值
- */
-/**
- * @brief 显示主窗口
- */
-void MainWindow::showscreen()
-{
-    setWindowIcon(QIcon(":/2.png"));
-    setWindowTitle(tr("识别系统"));
-    this->show();
 }
 
 void MainWindow::showParameterInfo(const QString &title, const QString &message)
@@ -442,11 +382,6 @@ void MainWindow::showParameterWarning(const QString &title, const QString &messa
 void MainWindow::showParameterCritical(const QString &title, const QString &message)
 {
     QMessageBox::critical(this, title, message);
-}
-
-void MainWindow::slot_clearResultLabel()
-{
-    ui->resultlabel_7->clear();
 }
 
 /**
@@ -695,8 +630,6 @@ void MainWindow::on_CloseCamera_clicked()
     //    ui->ocrResult->clear();
     ui->resultlabel_7->clear();
     ui->speedLabel->clear();
-    //    qDebug()<<"totaltime"<<totalTime<<"s";
-    //    totalTime=0;
     resetTemplateCaptureState();
     if (m_inspectionPage) {
         m_inspectionPage->clearDetectionRoiWarning(QString());
@@ -868,12 +801,6 @@ void MainWindow::on_plcmodebtn_clicked()
 {
     QStringList errors;
     applyPlcTriggerModeFromUi(&errors, true);
-}
-
-// 剔除位置设置
-void MainWindow::on_eliminatebutton_clicked()
-{
-    QMessageBox::information(this, "提示", "剔除位置设置成功");
 }
 
 //剔除队列复位 清空还未发出的剔除信号

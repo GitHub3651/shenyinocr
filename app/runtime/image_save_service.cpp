@@ -114,18 +114,6 @@ std::size_t ImageSaveService::workerCount() const
     return m_workerCount;
 }
 
-std::size_t ImageSaveService::outstandingTaskCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_outstandingTaskCount;
-}
-
-quint64 ImageSaveService::failedTaskCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_failedTaskCount;
-}
-
 void ImageSaveService::shutdown()
 {
     {

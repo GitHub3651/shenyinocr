@@ -130,7 +130,7 @@ BarcodeWordDetectionWorkOutput runPositionedWork(
                 item,
                 targetText,
                 QStringLiteral("profile-a"),
-                CharacterTemplateMatcher::prepare({characterTemplate}),
+                CharacterGlyphMatcher::prepare({characterTemplate}),
                 std::vector<int>(1, 0),
                 80,
                 options,

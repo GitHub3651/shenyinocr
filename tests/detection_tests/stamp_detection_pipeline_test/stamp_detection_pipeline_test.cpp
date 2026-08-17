@@ -171,8 +171,8 @@ void StampDetectionPipelineTest::positionedWorkProducesGenericResultAndOverlay()
 {
     cv::Mat characterTemplate;
     const DetectionWorkItem item = makePositionedItem(&characterTemplate);
-    const TemplateMatchPreparedTemplates prepared =
-            CharacterTemplateMatcher::prepare({characterTemplate});
+    const PreparedCharacterTemplates prepared =
+            CharacterGlyphMatcher::prepare({characterTemplate});
     const StampDetectionPipeline pipeline;
     const StampDetectionWorkOutput output = pipeline.detect(
                 item,
@@ -210,7 +210,7 @@ void StampDetectionPipelineTest::positionedWorkRejectsInvalidDateRoiWithoutProdu
     const StampDetectionWorkOutput output = pipeline.detect(
                 item,
                 QStringLiteral("A"),
-                CharacterTemplateMatcher::prepare({characterTemplate}),
+                CharacterGlyphMatcher::prepare({characterTemplate}),
                 std::vector<int>(1, 0),
                 80,
                 StampDetectionPipeline::OverlapDetectionFunction());

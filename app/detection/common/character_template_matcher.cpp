@@ -24,10 +24,10 @@ double calculateIou(const cv::Rect &rectA, const cv::Rect &rectB)
 
 } // namespace
 
-TemplateMatchPreparedTemplates CharacterTemplateMatcher::prepare(
+PreparedCharacterTemplates CharacterGlyphMatcher::prepare(
     const std::vector<cv::Mat> &digitTemplates)
 {
-    TemplateMatchPreparedTemplates prepared;
+    PreparedCharacterTemplates prepared;
     prepared.grayTemplates.reserve(digitTemplates.size());
     prepared.smallTemplates.reserve(digitTemplates.size());
 
@@ -64,13 +64,13 @@ TemplateMatchPreparedTemplates CharacterTemplateMatcher::prepare(
     return prepared;
 }
 
-CharacterTemplateMatchResult CharacterTemplateMatcher::match(
+CharacterMatchResult CharacterGlyphMatcher::match(
     const cv::Mat &targetImage,
-    const TemplateMatchPreparedTemplates &preparedTemplates,
+    const PreparedCharacterTemplates &preparedTemplates,
     const std::vector<int> &templateTargetIndexes,
     int thresholdPercent)
 {
-    CharacterTemplateMatchResult result;
+    CharacterMatchResult result;
     if (!preparedTemplates.isValid() || targetImage.empty()) {
         qDebug() << "[ERROR] Templates or target image is empty, cannot proceed with matching.";
         return result;

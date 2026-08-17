@@ -54,7 +54,6 @@ public:
 
     bool isRunning() const;
     std::size_t queueCapacity() const;
-    std::size_t queuedFrameCount() const;
     quint64 processedFrameCount() const;
     quint64 cancelledFrameCount() const;
 

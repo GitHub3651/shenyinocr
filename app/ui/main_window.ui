@@ -761,13 +761,6 @@ QLabel#rightPanelSplitterGrip {
                   </property>
                  </widget>
                 </item>
-                <item>
-                 <widget class="QLineEdit" name="lineBoxIndex">
-                  <property name="visible">
-                   <bool>false</bool>
-                  </property>
-                 </widget>
-                </item>
                </layout>
               </widget>
              </item>

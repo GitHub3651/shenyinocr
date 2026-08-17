@@ -9,7 +9,6 @@ class SettingsEditState
 public:
     void registerGlobalSetting(const QString &key,
                                const QString &displayName);
-    bool hasGlobalSetting(const QString &key) const;
     bool isGlobalDirty(const QString &key) const;
     void setGlobalDirty(const QString &key, bool dirty);
     void clearAllGlobalDirty();

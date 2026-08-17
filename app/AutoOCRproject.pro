@@ -1,15 +1,4 @@
-#-------------------------------------------------
-#
-# Project created by QtCreator 2020-06-25T14:45:44
-#
-#-------------------------------------------------
-
-
-QT       += core gui axcontainer serialport sql
-QT       += multimedia multimediawidgets
-#QT       += xlsx
-#QT       += sql
-
+QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -28,24 +17,11 @@ TEMPLATE = app
 PROJECT_ROOT = $$clean_path($$PWD/..)
 THIRD_PARTY = $$PROJECT_ROOT/third_party
 
-# The following define makes your compiler emit warnings if you use
-# any feature of Qt which has been marked as deprecated (the exact warnings
-# depend on your compiler). Please consult the documentation of the
-# deprecated API in order to know how to port your code away from it.
 DEFINES += QT_DEPRECATED_WARNINGS
 DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
-# You can also make your code fail to compile if you use deprecated APIs.
-# In order to do so, uncomment the following line.
-# You can also select to disable deprecated APIs only up to a certain version of Qt.
-#DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 CONFIG(debug, debug|release) {
     QMAKE_CXXFLAGS_DEBUG += /MTd
-    QMAKE_CFLAGS_RELEASE += -g
-    QMAKE_CXXFLAGS_RELEASE += -g
-    QMAKE_CFLAGS_RELEASE -= -O2
-    QMAKE_CXXFLAGS_RELEASE -= -O2
-    QMAKE_LFLAGS_RELEASE = -mthreads -W
 }
 
 CONFIG(release, debug|release) {
@@ -229,22 +205,14 @@ RESOURCES += \
     image/image.qrc
 
 
-CONFIG += C++11
-
 TRANSLATIONS += Translate_EN.ts \
-                 Translate_CN.ts \
-
-
-
+                Translate_CN.ts
 
 RC_ICONS = sy.ico
 
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
-
-
-
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/paddle/include
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/protobuf/include
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/glog/include
@@ -268,62 +236,16 @@ LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xxhash/
 
 INCLUDEPATH += $$THIRD_PARTY/hikvision_mvs_sdk/include
 DEPENDPATH += $$THIRD_PARTY/hikvision_mvs_sdk/include
-
-
-RC_ICONS = sy.ico
-
-qnx: target.path = /tmp/$${TARGET}/bin
-else: unix:!android: target.path = /opt/$${TARGET}/bin
-!isEmpty(target.path): INSTALLS += target
-
-
-
-INCLUDEPATH += $$THIRD_PARTY/opencv/include/opencv2
-DEPENDPATH += $$THIRD_PARTY/opencv/include/opencv2
 INCLUDEPATH += $$THIRD_PARTY/Libraries/win64
 DEPENDPATH += $$THIRD_PARTY/Libraries/win64
-
-
-
 LIBS += -L$$THIRD_PARTY/hikvision_mvs_sdk/lib/win64/ -lMvCameraControl
 LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lsnap7
-
-
-
-INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/bin
-DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/bin
-INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/lib
-DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/lib
-LIBS += -lopencv_core341 \
-        -lopencv_imgproc341 \
-        -lopencv_highgui341 \
-        -lopencv_tracking341 \
-        -lopencv_videoio341 \
-        -lopencv_objdetect341
-        -lopencv_features2d
-        -lopencv_xfeatures2d
-
-LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_tracking341
-LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_tracking341
-
-
-
-win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_img_hash341
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_img_hash341d
 
 INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 
 win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341d
-
-win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_xfeatures2d341
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_xfeatures2d341d
-
-INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
-DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
-
-DISTFILES +=
 
 # Let Qt Creator run the Release executable from its build directory.  The
 # validated dist package remains the source of runtime DLLs, models and config.

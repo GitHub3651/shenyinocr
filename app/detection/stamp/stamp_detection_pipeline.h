@@ -56,7 +56,7 @@ public:
     StampDetectionWorkOutput detect(
             const DetectionWorkItem &item,
             const QString &targetText,
-            const TemplateMatchPreparedTemplates &preparedTemplates,
+            const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,
             int thresholdPercent,
             const OverlapDetectionFunction &detectOverlap) const;

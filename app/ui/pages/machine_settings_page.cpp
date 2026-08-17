@@ -633,15 +633,6 @@ void MachineSettingsPage::refreshAllDirty()
     }
 }
 
-void MachineSettingsPage::markDirty(const QString &key)
-{
-    if (!m_editState || !m_bindings.contains(key)) {
-        return;
-    }
-    m_editState->setGlobalDirty(key, true);
-    updateDirtyLabel(key);
-}
-
 void MachineSettingsPage::clearDirty(const QString &key)
 {
     if (!m_editState || !m_bindings.contains(key)) {

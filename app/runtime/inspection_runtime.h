@@ -98,7 +98,6 @@ public:
     int unresolvedFaultProductCount() const;
     int faultUnconfirmedProductCount() const;
 
-    bool hasPlcController() const;
     bool isPlcConnected() const;
     PlcOperationResult connectPlc(
         const QString &address,
@@ -128,8 +127,6 @@ public:
     bool claimResult(const ProductKey &productKey);
 
     bool isDetectionWorkerActive() const;
-    bool isDetectionWorkerActiveForMode(DetectionMode mode) const;
-    DetectionMode detectionWorkerMode() const;
     std::size_t detectionWorkerQueueCapacity() const;
     bool submitDetectionFrame(
         const std::shared_ptr<const FrameData> &frame);
@@ -187,5 +184,4 @@ private:
     std::shared_ptr<DetectionWorker> m_detectionWorker;
     UiCompletionMailbox m_uiCompletionMailbox;
     std::atomic<bool> m_detectionWorkerActive{false};
-    std::atomic<DetectionMode> m_detectionWorkerMode{DetectionMode::Stamp};
 };

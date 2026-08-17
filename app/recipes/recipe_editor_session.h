@@ -31,7 +31,6 @@ public:
     QString sessionId() const;
     QString workspacePath() const;
     const ProductRecipe &recipe() const;
-    ProductRecipeSnapshot originalRecipe() const;
     QMap<QString, QString> assetSourcePaths() const;
 
     bool replaceDraft(const ProductRecipe &recipe,
@@ -40,9 +39,6 @@ public:
     bool updateProfile(int profileIndex,
                        const RecipeProfile &profile,
                        QString *errorMessage = nullptr);
-    bool setAssetSource(const QString &assetKey,
-                        const QString &sourcePath,
-                        QString *errorMessage = nullptr);
     bool publish(const RecipeStore &store,
                  PreparedRecipeSnapshot *preparedRecipe,
                  QString *errorMessage = nullptr);
@@ -53,6 +49,5 @@ private:
     RecipeEditorSessionState m_state =
             RecipeEditorSessionState::Inactive;
     ProductRecipe m_recipe;
-    ProductRecipeSnapshot m_originalRecipe;
     QMap<QString, QString> m_assetSourcePaths;
 };

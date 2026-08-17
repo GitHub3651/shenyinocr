@@ -11,68 +11,16 @@
 #include "ui/pages/template_editor_page.h"
 
 
-// Qt核心组件
-#include <QTimer>
-#include <QFileDialog>
-#include <QImageReader>
-#include <QLabel>
-#include <QFontMetrics>
-#include <QLineEdit>
-#include <QMetaType>
-#include <QDebug>
-#include <QFile>
-#include <QFileInfo>
 #include <QString>
-#include <QPixmap>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QDialog>
-#include <QDateTime>
-#include <QApplication>
-#include <QTranslator>
-#include <QIcon>
-#include <QCamera>
-#include <QCameraInfo>
-#include <QDesktopWidget>
-#include <QSplashScreen>
-#include <QTextCodec>
-#include <QDir>
-#include <QStandardPaths>
 #include <QComboBox>
-#include <QCheckBox>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
 #include <QSignalBlocker>
-#include <QSizePolicy>
-#include <QSpinBox>
-#include <QToolTip>
-#include <QCursor>
-#include <QFrame>
-#include <QTextEdit>
-#include <QScrollArea>
-#include <QEvent>
-#include <QRegularExpression>
-#include <QSplitterHandle>
+#include <QDebug>
 
-// Qt串口和SQL
-#include <QtSerialPort/QtSerialPort>
-#include <QtSql/QSqlError>
-#include <QtSql/QSqlQuery>
-#include <QVariantList>
-#include <QtSql/QSqlDatabase>
-
-// 标准库
-#include <array>
-#include <cmath>
 #include <cstdint>
-#include <limits>
-#include <windows.h>
-#include <algorithm>
-#include <iostream>
-#include <memory>
 
 #pragma execution_character_set("utf-8")
-using namespace std;
 
 namespace {
 bool parseIntValue(const QString &text, int *value)
@@ -281,7 +229,6 @@ void MainWindow::clearCurrentSoftwareData()
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearSelection();
-        imageLabel->clearGreenRects();
     }
     m_machineSettingsPage->clearAllDirty();
     clearRecipeProfileDirty();
@@ -318,7 +265,6 @@ void MainWindow::restoreDefaultMachineSettings()
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearSelection();
-        imageLabel->clearGreenRects();
     }
     clearRecipeProfileDirty();
     updateHardwareParameterUiEnabled();
@@ -602,23 +548,6 @@ bool MainWindow::applyCameraGainFromUi(
         showParameterInfo("提示", "相机增益设置成功！");
     }
     return true;
-}
-
-bool MainWindow::applyCameraHardwareSettingsFromUi(
-    QStringList *errors,
-    bool showSuccessMessage)
-{
-    bool ok = applyCameraExposureFromUi(
-        errors, showSuccessMessage);
-    ok = applyCameraGainFromUi(errors, showSuccessMessage) && ok;
-    if (ok) {
-        m_machineSettingsPage->updateAppliedFromUi(
-            QStringList() << "camera.exposure" << "camera.gain");
-        m_machineSettingsPage->refreshDirty(
-            QStringList() << "camera.exposure" << "camera.gain");
-        saveSettings(false);
-    }
-    return ok;
 }
 
 bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage)

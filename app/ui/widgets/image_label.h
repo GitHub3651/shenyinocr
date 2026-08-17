@@ -3,12 +3,10 @@
 
 #include <QLabel>
 #include <QRect>
-#include <QVector>
-#include <QList>
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QPaintEvent>
-#include <QPolygonF>
+#include <QPolygon>
 #include <QPixmap>
 #include <QResizeEvent>
 
@@ -19,26 +17,8 @@ class ImageLabel : public QLabel
 public:
     explicit ImageLabel(QWidget *parent = nullptr);
 
-    // ================= 原有的函数声明（原封不动恢复，防报错） =================
-    void setColor(int color);
-    void addSelectionRect(const QRect &rect, int color);
-    QRect getSelectionRect() const;
     void clearSelection();
-    void setSelectionRect(const QRect &rect);
-    void setStartPoint(const QPoint &point);
-    QPoint getStartPoint() const;
-    void setDrawing(bool draw);
-    void clearGreenRects();
-    void clearredRects();
-    void clearblueRects();
-    void addSelectionPolygon(const QPolygonF &polygon, int color);
-    bool isDrawing() const;
 
-    bool allowBlueDraw = false;
-    bool blueRectRedrawn = false;
-    int rectAdded = 0;
-
-    // 重写setPixmap
     void setPixmap(const QPixmap &pixmap);
     void setAutoFitPixmap(const QPixmap &pixmap);
     void clear();
@@ -59,8 +39,6 @@ signals:
     void mouseMoved(QMouseEvent *event);
     void mouseReleased(QMouseEvent *event);
 
-    // 新增：发送文本提示信号给 MainWindow
-    void signal_hintMessage(QString msg);
     void signal_templateGuideEvent(QString eventName, int pointCount);
 
 protected:
@@ -72,27 +50,6 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    struct ColoredRect {
-        QRect rect;
-        int color;
-    };
-
-    // ================= 原有变量（恢复） =================
-    bool drawing = false;
-    QPoint startPoint;
-    QRect selectionRect;
-    QRect selectionRect1;
-    QList<QRect> redRects;
-    QList<QRect> greenRects;
-    QList<QRect> blueRects;
-    QList<QRect> yellowRects;
-    QVector<QPolygonF> redPolygons;
-    QVector<QPolygonF> greenPolygons;
-    QVector<QPolygonF> bluePolygons;
-    QVector<ColoredRect> rectangles;
-    int m_color = 1;
-
-    // ================= 模板区域顺序绘制状态机 =================
     enum DrawStep {
         STEP_TRACKING,
         STEP_BARCODE,

@@ -64,7 +64,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const QString &targetText,
         const QString &templateName,
-        const TemplateMatchPreparedTemplates &preparedTemplates,
+        const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent) const
 {
@@ -109,7 +109,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
         const OrientedDateRoi &oriented,
         const QString &targetText,
         const QString &templateName,
-        const TemplateMatchPreparedTemplates &preparedTemplates,
+        const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent) const
 {
@@ -145,8 +145,8 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
     }
     output.roiValid = true;
 
-    const CharacterTemplateMatchResult matchResult =
-            CharacterTemplateMatcher::match(
+    const CharacterMatchResult matchResult =
+            CharacterGlyphMatcher::match(
                 oriented.croppedImage,
                 preparedTemplates,
                 templateTargetIndexes,

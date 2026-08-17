@@ -61,7 +61,6 @@ void RecipeEditorSession::reset()
     m_sessionId.clear();
     m_state = RecipeEditorSessionState::Inactive;
     m_recipe = ProductRecipe();
-    m_originalRecipe.reset();
     m_assetSourcePaths.clear();
 }
 
@@ -87,7 +86,6 @@ bool RecipeEditorSession::beginNew(const ProductRecipe &recipe,
     m_sessionId = newSessionId;
     m_state = RecipeEditorSessionState::New;
     m_recipe = recipe;
-    m_originalRecipe.reset();
     m_assetSourcePaths.clear();
     return true;
 }
@@ -122,7 +120,6 @@ bool RecipeEditorSession::beginEdit(const RecipeStore &store,
     m_sessionId = newSessionId;
     m_state = RecipeEditorSessionState::Editing;
     m_recipe = loaded;
-    m_originalRecipe = ProductRecipeSnapshot(new ProductRecipe(loaded));
     m_assetSourcePaths = sources;
     return true;
 }
@@ -152,11 +149,6 @@ QString RecipeEditorSession::workspacePath() const
 const ProductRecipe &RecipeEditorSession::recipe() const
 {
     return m_recipe;
-}
-
-ProductRecipeSnapshot RecipeEditorSession::originalRecipe() const
-{
-    return m_originalRecipe;
 }
 
 QMap<QString, QString> RecipeEditorSession::assetSourcePaths() const
@@ -212,26 +204,6 @@ bool RecipeEditorSession::updateProfile(int profileIndex,
     return true;
 }
 
-bool RecipeEditorSession::setAssetSource(const QString &assetKey,
-                                         const QString &sourcePath,
-                                         QString *errorMessage)
-{
-    if (!isActive() || !m_recipe.assets.contains(assetKey)) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe editor asset key is invalid."));
-        return false;
-    }
-    const QFileInfo source(sourcePath);
-    if (!source.exists() || source.isSymLink()
-            || !source.isFile() || source.size() <= 0) {
-        setError(errorMessage,
-                 QStringLiteral("Recipe editor asset source is invalid."));
-        return false;
-    }
-    m_assetSourcePaths.insert(assetKey, source.absoluteFilePath());
-    return true;
-}
-
 bool RecipeEditorSession::publish(
         const RecipeStore &store,
         PreparedRecipeSnapshot *preparedRecipe,
@@ -251,7 +223,6 @@ bool RecipeEditorSession::publish(
         return false;
     }
     m_recipe = *prepared->recipe;
-    m_originalRecipe = prepared->recipe;
     m_state = RecipeEditorSessionState::Editing;
     m_assetSourcePaths.clear();
     const QDir recipeDirectory(store.recipeDirectoryPath(m_recipe.recipeId));
