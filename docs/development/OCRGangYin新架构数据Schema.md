@@ -61,7 +61,9 @@ JSON 枚举值固定使用下表的小写字符串，不接受旧 ID（例如 `w
 | `camera.triggerSource` | `CameraTriggerSource`：`software` / `hardwareLine0` | 无 | 必填 | `hardwareLine0`；旧 `triggerEnabled=true` | 机器设置 | `checkBox`“启用触发” | `Global/trigger_enabled` | 启动计划、相机触发模式 | JSON string → `MachineSettings` |
 | `camera.rotation` | `ImageRotation`：`none` / `clockwise90` / `counterclockwise90` / `rotate180` | 度 | 必填 | `none`；旧 `rotate_none` | 机器设置 | `comboBox_2` | `Global/image_rotation` | 采集前图像变换快照 | JSON string → `MachineSettings` |
 | `camera.colorChannel` | `ColorChannel`：`color` / `red` / `green` / `blue` | 无 | 必填 | `color`；旧 `color` | 机器设置 | `comboBox_5` | `Global/color_channel` | 采集前图像变换快照 | JSON string → `MachineSettings` |
-| `inspection.minimumIntervalMs` | `int` | ms | 必填；`>=0`；0 表示不增加软件等待 | `300`；旧 `cameraDelay=300`、RUN-005 | 机器设置 | `lineEdit_4`“相机延时(ms)” | `Global/camera_delay` | 软触发两次正式受理的最小间隔 | JSON number → `MachineSettings` |
+| `inspection.minimumIntervalMs` | `int` | ms（写入MVS前换算为µs） | 必填；`>=0`；0 表示硬触发沿到达后不增加相机触发延时 | `300`；旧 `cameraDelay=300`、RUN-005 | 机器设置 | `lineEdit_4`“硬触发延时(ms)” | `Global/camera_delay` | 仅硬触发启动时写入海康 `TriggerDelay`；软触发不消费此值 | JSON number → `MachineSettings` |
+
+`inspection.minimumIntervalMs`是Schema 1已经落盘的历史键名，本次只更正其运行语义，不制造不兼容的第二份设置格式。正式代码中的含义以“硬触发延时(ms)”为准：启动硬触发时乘以1000后写入MVS `TriggerDelay`；软件触发没有人为最小间隔，其节拍由相机、检测队列、结果呈现邮箱和存图链反压共同决定。
 
 ### 3.3 PLC 字段
 

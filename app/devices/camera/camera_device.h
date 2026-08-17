@@ -21,7 +21,7 @@ struct CameraSettings
     bool updateGain = false;
     float gain = 0.0f;
     bool updateTriggerDelay = false;
-    float triggerDelay = 0.0f;
+    float triggerDelayMicroseconds = 0.0f;
     bool updateLineDebouncerTime = false;
     unsigned int lineDebouncerTime = 5000U;
 };

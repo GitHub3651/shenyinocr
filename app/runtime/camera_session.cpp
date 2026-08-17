@@ -245,6 +245,10 @@ bool CameraSession::prepareInspection(
     settings.updateTriggerDelay =
             configuration.runPlan.acquisitionKind
             == InspectionAcquisitionKind::HardwareTrigger;
+    if (settings.updateTriggerDelay) {
+        settings.triggerDelayMicroseconds =
+                configuration.hardwareTriggerDelayMicroseconds;
+    }
     if (result.isSuccess()) {
         result = m_cameraDevice->applySettings(settings);
     }
@@ -301,10 +305,7 @@ bool CameraSession::startInspection(QString *errorMessage)
             == InspectionAcquisitionKind::HardwareTrigger
             ? CaptureMode::HardwareTrigger
             : CaptureMode::SoftwareTrigger;
-    if (!m_captureWorker.start(
-                mode,
-                m_configuration.minimumIntervalMs,
-                callbacks)) {
+    if (!m_captureWorker.start(mode, callbacks)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("采集线程启动失败。");
         }
@@ -426,8 +427,7 @@ bool CameraSession::startPreview(
         handleCaptureError(status, nativeErrorCode);
     };
     callbacks.stopped = [this]() { handleCaptureStopped(); };
-    if (!m_captureWorker.start(
-                CaptureMode::Preview, 0, callbacks)) {
+    if (!m_captureWorker.start(CaptureMode::Preview, callbacks)) {
         m_preview = false;
         if (errorMessage) {
             *errorMessage = QStringLiteral("实时取景线程启动失败。");

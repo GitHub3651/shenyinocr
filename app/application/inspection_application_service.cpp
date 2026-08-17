@@ -11,6 +11,8 @@
 
 namespace {
 
+constexpr float kMicrosecondsPerMillisecond = 1000.0f;
+
 ApplicationRuntimeState applicationState(
     InspectionRuntimeState state)
 {
@@ -187,7 +189,12 @@ CameraSessionCaptureConfiguration cameraConfiguration(
     CameraSessionCaptureConfiguration output;
     output.runPlan = runPlan;
     output.framePreprocess = framePreprocessSettings(settings);
-    output.minimumIntervalMs = settings.cameraDelay;
+    if (runPlan.acquisitionKind
+            == InspectionAcquisitionKind::HardwareTrigger) {
+        output.hardwareTriggerDelayMicroseconds =
+                static_cast<float>(settings.cameraDelay)
+                * kMicrosecondsPerMillisecond;
+    }
     output.exposure = settings.cameraExposure;
     output.gain = settings.cameraGain;
     output.trackingProfiles = profileSnapshot.trackingProfiles;

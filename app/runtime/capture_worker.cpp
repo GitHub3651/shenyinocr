@@ -1,8 +1,13 @@
 #include "runtime/capture_worker.h"
 
-#include <algorithm>
-#include <chrono>
 #include <stdexcept>
+
+namespace {
+
+constexpr int kHardwareFrameWaitSliceMs = 1000;
+constexpr int kSoftwareFrameWaitTimeoutMs = 500;
+
+} // namespace
 
 CaptureWorker::CaptureWorker(
     const std::shared_ptr<ICameraDevice> &cameraDevice)
@@ -21,7 +26,6 @@ CaptureWorker::~CaptureWorker()
 
 bool CaptureWorker::start(
     CaptureMode mode,
-    int minimumIntervalMs,
     const CaptureWorkerCallbacks &callbacks)
 {
     if (m_running.load()) {
@@ -31,7 +35,6 @@ bool CaptureWorker::start(
         m_thread.join();
     }
     m_mode = mode;
-    m_minimumIntervalMs = std::max(0, minimumIntervalMs);
     m_callbacks = callbacks;
     m_stopRequested.store(false);
     m_running.store(true);
@@ -43,7 +46,6 @@ void CaptureWorker::stop()
 {
     m_stopRequested.store(true);
     m_cameraDevice->interruptWait();
-    m_waitCondition.notify_all();
     if (m_thread.joinable()) {
         m_thread.join();
     }
@@ -58,15 +60,8 @@ bool CaptureWorker::isRunning() const
 void CaptureWorker::run()
 {
     int consecutiveFailures = 0;
-    std::chrono::steady_clock::time_point lastFrameTime;
-    bool hasLastFrameTime = false;
 
     while (!m_stopRequested.load()) {
-        if (m_mode != CaptureMode::HardwareTrigger
-                && hasLastFrameTime
-                && !waitMinimumInterval(lastFrameTime)) {
-            break;
-        }
         if (m_mode != CaptureMode::HardwareTrigger) {
             const CameraResult trigger = m_cameraDevice->triggerSoftware();
             if (!trigger.isSuccess()) {
@@ -85,15 +80,21 @@ void CaptureWorker::run()
 
         const CameraFrameResult frame =
                 m_cameraDevice->waitNextFrame(
-                    m_mode == CaptureMode::HardwareTrigger ? 1000 : 500);
+                    m_mode == CaptureMode::HardwareTrigger
+                    ? kHardwareFrameWaitSliceMs
+                    : kSoftwareFrameWaitTimeoutMs);
         if (m_stopRequested.load()
                 || frame.status == CameraFrameStatus::Interrupted) {
             break;
         }
         if (frame.status == CameraFrameStatus::Timeout) {
+            // 外部硬件在空闲时可能长期没有触发沿；单次等待到期只让
+            // Worker重新取得控制权，不代表产品帧失败，也不限制下一帧。
+            if (m_mode == CaptureMode::HardwareTrigger) {
+                continue;
+            }
             ++consecutiveFailures;
-            if (m_mode != CaptureMode::HardwareTrigger
-                    && consecutiveFailures >= 3) {
+            if (consecutiveFailures >= 3) {
                 if (m_callbacks.captureError) {
                     m_callbacks.captureError(
                                 CameraFrameStatus::Timeout, 0);
@@ -114,8 +115,6 @@ void CaptureWorker::run()
         }
 
         consecutiveFailures = 0;
-        lastFrameTime = std::chrono::steady_clock::now();
-        hasLastFrameTime = true;
         if (m_callbacks.frameReady) {
             m_callbacks.frameReady(frame.frame);
         }
@@ -125,21 +124,4 @@ void CaptureWorker::run()
     if (m_callbacks.stopped) {
         m_callbacks.stopped();
     }
-}
-
-bool CaptureWorker::waitMinimumInterval(
-    const std::chrono::steady_clock::time_point &lastFrameTime) const
-{
-    if (m_minimumIntervalMs <= 0) {
-        return !m_stopRequested.load();
-    }
-    const std::chrono::steady_clock::time_point deadline =
-            lastFrameTime
-            + std::chrono::milliseconds(m_minimumIntervalMs);
-    std::unique_lock<std::mutex> lock(m_waitMutex);
-    m_waitCondition.wait_until(
-                lock,
-                deadline,
-                [this]() { return m_stopRequested.load(); });
-    return !m_stopRequested.load();
 }

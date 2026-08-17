@@ -95,7 +95,7 @@ struct CameraSessionCaptureConfiguration
 {
     InspectionRunPlan runPlan;
     FramePreprocessSettings framePreprocess;
-    int minimumIntervalMs = 0;
+    float hardwareTriggerDelayMicroseconds = 0.0f;
     int exposure = 0;
     int gain = 0;
     std::vector<WordTrackingProfile> trackingProfiles;

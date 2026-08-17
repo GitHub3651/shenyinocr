@@ -302,9 +302,10 @@ public:
   - 等待上一产品进入可受理状态。
   - 执行一次软触发。
   - 等待帧号增加的新帧。
-  - 遵守 `cameraDelay` 最小间隔。
+  - 不附加 `cameraDelay` 或其他固定软件等待；节拍由相机速度和正式链反压决定。
 - `HardwareTrigger`
   - 等待相机下一帧。
+  - 启动时把界面硬触发延时从ms换算为µs写入海康 `TriggerDelay`。
   - 使用容量 1 的正式帧队列。
   - 无队列空间时进入 Fault，不覆盖已受理帧。
 - `Preview`
@@ -588,7 +589,7 @@ Schema 至少完整覆盖：
 - 模板实时预览、冻结、退出和再次进入。
 - 五模式软触发。
 - 硬触发使用 Fake 和现有相机可执行路径验证。
-- `cameraDelay=0` 和非 0。
+- 软触发在硬触发延时为0和非0时节拍均不受该值影响；硬触发分别验证 `TriggerDelay=0` 和非0。
 - 停止、重启和退出后零线程残留。
 - 全仓没有 `MyThread/CameraThread/CMvCamera/Zhuizong/MultiCamera` 生产引用。
 

@@ -2160,7 +2160,7 @@ QCheckBox::indicator {
                   <item row="2" column="0">
                    <widget class="QLabel" name="label_13">
                     <property name="text">
-                     <string>相机延时(ms):</string>
+                     <string>硬触发延时(ms):</string>
                     </property>
                    </widget>
                   </item>

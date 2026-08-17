@@ -247,7 +247,7 @@ CameraResult HikvisionCameraDevice::applySettings(
         nativeResult = MV_CC_SetFloatValue(
                     m_impl->handle,
                     "TriggerDelay",
-                    settings.triggerDelay);
+                    settings.triggerDelayMicroseconds);
         if (nativeResult != MV_OK) {
             return CameraResult::deviceError(nativeResult);
         }
