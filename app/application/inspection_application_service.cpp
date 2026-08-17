@@ -3,9 +3,7 @@
 #include "DetectionModes.h"
 #include "application/settings_application_service.h"
 #include "recipes/recipe_store.h"
-#include "runtime/inspection_runtime_controller.h"
-#include "runtime/inspection_runtime_start_transaction.h"
-#include "runtime/inspection_runtime_stop_transaction.h"
+#include "runtime/inspection_runtime.h"
 
 #include <QDateTime>
 #include <QVector>
@@ -180,27 +178,54 @@ FramePreprocessSettings framePreprocessSettings(
 }
 
 CameraSessionCaptureConfiguration cameraConfiguration(
-    const InspectionStartExecutionCommand &execution)
+    const MachineSettings &settings,
+    const PreparedRecipeSnapshot &prepared,
+    const InspectionProfileSnapshot &profileSnapshot,
+    const InspectionRunPlan &runPlan)
 {
     CameraSessionCaptureConfiguration output;
-    output.runPlan = execution.runPlan;
-    output.framePreprocess = framePreprocessSettings(
-                execution.context.machineSettings);
-    output.minimumIntervalMs =
-            execution.context.machineSettings.cameraDelay;
-    output.exposure =
-            execution.context.machineSettings.cameraExposure;
-    output.gain = execution.context.machineSettings.cameraGain;
-    output.trackingProfiles =
-            execution.profileSnapshot.trackingProfiles;
-    const PreparedRecipeSnapshot &prepared =
-            execution.context.preparedRecipe;
+    output.runPlan = runPlan;
+    output.framePreprocess = framePreprocessSettings(settings);
+    output.minimumIntervalMs = settings.cameraDelay;
+    output.exposure = settings.cameraExposure;
+    output.gain = settings.cameraGain;
+    output.trackingProfiles = profileSnapshot.trackingProfiles;
     if (prepared && !prepared->profiles.isEmpty()) {
         const PreparedRecipeProfile &profile = prepared->profiles.first();
         output.singleDatePolygon = profile.datePolygon;
         output.singleTrackingTemplate =
                 profile.trackingTemplate.clone();
     }
+    return output;
+}
+
+ResultServiceRunConfiguration resultConfiguration(
+    const MachineSettings &settings)
+{
+    ResultServiceRunConfiguration configuration;
+    configuration.imageSaveModeIndex =
+            machineSettingsImageSaveModeIds().indexOf(
+                settings.imageSaveModeId);
+    configuration.plcOutputEnabled = settings.triggerEnabled;
+    configuration.delayedNgOffset = settings.rejectPosition;
+    configuration.saveOptions.rootDirectory = settings.imageSavePath;
+    configuration.saveOptions.format = QStringLiteral("jpg");
+    configuration.saveOptions.quality = settings.imageJpegQuality;
+    configuration.saveOptions.imageContentModeIndex =
+            machineSettingsImageSaveTypeIds().indexOf(
+                settings.imageSaveTypeId);
+    return configuration;
+}
+
+InspectionPlcRunSettings plcRunSettings(const MachineSettings &settings)
+{
+    InspectionPlcRunSettings output;
+    output.rejectTime = static_cast<std::uint16_t>(settings.rejectTime);
+    output.rejectDistance = static_cast<std::uint32_t>(
+                settings.rejectDistance);
+    output.photoTime = static_cast<std::uint16_t>(settings.photoTime);
+    output.photoDistance = static_cast<std::uint32_t>(
+                settings.photoDistance);
     return output;
 }
 
@@ -265,15 +290,13 @@ QString startIssueMessage(InspectionStartIssue issue)
 } // namespace
 
 InspectionApplicationService::InspectionApplicationService(
-    const std::shared_ptr<InspectionRuntimeController> &runtime,
-    const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+    const std::shared_ptr<InspectionRuntime> &runtime,
     const std::shared_ptr<CameraSession> &cameraSession,
     const std::shared_ptr<SettingsApplicationService> &settings,
     const std::shared_ptr<RecipeStore> &recipes,
     QObject *parent)
     : QObject(parent),
       m_runtime(runtime),
-      m_runtimePort(runtimePort),
       m_cameraSession(cameraSession),
       m_settings(settings),
       m_recipes(recipes)
@@ -345,8 +368,6 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringLiteral("INSPECTION_DETECTION_MODE_INVALID"),
                     QStringLiteral("机器设置中的检测模式无效。"));
     }
-    const int modeIndex = machineSettingsDetectionModeIds()
-            .indexOf(settings.detectModeId);
     const QString recipeId = settings.publishedRecipeIdsByMode
             .value(settings.detectModeId).trimmed();
     if (recipeId.isEmpty()) {
@@ -376,7 +397,7 @@ StartInspectionResult InspectionApplicationService::start(
 
     BarcodeRuntimeReadiness barcode;
     if (detectionMode == DetectionMode::BarcodeWord) {
-        barcode = m_runtimePort->prepareBarcodeDecoder();
+        barcode = m_runtime->preparePipeline(detectionMode);
     }
     const InspectionStartResourceInput resourceInput =
             resourceInputFor(*prepared, detectionMode, barcode);
@@ -390,23 +411,19 @@ StartInspectionResult InspectionApplicationService::start(
                     resourceResult.details);
     }
 
-    InspectionStartExecutionCommand execution;
-    execution.context.machineSettings = settings;
-    execution.context.preparedRecipe = prepared;
-    execution.runPlan = InspectionRunConfiguration::createPlan(
+    const InspectionRunPlan runPlan = InspectionRunConfiguration::createPlan(
                 trackingKind(detectionMode),
                 settings.triggerEnabled,
                 detectionMode == DetectionMode::BarcodeWord);
-    execution.detectionMode = detectionMode;
-    execution.modeId = settings.detectModeId;
-    execution.modeIndex = modeIndex;
-    execution.barcodeWordMode =
-            detectionMode == DetectionMode::BarcodeWord;
+    if (runPlan.acquisitionKind
+            == InspectionAcquisitionKind::HardwareTrigger) {
+        m_runtime->resetStatistics();
+    }
+    InspectionProfileSnapshot profileSnapshot;
     if (detectionMode == DetectionMode::Word
             || detectionMode == DetectionMode::BarcodeWord) {
-        execution.profileSnapshot =
-                profileSnapshotFromPreparedRecipe(*prepared);
-        if (!execution.profileSnapshot.isValid()) {
+        profileSnapshot = profileSnapshotFromPreparedRecipe(*prepared);
+        if (!profileSnapshot.isValid()) {
             return rejectStart(
                         InspectionStartIssue::WordProfilesMissing,
                         QStringLiteral("INSPECTION_PROFILE_SNAPSHOT_INVALID"),
@@ -414,15 +431,14 @@ StartInspectionResult InspectionApplicationService::start(
         }
     }
 
-    InspectionRuntimeStartTransaction transaction(*m_runtime);
-    if (!transaction.begin()) {
+    const QString runId = m_runtime->beginStart(
+                settings, prepared, profileSnapshot);
+    if (runId.isEmpty()) {
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
                     startIssueCode(InspectionStartIssue::RuntimeBusy),
                     startIssueMessage(InspectionStartIssue::RuntimeBusy));
     }
-    execution.context.runId = transaction.runId();
-    execution.context.startedAtUtc = QDateTime::currentDateTimeUtc();
     publishSnapshot();
 
     const CameraSession::PersistAdjustedExposure persistExposure =
@@ -438,12 +454,17 @@ StartInspectionResult InspectionApplicationService::start(
     };
     QString cameraError;
     if (!m_cameraSession->prepareInspection(
-                cameraConfiguration(execution), &cameraError)) {
+                cameraConfiguration(
+                    settings,
+                    prepared,
+                    profileSnapshot,
+                    runPlan),
+                &cameraError)) {
         const InspectionCameraRecoveryResult recovery =
                 m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
         m_cameraOpen = recovery.cameraOpen;
-        transaction.rollback();
+        m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
@@ -455,16 +476,43 @@ StartInspectionResult InspectionApplicationService::start(
                     cameraError);
     }
 
+    if (m_runtime->isPlcConnected()) {
+        const OperationResult trigger = applyPlcTriggerMode(
+                    settings.triggerModeId);
+        const OperationResult parameters = trigger.isSuccess()
+                ? applyPlcRunSettings(plcRunSettings(settings))
+                : trigger;
+        if (!trigger.isSuccess() || !parameters.isSuccess()) {
+            m_cameraSession->stopInspection();
+            const InspectionCameraRecoveryResult recovery =
+                    m_cameraSession->restorePreviewReady(
+                        settings.cameraExposure, persistExposure);
+            m_cameraOpen = recovery.cameraOpen;
+            m_runtime->rollbackStart();
+            publishSnapshot();
+            const ApplicationError error = !trigger.isSuccess()
+                    ? trigger.error
+                    : parameters.error;
+            return rejectStart(
+                        InspectionStartIssue::RuntimeBusy,
+                        QStringLiteral("INSPECTION_PLC_START_SETTINGS_FAILED"),
+                        QStringLiteral("启动识别前PLC参数下发失败：\n")
+                            + error.userMessage,
+                        QStringList(),
+                        error.diagnostic);
+        }
+    }
+
     QString executionError;
-    if (!m_runtimePort->startInspection(
-                execution, transaction, &executionError)) {
-        m_runtimePort->rollbackStart();
+    if (!m_runtime->startPipeline(
+                resultConfiguration(settings),
+                &executionError)) {
         m_cameraSession->stopInspection();
         const InspectionCameraRecoveryResult recovery =
                 m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
         m_cameraOpen = recovery.cameraOpen;
-        transaction.rollback();
+        m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
@@ -476,13 +524,12 @@ StartInspectionResult InspectionApplicationService::start(
                     executionError);
     }
     if (!m_cameraSession->startInspection(&cameraError)) {
-        m_runtimePort->rollbackStart();
         m_cameraSession->stopInspection();
         const InspectionCameraRecoveryResult recovery =
                 m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
         m_cameraOpen = recovery.cameraOpen;
-        transaction.rollback();
+        m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
@@ -493,14 +540,13 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringList(),
                     cameraError);
     }
-    if (!transaction.commit()) {
-        m_runtimePort->rollbackStart();
+    if (!m_runtime->commitStart()) {
         m_cameraSession->stopInspection();
         const InspectionCameraRecoveryResult recovery =
                 m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
         m_cameraOpen = recovery.cameraOpen;
-        transaction.rollback();
+        m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
@@ -511,7 +557,7 @@ StartInspectionResult InspectionApplicationService::start(
     m_activeRecipeId = recipeId;
     publishSnapshot();
     StartInspectionResult result;
-    result.acquisitionKind = execution.runPlan.acquisitionKind;
+    result.acquisitionKind = runPlan.acquisitionKind;
     result.snapshot = runtimeSnapshot();
     return result;
 }
@@ -538,12 +584,11 @@ StopInspectionResult InspectionApplicationService::stop(
         return result;
     }
 
-    InspectionRuntimeStopTransaction transaction(*m_runtime);
-    transaction.begin();
+    m_runtime->beginStop();
     publishSnapshot();
     const CameraCaptureStopResult acquisition =
             m_cameraSession->stopInspection();
-    transaction.waitForDetectionWorker();
+    m_runtime->waitForStop();
     if (!acquisition.allStopped()) {
         result.issue = StopInspectionIssue::AcquisitionStillStopping;
         result.error.code = QStringLiteral(
@@ -574,7 +619,7 @@ StopInspectionResult InspectionApplicationService::stop(
         result.cameraRecovery.cameraOpen = m_cameraOpen;
     }
     m_cameraOpen = result.cameraRecovery.cameraOpen;
-    transaction.commit();
+    m_runtime->finishStop();
 
     if (!recoveringFault
             && m_runtime->state() == InspectionRuntimeState::Fault) {
@@ -589,20 +634,12 @@ StopInspectionResult InspectionApplicationService::stop(
     }
 
     if (recoveringFault) {
-        QString reconciliationError;
-        if (!m_runtimePort->reconcileFaultProducts(
-                    &result.reconciliationSummary,
-                    &reconciliationError)) {
-            result.issue = StopInspectionIssue::FaultReconciliationFailed;
-            result.error.code = QStringLiteral(
-                        "INSPECTION_FAULT_RECONCILIATION_FAILED");
-            result.error.userMessage = QStringLiteral(
-                        "故障产品收口失败。");
-            result.error.diagnostic = reconciliationError;
-            result.snapshot = runtimeSnapshot();
-            publishSnapshot();
-            return result;
-        }
+        const int unconfirmed = m_runtime->reconcileFaultProducts();
+        result.reconciliationSummary = QStringLiteral(
+                    "视觉检测已暂停，输送线状态未知。\n"
+                    "本次未完成产品记为Unconfirmed：%1件。\n"
+                    "请通过输送线自身控制确认停线并隔离相关产品。")
+                .arg(unconfirmed);
         if (!m_runtime->acknowledgeFault()) {
             result.issue = StopInspectionIssue::FaultReconciliationFailed;
             result.error.code = QStringLiteral(
@@ -890,9 +927,9 @@ bool InspectionApplicationService::isCapturing() const
 
 void InspectionApplicationService::shutdown()
 {
-    m_runtime->requestStop();
+    m_runtime->beginStop();
     m_cameraSession->stopInspection();
-    m_runtime->waitForDetectionWorkerStop();
+    m_runtime->waitForStop();
     if (m_cameraOpen) {
         m_cameraSession->close();
         m_cameraOpen = false;
@@ -912,10 +949,9 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
             && state != InspectionRuntimeState::Stopping) {
         return;
     }
-    InspectionRuntimeStopTransaction transaction(*m_runtime);
-    transaction.begin();
+    m_runtime->beginStop();
     m_cameraSession->stopInspection();
-    transaction.waitForDetectionWorker();
+    m_runtime->waitForStop();
     if (m_cameraOpen) {
         const MachineSettings settings = m_settings->current();
         const CameraSession::PersistAdjustedExposure persistExposure =
@@ -934,7 +970,7 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
                     settings.cameraExposure, persistExposure);
         m_cameraOpen = recovery.cameraOpen;
     }
-    transaction.commit();
+    m_runtime->finishStop();
     m_activeRecipeId.clear();
     publishSnapshot();
 }

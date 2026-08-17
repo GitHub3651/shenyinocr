@@ -1294,7 +1294,7 @@
 - [x] 2026-08-17用户反馈阶段2Qt Creator统一门禁“都没问题”；本阶段12项功能全部恢复为`已验证`。真实PLC在线连接、现场读回和机械动作仍按功能表既有记录延期，未以Fake或无PLC结果冒充现场验收。
 - [x] 阶段2提交前最终静态门禁通过：90个正式功能ID唯一且状态为`0/0/0/87/0/3`；37个差异路径全部命中阶段2白名单，暂存区为空且`app.zip`不存在；旧Start/Stop控制器、重复运行状态、旧线程探测、旧runtime预检和停止路径`processEvents`引用均为0；application、runtime、recipes依赖边界核对通过；主工程新增/删除项、runtime测试工程、应用服务测试声明/定义`6/6`和Widget自动槽声明/定义`27/27`一致；`git diff --check`通过。Agent未运行构建、测试可执行文件或主程序，允许精确暂存并创建唯一阶段2本地提交，不推送。
 
-## 新架构完全替换阶段：阶段 3 相机、采集与多相机删除（2026-08-17，待用户集中门禁）
+## 新架构完全替换阶段：阶段 3 相机、采集与多相机删除（2026-08-17，已完成）
 
 ### 开始基准与真实影响范围
 
@@ -1340,3 +1340,43 @@
 - [x] 2026-08-17用户确认阶段3当前最终差异的集中门禁验证完成；30项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
 - [x] 用户在门禁后追溯提交`47e7115e7e5992267e348b2327a32c3076e5ff0b`和`e5a73c6f3171955f616ace544dfc0b98816f818a`的“相机延时(ms)”行为，确认历史UI `cameraDelay`是线程检测/循环节流而非SDK `TriggerDelay`；后者固定为0且没有UI入口。用户提出软件触发未来可改为“上一帧检测结束后立即取下一帧”，随后明确回退本轮尝试、要求以后再处理。该问题只登记为功能表`DIFF-011`，阶段3生产代码保持用户已验证版本，不纳入阶段4。
 - [x] 阶段3门禁已通过，允许执行最终静态检查、精确暂存并自动创建唯一阶段3本地提交；不推送，提交完成后才进入阶段4。
+- [x] 阶段3最终静态检查、精确暂存和缓存差异核对通过，已创建本地提交`6071787ad85e36269d595db98221855048a5864b refactor(camera): 完成阶段3相机与采集替换`；未推送，提交后工作区干净。
+
+## 新架构完全替换阶段：阶段 4 统一Runtime、Pipeline与结果事务（2026-08-17，已完成）
+
+### 开始基准与真实影响范围
+
+- [x] 用户确认阶段3集中门禁已经完成，并要求把“软件触发不受相机延时影响”的讨论只记录为`DIFF-011`、以后再处理；阶段4未改变`cameraDelay`/SDK `TriggerDelay`行为。开始时分支为`codex/ocrgangyin-refactor`，HEAD为`6071787ad85e36269d595db98221855048a5864b refactor(camera): 完成阶段3相机与采集替换`，工作区干净且`app.zip`不存在。
+- [x] 从组合根、五模式启动资源装配、相机正式帧受理、Worker完成回调、结果去重、统计、存图、PLC正常输出/延迟输出、Fault首因/停止/人工恢复、UI呈现、Qt信号槽和主/测试qmake清单重新追踪；阶段4实际影响41项：`SYS-008、SYS-010、UI-001..005、SET-005、DET-001..008、CAM-001..002、RUN-001..006、PLC-001..007、RES-001..005、SAVE-001..005`。
+- [x] 41项保留功能均已改为`迁移中`，其余46项保持`已验证`，`MC-001..003`保持`已确认删除`；本轮集中门禁通过前不恢复状态、不提交且不进入阶段5。
+
+### 唯一运行时、Pipeline与不可变运行上下文
+
+- [x] 新建`InspectionRuntime`并成为单次生产运行的唯一状态与所有权根，持有稳定`DetectionMode`、唯一检测Worker、容量1呈现邮箱、小型ProductKey账本、Fault首因、PLC控制器和唯一ResultService。Runtime构造时必须注入`PipelineRegistry`，缺失直接失败；正式帧不会自动补建缺失运行会话。
+- [x] 将`InspectionRunContext`收口到runtime并改为构造期完全初始化的不可变对象；每次`beginStart`只创建一次runId、UTC开始时间、MachineSettings、PreparedRecipe和Profile快照，运行期间算法、设备配置和结果事务均观察同一份快照。
+- [x] 新建`PipelineRegistry`，按PreparedRecipe中的稳定`DetectionMode`唯一装配纸巾、钢印、字库、深度OCR和二维码+三期五种既有Pipeline；Worker容量保持1，钢印重叠资产、字符模板、阈值、多Profile与二维码运行策略从PreparedRecipe/Profile快照构造，不从Widget或可变设置回读。
+- [x] `InspectionApplicationService`只组织启动预检、快照建立、相机/PLC参数下发、Pipeline启动、提交、停止、Fault收口和相机恢复；`ApplicationStartup`只组装OCR/二维码实现、PipelineRegistry、InspectionRuntime、CameraSession、应用服务和Widget，没有加入业务规则。
+
+### 唯一结果事务、正常PLC与存图
+
+- [x] 新建`ResultService`作为五模式唯一正式结果事务。每个合法`ProductKey`只能claim一次；一次事务内依次形成完整`InspectionPresentation`、更新正常统计一次、按策略提交最多一个产品存图任务、向容量1邮箱发布一次完整呈现，并在未进入Fault时执行一次正常PLC输出。重复或外来完成对象不再产生统计、呈现、存图或PLC副作用。
+- [x] 正常PLC合同保持：OK写`DB1.DBB1033=0`；NG写49并由单次Qt定时器约100ms后写0；延迟剔除队列保存原始ProductKey并按既有产品偏移到期。连接断开、49失败或复位0失败均进入Fault，不重试猜测性产品结果、不把当前或唯一未结论产品补发为NG。
+- [x] `ImageSaveService`继续固定容量32、两个写线程；ResultService按MachineSettings运行快照保留不保存/NG/OK/全部、标注/原图组合、OCR同帧原图、分类目录和JPEG质量。队满继续阻塞提交者而不丢正式存图任务；实际写失败只报警，不修改已产生算法结论、统计或PLC合同。
+- [x] 新增完整只读`InspectionPresentation`并将原图Overlay渲染收口为runtime内部纯`InspectionPresentationRenderer`；Runtime目录对`ui/`、`Ui::*`、Widget、MainWindow和QMessageBox零依赖。UI只安装显示绑定并整体应用同一产品的图、判定、文字、模板名、统计和耗时。
+
+### 简化Fault与旧路径删除
+
+- [x] Fault只记录第一个原因，立即停止新正式产品受理、取消Worker与容量1呈现等待并协作退出线程；Fault前已经形成的算法结论继续按原结论完成正常统计/呈现/存图，不被系统NG覆盖。尚未形成正式结果的ProductKey在人工恢复时统一记`Unconfirmed`，不进入正常总数、NG或合格率。
+- [x] UI故障语义固定为“视觉检测已暂停”“输送线状态未知”；解除软件锁定前必须由操作员确认、采集与Worker实际退出且未完成产品完成Unconfirmed收口。下一次启动重新执行相机、PLC和五模式资源预检；不自动补建会话、不假定输送线已停。
+- [x] 删除`InspectionRuntimeController`、`InspectionRuntimeStartTransaction`、`InspectionRuntimeStopTransaction`、`InspectionFaultState`、`InspectionProductReconciler`、`DetectionSession`、旧ResultHandler、`DetectionModeWorkerFactory`、`InspectionRuntimePort`、`InspectionResultCoordinator`和`DetectionCompletionController`及全部主/测试qmake项。Widget删除旧五模式Worker装配、结果协调器、PLC脉冲队列、存图服务和Fault兜底回调编排，只保留界面绑定与应用命令。
+
+### 测试源码与当前门禁状态
+
+- [x] 重写`detection_completion_test`为14项阶段4合同源码：显式不可变运行上下文、五模式稳定Registry选择、重复产品副作用一次、单一呈现快照、OK写0、NG 49→约100ms→0、已发49在其他Fault后仍完成一次0复位、PLC写失败保持判定且零兜底、未完成产品Unconfirmed、Fault首因与Fault后拒收、延迟NG原始身份、重复结果只存一次、存图服务容量32/双Worker、容量满反压且不丢任务。
+- [x] 更新`application_service_test`及工程清单，继续覆盖设置应用边界、五模式启动/停止/重启、预检顺序、PLC命令、相机命令和硬触发共享Session；两个阶段4 runtime测试入口统一为`QTEST_GUILESS_MAIN`，只创建`QCoreApplication`事件循环，不创建GUI平台对象，避免再次依赖Qt `windows`平台插件。
+- [x] 主工程和两个runtime测试工程已登记新Runtime、PipelineRegistry、ResultService、InspectionPresentation/Renderer/RunContext及五种Pipeline所需源头，删除旧Controller/Transaction/Fault/Reconciler/Session/Coordinator/Presenter清单；Agent只编写源码、测试源码和qmake清单，未运行或间接触发qmake、构建、测试可执行文件或主程序。
+- [x] 阶段4最终Agent静态门禁通过：90个正式功能ID唯一，状态为迁移中41、已验证46、已确认删除3；旧Runtime/Transaction/Fault/Reconciler/Session/ResultHandler/WorkerFactory/ResultCoordinator/CompletionController及旧Presenter生产/测试/qmake引用为0，Fault兜底49代码为0；runtime对`ui/`、`Ui::*`、Widget、MainWindow和QMessageBox引用为0；主工程及两个受影响runtime测试工程共283个文件项全部存在、大小写一致且无重复；两组测试声明/定义为14/14和7/7；23个差异C/C++文件严格UTF-8、花括号及本地include检查通过；全部26个现存差异文件无尾随空白且有末尾换行，`git diff --check`通过。暂存区为空，`app.zip`不存在。Agent未运行qmake、构建、测试可执行文件或主程序。
+- [x] 2026-08-17阶段4首次Qt Creator Rebuild在`result_service.h:143`报告`UiCompletionMailbox`未声明，并在`result_service.cpp`形成`postUiWork`重载、静态成员和参数转换等连锁错误；根因是`ResultService`头文件直接使用嵌套类型`UiCompletionMailbox::Work`却依赖间接包含。现已直接包含`runtime/result_presentation_mailbox.h`，声明与定义签名一致；该头文件已在主工程和两个runtime测试工程清单中登记，无需增加工程项。修复不改变Runtime、结果事务、Fault、PLC或UI行为，`git diff --check`通过，等待同轮Rebuild复验。
+- [x] 2026-08-17阶段4再次链接`detection_completion_test`时报告`BarcodeWordDetectionMode`未解析；引用来自该测试目标已登记的`machine_settings.cpp`，唯一定义位于漏列的`DetectionModes.cpp`。现已在`detection_completion_test.pro`补齐`DetectionModes.cpp/.h`，与主工程、`application_service_test`及`product_recipe_test`的唯一实现清单一致；没有复制常量、增加第二定义或改变检测模式行为，等待同轮重新Run qmake、Rebuild复验。
+- [x] 2026-08-17用户确认阶段4Qt Creator集中门禁“没问题”；41项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC、机械剔除和现场恢复仍不得由Fake或无PLC结果冒充验收。
+- [x] 阶段4提交前最终静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`；53个差异路径全部属于阶段4Runtime/Pipeline/结果事务、计划内旧路径删除、测试/qmake、功能表和执行记录；旧Runtime/Transaction/Fault/Reconciler/Session/ResultHandler/WorkerFactory/结果协调器/完成控制器/旧Presenter、Fault兜底49及runtime对UI引用均为0；主工程及两个runtime测试工程共283个文件项存在、大小写一致、无重复，测试声明/定义为14/14和7/7；两次编译修复的直接include与`DetectionModes.cpp/.h`工程项唯一；23个现存差异C/C++文件严格UTF-8且本地include可解析；暂存区为空、`app.zip`不存在，`git diff --check`通过。允许精确暂存并创建唯一阶段4本地提交，不推送。

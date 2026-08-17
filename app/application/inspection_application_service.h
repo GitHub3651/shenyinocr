@@ -1,7 +1,6 @@
 #pragma once
 
 #include "application/application_result.h"
-#include "application/inspection_runtime_port.h"
 #include "application/inspection_start_preflight.h"
 #include "application/runtime_snapshot.h"
 #include "runtime/camera_session.h"
@@ -12,7 +11,7 @@
 #include <cstdint>
 #include <memory>
 
-class InspectionRuntimeController;
+class InspectionRuntime;
 class RecipeStore;
 class SettingsApplicationService;
 struct InspectionPlcRunSettings;
@@ -90,8 +89,7 @@ class InspectionApplicationService : public QObject
     Q_OBJECT
 public:
     InspectionApplicationService(
-        const std::shared_ptr<InspectionRuntimeController> &runtime,
-        const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+        const std::shared_ptr<InspectionRuntime> &runtime,
         const std::shared_ptr<CameraSession> &cameraSession,
         const std::shared_ptr<SettingsApplicationService> &settings,
         const std::shared_ptr<RecipeStore> &recipes,
@@ -154,8 +152,7 @@ private:
         int nativeErrorCode) const;
     void publishSnapshot();
 
-    std::shared_ptr<InspectionRuntimeController> m_runtime;
-    std::shared_ptr<InspectionRuntimePort> m_runtimePort;
+    std::shared_ptr<InspectionRuntime> m_runtime;
     std::shared_ptr<CameraSession> m_cameraSession;
     std::shared_ptr<SettingsApplicationService> m_settings;
     std::shared_ptr<RecipeStore> m_recipes;

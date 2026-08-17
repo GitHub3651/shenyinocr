@@ -5,6 +5,10 @@ TARGET = detection_completion_test
 CONFIG += console testcase c++11
 CONFIG -= app_bundle
 
+msvc {
+    QMAKE_CXXFLAGS += /utf-8
+}
+
 QMAKE_PROJECT_DEPTH = 0
 
 PROJECT_ROOT = $$clean_path($$PWD/../../..)
@@ -15,71 +19,47 @@ DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
 SOURCES += \
     detection_completion_test.cpp \
     $$PROJECT_ROOT/app/DetectionModes.cpp \
-    $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.cpp \
     $$PROJECT_ROOT/app/runtime/frame_queue.cpp \
     $$PROJECT_ROOT/app/runtime/detection_worker.cpp \
-    $$PROJECT_ROOT/app/runtime/detection_mode_worker_factory.cpp \
+    $$PROJECT_ROOT/app/runtime/pipeline_registry.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.cpp \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_fault_state.cpp \
     $$PROJECT_ROOT/app/runtime/inspection_plc_controller.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_run_configuration.cpp \
-    $$PROJECT_ROOT/app/application/inspection_start_preflight.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.cpp \
-    $$PROJECT_ROOT/app/runtime/inspection_runtime_stop_transaction.cpp \
-    $$PROJECT_ROOT/app/runtime/detection_session.cpp \
-    $$PROJECT_ROOT/app/runtime/result_handler.cpp \
+    $$PROJECT_ROOT/app/runtime/inspection_runtime.cpp \
+    $$PROJECT_ROOT/app/runtime/result_service.cpp \
     $$PROJECT_ROOT/app/runtime/image_save_service.cpp \
-    $$PROJECT_ROOT/app/ui/controllers/detection_completion_controller.cpp \
-    $$PROJECT_ROOT/app/ui/controllers/inspection_result_coordinator.cpp \
-    $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.cpp \
-    $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.cpp \
-    $$PROJECT_ROOT/app/system_support/machine_settings_policy.cpp \
     $$PROJECT_ROOT/app/system_support/settings/machine_settings.cpp \
-    $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.cpp \
     $$PROJECT_ROOT/app/detection/common/character_template_matcher.cpp \
     $$PROJECT_ROOT/app/detection/ocr/ocr_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/barcode_word/barcode_word_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/stamp/stamp_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.cpp \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.cpp \
+    $$PROJECT_ROOT/app/Detector.cpp \
     $$PROJECT_ROOT/app/TissueRollDetector.cpp \
-    $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.cpp
+    $$PROJECT_ROOT/app/runtime/inspection_presentation_renderer.cpp
 
 HEADERS += \
     $$PROJECT_ROOT/app/DetectionModes.h \
     $$PROJECT_ROOT/app/contracts/barcode_parameter_defaults.h \
     $$PROJECT_ROOT/app/TrackingTypes.h \
-    $$PROJECT_ROOT/app/runtime/detection_shadow_comparator.h \
     $$PROJECT_ROOT/app/runtime/frame_queue.h \
     $$PROJECT_ROOT/app/runtime/detection_worker.h \
-    $$PROJECT_ROOT/app/runtime/detection_mode_worker_factory.h \
+    $$PROJECT_ROOT/app/runtime/pipeline_registry.h \
     $$PROJECT_ROOT/app/runtime/inspection_profile_snapshot.h \
     $$PROJECT_ROOT/app/runtime/result_presentation_mailbox.h \
-    $$PROJECT_ROOT/app/runtime/inspection_fault_state.h \
     $$PROJECT_ROOT/app/runtime/inspection_plc_controller.h \
-    $$PROJECT_ROOT/app/runtime/inspection_product_reconciler.h \
-    $$PROJECT_ROOT/app/runtime/inspection_run_configuration.h \
-    $$PROJECT_ROOT/app/application/inspection_start_preflight.h \
-    $$PROJECT_ROOT/app/runtime/inspection_runtime_controller.h \
-    $$PROJECT_ROOT/app/runtime/inspection_runtime_start_transaction.h \
-    $$PROJECT_ROOT/app/runtime/inspection_runtime_stop_transaction.h \
-    $$PROJECT_ROOT/app/runtime/detection_session.h \
-    $$PROJECT_ROOT/app/runtime/result_handler.h \
+    $$PROJECT_ROOT/app/runtime/inspection_run_context.h \
+    $$PROJECT_ROOT/app/runtime/inspection_runtime.h \
     $$PROJECT_ROOT/app/runtime/image_save_service.h \
-    $$PROJECT_ROOT/app/ui/controllers/detection_completion_controller.h \
-    $$PROJECT_ROOT/app/ui/controllers/inspection_result_coordinator.h \
-    $$PROJECT_ROOT/app/ui/controllers/operation_ui_policy.h \
-    $$PROJECT_ROOT/app/ui/controllers/settings_edit_state.h \
-    $$PROJECT_ROOT/app/system_support/machine_settings_policy.h \
+    $$PROJECT_ROOT/app/runtime/inspection_presentation.h \
+    $$PROJECT_ROOT/app/runtime/result_service.h \
     $$PROJECT_ROOT/app/system_support/settings/machine_settings.h \
-    $$PROJECT_ROOT/app/ui/presenters/inspection_fault_presenter.h \
-    $$PROJECT_ROOT/app/BarcodeDecoderApi.h \
     $$PROJECT_ROOT/app/BarcodeTypes.h \
+    $$PROJECT_ROOT/app/Detector.h \
     $$PROJECT_ROOT/app/TissueRollDetector.h \
     $$PROJECT_ROOT/app/recipes/product_recipe.h \
+    $$PROJECT_ROOT/app/recipes/prepared_recipe.h \
     $$PROJECT_ROOT/app/devices/barcode/barcode_decoder.h \
     $$PROJECT_ROOT/app/devices/ocr/ocr_engine.h \
     $$PROJECT_ROOT/app/devices/plc/plc_device.h \
@@ -90,7 +70,7 @@ HEADERS += \
     $$PROJECT_ROOT/app/detection/stamp/stamp_detection_pipeline.h \
     $$PROJECT_ROOT/app/detection/tissue/tissue_detection_pipeline.h \
     $$PROJECT_ROOT/app/detection/word/word_detection_pipeline.h \
-    $$PROJECT_ROOT/app/ui/presenters/detection_result_presenter.h
+    $$PROJECT_ROOT/app/runtime/inspection_presentation_renderer.h
 
 INCLUDEPATH += \
     $$PROJECT_ROOT/app \

@@ -5,7 +5,7 @@
 #include "detection/positioning/inspection_positioner.h"
 #include "devices/camera/camera_device.h"
 #include "runtime/capture_worker.h"
-#include "runtime/inspection_fault_state.h"
+#include "runtime/inspection_runtime.h"
 #include "runtime/inspection_run_configuration.h"
 
 #include <QString>
@@ -15,8 +15,6 @@
 #include <memory>
 #include <mutex>
 #include <vector>
-
-class InspectionRuntimeController;
 
 enum class InspectionCameraOpenIssue
 {
@@ -123,7 +121,7 @@ public:
 
     CameraSession(
         const std::shared_ptr<ICameraDevice> &cameraDevice,
-        InspectionRuntimeController *runtimeController);
+        InspectionRuntime *runtime);
     ~CameraSession();
 
     void setCallbacks(const CameraSessionCallbacks &callbacks);
@@ -174,7 +172,7 @@ private:
     CameraSessionCallbacks callbacksSnapshot() const;
 
     std::shared_ptr<ICameraDevice> m_cameraDevice;
-    InspectionRuntimeController *m_runtimeController = nullptr;
+    InspectionRuntime *m_runtime = nullptr;
     CaptureWorker m_captureWorker;
     CameraSessionCaptureConfiguration m_configuration;
     InspectionPositioner m_positioner;

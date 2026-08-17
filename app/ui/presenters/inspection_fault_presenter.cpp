@@ -7,6 +7,8 @@ namespace {
 QString faultReasonText(InspectionFaultReason reason)
 {
     switch (reason) {
+    case InspectionFaultReason::CameraDisconnected:
+        return QStringLiteral("相机断连或正式采集异常");
     case InspectionFaultReason::PlcDisconnected:
         return QStringLiteral("PLC\u8fde\u63a5\u6216\u7ed3\u679c\u8f93\u51fa\u5f02\u5e38");
     case InspectionFaultReason::HardTriggerQueueOverflow:
@@ -39,9 +41,8 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
     }
 
     const QString reasonText = faultReasonText(snapshot.reason);
-    presentation.statusText = QStringLiteral(
-                "\u7cfb\u7edf\u6545\u969c\uff1a\u68c0\u6d4b\u5df2\u6682\u505c");
-    presentation.resultText = QStringLiteral("\u7cfb\u7edf\u6545\u969c");
+    presentation.statusText = QStringLiteral("视觉检测已暂停");
+    presentation.resultText = QStringLiteral("检测暂停");
     presentation.statusStyleSheet = QStringLiteral(
                 "QLabel{color:#d32f2f; background:#ffebee;"
                 " font-weight:bold; border:2px solid #d32f2f;"
@@ -62,8 +63,8 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
                .arg(snapshot.acceptedProductCount)
                .arg(snapshot.completedProductCount);
     details << QStringLiteral(
-                   "\u8f93\u9001\u7ebf\u72b6\u6001\u672a\u77e5\uff0c\u8bf7\u7acb\u5373\u4f7f\u7528\u8f93\u9001\u7ebf\u81ea\u8eab\u63a7\u5236\u505c\u673a\uff0c"
-                   "\u5e76\u9694\u79bb\u6545\u969c\u671f\u95f4\u7684\u4ea7\u54c1\u3002");
+                   "输送线状态未知，请使用输送线自身控制确认停线，"
+                   "并隔离故障期间的产品。");
     details << QStringLiteral(
                    "\u786e\u8ba4\u73b0\u573a\u5df2\u5b89\u5168\u5904\u7406\u540e\uff0c\u70b9\u51fb\u3010\u786e\u8ba4\u6545\u969c\u5e76\u6062\u590d\u3011\u89e3\u9664\u8f6f\u4ef6\u9501\u5b9a\u3002");
     presentation.operatorMessage = details.join(QStringLiteral("\n\n"));

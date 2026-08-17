@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file widget.cpp
  * @brief 工业视觉识别系统主窗口实现文件
  * @details 实现图像采集、OCR识别、模板匹配、PLC通信等核心功能
@@ -7,11 +7,10 @@
  */
 
 #include "widget.h"
-#include "runtime/inspection_runtime_start_transaction.h"
 #include "ui_widget.h"
 #include "charactertemplatecropdialog.h"
 #include "DetectionModes.h"
-#include "ui/controllers/inspection_result_coordinator.h"
+#include "runtime/result_service.h"
 #include "ui/controllers/inspection_runtime_ui_coordinator.h"
 #include "ui/controllers/machine_settings_page_controller.h"
 #include "ui/controllers/template_editor_controller.h"
@@ -69,7 +68,6 @@
 #include <QSortFilterProxyModel>
 #include <QSet>
 #include <QEvent>
-#include <QEventLoop>
 #include <QRegularExpression>
 #include <QSplitterHandle>
 
@@ -89,39 +87,12 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
-#include <queue>
-#include <utility>
 #include <cmath>
 
 #pragma execution_character_set("utf-8")
 using namespace std;
 
 namespace {
-bool sameProductKey(const ProductKey &left, const ProductKey &right)
-{
-    return left.runId == right.runId
-            && left.sequence == right.sequence;
-}
-
-void appendUniqueProductKey(
-    std::vector<ProductKey> *productKeys,
-    const ProductKey &productKey)
-{
-    if (!productKeys || !productKey.isValid()) {
-        return;
-    }
-    const std::vector<ProductKey>::const_iterator existing =
-            std::find_if(
-                productKeys->cbegin(),
-                productKeys->cend(),
-                [&productKey](const ProductKey &candidate) {
-        return sameProductKey(candidate, productKey);
-    });
-    if (existing == productKeys->cend()) {
-        productKeys->push_back(productKey);
-    }
-}
-
 bool parseIntValue(const QString &text, int *value)
 {
     bool ok = false;
@@ -152,10 +123,8 @@ bool isSingleTemplateRecipeMode(const QString &modeId)
  * @details 初始化UI、相机、OCR模型、定时器等核心组件
  */
 Widget::Widget(
-    const OcrEngineFactory &ocrEngineFactory,
     const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
-    const std::shared_ptr<InspectionRuntimeController> &runtimeController,
-    const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+    const std::shared_ptr<InspectionRuntime> &runtime,
     const std::shared_ptr<InspectionApplicationService> &inspectionService,
     const std::shared_ptr<SettingsApplicationService> &settingsService,
     const std::shared_ptr<RecipeStore> &recipeStore,
@@ -164,12 +133,10 @@ Widget::Widget(
       ui(new Ui::Widget),
       m_inspectionApplicationService(inspectionService),
       m_settingsApplicationService(settingsService),
-      m_inspectionRuntimePort(runtimePort),
       m_appliedMachineSettings(
           m_settingsApplicationService->editableDraft()),
       m_recipeStore(recipeStore),
-      m_runtimeController(*runtimeController),
-      timer(new QTimer(this)),
+      m_runtime(*runtime),
       timer1(new QTimer(this)),
       imageIndex(0),
       color(1),
@@ -181,17 +148,12 @@ Widget::Widget(
 {
     m_barcodeDecoder = barcodeDecoder;
     ui->setupUi(this);
-    InspectionResultCoordinatorCallbacks resultCallbacks;
-    resultCallbacks.requestPlc = [this](
-            DetectionPlcAction action,
-            const ProductKey &productKey) {
-        m_activePlcOutputProductKey = productKey;
-        if (action == DetectionPlcAction::RequestOk) {
-            rightremove();
-        } else if (action == DetectionPlcAction::RequestNg) {
-            wrongremove();
-        }
-        m_activePlcOutputProductKey = ProductKey();
+    ResultServiceCallbacks resultCallbacks;
+    resultCallbacks.runtimeFaulted = [this]() {
+        QMetaObject::invokeMethod(
+                    this,
+                    [this]() { presentInspectionFault(); },
+                    Qt::QueuedConnection);
     };
     resultCallbacks.warnMissingAnnotatedImage = [this]() {
         if (m_runtimeUiCoordinator) {
@@ -207,17 +169,11 @@ Widget::Widget(
                         latestError);
         }
     };
-    resultCallbacks.clearLegacyPresentationState = [this](
+    resultCallbacks.clearPreviousOverlay = [this](
             bool clearImageLabelRects) {
         if (clearImageLabelRects && imageLabel) {
             imageLabel->clearGreenRects();
         }
-        detectedRects.clear();
-        string1.clear();
-    };
-    resultCallbacks.storeLegacyRecognitionText = [this](
-            const QString &text) {
-        allResults = text.toStdString();
     };
     resultCallbacks.showDetectionRoiWarning = [this]() {
         if (m_runtimeUiCoordinator) {
@@ -236,11 +192,8 @@ Widget::Widget(
                         : QString());
         }
     };
-    m_resultCoordinator.reset(
-                new InspectionResultCoordinator(
-                    &m_runtimeController,
-                    resultCallbacks,
-                    this));
+    m_resultService = &m_runtime.resultService();
+    m_resultService->setCallbacks(resultCallbacks);
 
     initStyle();
 
@@ -377,7 +330,7 @@ Widget::Widget(
                     imageLabel,
                     barcodeDecoder,
                     this));
-    m_resultCoordinator->bindView(
+    m_resultService->bindView(
                 m_runtimeUiCoordinator->resultViewBindings());
 
     // 注册Qt元类型，用于跨线程信号传递
@@ -496,7 +449,6 @@ Widget::Widget(
         enterInspectionFault(reason, diagnostic);
     },
     Qt::QueuedConnection);
-    bindInspectionRuntimePort();
 
     // 初始化窗口组件
     initWidget();
@@ -546,19 +498,13 @@ Widget::Widget(
                 m_inspectionApplicationService.get(),
                 m_settingsPageController.get());
 
-    m_ocrEngine = ocrEngineFactory
-            ? ocrEngineFactory()
-            : std::shared_ptr<IOcrEngine>();
-
     // 初始化统计变量
     hasValidBoxes = false;
     savedTrackingBox = cv::Rect2d(0, 0, 0, 0);
     savedBarcodePoly.clear();
     savedDatePoly.clear();
     recognitionCompletedFlag = false;
-    m_runtimeController.resetStatistics();
-    allResults = "";
-    wrongindex = ui->lineEdit_12->text().toInt();
+    m_runtime.resetStatistics();
 
     // 设置文本框自动换行
     ui->dateEdit->setWordWrapMode(QTextOption::WordWrap);
@@ -571,7 +517,6 @@ Widget::Widget(
     m_settingsPageController->installWheelProtection(this);
 
     // 连接定时器信号
-    connect(timer, &QTimer::timeout, this, &Widget::rightremove);
     connect(imageLabel, &ImageLabel::signal_templateGuideEvent,
             this, &Widget::handleTemplateGuideEvent);
 
@@ -644,11 +589,11 @@ Widget::~Widget()
     try {
         cv::destroyAllWindows();
     } catch (...) {}
-
-    if (m_resultCoordinator) {
-        m_resultCoordinator->shutdown();
-        m_resultCoordinator.reset();
+    if (m_resultService) {
+        m_resultService->setCallbacks(ResultServiceCallbacks());
+        m_resultService->bindView(InspectionPresentationViewBindings());
     }
+    m_resultService = nullptr;
 
     delete ui;
     ui = nullptr;
@@ -682,108 +627,17 @@ string Widget::qstr2str(const QString qstr)
     return std::string(cdata);
 }
 
-/**
- * @brief 正确剔除操作（发送信号给PLC）
- * @details 向PLC写入0值，表示产品合格，停止定时器
- */
-void Widget::rightremove()
-{
-    if (!m_runtimeController.isPlcConnected())
-    {
-        enterInspectionFault(
-                    InspectionFaultReason::PlcDisconnected,
-                     QStringLiteral(
-                         "PLC OK/\u590d\u4f4d\u8f93\u51fa\u524d\u68c0\u6d4b\u5230\u8fde\u63a5\u5df2\u65ad\u5f00\u3002"));
-        recordFaultedPlcOutput(m_activePlcOutputProductKey);
-        for (const ProductKey &productKey
-             : m_pendingPlcResetProductKeys) {
-            recordFaultedPlcOutput(productKey);
-        }
-        timer->stop();
-        return;
-    }
-
-    const PlcOperationResult result =
-            m_runtimeController.writePlcResultValue(0);
-    if (!result.isSuccess())
-    {
-        const QString diagnostic = QStringLiteral(
-                    "PLC OK/\u590d\u4f4d\u8f93\u51fa\u5931\u8d25\uff0c\u9519\u8bef\u7801 %1\u3002")
-                .arg(result.nativeErrorCode);
-        if (!m_runtimeController.isRunning()) {
-            QMessageBox::warning(this, "error", diagnostic);
-        }
-        enterInspectionFault(
-                    InspectionFaultReason::PlcDisconnected,
-                    diagnostic);
-        recordFaultedPlcOutput(m_activePlcOutputProductKey);
-        for (const ProductKey &productKey
-             : m_pendingPlcResetProductKeys) {
-            recordFaultedPlcOutput(productKey);
-        }
-    } else {
-        m_pendingPlcResetProductKeys.clear();
-    }
-    timer->stop();
-}
-
-/**
- * @brief 错误剔除操作（发送信号给PLC）
- * @details 向PLC写入49值，表示产品不合格，需要剔除，100ms后恢复
- */
-void Widget::wrongremove()
-{
-    if (!m_runtimeController.isPlcConnected())
-    {
-        enterInspectionFault(
-                    InspectionFaultReason::PlcDisconnected,
-                    QStringLiteral(
-                        "PLC NG\u8f93\u51fa\u524d\u68c0\u6d4b\u5230\u8fde\u63a5\u5df2\u65ad\u5f00\u3002"));
-        return;
-    }
-
-    const PlcOperationResult result =
-            m_runtimeController.writePlcResultValue(49);
-    if (!result.isSuccess())
-    {
-        const QString diagnostic = QStringLiteral(
-                    "PLC NG\u8f93\u51fa\u5931\u8d25\uff0c\u9519\u8bef\u7801 %1\u3002")
-                .arg(result.nativeErrorCode);
-        if (!m_runtimeController.isRunning()) {
-            QMessageBox::warning(this, "error", diagnostic);
-        }
-        enterInspectionFault(
-                    InspectionFaultReason::PlcDisconnected,
-                    diagnostic);
-        recordFaultedPlcOutput(m_activePlcOutputProductKey);
-    }
-    else
-    {
-        appendUniqueProductKey(
-                    &m_pendingPlcResetProductKeys,
-                    m_activePlcOutputProductKey);
-        // 100ms后调用rightremove恢复信号
-        timer->start(100);
-    }
-}
-
 void Widget::enterInspectionFault(
         InspectionFaultReason reason,
         const QString &diagnostic)
 {
-    if (!m_runtimeController.enterFault(reason, diagnostic)) {
+    if (!m_runtime.enterFault(reason, diagnostic)) {
         return;
     }
 
     qCritical() << "[INSPECTION_FAULT] entered"
                 << static_cast<int>(reason)
                 << diagnostic;
-    QMetaObject::invokeMethod(
-                this,
-                [this]() {
-        presentInspectionFault();
-    },
-    Qt::QueuedConnection);
 }
 
 void Widget::presentInspectionFault()
@@ -794,7 +648,7 @@ void Widget::presentInspectionFault()
     m_resultBoundDisplayActive.store(true);
     updateOperationUiState();
     m_runtimeUiCoordinator->presentFault(
-                m_runtimeController.faultSnapshot(),
+                m_runtime.faultSnapshot(),
                 &m_faultAlarmPresented);
 }
 
@@ -802,208 +656,19 @@ bool Widget::confirmInspectionFaultRecovery()
 {
     return m_runtimeUiCoordinator
             && m_runtimeUiCoordinator->confirmFaultRecovery(
-                m_runtimeController.faultSnapshot());
-}
-
-bool Widget::writeInspectionPlcOutput(
-    std::uint8_t value,
-    QString *errorMessage)
-{
-    if (!m_runtimeController.isPlcConnected()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "PLC is disconnected before DB1.DBB1033 write.");
-        }
-        return false;
-    }
-
-    const PlcOperationResult result =
-            m_runtimeController.writePlcResultValue(value);
-    if (!result.isSuccess()) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "PLC DB1.DBB1033 write value %1 failed, code %2.")
-                    .arg(static_cast<int>(value))
-                    .arg(result.nativeErrorCode);
-        }
-        return false;
-    }
-    return true;
-}
-
-void Widget::recordFaultedPlcOutput(
-    const ProductKey &productKey)
-{
-    if (!productKey.isValid()
-            || !m_runtimeController.recordFaultedPlcOutput(
-                productKey)) {
-        return;
-    }
-
-    qCritical() << "[INSPECTION_FAULT] recorded PLC output as unconfirmed"
-                << productKey.runId
-                << productKey.sequence;
-}
-
-bool Widget::requestFaultFallbackNgPulse(
-    const ProductKey &productKey,
-    QString *errorMessage)
-{
-    if (!writeInspectionPlcOutput(49, errorMessage)) {
-        return false;
-    }
-
-    appendUniqueProductKey(
-                &m_pendingPlcResetProductKeys,
-                productKey);
-    QEventLoop pulseWait;
-    QTimer::singleShot(100, &pulseWait, &QEventLoop::quit);
-    pulseWait.exec(QEventLoop::ExcludeUserInputEvents);
-
-    if (!writeInspectionPlcOutput(0, errorMessage)) {
-        return false;
-    }
-    m_pendingPlcResetProductKeys.clear();
-    return true;
-}
-
-bool Widget::reconcileInspectionFaultProducts(
-    QString *summary,
-    QString *errorMessage)
-{
-    QStringList warnings;
-
-    if (timer) {
-        timer->stop();
-    }
-    if (!m_runtimeController.isPlcConnected()) {
-        QString plcIp = m_appliedMachineSettings.plcIp.trimmed();
-        if (plcIp.isEmpty() && ui) {
-            plcIp = ui->lineEdit->text().trimmed();
-        }
-        const int rack = m_appliedMachineSettings.plcRack;
-        const int slot = m_appliedMachineSettings.plcSlot;
-        const PlcOperationResult reconnectResult =
-                m_runtimeController.connectPlc(
-                    plcIp,
-                    rack,
-                    slot);
-        if (!reconnectResult.isSuccess()) {
-            warnings.append(QStringLiteral(
-                                "PLC reconnect failed, code %1.")
-                            .arg(reconnectResult.nativeErrorCode));
-        }
-    }
-
-    if (!m_pendingPlcResetProductKeys.empty()) {
-        QString resetError;
-        if (!writeInspectionPlcOutput(0, &resetError)) {
-            for (const ProductKey &productKey
-                 : m_pendingPlcResetProductKeys) {
-                recordFaultedPlcOutput(productKey);
-            }
-            if (errorMessage) {
-                *errorMessage = QStringLiteral(
-                            "\u6545\u969c\u6062\u590d\u524d PLC \u590d\u4f4d 0 \u5199\u5165\u5931\u8d25\uff0c"
-                            "\u7cfb\u7edf\u7ee7\u7eed\u4fdd\u6301 Fault\u3002\n%1")
-                        .arg(resetError);
-            }
-            return false;
-        }
-        m_pendingPlcResetProductKeys.clear();
-    }
-
-    const bool plcWritable =
-            m_runtimeController.isPlcConnected();
-    const std::vector<InspectionFaultProductAction> actions =
-            m_runtimeController.faultProductActions(plcWritable);
-    for (const InspectionFaultProductAction &action : actions) {
-        if (action.type
-                == InspectionFaultProductActionType::RequestFallbackNg) {
-            QString pulseError;
-            if (requestFaultFallbackNgPulse(
-                        action.productKey,
-                        &pulseError)) {
-                if (!m_runtimeController.resolveFaultProduct(
-                            action.productKey,
-                            InspectionFaultProductResolution::FallbackNgRequested)) {
-                    if (errorMessage) {
-                        *errorMessage = QStringLiteral(
-                                    "Fault product reconciliation state changed unexpectedly.");
-                    }
-                    return false;
-                }
-                continue;
-            }
-
-            if (!m_runtimeController.resolveFaultProduct(
-                        action.productKey,
-                        InspectionFaultProductResolution::Unconfirmed)) {
-                if (errorMessage) {
-                    *errorMessage = QStringLiteral(
-                                "Fault product could not be marked unconfirmed.");
-                }
-                return false;
-            }
-            warnings.append(pulseError);
-            if (!m_pendingPlcResetProductKeys.empty()) {
-                if (errorMessage) {
-                    *errorMessage = QStringLiteral(
-                                "\u6545\u969c\u515c\u5e95 NG \u5df2\u5199\u5165 49\uff0c\u4f46\u590d\u4f4d 0 \u5931\u8d25\u3002"
-                                "\u4ea7\u54c1\u5df2\u8bb0\u4e3a\u672a\u786e\u8ba4\uff0c\u7cfb\u7edf\u7ee7\u7eed\u4fdd\u6301 Fault\u3002\n%1")
-                            .arg(pulseError);
-                }
-                return false;
-            }
-            continue;
-        }
-
-        if (!m_runtimeController.resolveFaultProduct(
-                    action.productKey,
-                    InspectionFaultProductResolution::Unconfirmed)) {
-            if (errorMessage) {
-                *errorMessage = QStringLiteral(
-                            "Fault product could not be marked unconfirmed.");
-            }
-            return false;
-        }
-    }
-
-    const int fallbackNgRequested =
-            m_runtimeController.faultFallbackNgResolutionCount();
-    const int unconfirmedProducts =
-            m_runtimeController.faultUnconfirmedProductCount();
-
-    if (summary) {
-        *summary = QStringLiteral(
-                    "\u672c\u6b21\u6545\u969c\u4ea7\u54c1\u6536\u53e3\uff1a"
-                    "\u515c\u5e95 NG \u8bf7\u6c42 %1 \u4ef6\uff0c"
-                    "\u672a\u786e\u8ba4 %2 \u4ef6\u3002\n"
-                    "\u672a\u786e\u8ba4\u4ea7\u54c1\u4e0d\u8fdb\u5165\u6b63\u5e38\u603b\u6570\u3001NG\u6570\u548c\u5408\u683c\u7387\uff0c"
-                    "\u8bf7\u6309\u73b0\u573a\u6d41\u7a0b\u9694\u79bb\u3002")
-                .arg(fallbackNgRequested)
-                .arg(unconfirmedProducts);
-        if (!warnings.isEmpty()) {
-            *summary += QStringLiteral("\n\nPLC details:\n")
-                    + warnings.join(QStringLiteral("\n"));
-        }
-    }
-    qWarning() << "[INSPECTION_FAULT] product reconciliation completed"
-               << "fallbackNgRequests=" << fallbackNgRequested
-               << "unconfirmed=" << unconfirmedProducts;
-    return true;
+                m_runtime.faultSnapshot());
 }
 
 void Widget::checkInspectionPlcHealth()
 {
-    if (!m_runtimeController.isRunning()) {
+    if (!m_runtime.isRunning()) {
         return;
     }
-    if (!m_resultCoordinator
-            || !m_resultCoordinator->requiresPlcForRun()) {
+    if (!m_resultService
+            || !m_resultService->requiresPlcForRun()) {
         return;
     }
-    if (m_runtimeController.isPlcConnected()) {
+    if (m_runtime.isPlcConnected()) {
         return;
     }
 
@@ -1016,112 +681,12 @@ void Widget::checkInspectionPlcHealth()
 void Widget::restoreNormalFaultUi()
 {
     m_faultAlarmPresented = false;
-    if (m_resultCoordinator) {
-        m_resultCoordinator->clearTransientView();
+    if (m_resultService) {
+        m_resultService->clearTransientView();
     }
     if (m_runtimeUiCoordinator) {
         m_runtimeUiCoordinator->restoreNormalFaultStyle();
     }
-}
-
-void Widget::bindInspectionRuntimePort()
-{
-    InspectionRuntimePort::Callbacks callbacks;
-    callbacks.prepareBarcodeDecoder = [this]() {
-        BarcodeRuntimeReadiness readiness;
-        readiness.ready = m_barcodeDecoder
-                && m_barcodeDecoder->ensureLoaded();
-        if (!readiness.ready && m_barcodeDecoder) {
-            readiness.errorMessage = m_barcodeDecoder->lastError();
-        }
-        return readiness;
-    };
-    callbacks.startInspection = [this](
-            const InspectionStartExecutionCommand &command,
-            InspectionRuntimeStartTransaction &transaction,
-            QString *errorMessage) {
-        return executeInspectionStart(
-                    command, transaction, errorMessage);
-    };
-    callbacks.rollbackStart = [this]() {
-        rollbackInspectionStart();
-    };
-    callbacks.reconcileFaultProducts = [this](
-            QString *summary,
-            QString *errorMessage) {
-        return reconcileInspectionFaultProducts(summary, errorMessage);
-    };
-    m_inspectionRuntimePort->bind(callbacks);
-}
-
-bool Widget::executeInspectionStart(
-    const InspectionStartExecutionCommand &command,
-    InspectionRuntimeStartTransaction &startTransaction,
-    QString *errorMessage)
-{
-    if (errorMessage) {
-        errorMessage->clear();
-    }
-    const PreparedRecipeSnapshot &prepared =
-            command.context.preparedRecipe;
-    const MachineSettings &settings =
-            command.context.machineSettings;
-    m_barcodeWordRunActive = false;
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-    }
-    hideTemplateGuide();
-    if (m_runtimeUiCoordinator) {
-        m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
-    }
-
-    if (command.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger) {
-        ui->image_undetected->clear();
-        ui->imagenum->clear();
-        ui->ngnum->clear();
-        ui->resultlabel_7->clear();
-        ui->speedLabel->clear();
-        m_runtimeController.resetStatistics();
-    }
-    QStringList applyErrors;
-    applyErrors.clear();
-    if (!applyPlcTriggerModeForRun(settings, &applyErrors)
-            || !applyPlcRunSettingsForRun(
-                settings, &applyErrors)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "启动识别前 PLC 参数下发失败：\n")
-                    + applyErrors.join(QStringLiteral("\n"));
-        }
-        return false;
-    }
-
-    m_barcodeWordRunActive = command.barcodeWordMode;
-    m_resultBoundDisplayActive.store(true);
-    QString workerError;
-    if (!startDetectionWorkerForMode(
-                startTransaction,
-                command.modeIndex,
-                settings,
-                prepared,
-                command.profileSnapshot,
-                &workerError)) {
-        m_resultBoundDisplayActive.store(false);
-        m_barcodeWordRunActive = false;
-        if (errorMessage) {
-            *errorMessage = workerError;
-        }
-        return false;
-    }
-
-    return true;
-}
-
-void Widget::rollbackInspectionStart()
-{
-    m_resultBoundDisplayActive.store(false);
-    m_barcodeWordRunActive = false;
 }
 
 void Widget::presentStartFailure(
@@ -1236,7 +801,6 @@ void Widget::finishInspectionStopUi(
         }
     }
 
-    detectedRects.clear();
     selectionRect1 = QRect();
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -1245,8 +809,8 @@ void Widget::finishInspectionStopUi(
         imageLabel->clearSelection();
     }
     hideTemplateGuide();
-    if (m_resultCoordinator) {
-        m_resultCoordinator->clear();
+    if (m_resultService) {
+        m_resultService->clear();
     }
     m_resultBoundDisplayActive.store(false);
     m_barcodeWordRunActive = false;
@@ -1278,113 +842,6 @@ void Widget::finishInspectionStopUi(
     updateOperationUiState();
 }
 
-bool Widget::startDetectionWorkerForMode(
-        InspectionRuntimeStartTransaction &startTransaction,
-        int modeIndex,
-        const MachineSettings &settings,
-        const PreparedRecipeSnapshot &prepared,
-        const InspectionProfileSnapshot &profileSnapshot,
-        QString *errorMessage)
-{
-    if (!m_resultCoordinator) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "\u68c0\u6d4b\u7ed3\u679c\u534f\u8c03\u5668\u672a\u521d\u59cb\u5316\u3002");
-        }
-        return false;
-    }
-
-    InspectionDetectionWorkerStartConfiguration configuration;
-    configuration.modeIndex = modeIndex;
-    configuration.profiles = profileSnapshot.detectionProfiles;
-    configuration.ocrEngine = m_ocrEngine.get();
-    configuration.barcodeDecoder = m_barcodeDecoder.get();
-    if (!prepared || !prepared->recipe) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral(
-                        "运行配方快照不可用。");
-        }
-        return false;
-    }
-    configuration.tissueParameters = prepared->tissue;
-    if ((modeIndex == 0 || modeIndex == 2)
-            && !prepared->profiles.isEmpty()) {
-        const PreparedRecipeProfile &profile =
-                prepared->profiles.first();
-        configuration.targetText =
-                profile.definition.targetText;
-        configuration.stampThresholdPercent =
-                profile.definition.imageThresholdPercent;
-        configuration.stampThresholdValid = true;
-        if (modeIndex == 0) {
-            for (const cv::Mat &character
-                 : profile.characterTemplates) {
-                configuration.stampTemplates.push_back(
-                            character.clone());
-            }
-        }
-    }
-    configuration.resultConfiguration.imageSaveModeIndex =
-            machineSettingsImageSaveModeIds().indexOf(
-                settings.imageSaveModeId);
-    configuration.resultConfiguration.plcOutputEnabled =
-            settings.triggerEnabled;
-    configuration.resultConfiguration.delayedNgOffset =
-            settings.rejectPosition;
-    configuration.resultConfiguration.saveOptions.rootDirectory =
-            settings.imageSavePath;
-    configuration.resultConfiguration.saveOptions.format =
-            QStringLiteral("jpg");
-    configuration.resultConfiguration.saveOptions.quality =
-            settings.imageJpegQuality;
-    configuration.resultConfiguration.saveOptions.imageContentModeIndex =
-            machineSettingsImageSaveTypeIds().indexOf(
-                settings.imageSaveTypeId);
-
-    if (modeIndex == 0) {
-        const std::shared_ptr<OverlapDetector> workerOverlapDetector(
-                    new OverlapDetector);
-        if (prepared->profiles.isEmpty()) {
-            if (errorMessage) {
-                *errorMessage = QStringLiteral(
-                            "钢印运行配方缺少Prepared Profile。");
-            }
-            return false;
-        }
-        const PreparedRecipeProfile &profile =
-                prepared->profiles.first();
-        CalibrationData calibration;
-        calibration.stamp_poly = profile.stampPolygon;
-        calibration.date_poly = profile.datePolygon;
-        calibration.barcode_poly = profile.barcodePolygon;
-        if (!workerOverlapDetector->init(
-                profile.stampRingTemplate, calibration)) {
-            if (errorMessage) {
-                *errorMessage = QStringLiteral(
-                            "钢印PreparedRecipe无法初始化防重叠检测资产。");
-            }
-            return false;
-        }
-        configuration.detectStampOverlap = [workerOverlapDetector](
-                const cv::Mat &sourceImage,
-                const std::vector<cv::Point> &datePoly) {
-            const DetectResult overlap =
-                    workerOverlapDetector->processImage(
-                        sourceImage,
-                        datePoly);
-            StampOverlapResult result;
-            result.isOk = overlap.isOk;
-            result.finalStampPoly = overlap.finalStampPoly;
-            return result;
-        };
-    }
-
-    return m_resultCoordinator->startDetectionWorker(
-                startTransaction,
-                configuration,
-                errorMessage);
-}
-
 /**
  * @brief 显示图像槽函数
  * @param image OpenCV Mat图像指针
@@ -1399,8 +856,8 @@ void Widget::slot_displayAndDetect(cv::Mat *image)
             && activeMode == DetectionMode::Tissue;
     const bool productionRunning =
             isInspectionBusy();
-    if (image && m_resultCoordinator) {
-        m_resultCoordinator->presentPreviewFrame(
+    if (image && m_resultService) {
+        m_resultService->presentPreviewFrame(
                     *image, tissueMode, productionRunning);
     }
 }
@@ -1573,10 +1030,9 @@ bool Widget::startTemplatePreview()
     ++m_templatePreviewSessionId;
     m_templateCaptureState =
             TemplateCaptureState::Previewing;
-    if (m_resultCoordinator) {
-        m_resultCoordinator->clearTransientView();
+    if (m_resultService) {
+        m_resultService->clearTransientView();
     }
-    allResults.clear();
     updateOperationUiState();
 
     QString previewError;
@@ -1997,7 +1453,7 @@ void Widget::restoreDefaultMachineSettings()
 
     const bool cameraOpen = isCameraOpen();
     const bool plcConnected =
-            m_runtimeController.isPlcConnected();
+            m_runtime.isPlcConnected();
     const MachineSettings editableDefaults =
             m_settingsPageController->defaultsForHardwareState(
                 cameraOpen, plcConnected);
@@ -2048,7 +1504,7 @@ void Widget::updateHardwareParameterUiEnabled()
             || m_templateCaptureState != TemplateCaptureState::Idle;
     m_settingsPageController->updateHardwareEnabled(
                 cameraOpen,
-                m_runtimeController.isPlcConnected(),
+                m_runtime.isPlcConnected(),
                 operationBusy);
 }
 
@@ -2472,53 +1928,11 @@ bool Widget::applyCameraHardwareSettingsFromUi(
     return ok;
 }
 
-bool Widget::applyPlcTriggerModeForRun(
-        const MachineSettings &settings,
-        QStringList *errors)
-{
-    if (!m_runtimeController.isPlcConnected()) {
-        return true;
-    }
-    const OperationResult result =
-            m_inspectionApplicationService->applyPlcTriggerMode(
-                settings.triggerModeId);
-    if (!result.isSuccess() && errors) {
-        errors->append(result.error.userMessage);
-    }
-    return result.isSuccess();
-}
-
-bool Widget::applyPlcRunSettingsForRun(
-        const MachineSettings &settings,
-        QStringList *errors)
-{
-    wrongindex = settings.rejectPosition;
-    if (!m_runtimeController.isPlcConnected()) {
-        return true;
-    }
-    InspectionPlcRunSettings plcSettings;
-    plcSettings.rejectTime = static_cast<std::uint16_t>(
-                settings.rejectTime);
-    plcSettings.rejectDistance = static_cast<std::uint32_t>(
-                settings.rejectDistance);
-    plcSettings.photoTime = static_cast<std::uint16_t>(
-                settings.photoTime);
-    plcSettings.photoDistance = static_cast<std::uint32_t>(
-                settings.photoDistance);
-    const OperationResult result =
-            m_inspectionApplicationService
-            ->applyPlcRunSettings(plcSettings);
-    if (!result.isSuccess() && errors) {
-        errors->append(result.error.userMessage);
-    }
-    return result.isSuccess();
-}
-
 bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage)
 {
     PLCmode = ui->comboBox_3->currentIndex();
 
-    if (!m_runtimeController.isPlcConnected()) {
+    if (!m_runtime.isPlcConnected()) {
         const QString message = "PLC未连接！";
         if (showSuccessMessage) {
             if (errors) errors->append(message);
@@ -2558,7 +1972,7 @@ bool Widget::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMess
 
 bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (!m_runtimeController.isPlcConnected()) {
+    if (!m_runtime.isPlcConnected()) {
         const QString message = "PLC未连接！";
         if (showSuccessMessage) {
             if (errors) errors->append(message);
@@ -2568,7 +1982,6 @@ bool Widget::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMess
         return true;
     }
 
-    wrongindex = ui->lineEdit_12->text().toInt();
 
     InspectionPlcRunSettings plcSettings;
     plcSettings.rejectTime = static_cast<std::uint16_t>(
@@ -2812,7 +2225,6 @@ Mat *Widget::QImageToMat(const QImage &image)
 void Widget::slot_clearResultLabel()
 {
     ui->resultlabel_7->clear();
-    allResults = "";
 }
 
 /**
@@ -2898,11 +2310,11 @@ void Widget::on_pushButton_browseImageSavePath_clicked()
  */
 void Widget::on_cut_cancelButton_2_clicked()
 {
-    m_runtimeController.resetStatistics();
-    if (m_resultCoordinator) {
-        m_resultCoordinator->presentTotalAndNgCounts(
-                    m_runtimeController.totalCount(),
-                    m_runtimeController.ngCount());
+    m_runtime.resetStatistics();
+    if (m_resultService) {
+        m_resultService->presentTotalAndNgCounts(
+                    m_runtime.totalCount(),
+                    m_runtime.ngCount());
     }
 }
 
@@ -2911,10 +2323,10 @@ void Widget::on_cut_cancelButton_2_clicked()
  */
 void Widget::on_cut_cancelButton_3_clicked()
 {
-    m_runtimeController.resetNgCount();
-    if (m_resultCoordinator) {
-        m_resultCoordinator->presentNgCount(
-                    m_runtimeController.ngCount());
+    m_runtime.resetNgCount();
+    if (m_resultService) {
+        m_resultService->presentNgCount(
+                    m_runtime.ngCount());
     }
 }
 
@@ -3198,6 +2610,28 @@ void Widget::on_plcbtn_clicked()
         updateOperationUiState();
         return;
     }
+    DetectionMode activeMode = DetectionMode::Stamp;
+    detectionModeFromUiId(
+                m_appliedMachineSettings.detectModeId,
+                &activeMode);
+    m_barcodeWordRunActive =
+            activeMode == DetectionMode::BarcodeWord;
+    m_resultBoundDisplayActive.store(true);
+    if (imageLabel) {
+        imageLabel->setTemplateDrawingEnabled(false);
+    }
+    hideTemplateGuide();
+    if (m_runtimeUiCoordinator) {
+        m_runtimeUiCoordinator->clearDetectionRoiWarning(QString());
+    }
+    if (result.acquisitionKind
+            == InspectionAcquisitionKind::HardwareTrigger) {
+        ui->image_undetected->clear();
+        ui->imagenum->clear();
+        ui->ngnum->clear();
+        ui->resultlabel_7->clear();
+        ui->speedLabel->clear();
+    }
     ui->statusLabel->setText(
                 result.acquisitionKind
                 == InspectionAcquisitionKind::HardwareTrigger
@@ -3303,14 +2737,13 @@ void Widget::on_plcmodebtn_clicked()
 // 剔除位置设置
 void Widget::on_eliminatebutton_clicked()
 {
-    wrongindex = ui->lineEdit_12->text().toInt();
     QMessageBox::information(this, "提示", "剔除位置设置成功");
 }
 
 //剔除队列复位 清空还未发出的剔除信号
 void Widget::on_pushButton_10_clicked()
 {
-    m_runtimeController.clearPendingDelayedNgRequests();
+    m_runtime.clearPendingDelayedNgRequests();
     QMessageBox::information(this, "提示", "剔除队列已清空！");
 }
 
@@ -3324,8 +2757,8 @@ void Widget::slot_saveBoxesFromThread(DetectionPose pose)
     if (m_resultBoundDisplayActive.load()) {
         return;
     }
-    if (m_resultCoordinator) {
-        m_resultCoordinator->updatePose(pose);
+    if (m_resultService) {
+        m_resultService->updatePose(pose);
     }
 }
 
@@ -3417,7 +2850,7 @@ void Widget::on_pushButton_tissueRoughnessThreshold_clicked()
 void Widget::on_WriteVDpushButton_clicked()
 {
 
-    if (!m_runtimeController.isPlcConnected())
+    if (!m_runtime.isPlcConnected())
     {
         showParameterWarning("警告", "PLC未连接！");
         return;

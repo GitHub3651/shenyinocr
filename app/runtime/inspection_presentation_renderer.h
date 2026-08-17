@@ -1,7 +1,7 @@
 #pragma once
 
 #include "TrackingTypes.h"
-#include "runtime/result_handler.h"
+#include "runtime/inspection_presentation.h"
 
 #include <QImage>
 
@@ -15,7 +15,7 @@ struct TissueRollPresentation
     cv::Size2f innerAxes;
 };
 
-struct DetectionPresentationState
+struct InspectionPresentationRenderState
 {
     DetectionPose pose;
     std::vector<DetectionOverlayPolygon> detailPolygons;
@@ -24,28 +24,7 @@ struct DetectionPresentationState
     bool hasTissueRoll = false;
 };
 
-enum class DetectionVerdictViewStyle
-{
-    Correct,
-    Error
-};
-
-struct DetectionResultViewSnapshot
-{
-    ProductKey productKey;
-    QImage image;
-    DetectionVerdictViewStyle verdictStyle =
-            DetectionVerdictViewStyle::Error;
-    QString recognitionText;
-    bool updatesTemplateName = false;
-    QString templateName;
-    DetectionResultStatistics statistics;
-    QString elapsedText;
-
-    bool isValid() const;
-};
-
-struct DetectionResultViewBindings
+struct InspectionPresentationViewBindings
 {
     std::function<void(const QImage &)> showImage;
     std::function<void(DetectionVerdictViewStyle)> showVerdictStyle;
@@ -60,15 +39,15 @@ struct DetectionResultViewBindings
     bool isValid() const;
 };
 
-class DetectionResultPresenter
+class InspectionPresentationRenderer
 {
 public:
-    void bindView(const DetectionResultViewBindings &bindings);
+    void bindView(const InspectionPresentationViewBindings &bindings);
     bool hasViewBindings() const;
 
     void clear();
     void clearTransientView();
-    bool present(const DetectionResultViewSnapshot &snapshot);
+    bool present(const InspectionPresentation &snapshot);
     bool presentFrame(const QImage &image);
     void presentTotalAndNgCounts(int totalCount, int ngCount);
     void presentNgCount(int ngCount);
@@ -83,13 +62,13 @@ public:
         bool hasTissueRoll);
     void updatePose(const DetectionPose &pose);
 
-    const DetectionPresentationState &state() const;
+    const InspectionPresentationRenderState &state() const;
     QImage renderFrame(
         const cv::Mat &image,
         bool includeTissueOverlay) const;
 
 private:
-    DetectionPresentationState m_state;
-    DetectionResultViewBindings m_viewBindings;
+    InspectionPresentationRenderState m_state;
+    InspectionPresentationViewBindings m_viewBindings;
     ProductKey m_lastPresentedProductKey;
 };

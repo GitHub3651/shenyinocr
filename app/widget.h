@@ -1,4 +1,4 @@
-﻿// widget.h
+// widget.h
 // 主窗口类 - 视觉检测跟踪系统
 // 已修改以兼容简化版线程类（只有1个检测框）
 
@@ -20,7 +20,6 @@
 #include <cstdint>
 #include <iomanip>
 #include <memory>
-#include <functional>
 #include <vector>
 #include <QMetaType>
 #include <QTranslator>
@@ -65,8 +64,7 @@
 #include "recipes/template_mode_memory.h"
 #include "runtime/template_runtime_profile.h"
 #include "devices/barcode/barcode_decoder.h"
-#include "devices/ocr/ocr_engine.h"
-#include "runtime/inspection_runtime_controller.h"
+#include "runtime/inspection_runtime.h"
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
 
@@ -81,12 +79,10 @@ class QComboBox;
 class QFrame;
 class QDialog;
 class QPushButton;
-class InspectionResultCoordinator;
+class ResultService;
 class InspectionRuntimeUiCoordinator;
 class MachineSettingsPageController;
 class TemplateEditorController;
-struct InspectionProfileSnapshot;
-class InspectionRuntimeStartTransaction;
 
 /**
  * @brief 主窗口类
@@ -103,14 +99,9 @@ class Widget : public QWidget
     Q_OBJECT
 
 public:
-    using OcrEngineFactory =
-        std::function<std::shared_ptr<IOcrEngine>()>;
-
     explicit Widget(
-        const OcrEngineFactory &ocrEngineFactory,
         const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
-        const std::shared_ptr<InspectionRuntimeController> &runtimeController,
-        const std::shared_ptr<InspectionRuntimePort> &runtimePort,
+        const std::shared_ptr<InspectionRuntime> &runtime,
         const std::shared_ptr<InspectionApplicationService> &inspectionService,
         const std::shared_ptr<SettingsApplicationService> &settingsService,
         const std::shared_ptr<RecipeStore> &recipeStore,
@@ -156,8 +147,6 @@ private slots:
     void on_ConnectpushButton_clicked(); ///< 连接PLC按钮
     void on_DisconnectpushButton_clicked(); ///< 断开PLC按钮
     void on_WriteVDpushButton_clicked(); ///< 写入VD按钮
-    void rightremove();                 ///< 合格移除
-    void wrongremove();                 ///< 不合格移除
 
     // ========== 其他槽函数 ==========
     void on_textsure_btn_clicked();     ///< 文本确定按钮
@@ -213,12 +202,6 @@ private:
     bool applyCameraHardwareSettingsFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
-    bool applyPlcTriggerModeForRun(
-        const MachineSettings &settings,
-        QStringList *errors);
-    bool applyPlcRunSettingsForRun(
-        const MachineSettings &settings,
-        QStringList *errors);
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
@@ -273,36 +256,13 @@ private:
     bool isInspectionBusy() const;
     const MachineSettings &machineSettings() const;
     void updateMachineSettingsDraft(const MachineSettings &settings);
-    void bindInspectionRuntimePort();
-    bool executeInspectionStart(
-        const InspectionStartExecutionCommand &command,
-        InspectionRuntimeStartTransaction &startTransaction,
-        QString *errorMessage);
-    void rollbackInspectionStart();
     void presentStartFailure(const StartInspectionResult &result);
     void finishInspectionStopUi(const StopInspectionResult &result);
-    bool startDetectionWorkerForMode(
-        InspectionRuntimeStartTransaction &startTransaction,
-        int modeIndex,
-        const MachineSettings &settings,
-        const PreparedRecipeSnapshot &prepared,
-        const InspectionProfileSnapshot &profileSnapshot,
-        QString *errorMessage);
     void enterInspectionFault(
         InspectionFaultReason reason,
         const QString &diagnostic);
     void presentInspectionFault();
     bool confirmInspectionFaultRecovery();
-    bool reconcileInspectionFaultProducts(
-        QString *summary,
-        QString *errorMessage);
-    bool requestFaultFallbackNgPulse(
-        const ProductKey &productKey,
-        QString *errorMessage);
-    bool writeInspectionPlcOutput(
-        std::uint8_t value,
-        QString *errorMessage);
-    void recordFaultedPlcOutput(const ProductKey &productKey);
     void checkInspectionPlcHealth();
     void restoreNormalFaultUi();
 
@@ -313,7 +273,6 @@ private:
             m_inspectionApplicationService;
     std::shared_ptr<SettingsApplicationService>
             m_settingsApplicationService;
-    std::shared_ptr<InspectionRuntimePort> m_inspectionRuntimePort;
     MachineSettings &m_appliedMachineSettings;
     std::shared_ptr<RecipeStore> m_recipeStore;
     QString m_currentDetectModeId;
@@ -336,16 +295,13 @@ private:
     using OperationState = OperationUiState;
     std::atomic<bool> m_resultBoundDisplayActive{false};
     bool m_applicationExitInProgress = false;
-    InspectionRuntimeController &m_runtimeController;
-    std::unique_ptr<InspectionResultCoordinator> m_resultCoordinator;
+    InspectionRuntime &m_runtime;
+    ResultService *m_resultService = nullptr;
     std::unique_ptr<InspectionRuntimeUiCoordinator>
             m_runtimeUiCoordinator;
     bool m_faultAlarmPresented = false;
-    ProductKey m_activePlcOutputProductKey;
-    std::vector<ProductKey> m_pendingPlcResetProductKeys;
 
     // ========== 定时器 ==========
-    QTimer *timer;                      ///< 定时器
     QTimer *m_timer;                    ///< 定时器2
     QTimer *timer1;                     ///< 定时器3
     QTimer *m_plcHealthTimer = nullptr; ///< 运行中PLC连接监视
@@ -403,7 +359,6 @@ private:
 
     // ========== 检测框相关 ==========
     std::vector<std::vector<QRect>> allDetectedRects; ///< 所有检测到的矩形
-    std::vector<QRect> detectedRects;   ///< 检测到的矩形
     QRect dingweiRect;                  ///< 定位矩形
     QRect selectionRect;                ///< 选择矩形
     QRect selectionRect1;               ///< 选择矩形1
@@ -415,8 +370,6 @@ private:
 
 
     // ========== 识别结果相关 ==========
-    String allResults;                  ///< 所有结果
-    QVector<std::string> string1;       ///< 字符串向量
     int k = 1;                          ///< 计数器
 
     // ========== 跟踪相关 ==========
@@ -438,7 +391,6 @@ private:
     // ========== 模式和路径 ==========
     int mode;                           ///< 模式
     QString path;                       ///< 路径
-    int wrongindex;                     ///< 错误索引
 
     // ========== 统计相关 ==========
 
@@ -450,7 +402,6 @@ private:
     QString selectedDir;                ///< 选择的目录
 
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
-    std::shared_ptr<IOcrEngine> m_ocrEngine;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
     bool loadWordDigitTemplatesFromProfile(
         const WordTemplateProfile &profile,

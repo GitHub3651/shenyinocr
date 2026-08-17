@@ -54,7 +54,6 @@ CONFIG(release, debug|release) {
 
 SOURCES += \
     application/inspection_application_service.cpp \
-    application/inspection_runtime_port.cpp \
     application/inspection_start_preflight.cpp \
     application/settings_application_service.cpp \
     recipes/product_recipe.cpp \
@@ -63,8 +62,6 @@ SOURCES += \
     recipes/recipe_editor_session.cpp \
     recipes/template_mode_memory.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
-    ui/controllers/detection_completion_controller.cpp \
-    ui/controllers/inspection_result_coordinator.cpp \
     ui/controllers/inspection_runtime_ui_coordinator.cpp \
     ui/controllers/machine_settings_page_controller.cpp \
     ui/controllers/operation_ui_policy.cpp \
@@ -81,7 +78,7 @@ SOURCES += \
     startup/single_instance_guard.cpp \
     startup/application_startup.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
-    ui/presenters/detection_result_presenter.cpp \
+    runtime/inspection_presentation_renderer.cpp \
     devices/barcode/barcode_decoder_adapter.cpp \
     devices/camera/vendor/hikvision_camera_device.cpp \
     devices/ocr/paddle_ocr_engine.cpp \
@@ -92,17 +89,12 @@ SOURCES += \
     runtime/detection_shadow_comparator.cpp \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
-    runtime/detection_mode_worker_factory.cpp \
+    runtime/pipeline_registry.cpp \
     runtime/inspection_profile_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
-    runtime/inspection_fault_state.cpp \
     runtime/inspection_plc_controller.cpp \
-    runtime/inspection_product_reconciler.cpp \
-    runtime/inspection_runtime_controller.cpp \
-    runtime/inspection_runtime_start_transaction.cpp \
-    runtime/inspection_runtime_stop_transaction.cpp \
-    runtime/detection_session.cpp \
-    runtime/result_handler.cpp \
+    runtime/inspection_runtime.cpp \
+    runtime/result_service.cpp \
     runtime/image_save_service.cpp \
     detection/common/character_template_matcher.cpp \
     detection/common/frame_preprocessor.cpp \
@@ -135,8 +127,6 @@ SOURCES += \
 HEADERS += \
     application/application_result.h \
     application/inspection_application_service.h \
-    application/inspection_run_context.h \
-    application/inspection_runtime_port.h \
     application/inspection_start_preflight.h \
     application/runtime_snapshot.h \
     application/settings_application_service.h \
@@ -147,8 +137,8 @@ HEADERS += \
     recipes/recipe_editor_session.h \
     recipes/template_mode_memory.h \
     ui/dialogs/recipe_selection_dialog.h \
-    ui/controllers/detection_completion_controller.h \
-    ui/controllers/inspection_result_coordinator.h \
+    runtime/inspection_presentation.h \
+    runtime/result_service.h \
     ui/controllers/inspection_runtime_ui_coordinator.h \
     ui/controllers/machine_settings_page_controller.h \
     ui/controllers/operation_ui_policy.h \
@@ -165,7 +155,7 @@ HEADERS += \
     startup/single_instance_guard.h \
     startup/application_startup.h \
     ui/presenters/inspection_fault_presenter.h \
-    ui/presenters/detection_result_presenter.h \
+    runtime/inspection_presentation_renderer.h \
     devices/barcode/barcode_decoder_adapter.h \
     devices/barcode/barcode_decoder.h \
     devices/camera/camera_device.h \
@@ -180,18 +170,13 @@ HEADERS += \
     runtime/detection_shadow_comparator.h \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
-    runtime/detection_mode_worker_factory.h \
+    runtime/pipeline_registry.h \
     runtime/inspection_profile_snapshot.h \
     runtime/template_runtime_profile.h \
     runtime/result_presentation_mailbox.h \
-    runtime/inspection_fault_state.h \
     runtime/inspection_plc_controller.h \
-    runtime/inspection_product_reconciler.h \
-    runtime/inspection_runtime_controller.h \
-    runtime/inspection_runtime_start_transaction.h \
-    runtime/inspection_runtime_stop_transaction.h \
-    runtime/detection_session.h \
-    runtime/result_handler.h \
+    runtime/inspection_run_context.h \
+    runtime/inspection_runtime.h \
     runtime/image_save_service.h \
     detection/common/character_template_matcher.h \
     detection/common/detection_roi_geometry.h \

@@ -1,4 +1,4 @@
-﻿#include "startup/application_startup.h"
+#include "startup/application_startup.h"
 
 #include "startup/runtime_guard.h"
 #include "startup/single_instance_guard.h"
@@ -10,10 +10,10 @@
 #include "devices/ocr/paddle_ocr_engine.h"
 #include "devices/plc/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
-#include "application/inspection_runtime_port.h"
+#include "runtime/pipeline_registry.h"
 #include "application/settings_application_service.h"
 #include "runtime/inspection_plc_controller.h"
-#include "runtime/inspection_runtime_controller.h"
+#include "runtime/inspection_runtime.h"
 #include "runtime/camera_session.h"
 #include "recipes/recipe_store.h"
 #include "system_support/settings/machine_settings_store.h"
@@ -195,40 +195,34 @@ int ApplicationStartup::run(int argc, char *argv[])
         const std::shared_ptr<InspectionPlcController> plcController(
                     new InspectionPlcController(
                         std::move(plcDevice), plcAddresses));
-        const std::shared_ptr<InspectionRuntimeController>
-                runtimeController(
-                    new InspectionRuntimeController(
-                        InspectionRuntimeController::RunIdFactory(),
-                        plcController));
-        const std::shared_ptr<InspectionRuntimePort> runtimePort(
-                    new InspectionRuntimePort);
+        const QString ocrConfigPath = QDir(applicationDirectory).filePath(
+                    QStringLiteral("config1.txt"));
+        const std::shared_ptr<IOcrEngine> ocrEngine(
+                    new PaddleOcrEngine(ocrConfigPath));
+        const std::shared_ptr<IBarcodeDecoder> barcodeDecoder(
+                    new BarcodeDecoderAdapter);
+        const std::shared_ptr<PipelineRegistry> pipelineRegistry(
+                    new PipelineRegistry(ocrEngine, barcodeDecoder));
+        const std::shared_ptr<InspectionRuntime>
+                runtime(
+                    new InspectionRuntime(
+                        InspectionRuntime::RunIdFactory(),
+                        plcController,
+                        pipelineRegistry));
         const std::shared_ptr<CameraSession> cameraSession(
                     new CameraSession(
                         cameraDevice,
-                        runtimeController.get()));
+                        runtime.get()));
         const std::shared_ptr<InspectionApplicationService>
                 inspectionService(
                     new InspectionApplicationService(
-                        runtimeController,
-                        runtimePort,
+                        runtime,
                         cameraSession,
                         settingsService,
                         recipeStore));
-        const QString ocrConfigPath = QDir(applicationDirectory).filePath(
-                    QStringLiteral("config1.txt"));
-        const Widget::OcrEngineFactory ocrEngineFactory =
-                [ocrConfigPath]() {
-            return std::shared_ptr<IOcrEngine>(
-                        new PaddleOcrEngine(ocrConfigPath));
-        };
-        const std::shared_ptr<IBarcodeDecoder> barcodeDecoder(
-                    new BarcodeDecoderAdapter);
-
         Widget window(
-                    ocrEngineFactory,
                     barcodeDecoder,
-                    runtimeController,
-                    runtimePort,
+                    runtime,
                     inspectionService,
                     settingsService,
                     recipeStore);

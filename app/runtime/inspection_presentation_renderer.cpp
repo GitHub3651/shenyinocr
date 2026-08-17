@@ -1,4 +1,4 @@
-#include "detection_result_presenter.h"
+#include "runtime/inspection_presentation_renderer.h"
 
 #include <algorithm>
 #include <string>
@@ -154,12 +154,7 @@ void transformPolygonForPose(
 }
 }
 
-bool DetectionResultViewSnapshot::isValid() const
-{
-    return productKey.isValid() && !image.isNull();
-}
-
-bool DetectionResultViewBindings::isValid() const
+bool InspectionPresentationViewBindings::isValid() const
 {
     return showImage
             && showVerdictStyle
@@ -172,24 +167,24 @@ bool DetectionResultViewBindings::isValid() const
             && showElapsedText;
 }
 
-void DetectionResultPresenter::bindView(
-    const DetectionResultViewBindings &bindings)
+void InspectionPresentationRenderer::bindView(
+    const InspectionPresentationViewBindings &bindings)
 {
     m_viewBindings = bindings;
 }
 
-bool DetectionResultPresenter::hasViewBindings() const
+bool InspectionPresentationRenderer::hasViewBindings() const
 {
     return m_viewBindings.isValid();
 }
 
-void DetectionResultPresenter::clear()
+void InspectionPresentationRenderer::clear()
 {
-    m_state = DetectionPresentationState();
+    m_state = InspectionPresentationRenderState();
     m_lastPresentedProductKey = ProductKey();
 }
 
-void DetectionResultPresenter::clearTransientView()
+void InspectionPresentationRenderer::clearTransientView()
 {
     if (!hasViewBindings()) {
         return;
@@ -199,8 +194,8 @@ void DetectionResultPresenter::clearTransientView()
     m_viewBindings.showElapsedText(QString());
 }
 
-bool DetectionResultPresenter::present(
-    const DetectionResultViewSnapshot &snapshot)
+bool InspectionPresentationRenderer::present(
+    const InspectionPresentation &snapshot)
 {
     if (!hasViewBindings() || !snapshot.isValid()) {
         return false;
@@ -225,7 +220,7 @@ bool DetectionResultPresenter::present(
     return true;
 }
 
-bool DetectionResultPresenter::presentFrame(const QImage &image)
+bool InspectionPresentationRenderer::presentFrame(const QImage &image)
 {
     if (!hasViewBindings() || image.isNull()) {
         return false;
@@ -234,7 +229,7 @@ bool DetectionResultPresenter::presentFrame(const QImage &image)
     return true;
 }
 
-void DetectionResultPresenter::presentTotalAndNgCounts(
+void InspectionPresentationRenderer::presentTotalAndNgCounts(
     int totalCount,
     int ngCount)
 {
@@ -245,19 +240,19 @@ void DetectionResultPresenter::presentTotalAndNgCounts(
     m_viewBindings.showNgCount(ngCount);
 }
 
-void DetectionResultPresenter::presentNgCount(int ngCount)
+void InspectionPresentationRenderer::presentNgCount(int ngCount)
 {
     if (hasViewBindings()) {
         m_viewBindings.showNgCount(ngCount);
     }
 }
 
-const ProductKey &DetectionResultPresenter::lastPresentedProductKey() const
+const ProductKey &InspectionPresentationRenderer::lastPresentedProductKey() const
 {
     return m_lastPresentedProductKey;
 }
 
-void DetectionResultPresenter::installDetectionResult(
+void InspectionPresentationRenderer::installDetectionResult(
     const DetectionResult &result,
     const DetectionPose &pose,
     bool stampIsOverlap)
@@ -273,7 +268,7 @@ void DetectionResultPresenter::installDetectionResult(
     }
 }
 
-void DetectionResultPresenter::installTissueRoll(
+void InspectionPresentationRenderer::installTissueRoll(
     const TissueRollPresentation &roll,
     bool hasTissueRoll)
 {
@@ -284,7 +279,7 @@ void DetectionResultPresenter::installTissueRoll(
     }
 }
 
-void DetectionResultPresenter::updatePose(
+void InspectionPresentationRenderer::updatePose(
     const DetectionPose &pose)
 {
     if (!pose.valid) {
@@ -307,12 +302,12 @@ void DetectionResultPresenter::updatePose(
     m_state.pose = pose;
 }
 
-const DetectionPresentationState &DetectionResultPresenter::state() const
+const InspectionPresentationRenderState &InspectionPresentationRenderer::state() const
 {
     return m_state;
 }
 
-QImage DetectionResultPresenter::renderFrame(
+QImage InspectionPresentationRenderer::renderFrame(
     const cv::Mat &image,
     bool includeTissueOverlay) const
 {

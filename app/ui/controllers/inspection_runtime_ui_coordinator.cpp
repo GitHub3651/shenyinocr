@@ -37,10 +37,10 @@ InspectionRuntimeUiCoordinator::InspectionRuntimeUiCoordinator(
 {
 }
 
-DetectionResultViewBindings
+InspectionPresentationViewBindings
 InspectionRuntimeUiCoordinator::resultViewBindings() const
 {
-    DetectionResultViewBindings bindings;
+    InspectionPresentationViewBindings bindings;
     bindings.showImage = [this](const QImage &image) {
         if (!m_ui || !m_ui->image_undetected) {
             return;

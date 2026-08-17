@@ -3,8 +3,11 @@
 #include "DetectionModes.h"
 #include "application/inspection_application_service.h"
 #include "application/settings_application_service.h"
+#include "devices/barcode/barcode_decoder.h"
+#include "devices/ocr/ocr_engine.h"
 #include "recipes/recipe_store.h"
-#include "runtime/inspection_runtime_controller.h"
+#include "runtime/inspection_runtime.h"
+#include "runtime/pipeline_registry.h"
 #include "system_support/settings/machine_settings_store.h"
 
 #include <QDir>
@@ -23,6 +26,42 @@
 #include <utility>
 
 namespace {
+
+class ApplicationFakeOcrEngine : public IOcrEngine
+{
+public:
+    std::vector<std::string> recognize(cv::Mat &) override
+    {
+        return std::vector<std::string>(1, "1");
+    }
+};
+
+class ApplicationFakeBarcodeDecoder : public IBarcodeDecoder
+{
+public:
+    bool ensureLoaded() override
+    {
+        return true;
+    }
+
+    QString lastError() const override
+    {
+        return QString();
+    }
+
+    BarcodeReadResult decode(
+        const cv::Mat &,
+        const BarcodeDecodeOptions &,
+        int,
+        unsigned int,
+        int *,
+        unsigned int *) override
+    {
+        BarcodeReadResult result;
+        result.status = BarcodeReadStatus::NotFound;
+        return result;
+    }
+};
 
 struct PlcWrite
 {
@@ -377,14 +416,13 @@ struct ServiceFixture
     std::shared_ptr<MachineSettingsStore> settingsStore;
     std::shared_ptr<SettingsApplicationService> settings;
     std::shared_ptr<RecipeStore> recipes;
-    std::shared_ptr<InspectionRuntimeController> runtime;
+    std::shared_ptr<InspectionRuntime> runtime;
     std::shared_ptr<InspectionPlcController> plcController;
-    std::shared_ptr<InspectionRuntimePort> port;
+    std::shared_ptr<PipelineRegistry> pipelineRegistry;
     PlcCommandFakeDevice *plcDevice = nullptr;
     std::shared_ptr<ApplicationFakeCamera> camera;
     std::shared_ptr<CameraSession> cameraSession;
     std::shared_ptr<InspectionApplicationService> service;
-    int starts = 0;
 
     explicit ServiceFixture(bool providePlc = false)
     {
@@ -392,41 +430,30 @@ struct ServiceFixture
         settings.reset(new SettingsApplicationService(
                            settingsStore, MachineSettings::defaults()));
         recipes.reset(new RecipeStore(settingsStore->recipesRootPath()));
+        pipelineRegistry.reset(new PipelineRegistry(
+            std::shared_ptr<IOcrEngine>(new ApplicationFakeOcrEngine),
+            std::shared_ptr<IBarcodeDecoder>(
+                new ApplicationFakeBarcodeDecoder)));
         if (providePlc) {
             plcDevice = new PlcCommandFakeDevice;
             std::unique_ptr<IPlcDevice> device(plcDevice);
             plcController.reset(new InspectionPlcController(
                                     std::move(device),
                                     InspectionPlcAddressMap()));
-            runtime.reset(new InspectionRuntimeController(
-                              InspectionRuntimeController::RunIdFactory(),
-                              plcController));
+            runtime.reset(new InspectionRuntime(
+                              InspectionRuntime::RunIdFactory(),
+                              plcController,
+                              pipelineRegistry));
         } else {
-            runtime.reset(new InspectionRuntimeController);
+            runtime.reset(new InspectionRuntime(
+                InspectionRuntime::RunIdFactory(),
+                std::shared_ptr<InspectionPlcController>(),
+                pipelineRegistry));
         }
-        port.reset(new InspectionRuntimePort);
         camera.reset(new ApplicationFakeCamera);
         cameraSession.reset(new CameraSession(camera, runtime.get()));
-
-        InspectionRuntimePort::Callbacks callbacks;
-        callbacks.prepareBarcodeDecoder = []() {
-            return BarcodeRuntimeReadiness();
-        };
-        callbacks.startInspection = [this](
-                const InspectionStartExecutionCommand &,
-                InspectionRuntimeStartTransaction &,
-                QString *) {
-            ++starts;
-            return true;
-        };
-        callbacks.rollbackStart = []() {};
-        callbacks.reconcileFaultProducts = [](
-                QString *, QString *) {
-            return true;
-        };
-        port->bind(callbacks);
         service.reset(new InspectionApplicationService(
-                          runtime, port, cameraSession,
+                          runtime, cameraSession,
                           settings, recipes));
     }
 
@@ -544,7 +571,6 @@ void ApplicationServiceTest::fiveModesStartStopAndRestart()
         QVERIFY(restarted.isAccepted());
         QVERIFY(fixture.service->stop().isAccepted());
     }
-    QCOMPARE(fixture.starts, modes.size() * 2);
 }
 
 void ApplicationServiceTest::preflightOrderDirtyAndDuplicateStart()
@@ -612,17 +638,22 @@ void ApplicationServiceTest::plcCommandsUseApplicationBoundary()
     const std::shared_ptr<InspectionPlcController> plc(
                 new InspectionPlcController(
                     std::move(device), addresses));
-    const std::shared_ptr<InspectionRuntimeController> runtime(
-                new InspectionRuntimeController(
-                    InspectionRuntimeController::RunIdFactory(), plc));
-    const std::shared_ptr<InspectionRuntimePort> port(
-                new InspectionRuntimePort);
+    const std::shared_ptr<InspectionRuntime> runtime(
+                new InspectionRuntime(
+                    InspectionRuntime::RunIdFactory(),
+                    plc,
+                    std::shared_ptr<PipelineRegistry>(
+                        new PipelineRegistry(
+                            std::shared_ptr<IOcrEngine>(
+                                new ApplicationFakeOcrEngine),
+                            std::shared_ptr<IBarcodeDecoder>(
+                                new ApplicationFakeBarcodeDecoder)))));
     const std::shared_ptr<ApplicationFakeCamera> camera(
                 new ApplicationFakeCamera);
     const std::shared_ptr<CameraSession> cameraSession(
                 new CameraSession(camera, runtime.get()));
     InspectionApplicationService service(
-                runtime, port, cameraSession, settings, recipes);
+                runtime, cameraSession, settings, recipes);
 
     PlcConnectionCommand connection;
     connection.address = QStringLiteral("192.168.10.10");

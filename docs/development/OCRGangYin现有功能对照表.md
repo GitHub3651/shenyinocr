@@ -44,7 +44,7 @@
 
 ### 阶段3已完成调用链覆盖
 
-正式功能当前状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。阶段3差异已经完成Agent静态门禁和用户Qt Creator集中验证。
+阶段3门禁完成时，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。阶段3差异已经完成Agent静态门禁和用户Qt Creator集中验证；进入阶段4后，以后文阶段4状态为当前状态。
 
 | 当前状态 / 功能ID | 当前唯一正式路径 | 已删除旧路径或保持边界 | 本轮集中门禁 |
 |---|---|---|---|
@@ -53,6 +53,24 @@
 | `已验证`：`DET-002..007、CAM-003..004、RUN-001..004` | `InspectionPositioner`复用迁移后的`detection/positioning/TrackingPoseMatcher`，对单Profile和多Profile共享同一预处理帧并选择Pose；`CameraSession`只向现有阶段4前Runtime提交正式帧/Pose | `Zhuizong`、根目录TrackingPoseMatcher副本以及MyThread/CameraThread中的两套定位/Profile分发已删除；五种Pipeline、阈值、判定、正常统计和PLC结果链未改 | 五模式软触发；硬触发Fake/现有相机路径；单/多Profile定位；固定样本判定与Overlay不变 |
 | `已验证`：`SYS-009、CAM-003..004、RUN-002..006` | 单一`CaptureWorker`仅拥有一个`std::thread`；停止固定执行停止标志→`ICameraDevice::interruptWait()`→`join()`；软触发、硬触发和预览共用该生命周期 | `MyThread`、`CameraThread`、`InspectionAcquisitionController`、`InspectionWorkerConfigurator`、启动/停止/恢复Transition及超时泄漏兜底全部删除；无detach/terminate/放弃所有权 | 连续停止/重启；等待帧时停止；检测中/预览中退出；确认无残留线程 |
 | `已验证`：`CAM-001..005、PLC-001` | `devices/camera/vendor/HikvisionCameraDevice`直接调用MVS；保持首台相机、软件TriggerSource=7和硬件stop→200ms→Line0→曝光/增益/TriggerDelay→回调/start→LineDebouncerTime=5000→100ms；停止后按旧合同关闭、100ms、重开软件触发 | `CMvCamera`、旧Hikvision函数表/Native桥、ReadBuffer/latestImage等实现泄漏API已删除；MVS类型只存在vendor目录；PLC仍只保持原连接尝试和正常合同，本阶段不改Fault或PLC结果逻辑 | 真实相机首开/关闭/参数；软触发五模式；硬触发现有路径；停止后相机恢复并可再次启动 |
+
+阶段4实际调用链影响范围：`SYS-008、SYS-010、UI-001..005、SET-005、DET-001..008、CAM-001..002、RUN-001..006、PLC-001..007、RES-001..005、SAVE-001..005`，共41项。范围来自当前唯一生产链的反向追踪：统一Runtime替换会覆盖进程退出、延迟PLC连接、模式类型、运行状态和相机忙碌门禁；五种Pipeline、结果呈现、统计、PLC结果、存图及Fault收口属于同一不可拆分结果事务。2026-08-17用户确认阶段4Qt Creator集中门禁“没问题”，这41项已统一恢复为`已验证`。
+
+### 阶段4已验证调用链覆盖
+
+阶段4最终差异已经建立`InspectionRuntime`、`PipelineRegistry`、`ResultService`、`RuntimeSnapshot`和`InspectionPresentation`，并删除旧Runtime Controller/Transaction/Fault/Reconciler、自动补建会话、UI结果协调以及UI侧PLC/存图编排。下表覆盖后续各ID行保留的阶段0历史基线描述；发生冲突时以下表为当前事实。正常算法、统计、PLC 0/49→约100ms→0、存图和UI语义保持；Fault只停止新正式受理、保留已有算法结论并把未完成产品记为`Unconfirmed`，不补发兜底49。
+
+| 影响功能ID | 当前唯一正式路径 | 本阶段已删除的旧路径 | 本轮门禁重点 |
+|---|---|---|---|
+| `SYS-008、CAM-001..002、PLC-001..004` | 延迟连接、相机附带连接、手动连接/断开、触发模式和工艺参数继续由`InspectionApplicationService`命令进入唯一`InspectionRuntime`与`InspectionPlcController`；启动参数只取本次MachineSettings快照 | `InspectionRuntimeController`及UI侧启动PLC参数编排已删除；Widget不再持有PLC结果脉冲状态 | 无PLC不阻止主窗/开相机；Fake连接、断开、0/1、固定地址/大端顺序；真实PLC仍不冒充验收 |
+| `SYS-010、UI-001..003、SET-005` | 五模式使用稳定`DetectionMode`；运行状态与只读`RuntimeSnapshot`来自唯一Runtime；结果图由Runtime内纯渲染器生成，再由UI绑定应用；运行中硬件参数门禁继续查询同一状态 | 旧模式整数Worker工厂、UI目录反向依赖、第二套结果状态和运行Controller查询已删除 | Release Run qmake/Rebuild；五模式控件/图像/Overlay；运行中参数禁用和退出释放 |
+| `UI-004..005、RES-001..005` | 每个`ProductKey`只允许一次`ResultService`事务：形成完整`InspectionPresentation`，正常统计更新一次，再经容量1邮箱整体呈现；Fault使用独立异常统计和“视觉检测已暂停、输送线状态未知”说明 | `InspectionResultCoordinator`、`DetectionCompletionController`、旧ResultHandler、分散五模式收尾和Fault兜底计数展示已删除 | 五模式图文/模板名/判定/耗时/统计同产品；重复结果只呈现/统计一次；Fault不改变已有判定 |
+| `DET-001..008` | `PipelineRegistry`按PreparedRecipe中的稳定模式唯一选择纸巾、钢印、字库、OCR或二维码+三期Pipeline；全部Worker容量1并把类型化完成结果交给唯一ResultService | `DetectionModeWorkerFactory`、`DetectionSession`及Widget中的模式装配/结果出口已删除；算法失败不切换其他算法 | 五模式固定样本与资源；定位失败仍形成既有NG；系统故障与产品NG严格分离 |
+| `RUN-001..006` | 每次启动只创建一个不可变`InspectionRunContext`，冻结runId、开始时间、MachineSettings、PreparedRecipe和Profile；Runtime唯一拥有Worker、产品账本、Fault和容量1呈现邮箱；停止按采集→Worker→相机恢复协作完成 | 启动/停止Transaction、旧FaultState、ProductReconciler、自动补建运行会话和并行运行状态已删除 | 五模式启停/重启、软硬触发背压、重复结果、Fault首因、停止后线程退出及下一次预检 |
+| `PLC-005..007` | 正常OK写0；正常NG写49并由ResultService约100ms后写0；延迟NG队列携带原始ProductKey且只输出一次；任一写失败进入Fault并停止新的正式受理 | UI回调写PLC、旧完成控制器/ResultHandler队列及“唯一未结论产品兜底49”分支已删除 | Fake锁定0、49→0、延迟位置、重复去重、写失败零兜底；不声称机械剔除成功 |
+| `SAVE-001..005` | ResultService按运行设置快照每产品最多提交一个`ImageSaveTask`；`ImageSaveService`保持容量32、两个写线程、队满阻塞且不丢任务，原图/标注图仍来自同一帧 | UI侧保存模式判断、任务拼装和结果协调器私有存图服务已删除 | 四种策略、三种图像组合、OCR同帧原图、JPEG 92、不可写报警和慢盘反压 |
+
+正式功能当前状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。
 | `已确认删除`：`MC-001..003` | 无入口、无类型、无底层API | `MultiCameraWidget/Controller/Unit/SyncManager/Provider/Types`、隐藏按钮、UI文件及qmake项已全部删除，不留兼容桥或未来扩建API | 主界面无多相机入口；源码/UI/qmake旧符号零引用 |
 
 ## 1. 启动、系统保护与部署
@@ -239,7 +257,7 @@
 | DIFF-007 | 相机和PLC边界后续分离 | “打开相机”会先尝试连接PLC，PLC失败仍继续开相机 | 影响设备操作时序 | Stage 1-3保持，Stage 2只用适配器复现现有顺序 | CAM-001/PLC-001 |
 | DIFF-008 | 检测ROI外扩碰边时裁到原图边界 | 原模板匹配日期ROI外扩20像素后若整体落到图外会逐帧弹窗并跳过检测 | 按用户明确要求，20像素改为期望边距；边缘不足时使用0..width-1/height-1边界，只在裁剪后无有效面积时失败 | `DetectionRoiGeometry`统一模板匹配、字库和二维码日期ROI边界；2026-08-14离线边界测试及主程序靠边模板由用户确认通过 | DET-002、DET-003、DET-006、UI-002、RUN-002 |
 | DIFF-009 | 五模式生产存图统一使用JPEG质量92 | 原钢印、字库、二维码和纸巾请求PNG，深度OCR请求未显式质量的JPG | 用户明确选择JPEG 90～95并采用中间值92，以降低PNG编码积压；不改变保存范围、原图/标注图组合、目录和失败报警 | `DetectionCompletionSaveOptions`显式传递quality，`ImageSaveService`调用三参数`QImage::save`；2026-08-15运行测试136项及主程序集中门禁通过 | SAVE-001..005 |
-| DIFF-010 | Fault不发送猜测性兜底NG | 当前`InspectionProductReconciler`在恰有一个未结论产品且PLC可写时允许请求一次49→约100ms→0 | 计划内行为变化；新策略保持已有算法结论，未完成产品记`Unconfirmed`，不计入产品NG或合格率，不冒充机械剔除 | 2026-08-16用户批准；阶段4删除收口器兜底分支并用Fake验证PLC写失败只进入Fault、不产生猜测性49 | `UI-002、UI-005、RUN-001..004、PLC-005..007、RES-001`；新终局方案阶段4 |
+| DIFF-010 | Fault不发送猜测性兜底NG | 阶段4前`InspectionProductReconciler`曾在恰有一个未结论产品且PLC可写时允许请求一次49→约100ms→0 | 已实现的计划内行为变化：`InspectionRuntime`保留已有算法结论，未完成产品统一记`Unconfirmed`，不计入产品NG或合格率，不冒充机械剔除 | 2026-08-16用户批准；阶段4已删除收口器及兜底分支，测试源码覆盖PLC写失败只进入Fault且不产生猜测性49，等待本轮Qt Creator门禁执行 | `UI-002、UI-005、RUN-001..004、PLC-005..007、RES-001`；新终局方案阶段4 |
 | DIFF-011 | “相机延时(ms)”与SDK `TriggerDelay`语义待后续独立决定 | 历史提交中UI `cameraDelay`曾作为线程检测/循环节流，SDK `TriggerDelay`始终固定为0且无UI入口；阶段3当前验证版本仍按已冻结Schema将`cameraDelay`用于软件触发最小间隔、硬触发不附加等待 | 用户提出软件触发未来应改为“上一帧检测结束后立即取下一帧”，但明确撤回本轮尝试并要求以后再处理 | 不修改阶段3已验证生产代码；后续必须先确认字段归属、硬触发合同、0值语义和SDK单位，再单独批准修改Schema、UI和运行消费者 | 不纳入阶段4；关联`SET-008、CAM-003..004、RUN-005` |
 
 ## 基线资源

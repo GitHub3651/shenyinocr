@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ui/presenters/detection_result_presenter.h"
-#include "runtime/inspection_fault_state.h"
+#include "runtime/inspection_presentation_renderer.h"
+#include "runtime/inspection_runtime.h"
 #include "ui/controllers/operation_ui_policy.h"
 
 #include <QString>
@@ -32,7 +32,7 @@ public:
         bool *templateAttentionOn,
         const Callbacks &callbacks);
 
-    DetectionResultViewBindings resultViewBindings() const;
+    InspectionPresentationViewBindings resultViewBindings() const;
     void updateOperationState(
         OperationUiState requestedState,
         bool runtimeFaulted);

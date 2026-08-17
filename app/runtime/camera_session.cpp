@@ -1,6 +1,6 @@
 #include "runtime/camera_session.h"
 
-#include "runtime/inspection_runtime_controller.h"
+#include "runtime/inspection_runtime.h"
 
 #include <QDebug>
 
@@ -48,14 +48,14 @@ bool integerRange(
 
 CameraSession::CameraSession(
     const std::shared_ptr<ICameraDevice> &cameraDevice,
-    InspectionRuntimeController *runtimeController)
+    InspectionRuntime *runtime)
     : m_cameraDevice(cameraDevice),
-      m_runtimeController(runtimeController),
+      m_runtime(runtime),
       m_captureWorker(cameraDevice)
 {
-    if (!m_runtimeController) {
+    if (!m_runtime) {
         throw std::invalid_argument(
-                    "CameraSession requires a runtime controller");
+                    "CameraSession requires InspectionRuntime");
     }
 }
 
@@ -593,6 +593,16 @@ void CameraSession::handleCaptureError(
     qWarning() << "[CAMERA_CAPTURE] formal capture stopped:"
                << static_cast<int>(status)
                << nativeErrorCode;
+    if (callbacks.enterFault) {
+        callbacks.enterFault(
+                    InspectionFaultReason::CameraDisconnected,
+                    status == CameraFrameStatus::Timeout
+                    ? QStringLiteral(
+                        "正式检测连续等待相机图像超时，相机采集已停止。")
+                    : cameraErrorText(
+                        QStringLiteral("正式检测相机采集失败"),
+                        nativeErrorCode));
+    }
 }
 
 void CameraSession::handleCaptureStopped()
@@ -614,11 +624,11 @@ void CameraSession::submitFrame(
     if (image.empty()) {
         return;
     }
-    if (m_runtimeController->state() == InspectionRuntimeState::Fault) {
-        m_runtimeController->acceptFrame(image);
+    if (m_runtime->state() == InspectionRuntimeState::Fault) {
+        m_runtime->acceptFrame(image);
         return;
     }
-    if (!m_runtimeController->isDetectionWorkerActive()) {
+    if (!m_runtime->isDetectionWorkerActive()) {
         return;
     }
     const bool wholeFrame = m_configuration.runPlan.trackingKind
@@ -629,7 +639,7 @@ void CameraSession::submitFrame(
         return;
     }
     const std::shared_ptr<const FrameData> frame =
-            m_runtimeController->acceptFrame(image);
+            m_runtime->acceptFrame(image);
     if (!frame) {
         return;
     }
@@ -637,8 +647,8 @@ void CameraSession::submitFrame(
     if (m_configuration.runPlan.acquisitionKind
             == InspectionAcquisitionKind::SoftwareTrigger) {
         const bool accepted = wholeFrame
-                ? m_runtimeController->submitDetectionFrame(frame)
-                : m_runtimeController->submitDetectionWorkItem(
+                ? m_runtime->submitDetectionFrame(frame)
+                : m_runtime->submitDetectionWorkItem(
                     makeDetectionWorkItem(frame, pose));
         if (!accepted) {
             qDebug() << "[DETECTION_WORKER] software frame rejected"
@@ -649,8 +659,8 @@ void CameraSession::submitFrame(
     }
 
     const DetectionWorkSubmissionResult submission = wholeFrame
-            ? m_runtimeController->trySubmitDetectionFrame(frame)
-            : m_runtimeController->trySubmitDetectionWorkItem(
+            ? m_runtime->trySubmitDetectionFrame(frame)
+            : m_runtime->trySubmitDetectionWorkItem(
                 makeDetectionWorkItem(frame, pose));
     if (submission == DetectionWorkSubmissionResult::QueueFull) {
         const CameraSessionCallbacks callbacks = callbacksSnapshot();
@@ -662,7 +672,7 @@ void CameraSession::submitFrame(
                         .arg(frame->productKey.runId)
                         .arg(frame->productKey.sequence)
                         .arg(static_cast<qulonglong>(
-                            m_runtimeController
+                            m_runtime
                             ->detectionWorkerQueueCapacity())));
         }
     }

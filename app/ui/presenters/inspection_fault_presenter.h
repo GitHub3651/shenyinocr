@@ -1,6 +1,6 @@
 #pragma once
 
-#include "runtime/inspection_fault_state.h"
+#include "runtime/inspection_runtime.h"
 
 #include <QString>
 
