@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <devices/ocr/vendor/paddle/include/ocr_rec.h>
+#include <engines/ocr/vendor/paddle/include/ocr_rec.h>
 
 namespace PaddleOCR {
 

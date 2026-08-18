@@ -1501,3 +1501,11 @@
 - [x] 硬触发`waitNextFrame`的1000ms仍只是一次条件变量等待切片：帧回调、设备错误或`interruptWait()`会立即提前唤醒；无外部沿时到期后重新等待，不产生产品失败、NG或Fault，也不限制后续帧。由于正常停止已有`interruptWait()`，该切片不是停止正确性的必要条件，只保留为采集线程周期性重新取得控制权的防御性心跳。
 - [x] Schema 1已落盘键`inspection.minimumIntervalMs`暂不改名，避免本次行为修订制造第二份不兼容设置格式；其唯一当前语义已在Schema和功能表改为硬触发延时ms。正式功能`CAM-003、CAM-004、RUN-005`暂记`迁移中`，等待用户Qt Creator主程序与真实海康相机门禁后恢复为`已验证`。
 - [x] 按用户此前要求，仓库`tests`已删除；本轮不创建测试代码，也不运行qmake、构建、测试程序或主程序，只执行正式代码静态检查，最终运行验证交由用户在Qt Creator完成。
+
+## 阶段0～7完成后的外部引擎目录拆分（2026-08-18，等待用户门禁）
+
+- [x] 用户明确要求将广义`devices`拆为物理设备与识别引擎：`app/devices`只保留`camera/plc`，新增`app/engines`承载`ocr/barcode`。
+- [x] `IOcrEngine/PaddleOcrEngine`及Paddle vendor源码整体迁至`engines/ocr`；`IBarcodeDecoder/BarcodeDecoderAdapter`、公共值类型和DLL API整体迁至`engines/barcode`。所有include与主工程qmake清单同步改为新路径，接口名称、构造位置、模型、DLL ABI、算法和判定不变。
+- [x] 当前架构文档、第三方依赖清单和正式功能路径同步区分`devices`与`engines`；历史执行记录中的旧路径保留为当时事实，不回写历史证据。
+- [x] 受影响功能为`SYS-006、TPL-004、DET-004、DET-006、TOOL-002`，暂记`迁移中`；与既有采集节拍待验项合计`迁移中8/已验证79/已确认删除3`。等待用户在Qt Creator执行Run qmake、Rebuild，并复验OCR模型初始化、代表帧OCR、模板即时读码和二维码+三期模式。
+- [x] 按用户此前要求，仓库`tests`已删除；本轮不创建或运行测试，不运行qmake、构建或主程序，只执行正式代码静态检查。

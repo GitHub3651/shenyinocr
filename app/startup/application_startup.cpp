@@ -9,9 +9,9 @@
 #include "system_support/crash/windows_crash_handler.h"
 #include "system_support/logging/application_logger.h"
 
-#include "devices/barcode/vendor/barcode_decoder_adapter.h"
+#include "engines/barcode/vendor/barcode_decoder_adapter.h"
 #include "devices/camera/vendor/hikvision_camera_device.h"
-#include "devices/ocr/vendor/paddle_ocr_engine.h"
+#include "engines/ocr/vendor/paddle_ocr_engine.h"
 #include "devices/plc/vendor/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
 #include "application/template_application_service.h"

@@ -63,9 +63,9 @@ SOURCES += \
     startup/application_startup.cpp \
     ui/presenters/inspection_fault_presenter.cpp \
     runtime/inspection_presentation_renderer.cpp \
-    devices/barcode/vendor/barcode_decoder_adapter.cpp \
+    engines/barcode/vendor/barcode_decoder_adapter.cpp \
     devices/camera/vendor/hikvision_camera_device.cpp \
-    devices/ocr/vendor/paddle_ocr_engine.cpp \
+    engines/ocr/vendor/paddle_ocr_engine.cpp \
     devices/plc/vendor/snap7_plc_device.cpp \
     runtime/inspection_run_configuration.cpp \
     runtime/camera_session.cpp \
@@ -92,14 +92,14 @@ SOURCES += \
     detection/word/word_detection_pipeline.cpp \
     contracts/detection_mode.cpp \
     detection/stamp/overlap_detector.cpp \
-    devices/ocr/vendor/paddle/src/clipper.cpp \
-    devices/ocr/vendor/paddle/src/config.cpp \
-    devices/ocr/vendor/paddle/src/ocr_cls.cpp \
-    devices/ocr/vendor/paddle/src/ocr_det.cpp \
-    devices/ocr/vendor/paddle/src/ocr_rec.cpp \
-    devices/ocr/vendor/paddle/src/postprocess_op.cpp \
-    devices/ocr/vendor/paddle/src/preprocess_op.cpp \
-    devices/ocr/vendor/paddle/src/utility.cpp \
+    engines/ocr/vendor/paddle/src/clipper.cpp \
+    engines/ocr/vendor/paddle/src/config.cpp \
+    engines/ocr/vendor/paddle/src/ocr_cls.cpp \
+    engines/ocr/vendor/paddle/src/ocr_det.cpp \
+    engines/ocr/vendor/paddle/src/ocr_rec.cpp \
+    engines/ocr/vendor/paddle/src/postprocess_op.cpp \
+    engines/ocr/vendor/paddle/src/preprocess_op.cpp \
+    engines/ocr/vendor/paddle/src/utility.cpp \
     detection/tissue/tissue_roll_detector.cpp \
     ui/widgets/image_label.cpp \
     startup/main.cpp \
@@ -147,12 +147,12 @@ HEADERS += \
     startup/application_startup.h \
     ui/presenters/inspection_fault_presenter.h \
     runtime/inspection_presentation_renderer.h \
-    devices/barcode/vendor/barcode_decoder_adapter.h \
-    devices/barcode/barcode_decoder.h \
+    engines/barcode/vendor/barcode_decoder_adapter.h \
+    engines/barcode/barcode_decoder.h \
     devices/camera/camera_device.h \
     devices/camera/vendor/hikvision_camera_device.h \
-    devices/ocr/ocr_engine.h \
-    devices/ocr/vendor/paddle_ocr_engine.h \
+    engines/ocr/ocr_engine.h \
+    engines/ocr/vendor/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
     devices/plc/vendor/snap7_plc_device.h \
     runtime/inspection_run_configuration.h \
@@ -180,18 +180,18 @@ HEADERS += \
     detection/stamp/stamp_detection_pipeline.h \
     detection/tissue/tissue_detection_pipeline.h \
     detection/word/word_detection_pipeline.h \
-    devices/barcode/vendor/barcode_decoder_api.h \
-    devices/barcode/barcode_types.h \
+    engines/barcode/vendor/barcode_decoder_api.h \
+    engines/barcode/barcode_types.h \
     contracts/detection_mode.h \
     detection/stamp/overlap_detector.h \
-    devices/ocr/vendor/paddle/include/clipper.h \
-    devices/ocr/vendor/paddle/include/config.h \
-    devices/ocr/vendor/paddle/include/ocr_cls.h \
-    devices/ocr/vendor/paddle/include/ocr_det.h \
-    devices/ocr/vendor/paddle/include/ocr_rec.h \
-    devices/ocr/vendor/paddle/include/postprocess_op.h \
-    devices/ocr/vendor/paddle/include/preprocess_op.h \
-    devices/ocr/vendor/paddle/include/utility.h \
+    engines/ocr/vendor/paddle/include/clipper.h \
+    engines/ocr/vendor/paddle/include/config.h \
+    engines/ocr/vendor/paddle/include/ocr_cls.h \
+    engines/ocr/vendor/paddle/include/ocr_det.h \
+    engines/ocr/vendor/paddle/include/ocr_rec.h \
+    engines/ocr/vendor/paddle/include/postprocess_op.h \
+    engines/ocr/vendor/paddle/include/preprocess_op.h \
+    engines/ocr/vendor/paddle/include/utility.h \
     detection/positioning/detection_pose.h \
     detection/tissue/tissue_roll_detector.h \
     ui/widgets/image_label.h \

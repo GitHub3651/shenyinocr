@@ -5,7 +5,7 @@
 #include "barcode_word_detection_pipeline.h"
 
 #include "detection/common/detection_roi_geometry.h"
-#include "devices/barcode/barcode_decoder.h"
+#include "engines/barcode/barcode_decoder.h"
 
 #include <chrono>
 

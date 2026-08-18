@@ -1,6 +1,6 @@
 // 文件作用：本文件用于定义PLC连接、写入和错误结果端口，隔离具体通信库。
 // 主要职责：定义PLC连接、写入和错误结果端口，隔离具体通信库。
-// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 模块位置：设备层；通过统一端口隔离相机和PLC供应商实现。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #ifndef PLC_DEVICE_H
 #define PLC_DEVICE_H
@@ -31,7 +31,7 @@ struct PlcOperationResult
     int nativeErrorCode;
 };
 
-// 组件说明：IPlcDevice 组件提供对应设备或检测能力的统一实现。
+// 组件说明：IPlcDevice 组件提供对应硬件设备能力的统一实现。
 class IPlcDevice
 {
 public:

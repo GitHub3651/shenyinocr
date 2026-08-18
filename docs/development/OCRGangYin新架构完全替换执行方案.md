@@ -96,10 +96,13 @@ flowchart TD
     Application --> Settings["system_support/settings<br/>机器设置"]
 
     Runtime --> Detection["detection<br/>预处理、定位、五种Pipeline"]
-    Runtime --> Devices["devices<br/>相机、PLC、OCR、二维码端口"]
+    Runtime --> Devices["devices<br/>相机、PLC端口"]
+    Runtime --> Engines["engines<br/>OCR、二维码引擎端口"]
     Runtime --> Storage["system_support/storage<br/>存图与路径"]
 
-    Devices --> Vendor["devices/*/vendor<br/>供应商SDK实现"]
+    Devices --> DeviceVendor["devices/*/vendor<br/>硬件供应商SDK实现"]
+    Engines --> EngineVendor["engines/*/vendor<br/>识别引擎供应商实现"]
+    Detection --> Engines
     Detection --> Recipes
 ```
 
@@ -111,9 +114,9 @@ flowchart TD
 - `runtime` 不依赖 `Widget`、`MainWindow`、`Ui::*` 或 `QMessageBox`。
 - `detection` 不依赖 UI、磁盘、PLC 或相机 SDK。
 - `recipes` 不依赖 detection 实现、UI 或全局设置管理器。
-- 供应商类型只能出现在 `devices/*/vendor`。
-- `startup` 是整个应用的纯组合根，负责进程初始化并组装完整对象图，包括 vendor 设备实现、Store、Runtime、应用服务、页面和 `MainWindow`。
-- `startup` 是唯一允许构造具体设备实现的位置，但不得包含业务规则、算法、设备时序、结果判定或 UI 用例逻辑。
+- 硬件供应商类型只能出现在 `devices/*/vendor`，OCR和二维码供应商类型只能出现在 `engines/*/vendor`。
+- `startup` 是整个应用的纯组合根，负责进程初始化并组装完整对象图，包括 vendor 设备和引擎实现、Store、Runtime、应用服务、页面和 `MainWindow`。
+- `startup` 是唯一允许构造具体设备和引擎实现的位置，但不得包含业务规则、算法、设备时序、结果判定或 UI 用例逻辑。
 - 每次运行只有一个 `InspectionRunContext`、一条检测结果链和一个 PLC 输出入口。
 - 禁止通过 `friend`、主窗口裸指针或 `Ui::Widget *` 穿透边界。
 
@@ -162,7 +165,8 @@ app/
 │  └─ recipe_asset_service.*
 ├─ devices/
 │  ├─ camera/
-│  ├─ plc/
+│  └─ plc/
+├─ engines/
 │  ├─ ocr/
 │  └─ barcode/
 └─ system_support/

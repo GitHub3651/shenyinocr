@@ -6,7 +6,7 @@
 #define DETECTION_OCR_OCR_DETECTION_PIPELINE_H
 
 #include "detection/positioning/detection_pose.h"
-#include "devices/ocr/ocr_engine.h"
+#include "engines/ocr/ocr_engine.h"
 
 #include <opencv2/core.hpp>
 

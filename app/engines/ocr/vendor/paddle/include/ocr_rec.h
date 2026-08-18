@@ -27,10 +27,10 @@
 #include <fstream>
 #include <numeric>
 
-#include <devices/ocr/vendor/paddle/include/ocr_cls.h>
-#include <devices/ocr/vendor/paddle/include/postprocess_op.h>
-#include <devices/ocr/vendor/paddle/include/preprocess_op.h>
-#include <devices/ocr/vendor/paddle/include/utility.h>
+#include <engines/ocr/vendor/paddle/include/ocr_cls.h>
+#include <engines/ocr/vendor/paddle/include/postprocess_op.h>
+#include <engines/ocr/vendor/paddle/include/preprocess_op.h>
+#include <engines/ocr/vendor/paddle/include/utility.h>
 
 using namespace paddle_infer;
 

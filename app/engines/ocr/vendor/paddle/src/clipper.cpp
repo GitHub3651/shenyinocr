@@ -46,7 +46,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "devices/ocr/vendor/paddle/include/clipper.h"
+#include "engines/ocr/vendor/paddle/include/clipper.h"
 
 namespace ClipperLib {
 

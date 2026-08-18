@@ -16,7 +16,7 @@
 #include <ostream>
 #include <vector>
 
-#include <devices/ocr/vendor/paddle/include/utility.h>
+#include <engines/ocr/vendor/paddle/include/utility.h>
 
 namespace PaddleOCR {
 

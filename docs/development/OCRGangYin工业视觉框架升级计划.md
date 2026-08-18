@@ -77,7 +77,8 @@ app/
 ├─ ui/               # 界面和显示
 ├─ recipes/          # 产品配方
 ├─ detection/        # 检测类型、Tool、Pipeline和五种模式
-├─ devices/          # 相机、PLC、OCR和二维码接口及实现
+├─ devices/          # 相机和PLC接口及实现
+├─ engines/          # OCR和二维码引擎接口及实现
 ├─ runtime/          # 启停控制、线程、队列和结果处理
 └─ system_support/   # 软件设置、日志和图片保存
 ```
@@ -89,10 +90,11 @@ app/
 ```text
 startup → 所有模块
 ui → runtime + recipes
-runtime → recipes + detection + devices + system_support
-detection → recipes + devices中的OCR/二维码接口
+runtime → recipes + detection + devices + engines + system_support
+detection → recipes + engines中的OCR/二维码接口
 recipes → Qt Core/OpenCV基础类型
-devices → 第三方SDK
+devices → 相机和PLC第三方SDK
+engines → OCR和二维码第三方SDK/模型
 system_support → Qt Core/OpenCV基础类型
 ```
 
@@ -104,7 +106,7 @@ system_support → Qt Core/OpenCV基础类型
 - `ui/` 不持有相机SDK对象、PLC客户端、OCR模型或DLL函数指针。
 - `recipes/` 不执行定位、OCR、二维码或正式检测。
 - `runtime/` 负责编排，不实现具体算法。
-- 具体第三方依赖只出现在 `devices/`、`system_support/` 和现有 `third_party/` 中。
+- 具体第三方依赖只出现在 `devices/`、`engines/`、`system_support/` 和现有 `third_party/` 中。
 
 ### 2.3 主运行链
 
@@ -586,7 +588,7 @@ Agent负责生成和维护测试源码、工程清单与执行说明；测试目
 - 新增产品：新增或修改产品配方，不修改主窗口算法代码。
 - 新增Tool：放入 `detection/` 并增加离线测试。
 - 新增检测模式：装配Pipeline、注册模式并增加UI名称。
-- 更换设备：替换 `devices/` 中对应实现，不修改检测算法。
+- 更换设备或识别引擎：替换 `devices/` 或 `engines/` 中对应实现，不修改检测算法。
 - 新增设置：先判断属于产品配方还是整机设置，每项设置只保留一个默认值来源。
 - 类或文件按独立职责拆分，主窗口只保留界面组合与命令连接。
 - 新文件、类型、函数、信号槽、变量、JSON字段和测试名称遵守2.5节；迁移旧职责时同步消除同一模块内明显不一致的名称，但不做脱离功能迁移的全局改名。

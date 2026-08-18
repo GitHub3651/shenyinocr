@@ -1,10 +1,12 @@
 # OCRGangYin
 
-OCRGangYin 是神银现场 OCR 检测程序。Qt 主程序位于 `app/`；当前目录结构重构只调整文件位置和工程路径，不调整五种检测模式、`Widget` 业务逻辑、多相机入口或现场配置格式。
+OCRGangYin 是神银现场 OCR 检测程序。Qt 主程序位于 `app/`；目录结构调整不改变五种检测模式的算法、判定、运行时序或现场配置格式。
 
 ## 目录
 
 - `app/`：Qt 5 主程序、UI、资源和参与编译的 PaddleOCR 源码。
+- `app/devices/`：相机和PLC硬件端口及供应商实现。
+- `app/engines/`：OCR和二维码识别引擎端口及供应商实现。
 - `third_party/`：Paddle Inference、OpenCV、海康 SDK、Snap7 等非 Git 二进制依赖；准确版本与校验项见 `third_party/DEPENDENCIES.md`。
 - `tools/barcode_decoder/`：二维码 / Data Matrix 解码 DLL 的独立 CMake 源码。
 - `tools/license_tool/`：独立 Qt 授权工具。

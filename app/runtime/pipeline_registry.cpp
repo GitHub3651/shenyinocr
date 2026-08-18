@@ -6,8 +6,8 @@
 
 #include "detection/stamp/overlap_detector.h"
 #include "detection/ocr/ocr_detection_pipeline.h"
-#include "devices/barcode/barcode_decoder.h"
-#include "devices/ocr/ocr_engine.h"
+#include "engines/barcode/barcode_decoder.h"
+#include "engines/ocr/ocr_engine.h"
 
 #include <chrono>
 

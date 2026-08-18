@@ -5,7 +5,7 @@
 | 依赖 | 当前用途 | 目标目录 | 版本 / 架构 | 许可证 | 来源与校验 |
 | --- | --- | --- | --- | --- | --- |
 | Paddle Inference | OCR 推理链接与运行时 | `third_party/paddle_inference_install_dir` | Git `5c7ad3bcb482dd93ea21b3b66b5a7ff964e0f239`；CPU、MKL/MKLDNN、MSVC 19.0 x64 | Apache-2.0 | `paddle_inference.dll` (51,808,768 B): `E8BF9E6043CE6754CFD516162369A5CBCA22DCF15A0EAC8B41A68B4F14EE6113`; `.lib` (180,906 B): `854BA8471A6869E975B3E75778A5B35EAAB6BD772CE874518A75C62DC88F8673` |
-| PaddleOCR vendor 源码 | Qt 主程序内 OCR 预处理 / 后处理 | `app/devices/ocr/vendor/paddle` | 当前项目源码 | Apache-2.0 | 由 Git 追踪；仅此目录参与主工程，不属于二进制依赖 |
+| PaddleOCR vendor 源码 | Qt 主程序内 OCR 预处理 / 后处理 | `app/engines/ocr/vendor/paddle` | 当前项目源码 | Apache-2.0 | 由 Git 追踪；仅此目录参与主工程，不属于二进制依赖 |
 | OpenCV | 图像处理、模板匹配、定位与图像编解码 | `third_party/opencv` | 3.4.1、MSVC 2017 x64 | Apache-2.0 | 主/测试qmake统一链接`opencv_world341.lib` (2,319,424 B): `E65B64E924E014AD33DE66046A251F455AD8170318F8AC9D3E9FE57BC6AC1981`；Release运行库以`dist/ShengYin/manifest.sha256`为准 |
 | Halcon 头文件 | 为后续机器视觉功能保留接口；当前未接入编译或运行 | `third_party/halcon/include` | 13.0.2 build 5、头文件包 | MVTec 商业许可 | 从原混合头文件包分离；当前 `.pro` 和源码无 Halcon 引用，未包含 Halcon 库或运行时 |
 | 海康 MVS SDK | 相机控制与取图 | `third_party/hikvision_mvs_sdk/include`、`third_party/hikvision_mvs_sdk/lib/win64` | 当前 Win64 SDK（安装包版本待从原始介质补录） | 海康 SDK 随附许可（非开源） | `MvCameraControl.lib` (65,656 B): `F61A4C23CA873FBF1AD2597F78AD85C710983C0FC1B7CAD4A967508DE5F7FE1E` |

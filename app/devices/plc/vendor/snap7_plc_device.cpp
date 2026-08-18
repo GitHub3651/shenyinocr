@@ -1,6 +1,6 @@
 // 文件作用：本文件用于把Snap7通信包装为项目统一PLC设备端口。
 // 主要职责：把Snap7通信包装为项目统一PLC设备端口。
-// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 模块位置：设备层；通过统一端口隔离相机和PLC供应商实现。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "snap7_plc_device.h"
 
@@ -27,7 +27,7 @@ int snap7WordLength(PlcDataWidth dataWidth)
 
 } // namespace
 
-// 组件说明：Snap7PlcDevice 组件提供对应设备或检测能力的统一实现。
+// 组件说明：Snap7PlcDevice 组件提供对应硬件设备能力的统一实现。
 struct Snap7PlcDevice::Impl
 {
     std::unique_ptr<TS7Client> client;

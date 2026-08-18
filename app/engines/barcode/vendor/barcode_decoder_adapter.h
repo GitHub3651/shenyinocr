@@ -1,12 +1,12 @@
 // 文件作用：本文件用于把二维码供应商接口转换为项目内部统一的二维码解码端口。
 // 主要职责：把二维码供应商接口转换为项目内部统一的二维码解码端口。
-// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 模块位置：引擎层；通过统一端口隔离OCR和二维码供应商实现。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #ifndef BARCODE_DECODER_ADAPTER_H
 #define BARCODE_DECODER_ADAPTER_H
 
-#include "devices/barcode/barcode_decoder.h"
-#include "devices/barcode/vendor/barcode_decoder_api.h"
+#include "engines/barcode/barcode_decoder.h"
+#include "engines/barcode/vendor/barcode_decoder_api.h"
 
 #include <QString>
 

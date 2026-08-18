@@ -1,6 +1,6 @@
 // 文件作用：本文件用于定义相机设备端口、触发模式、帧数据和设备错误状态。
 // 主要职责：定义相机设备端口、触发模式、帧数据和设备错误状态。
-// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 模块位置：设备层；通过统一端口隔离相机和PLC供应商实现。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
@@ -96,7 +96,7 @@ struct CameraFrameResult
     int nativeErrorCode = 0;
 };
 
-// 组件说明：ICameraDevice 组件提供对应设备或检测能力的统一实现。
+// 组件说明：ICameraDevice 组件提供对应硬件设备能力的统一实现。
 class ICameraDevice
 {
 public:

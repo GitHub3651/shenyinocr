@@ -4,7 +4,7 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/template_application_service.h"
 
-#include "devices/barcode/barcode_decoder.h"
+#include "engines/barcode/barcode_decoder.h"
 #include "recipes/recipe_store.h"
 
 #include <opencv2/imgproc.hpp>

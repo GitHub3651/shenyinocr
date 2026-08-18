@@ -27,8 +27,8 @@
 #include <fstream>
 #include <numeric>
 
-#include "devices/ocr/vendor/paddle/include/clipper.h"
-#include "devices/ocr/vendor/paddle/include/utility.h"
+#include "engines/ocr/vendor/paddle/include/clipper.h"
+#include "engines/ocr/vendor/paddle/include/utility.h"
 
 using namespace std;
 

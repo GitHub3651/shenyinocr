@@ -4,7 +4,7 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include "devices/barcode/barcode_types.h"
+#include "engines/barcode/barcode_types.h"
 #include "detection/positioning/detection_pose.h"
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
