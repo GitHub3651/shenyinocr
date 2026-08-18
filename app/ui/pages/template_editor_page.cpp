@@ -601,12 +601,10 @@ void TemplateEditorPage::saveCurrentTemplate()
         }
         if (!barcodeTemplateReadable()
                 || validatedBarcodeRect() != barcodeUi) {
-            TemplateBarcodeValidationResult barcode;
             QString reason;
             if (!validateBarcodeTemplateRect(
                     barcodeUi,
                     barcodeTemplateValidationOptions(),
-                    &barcode,
                     &reason)) {
                 clearBarcodeTemplateValidation();
                 imageLabel->retryBarcodeRegion();
@@ -615,7 +613,7 @@ void TemplateEditorPage::saveCurrentTemplate()
                             reason);
                 return;
             }
-            acceptBarcodeTemplateValidation(barcodeUi, barcode.text);
+            acceptBarcodeTemplateValidation(barcodeUi);
         }
     }
 
@@ -840,20 +838,11 @@ QRect TemplateEditorPage::validatedBarcodeRect() const
     return m_validatedBarcodeRect;
 }
 
-// 函数说明：validatedBarcodeText 函数校验、转换或恢复对应数据。
-QString TemplateEditorPage::validatedBarcodeText() const
-{
-    return m_validatedBarcodeText;
-}
-
 // 函数说明：acceptBarcodeTemplateValidation 函数实现名称所表示的处理步骤。
-void TemplateEditorPage::acceptBarcodeTemplateValidation(
-    const QRect &barcodeRect,
-    const QString &barcodeText)
+void TemplateEditorPage::acceptBarcodeTemplateValidation(const QRect &barcodeRect)
 {
     m_barcodeTemplateReadable = true;
     m_validatedBarcodeRect = barcodeRect;
-    m_validatedBarcodeText = barcodeText;
 }
 
 // 函数说明：clearBarcodeTemplateValidation 函数停止流程、清理状态或释放对应资源。
@@ -861,14 +850,12 @@ void TemplateEditorPage::clearBarcodeTemplateValidation()
 {
     m_barcodeTemplateReadable = false;
     m_validatedBarcodeRect = QRect();
-    m_validatedBarcodeText.clear();
 }
 
 // 函数说明：validateBarcodeTemplateRect 函数校验、转换或恢复对应数据。
 bool TemplateEditorPage::validateBarcodeTemplateRect(
     const QRect &uiBarcodeRect,
     const TemplateBarcodeValidationOptions &options,
-    TemplateBarcodeValidationResult *barcode,
     QString *failureReason)
 {
     const cv::Mat templateImage =
@@ -886,7 +873,7 @@ bool TemplateEditorPage::validateBarcodeTemplateRect(
                 uiBarcodeRect.normalized(), geometry);
     return m_templateService->validateBarcodeTemplate(
                 templateImage, sourceRect, options,
-                barcode, failureReason);
+                failureReason);
 }
 
 TemplateBarcodeValidationOptions

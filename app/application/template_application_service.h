@@ -85,7 +85,6 @@ public:
         const cv::Mat &sourceImage,
         const QRect &sourceRect,
         const TemplateBarcodeValidationOptions &options,
-        TemplateBarcodeValidationResult *result,
         QString *failureReason) const;
 
     const TemplateModeMemory &modeMemory() const;

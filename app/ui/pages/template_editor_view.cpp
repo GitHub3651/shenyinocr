@@ -286,12 +286,10 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
     if (barcodeWordMode && eventName == "barcode_done") {
         const QRect barcodeRect =
                 imageLabel->getBarcodeRect().normalized();
-        TemplateBarcodeValidationResult barcode;
         QString failureReason;
         if (!validateBarcodeTemplateRect(
                     barcodeRect,
                     barcodeTemplateValidationOptions(),
-                    &barcode,
                     &failureReason)) {
             clearBarcodeTemplateValidation();
             imageLabel->retryBarcodeRegion();
@@ -313,7 +311,6 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
 
         m_barcodeTemplateReadable = true;
         m_validatedBarcodeRect = barcodeRect;
-        m_validatedBarcodeText = barcode.text;
         if (guideVisible) {
             updateTemplateGuideText(
                         title,

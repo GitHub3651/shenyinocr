@@ -245,22 +245,14 @@ bool TemplateApplicationService::validateBarcodeTemplate(
         const cv::Mat &sourceImage,
         const QRect &sourceRect,
         const TemplateBarcodeValidationOptions &options,
-        TemplateBarcodeValidationResult *result,
         QString *failureReason) const
 {
     BarcodeReadResult decoded;
-    auto publishResult = [&]() {
-        if (result) {
-            result->readable = decoded.readable;
-            result->text = decoded.text;
-        }
-    };
     auto fail = [&](BarcodeReadStatus status,
                     const QString &diagnostic) {
         decoded.status = status;
         decoded.readable = false;
         decoded.errorReason = diagnostic;
-        publishResult();
         if (failureReason) {
             *failureReason = barcodeFailureMessage(decoded);
         }
@@ -314,25 +306,17 @@ bool TemplateApplicationService::validateBarcodeTemplate(
     decodeOptions.maxDecodeTimeMs = options.maxDecodeTimeMs;
     decodeOptions.enableFallback = options.enableFallback;
     decoded = m_barcodeDecoder->decode(gray, decodeOptions);
-    decoded.cornersInOriginal.clear();
-    decoded.cornersInOriginal.reserve(decoded.cornersInRoi.size());
-    for (const cv::Point2f &point : decoded.cornersInRoi) {
-        decoded.cornersInOriginal.emplace_back(
-                    point.x + roi.x, point.y + roi.y);
-    }
     const bool readable =
             decoded.status == BarcodeReadStatus::Success
             && decoded.readable
             && (!decoded.rawBytes.isEmpty() || !decoded.text.isEmpty());
     if (!readable) {
         decoded.readable = false;
-        publishResult();
         if (failureReason) {
             *failureReason = barcodeFailureMessage(decoded);
         }
         return false;
     }
-    publishResult();
     if (failureReason) {
         failureReason->clear();
     }

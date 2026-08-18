@@ -28,13 +28,6 @@ struct TemplateBarcodeValidationOptions
             BarcodeParameterDefaults::EnableFallback;
 };
 
-// 组件说明：TemplateBarcodeValidationResult 数据结构保存一次操作的结果、状态和错误信息。
-struct TemplateBarcodeValidationResult
-{
-    bool readable = false;
-    QString text;
-};
-
 // Mutable editor DTO derived exclusively from a PreparedRecipe snapshot.
 // It carries neither filesystem paths nor persistence ownership.
 struct WordTemplateProfile

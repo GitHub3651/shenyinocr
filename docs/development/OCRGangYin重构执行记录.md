@@ -1509,3 +1509,14 @@
 - [x] 当前架构文档、第三方依赖清单和正式功能路径同步区分`devices`与`engines`；历史执行记录中的旧路径保留为当时事实，不回写历史证据。
 - [x] 受影响功能为`SYS-006、TPL-004、DET-004、DET-006、TOOL-002`，暂记`迁移中`；与既有采集节拍待验项合计`迁移中8/已验证79/已确认删除3`。等待用户在Qt Creator执行Run qmake、Rebuild，并复验OCR模型初始化、代表帧OCR、模板即时读码和二维码+三期模式。
 - [x] 按用户此前要求，仓库`tests`已删除；本轮不创建或运行测试，不运行qmake、构建或主程序，只执行正式代码静态检查。
+
+## 阶段0～7完成后的S1零调用代码清理（2026-08-18，已完成）
+
+- [x] 用户明确批准只删除“现在不用且完全不影响功能”的代码或文件，并再次限定本轮只精简代码：图片、图标、QSS/CSS、翻译、`.qrc`、模型、DLL、部署资产和用户文件均不删除、不修改。原计划S0中的8项既有待验功能不因本轮清理改变状态，继续保持`迁移中8/已验证79/已确认删除3`。
+- [x] 删除无任何生产入口的`runtime/detection_shadow_comparator.h/.cpp`及主qmake两条工程项。该比较器只接收两份外部`DetectionResult`做离线差异比较，从未接入startup、CameraSession、DetectionWorker、五种Pipeline、ResultService、统计、存图、UI或PLC链。
+- [x] 删除全仓仅有声明和定义的5个普通查询方法：`InspectionApplicationService::queryCameraExposureRange()`、`InspectionRuntime::unresolvedFaultProductCount()`、`InspectionRuntime::faultUnconfirmedProductCount()`、`InspectionRuntime::runContext()`、`TemplateEditorPage::validatedBarcodeText()`。Qt自动槽、虚函数、SDK回调、许可证工具接口和vendor源码均已排除，没有按名称或目录猜测删除。
+- [x] 连带删除只写不读的Runtime故障累计字段和模板页二维码文本字段，以及无人消费的`TemplateBarcodeValidationResult`返回DTO、结果参数、二维码角点回填和局部变量。实际故障未确认数量仍由`ResultService::recordUnconfirmedProducts()`登记；二维码仍执行真实解码并保留可读状态、失败原因和已验证ROI；曝光范围底层查询仍由实际曝光设置流程使用。
+- [x] 本轮代码差异删除2个代码文件、清理6个零调用查询/返回接口及2组只写状态，`app/`的`.h/.cpp`由166个降为164个；未删除任何检测模式、Pipeline、Recipe、设备/引擎适配器、资源或第三方代码。仓库`tests`不存在，按用户要求未重建测试。
+- [x] Agent静态门禁通过：已删文件和全部已删符号在`app`生产源码/qmake中为0引用；主qmake登记文件缺失为0；`git diff --check`通过；差异不含资源、`.pro.user`、`.ui.autosave`或`app.zip`。Agent未运行或间接触发qmake、构建、测试程序或主程序，等待用户在Qt Creator执行Run qmake、Rebuild和主程序回归后再收口与提交。
+- [x] 2026-08-18用户按S1交付清单完成Run qmake、Rebuild及主程序回归后反馈“没问题”；旧文件删除后的工程可构建运行，二维码+三期模板即时验证和代表检测模式启停未发现回归，S1用户门禁通过。
+- [x] S1没有对应独立用户功能ID，功能表不作状态变更；采集节拍语义修订和engines目录迁移涉及的`CAM-003、CAM-004、RUN-005、SYS-006、TPL-004、DET-004、DET-006、TOOL-002`继续保持`迁移中`，不得以本轮无功能精简门禁替代其真实相机/OCR专项验证。

@@ -135,7 +135,6 @@ public:
     OperationResult applyPlcRunSettings(
         const PlcRunSettingsCommand &command);
     OperationResult writePlcPhotoDistance(std::uint32_t value);
-    CameraParameterResultDto queryCameraExposureRange();
     CameraParameterResultDto queryCameraGainRange();
     CameraParameterResultDto applyCameraExposure(int exposure);
     CameraParameterResultDto applyCameraGain(int gain);

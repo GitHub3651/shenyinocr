@@ -70,7 +70,6 @@ SOURCES += \
     runtime/inspection_run_configuration.cpp \
     runtime/camera_session.cpp \
     runtime/capture_worker.cpp \
-    runtime/detection_shadow_comparator.cpp \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
     runtime/pipeline_registry.cpp \
@@ -158,7 +157,6 @@ HEADERS += \
     runtime/inspection_run_configuration.h \
     runtime/camera_session.h \
     runtime/capture_worker.h \
-    runtime/detection_shadow_comparator.h \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
     runtime/pipeline_registry.h \

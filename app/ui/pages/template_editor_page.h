@@ -137,7 +137,6 @@ public:
     bool validateBarcodeTemplateRect(
         const QRect &uiBarcodeRect,
         const TemplateBarcodeValidationOptions &options,
-        TemplateBarcodeValidationResult *barcode,
         QString *failureReason);
     TemplateBarcodeValidationOptions
     barcodeTemplateValidationOptions() const;
@@ -223,10 +222,7 @@ public:
     void setCurrentTemplateNameVisible(bool visible);
     bool barcodeTemplateReadable() const;
     QRect validatedBarcodeRect() const;
-    QString validatedBarcodeText() const;
-    void acceptBarcodeTemplateValidation(
-        const QRect &barcodeRect,
-        const QString &barcodeText);
+    void acceptBarcodeTemplateValidation(const QRect &barcodeRect);
 
 private:
     QWidget *dialogParent() const;
@@ -281,5 +277,4 @@ private:
     QString m_currentTemplateDisplayName;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
-    QString m_validatedBarcodeText;
 };

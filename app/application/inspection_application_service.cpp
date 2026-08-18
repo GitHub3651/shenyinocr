@@ -1001,13 +1001,6 @@ OperationResult InspectionApplicationService::writePlcPhotoDistance(
 }
 
 CameraParameterResultDto
-// 函数说明：queryCameraExposureRange 函数读取、等待或计算对应的数据。
-InspectionApplicationService::queryCameraExposureRange()
-{
-    return cameraParameterDto(m_cameraSession->queryExposureRange());
-}
-
-CameraParameterResultDto
 // 函数说明：queryCameraGainRange 函数读取、等待或计算对应的数据。
 InspectionApplicationService::queryCameraGainRange()
 {

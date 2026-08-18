@@ -103,8 +103,6 @@ public:
     QString runId() const;
     quint64 acceptedProductCount() const;
     quint64 completedProductCount() const;
-    int unresolvedFaultProductCount() const;
-    int faultUnconfirmedProductCount() const;
 
     bool isPlcConnected() const;
     PlcOperationResult connectPlc(
@@ -122,8 +120,6 @@ public:
     bool startPipeline(
         const ResultServiceRunConfiguration &resultConfiguration,
         QString *errorMessage);
-    std::shared_ptr<const InspectionRunContext> runContext() const;
-
     std::shared_ptr<const FrameData> acceptFrame(
         const cv::Mat &image,
         quint64 frameNumber = 0,
@@ -180,7 +176,6 @@ private:
     quint64 m_acceptedProductSequence = 0;
     quint64 m_completedProductCount = 0;
     quint64 m_lastCompletedProductSequence = 0;
-    int m_faultUnconfirmedProductCount = 0;
     InspectionFaultSnapshot m_faultSnapshot;
     std::map<quint64, std::weak_ptr<const FrameData>> m_acceptedFrames;
     std::map<quint64, ProductProgress> m_products;

@@ -67,7 +67,6 @@ QString InspectionRuntime::beginStart(
     m_acceptedProductSequence = 0;
     m_completedProductCount = 0;
     m_lastCompletedProductSequence = 0;
-    m_faultUnconfirmedProductCount = 0;
     m_faultSnapshot = InspectionFaultSnapshot();
     m_acceptedFrames.clear();
     m_products.clear();
@@ -184,7 +183,6 @@ int InspectionRuntime::reconcileFaultProducts()
             return 0;
         }
         count = static_cast<int>(m_products.size());
-        m_faultUnconfirmedProductCount += count;
         m_products.clear();
         m_acceptedFrames.clear();
     }
@@ -255,20 +253,6 @@ quint64 InspectionRuntime::completedProductCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_completedProductCount;
-}
-
-// 函数说明：unresolvedFaultProductCount 函数实现名称所表示的处理步骤。
-int InspectionRuntime::unresolvedFaultProductCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return static_cast<int>(m_products.size());
-}
-
-// 函数说明：faultUnconfirmedProductCount 函数实现名称所表示的处理步骤。
-int InspectionRuntime::faultUnconfirmedProductCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_faultUnconfirmedProductCount;
 }
 
 // 函数说明：isPlcConnected 函数检查相关状态并返回判断结果。
@@ -547,14 +531,6 @@ bool InspectionRuntime::belongsToCurrentRun(
     return productKey.isValid()
             && m_runContext
             && productKey.runId == m_runContext->runId;
-}
-
-std::shared_ptr<const InspectionRunContext>
-// 函数说明：runContext 函数执行对应事件或业务处理。
-InspectionRuntime::runContext() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_runContext;
 }
 
 // 函数说明：isDetectionWorkerActive 函数检查相关状态并返回判断结果。
