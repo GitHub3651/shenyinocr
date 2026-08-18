@@ -80,7 +80,7 @@ MainWindow::MainWindow(
         if (m_inspectionPage) {
             m_inspectionPage->clearDetectionRoiWarning(
                         operationUiState() == OperationState::Detecting
-                        ? (ui->checkBox->isChecked()
+                        ? (ui->checkBox_hardwareTriggerEnabled->isChecked()
                            ? QString::fromWCharArray(
                                L"\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d")
                            : QString::fromWCharArray(
@@ -93,20 +93,20 @@ MainWindow::MainWindow(
     initStyle();
 
     // 检测信息区域允许被分隔条压缩；空间不足时只在该区域内部滚动。
-    QScrollArea *detectionInfoScrollArea = new QScrollArea;
-    detectionInfoScrollArea->setObjectName("detectionInfoScrollArea");
-    detectionInfoScrollArea->setFrameShape(QFrame::NoFrame);
-    detectionInfoScrollArea->setWidgetResizable(true);
-    detectionInfoScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    detectionInfoScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    detectionInfoScrollArea->setSizePolicy(
+    QScrollArea *scrollArea_inspectionInfo = new QScrollArea;
+    scrollArea_inspectionInfo->setObjectName("scrollArea_inspectionInfo");
+    scrollArea_inspectionInfo->setFrameShape(QFrame::NoFrame);
+    scrollArea_inspectionInfo->setWidgetResizable(true);
+    scrollArea_inspectionInfo->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    scrollArea_inspectionInfo->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea_inspectionInfo->setSizePolicy(
                 QSizePolicy::Expanding,
                 QSizePolicy::Expanding);
-    detectionInfoScrollArea->setWidget(ui->groupBox1);
-    ui->rightPanelSplitter->insertWidget(0, detectionInfoScrollArea);
+    scrollArea_inspectionInfo->setWidget(ui->groupBox_inspectionInfo);
+    ui->splitter_mainContent->insertWidget(0, scrollArea_inspectionInfo);
 
     if (QSplitterHandle *rightPanelHandle =
-            ui->rightPanelSplitter->handle(1)) {
+            ui->splitter_mainContent->handle(1)) {
         rightPanelHandle->setCursor(Qt::SplitVCursor);
         rightPanelHandle->setToolTip(
                     QString::fromWCharArray(
@@ -122,7 +122,7 @@ MainWindow::MainWindow(
                 new QLabel(QString::fromWCharArray(
                                L"\u2195  \u62d6\u52a8\u8c03\u6574"),
                            rightPanelHandle);
-        handleGrip->setObjectName("rightPanelSplitterGrip");
+        handleGrip->setObjectName("label_mainContentSplitterGrip");
         handleGrip->setAlignment(Qt::AlignCenter);
         handleGrip->setMinimumWidth(92);
         handleGrip->setAttribute(
@@ -134,10 +134,10 @@ MainWindow::MainWindow(
         const int splitterHandleHeight =
                 handleGripHeight + 8;
         handleGrip->setFixedHeight(handleGripHeight);
-        ui->rightPanelSplitter->setProperty(
+        ui->splitter_mainContent->setProperty(
                     "visualHandleHeight",
                     splitterHandleHeight);
-        ui->rightPanelSplitter->setHandleWidth(
+        ui->splitter_mainContent->setHandleWidth(
                     splitterHandleHeight);
         rightPanelHandle->setMinimumHeight(
                     splitterHandleHeight);
@@ -156,7 +156,7 @@ MainWindow::MainWindow(
             this,
             [this]() {
                 if (!ui
-                        || !ui->VideoShoot
+                        || !ui->toolButton_createTemplate
                         || operationUiState()
                            != OperationState::TemplatePreviewing) {
             m_templateCaptureAttentionTimer->stop();
@@ -166,19 +166,19 @@ MainWindow::MainWindow(
                     !m_templateCaptureAttentionOn;
         }
 
-        if (ui && ui->VideoShoot) {
-            ui->VideoShoot->setProperty(
+        if (ui && ui->toolButton_createTemplate) {
+            ui->toolButton_createTemplate->setProperty(
                         "templateCaptureActive",
                         operationUiState()
                         == OperationState::TemplatePreviewing);
-            ui->VideoShoot->setProperty(
+            ui->toolButton_createTemplate->setProperty(
                         "templateCaptureAttention",
                         m_templateCaptureAttentionOn);
-            ui->VideoShoot->style()->unpolish(
-                        ui->VideoShoot);
-            ui->VideoShoot->style()->polish(
-                        ui->VideoShoot);
-            ui->VideoShoot->update();
+            ui->toolButton_createTemplate->style()->unpolish(
+                        ui->toolButton_createTemplate);
+            ui->toolButton_createTemplate->style()->polish(
+                        ui->toolButton_createTemplate);
+            ui->toolButton_createTemplate->update();
         }
     });
 
@@ -191,7 +191,7 @@ MainWindow::MainWindow(
     });
 
     // UI 文件中已经是 ImageLabel，直接使用。
-    imageLabel = ui->image_undetected;
+    imageLabel = ui->imageLabel_inspection;
 
     m_plcHealthTimer = new QTimer(this);
     m_plcHealthTimer->setInterval(500);
@@ -222,7 +222,7 @@ MainWindow::MainWindow(
                     ->completeUnexpectedAcquisitionStop();
             m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
-            ui->statusLabel->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
+            ui->label_runtimeStatus->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
             updateOperationUiState();
         }
     },
@@ -280,8 +280,8 @@ InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
         if (m_machineSettingsPage) {
             m_machineSettingsPage->setAllEditorsEnabled(enabled);
         }
-        if (ui->comboBox_4) {
-            ui->comboBox_4->setEnabled(enabled);
+        if (ui->comboBox_detectionMode) {
+            ui->comboBox_detectionMode->setEnabled(enabled);
         }
         if (m_templateEditorPage) {
             m_templateEditorPage->setEditorsEnabled(enabled);
@@ -334,51 +334,51 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     TemplateEditorViewBindings view;
     view.parentWidget = const_cast<MainWindow *>(this);
     view.eventFilterTarget = const_cast<MainWindow *>(this);
-    view.imageLabel = imageLabel;
-    view.dateEdit = ui->dateEdit;
-    view.lineEdit_yuzhi = ui->lineEdit_yuzhi;
+    view.imageLabel_templateCanvas = imageLabel;
+    view.textEdit_targetText = ui->textEdit_targetText;
+    view.lineEdit_imageThreshold = ui->lineEdit_imageThreshold;
     view.lineEdit_tissueRoughnessThreshold =
             ui->lineEdit_tissueRoughnessThreshold;
-    view.comboBox_2 = ui->comboBox_2;
-    view.comboBox_3 = ui->comboBox_3;
-    view.comboBox_4 = ui->comboBox_4;
-    view.comboBox_5 = ui->comboBox_5;
-    view.currentTemplateName = ui->currentTemplateName;
-    view.statusLabel = ui->statusLabel;
-    view.label = ui->label;
-    view.label_4 = ui->label_4;
-    view.label_6 = ui->label_6;
-    view.label_8 = ui->label_8;
-    view.label_10 = ui->label_10;
-    view.label_13 = ui->label_13;
-    view.label_14 = ui->label_14;
-    view.label_16 = ui->label_16;
-    view.label_17 = ui->label_17;
-    view.label_27 = ui->label_27;
-    view.image_undetected = ui->image_undetected;
-    view.imagedisplayBox = ui->imagedisplayBox;
-    view.verticalLayout_InnerImg = ui->verticalLayout_InnerImg;
-    view.manualCharacterCropButton = ui->manualCharacterCropButton;
-    view.textsure_btn = ui->textsure_btn;
-    view.batchTextsure_btn = ui->batchTextsure_btn;
-    view.batchImageThresholdButton = ui->batchImageThresholdButton;
-    view.WriteVDpushButton = ui->WriteVDpushButton;
-    view.pushButton_3 = ui->pushButton_3;
-    view.pushButton_7 = ui->pushButton_7;
-    view.pushButton_8 = ui->pushButton_8;
-    view.pushButton_9 = ui->pushButton_9;
-    view.pushButton_10 = ui->pushButton_10;
-    view.pushButton_12 = ui->pushButton_12;
-    view.sureButton = ui->sureButton;
-    view.pushButton_tissueRoughnessThreshold =
-            ui->pushButton_tissueRoughnessThreshold;
-    view.plcmodebtn = ui->plcmodebtn;
-    view.ConnectpushButton = ui->ConnectpushButton;
-    view.DisconnectpushButton = ui->DisconnectpushButton;
+    view.comboBox_imageRotation = ui->comboBox_imageRotation;
+    view.comboBox_plcTriggerMode = ui->comboBox_plcTriggerMode;
+    view.comboBox_detectionMode = ui->comboBox_detectionMode;
+    view.comboBox_colorChannel = ui->comboBox_colorChannel;
+    view.lineEdit_currentRecipeName = ui->lineEdit_currentRecipeName;
+    view.label_runtimeStatus = ui->label_runtimeStatus;
+    view.label_targetText = ui->label_targetText;
+    view.label_imageThreshold = ui->label_imageThreshold;
+    view.label_rejectDistance = ui->label_rejectDistance;
+    view.label_photoDistance = ui->label_photoDistance;
+    view.label_rejectTime = ui->label_rejectTime;
+    view.label_hardwareTriggerDelay = ui->label_hardwareTriggerDelay;
+    view.label_photoTime = ui->label_photoTime;
+    view.label_cameraGain = ui->label_cameraGain;
+    view.label_rejectPosition = ui->label_rejectPosition;
+    view.label_imageRotation = ui->label_imageRotation;
+    view.imageLabel_inspectionDisplay = ui->imageLabel_inspection;
+    view.groupBox_imageDisplay = ui->groupBox_imageDisplay;
+    view.verticalLayout_imageDisplay = ui->verticalLayout_imageDisplay;
+    view.pushButton_editCharacterTemplates = ui->pushButton_editCharacterTemplates;
+    view.pushButton_applyTargetText = ui->pushButton_applyTargetText;
+    view.pushButton_applyBatchTargetText = ui->pushButton_applyBatchTargetText;
+    view.pushButton_applyBatchImageThreshold = ui->pushButton_applyBatchImageThreshold;
+    view.pushButton_applyPhotoDistance = ui->pushButton_applyPhotoDistance;
+    view.pushButton_applyImageThreshold = ui->pushButton_applyImageThreshold;
+    view.pushButton_applyColorChannel = ui->pushButton_applyColorChannel;
+    view.pushButton_applyPlcProcessParameters = ui->pushButton_applyPlcProcessParameters;
+    view.pushButton_applyImageRotation = ui->pushButton_applyImageRotation;
+    view.pushButton_resetRejectQueue = ui->pushButton_resetRejectQueue;
+    view.pushButton_applyCameraGain = ui->pushButton_applyCameraGain;
+    view.pushButton_applyCameraExposure = ui->pushButton_applyCameraExposure;
+    view.pushButton_applyTissueRoughnessThreshold =
+            ui->pushButton_applyTissueRoughnessThreshold;
+    view.pushButton_applyPlcTriggerMode = ui->pushButton_applyPlcTriggerMode;
+    view.pushButton_connectPlc = ui->pushButton_connectPlc;
+    view.pushButton_disconnectPlc = ui->pushButton_disconnectPlc;
     view.pushButton_browseImageSavePath =
             ui->pushButton_browseImageSavePath;
-    view.VideoShoot = ui->VideoShoot;
-    view.checkBox = ui->checkBox;
+    view.toolButton_createTemplate = ui->toolButton_createTemplate;
+    view.checkBox_hardwareTriggerEnabled = ui->checkBox_hardwareTriggerEnabled;
     return view;
 }
 
@@ -428,7 +428,7 @@ void MainWindow::attachPages(
     m_inspectionApplicationService->bindView(
                 m_inspectionPage->resultViewBindings());
     m_inspectionApplicationService->resetStatistics();
-    ui->dateEdit->setWordWrapMode(QTextOption::WordWrap);
+    ui->textEdit_targetText->setWordWrapMode(QTextOption::WordWrap);
     setupRecipeProfileDirtyTracking();
     setupWordTemplateEditorCombo();
     setupTemplateGuide();
@@ -454,11 +454,11 @@ void MainWindow::attachPages(
     updateCurrentTemplateName();
 
     QTimer::singleShot(1000, this, [this]() {
-        const QString targetIp = ui->lineEdit->text();
+        const QString targetIp = ui->lineEdit_plcIpAddress->text();
         PlcConnectionCommand command;
         command.address = targetIp;
-        command.rack = ui->lineEdit_2->text().toInt();
-        command.slot = ui->lineEdit_3->text().toInt();
+        command.rack = ui->lineEdit_plcRack->text().toInt();
+        command.slot = ui->lineEdit_plcSlot->text().toInt();
         const OperationResult result =
                 m_inspectionApplicationService->connectPlc(command);
         if (result.isSuccess()) {

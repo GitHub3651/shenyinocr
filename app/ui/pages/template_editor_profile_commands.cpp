@@ -57,16 +57,16 @@ using namespace TemplateEditorSupport;
 void TemplateEditorPage::displayWordTemplateRawImage(
         const WordTemplateProfile &profile)
 {
-    if (!m_view.image_undetected || profile.rawImage.empty()) {
+    if (!m_view.imageLabel_inspectionDisplay || profile.rawImage.empty()) {
         return;
     }
     const QImage image = imageFromBgrMat(profile.rawImage);
     if (image.isNull()) {
         return;
     }
-    m_view.image_undetected->setScaledContents(false);
-    m_view.image_undetected->setAlignment(Qt::AlignCenter);
-    m_view.image_undetected->setAutoFitPixmap(
+    m_view.imageLabel_inspectionDisplay->setScaledContents(false);
+    m_view.imageLabel_inspectionDisplay->setAlignment(Qt::AlignCenter);
+    m_view.imageLabel_inspectionDisplay->setAutoFitPixmap(
                 QPixmap::fromImage(image));
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
@@ -248,7 +248,7 @@ void TemplateEditorPage::applyCurrentTargetText()
     }
 
     const QString targetText =
-            m_view.dateEdit->toPlainText();
+            m_view.textEdit_targetText->toPlainText();
     if (targetText.trimmed().isEmpty()) {
         showParameterInfoAsError(
                     QStringLiteral("提示"),
@@ -390,7 +390,7 @@ void TemplateEditorPage::applyBatchTargetText()
     }
 
     const QString targetText =
-            m_view.dateEdit->toPlainText();
+            m_view.textEdit_targetText->toPlainText();
     const QStringList targetUnits =
             preparedRecipeTargetUnits(targetText);
     if (targetUnits.isEmpty()) {
@@ -469,7 +469,7 @@ void TemplateEditorPage::applyCurrentImageThreshold()
     }
     int threshold = 0;
     if (!parseIntValue(
-                m_view.lineEdit_yuzhi->text(), &threshold)
+                m_view.lineEdit_imageThreshold->text(), &threshold)
             || threshold < 0 || threshold > 100) {
         showParameterWarning(
                     QStringLiteral("参数错误"),
@@ -641,7 +641,7 @@ void TemplateEditorPage::applyBatchImageThreshold()
     }
     int threshold = 0;
     if (!parseIntValue(
-                m_view.lineEdit_yuzhi->text(), &threshold)
+                m_view.lineEdit_imageThreshold->text(), &threshold)
             || threshold < 0 || threshold > 100) {
         showParameterWarning(
                     QStringLiteral("参数错误"),

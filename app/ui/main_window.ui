@@ -18,7 +18,7 @@
 /* 全局字体加粗 */
 * { font-weight: bold; }</string>
   </property>
-  <layout class="QHBoxLayout" name="mainLayout">
+  <layout class="QHBoxLayout" name="horizontalLayout_mainWindow">
    <property name="spacing">
     <number>15</number>
    </property>
@@ -35,14 +35,14 @@
     <number>15</number>
    </property>
    <item>
-    <widget class="QWidget" name="leftPanel" native="true">
+    <widget class="QWidget" name="widget_leftPanel" native="true">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
        <horstretch>60</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_Left">
+     <layout class="QVBoxLayout" name="verticalLayout_leftPanel">
       <property name="spacing">
        <number>15</number>
       </property>
@@ -59,7 +59,7 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QGroupBox" name="topControlPanel">
+       <widget class="QGroupBox" name="groupBox_mainControls">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -81,7 +81,7 @@
         <property name="title">
          <string>主控操作台</string>
         </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_Btns">
+        <layout class="QHBoxLayout" name="horizontalLayout_mainControls">
          <property name="spacing">
           <number>12</number>
          </property>
@@ -98,7 +98,7 @@
           <number>12</number>
          </property>
          <item>
-          <widget class="QToolButton" name="HandwareDetect">
+          <widget class="QToolButton" name="toolButton_openCamera">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -115,7 +115,7 @@
             <string>打开相机</string>
            </property>
            <property name="icon">
-            <iconset resource="image/image.qrc">
+            <iconset resource="../image/image.qrc">
              <normaloff>:/Img_Icon_camera3.ico</normaloff>:/Img_Icon_camera3.ico</iconset>
            </property>
            <property name="iconSize">
@@ -130,7 +130,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="pushButton_4">
+          <widget class="QToolButton" name="toolButton_selectRecipe">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -147,7 +147,7 @@
             <string>选择模板</string>
            </property>
            <property name="icon">
-            <iconset resource="image/image.qrc">
+            <iconset resource="../image/image.qrc">
              <normaloff>:/3.png</normaloff>:/3.png</iconset>
            </property>
            <property name="iconSize">
@@ -162,7 +162,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="plcbtn">
+          <widget class="QToolButton" name="toolButton_startInspection">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -179,7 +179,7 @@
             <string>启动识别</string>
            </property>
            <property name="icon">
-            <iconset resource="image/image.qrc">
+            <iconset resource="../image/image.qrc">
              <normaloff>:/13.png</normaloff>:/13.png</iconset>
            </property>
            <property name="iconSize">
@@ -194,7 +194,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="VideoShoot">
+          <widget class="QToolButton" name="toolButton_createTemplate">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -211,7 +211,7 @@
             <string>制作模板</string>
            </property>
            <property name="icon">
-            <iconset resource="image/image.qrc">
+            <iconset resource="../image/image.qrc">
              <normaloff>:/11.png</normaloff>:/11.png</iconset>
            </property>
            <property name="iconSize">
@@ -226,7 +226,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="cancel">
+          <widget class="QToolButton" name="toolButton_stopInspection">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -243,7 +243,7 @@
             <string>停止识别</string>
            </property>
            <property name="icon">
-            <iconset resource="image/image.qrc">
+            <iconset resource="../image/image.qrc">
              <normaloff>:/close.png</normaloff>:/close.png</iconset>
            </property>
            <property name="iconSize">
@@ -258,7 +258,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="CloseCamera">
+          <widget class="QToolButton" name="toolButton_closeCamera">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -275,7 +275,7 @@
             <string>关闭相机</string>
            </property>
            <property name="icon">
-            <iconset resource="image/image.qrc">
+            <iconset resource="../image/image.qrc">
              <normaloff>:/1.png</normaloff>:/1.png</iconset>
            </property>
            <property name="iconSize">
@@ -293,7 +293,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QGroupBox" name="imagedisplayBox">
+       <widget class="QGroupBox" name="groupBox_imageDisplay">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -303,7 +303,7 @@
         <property name="title">
          <string>图像显示区</string>
         </property>
-        <layout class="QVBoxLayout" name="verticalLayout_InnerImg">
+        <layout class="QVBoxLayout" name="verticalLayout_imageDisplay">
          <property name="spacing">
           <number>0</number>
          </property>
@@ -320,7 +320,7 @@
           <number>2</number>
          </property>
          <item>
-          <widget class="ImageLabel" name="image_undetected">
+          <widget class="ImageLabel" name="imageLabel_inspection">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Ignored" vsizetype="Ignored">
              <horstretch>0</horstretch>
@@ -360,7 +360,7 @@
     </widget>
    </item>
    <item>
-    <widget class="QWidget" name="rightPanel" native="true">
+    <widget class="QWidget" name="widget_rightPanel" native="true">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
        <horstretch>40</horstretch>
@@ -373,7 +373,7 @@
        <height>0</height>
       </size>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_Right">
+     <layout class="QVBoxLayout" name="verticalLayout_rightPanel">
       <property name="spacing">
        <number>15</number>
       </property>
@@ -390,9 +390,9 @@
        <number>0</number>
       </property>
       <item>
-       <widget class="QSplitter" name="rightPanelSplitter">
+       <widget class="QSplitter" name="splitter_mainContent">
         <property name="styleSheet">
-         <string notr="true">QSplitter#rightPanelSplitter::handle:vertical {
+         <string notr="true">QSplitter#splitter_mainContent::handle:vertical {
     border: none;
     background: qlineargradient(
         x1: 0, y1: 0, x2: 0, y2: 1,
@@ -403,8 +403,8 @@
         stop: 0.53 rgba(255, 255, 255, 0),
         stop: 1 rgba(255, 255, 255, 0));
 }
-QSplitter#rightPanelSplitter::handle:vertical:hover,
-QSplitter#rightPanelSplitter::handle:vertical:pressed {
+QSplitter#splitter_mainContent::handle:vertical:hover,
+QSplitter#splitter_mainContent::handle:vertical:pressed {
     background: qlineargradient(
         x1: 0, y1: 0, x2: 0, y2: 1,
         stop: 0 rgba(255, 255, 255, 0),
@@ -414,7 +414,7 @@ QSplitter#rightPanelSplitter::handle:vertical:pressed {
         stop: 0.53 rgba(255, 255, 255, 0),
         stop: 1 rgba(255, 255, 255, 0));
 }
-QLabel#rightPanelSplitterGrip {
+QLabel#label_mainContentSplitterGrip {
     color: #526b80;
     background: #f4f7fa;
     border: 1px solid #aebdca;
@@ -432,18 +432,18 @@ QLabel#rightPanelSplitterGrip {
         <property name="childrenCollapsible">
          <bool>true</bool>
         </property>
-        <widget class="QGroupBox" name="groupBox1">
+        <widget class="QGroupBox" name="groupBox_inspectionInfo">
          <property name="title">
           <string>检测信息</string>
          </property>
-         <layout class="QGridLayout" name="gridLayout_6">
+         <layout class="QGridLayout" name="gridLayout_inspectionInfo">
           <item row="0" column="0">
            <layout class="QHBoxLayout">
             <property name="spacing">
              <number>15</number>
             </property>
             <item>
-             <widget class="QGroupBox" name="groupBox2_7">
+             <widget class="QGroupBox" name="groupBox_runtimeStatus">
               <property name="minimumSize">
                <size>
                 <width>0</width>
@@ -470,7 +470,7 @@ QLabel#rightPanelSplitterGrip {
                 <number>0</number>
                </property>
                <item>
-                <widget class="QLabel" name="statusLabel">
+                <widget class="QLabel" name="label_runtimeStatus">
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
@@ -492,7 +492,7 @@ QLabel#rightPanelSplitterGrip {
              </widget>
             </item>
             <item>
-             <widget class="QGroupBox" name="groupBox2_3">
+             <widget class="QGroupBox" name="groupBox_verdictResult">
               <property name="minimumSize">
                <size>
                 <width>0</width>
@@ -519,7 +519,7 @@ QLabel#rightPanelSplitterGrip {
                 <number>0</number>
                </property>
                <item>
-                <widget class="QLabel" name="resultlabel">
+                <widget class="QLabel" name="label_verdictResult">
                  <property name="minimumSize">
                   <size>
                    <width>0</width>
@@ -543,7 +543,7 @@ QLabel#rightPanelSplitterGrip {
            </layout>
           </item>
           <item row="2" column="0">
-           <widget class="QGroupBox" name="groupBox2">
+           <widget class="QGroupBox" name="groupBox_productionStatistics">
             <property name="styleSheet">
              <string notr="true">QGroupBox { border: none; background: transparent; margin-top: 20px; } QGroupBox::title {font-size: 14px; }
 </string>
@@ -551,9 +551,9 @@ QLabel#rightPanelSplitterGrip {
             <property name="title">
              <string>生产统计</string>
             </property>
-            <layout class="QGridLayout" name="gridLayout_4">
+            <layout class="QGridLayout" name="gridLayout_productionStatistics">
              <item row="0" column="0">
-              <widget class="QGroupBox" name="groupBox2_1">
+              <widget class="QGroupBox" name="groupBox_totalCount">
                <property name="minimumSize">
                 <size>
                  <width>285</width>
@@ -586,7 +586,7 @@ QLabel#rightPanelSplitterGrip {
                  <number>0</number>
                 </property>
                 <item>
-                 <widget class="QLineEdit" name="imagenum">
+                 <widget class="QLineEdit" name="lineEdit_totalCount">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -608,7 +608,7 @@ QLabel#rightPanelSplitterGrip {
                  </widget>
                 </item>
                 <item>
-                 <widget class="QPushButton" name="cut_cancelButton_2">
+                 <widget class="QPushButton" name="pushButton_resetTotalCount">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -630,7 +630,7 @@ QLabel#rightPanelSplitterGrip {
               </widget>
              </item>
              <item row="0" column="1">
-              <widget class="QGroupBox" name="groupBox2_2">
+              <widget class="QGroupBox" name="groupBox_ngCount">
                <property name="minimumSize">
                 <size>
                  <width>285</width>
@@ -663,7 +663,7 @@ QLabel#rightPanelSplitterGrip {
                  <number>0</number>
                 </property>
                 <item>
-                 <widget class="QLineEdit" name="ngnum">
+                 <widget class="QLineEdit" name="lineEdit_ngCount">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -685,7 +685,7 @@ QLabel#rightPanelSplitterGrip {
                  </widget>
                 </item>
                 <item>
-                 <widget class="QPushButton" name="cut_cancelButton_3">
+                 <widget class="QPushButton" name="pushButton_resetNgCount">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -707,7 +707,7 @@ QLabel#rightPanelSplitterGrip {
               </widget>
              </item>
              <item row="1" column="0">
-              <widget class="QGroupBox" name="groupBox2_4">
+              <widget class="QGroupBox" name="groupBox_detectionDuration">
                <property name="minimumSize">
                 <size>
                  <width>285</width>
@@ -740,7 +740,7 @@ QLabel#rightPanelSplitterGrip {
                  <number>0</number>
                 </property>
                 <item>
-                 <widget class="QLineEdit" name="speedLabel">
+                 <widget class="QLineEdit" name="lineEdit_detectionDuration">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -765,7 +765,7 @@ QLabel#rightPanelSplitterGrip {
               </widget>
              </item>
              <item row="1" column="1">
-              <widget class="QGroupBox" name="groupBox2_6">
+              <widget class="QGroupBox" name="groupBox_passRate">
                <property name="minimumSize">
                 <size>
                  <width>285</width>
@@ -798,7 +798,7 @@ QLabel#rightPanelSplitterGrip {
                  <number>0</number>
                 </property>
                 <item>
-                 <widget class="QLineEdit" name="lineBoxIndex_6">
+                 <widget class="QLineEdit" name="lineEdit_passRate">
                   <property name="minimumSize">
                    <size>
                     <width>0</width>
@@ -826,7 +826,7 @@ QLabel#rightPanelSplitterGrip {
            </widget>
           </item>
           <item row="1" column="0">
-           <widget class="QGroupBox" name="groupBox2_8">
+           <widget class="QGroupBox" name="groupBox_recognitionText">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -841,7 +841,7 @@ QLabel#rightPanelSplitterGrip {
             </property>
             <layout class="QVBoxLayout">
              <item>
-              <widget class="QLabel" name="resultlabel_7">
+              <widget class="QLabel" name="label_recognitionText">
                <property name="styleSheet">
                 <string notr="true">color: #409eff; font-size: 20px; font-weight: bold;</string>
                </property>
@@ -860,7 +860,7 @@ QLabel#rightPanelSplitterGrip {
            </widget>
           </item>
           <item row="3" column="0">
-           <widget class="QGroupBox" name="groupBox_currentTemplate">
+           <widget class="QGroupBox" name="groupBox_currentRecipe">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -887,7 +887,7 @@ QLabel#rightPanelSplitterGrip {
               <number>0</number>
              </property>
              <item>
-              <widget class="QLineEdit" name="currentTemplateName">
+              <widget class="QLineEdit" name="lineEdit_currentRecipeName">
                <property name="minimumSize">
                 <size>
                  <width>0</width>
@@ -912,7 +912,7 @@ QLabel#rightPanelSplitterGrip {
            </widget>
           </item>
           <item row="4" column="0">
-           <widget class="QPushButton" name="pushButton_10">
+           <widget class="QPushButton" name="pushButton_resetRejectQueue">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -929,7 +929,7 @@ QLabel#rightPanelSplitterGrip {
           </item>
          </layout>
         </widget>
-        <widget class="QTabWidget" name="tabWidget">
+        <widget class="QTabWidget" name="tabWidget_settings">
          <property name="currentIndex">
           <number>0</number>
          </property>
@@ -939,7 +939,7 @@ QLabel#rightPanelSplitterGrip {
            <height>20</height>
           </size>
          </property>
-         <widget class="QWidget" name="tab1">
+         <widget class="QWidget" name="tab_recipeSettings">
           <attribute name="title">
            <string> 参数设定 </string>
           </attribute>
@@ -948,14 +948,14 @@ QLabel#rightPanelSplitterGrip {
             <number>10</number>
            </property>
            <item>
-            <widget class="QScrollArea" name="scrollArea">
+            <widget class="QScrollArea" name="scrollArea_recipeSettings">
              <property name="styleSheet">
               <string notr="true">border:none; background:transparent;</string>
              </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
-             <widget class="QWidget" name="scrollAreaWidgetContents">
+             <widget class="QWidget" name="widget_recipeSettingsScrollContent">
               <property name="geometry">
                <rect>
                 <x>0</x>
@@ -967,9 +967,9 @@ QLabel#rightPanelSplitterGrip {
               <property name="styleSheet">
                <string notr="true">background:white;</string>
               </property>
-              <layout class="QGridLayout" name="gridLayout">
+              <layout class="QGridLayout" name="gridLayout_recipeSettings">
                <item row="0" column="0">
-                <layout class="QVBoxLayout" name="tab1Frame2Layout">
+                <layout class="QVBoxLayout" name="verticalLayout_recipeSettings">
                  <property name="spacing">
                   <number>12</number>
                  </property>
@@ -986,7 +986,7 @@ QLabel#rightPanelSplitterGrip {
                   <number>0</number>
                  </property>
                  <item>
-                  <widget class="QGroupBox" name="tab1_frame2">
+                  <widget class="QGroupBox" name="groupBox_currentRecipeSettings">
                    <property name="styleSheet">
                     <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                    </property>
@@ -998,7 +998,7 @@ QLabel#rightPanelSplitterGrip {
                      <number>15</number>
                     </property>
                     <item row="5" column="1" colspan="2">
-                     <widget class="QPushButton" name="manualCharacterCropButton">
+                     <widget class="QPushButton" name="pushButton_editCharacterTemplates">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -1011,7 +1011,7 @@ QLabel#rightPanelSplitterGrip {
                      </widget>
                     </item>
                     <item row="2" column="1" colspan="2">
-                     <layout class="QHBoxLayout" name="textConfirmButtonLayout">
+                     <layout class="QHBoxLayout" name="horizontalLayout_targetTextActions">
                       <property name="spacing">
                        <number>6</number>
                       </property>
@@ -1028,7 +1028,7 @@ QLabel#rightPanelSplitterGrip {
                        <number>0</number>
                       </property>
                       <item>
-                       <widget class="QPushButton" name="textsure_btn">
+                       <widget class="QPushButton" name="pushButton_applyTargetText">
                         <property name="minimumSize">
                          <size>
                           <width>0</width>
@@ -1056,7 +1056,7 @@ background-color: #ebeef5;
                        </widget>
                       </item>
                       <item>
-                       <widget class="QPushButton" name="batchTextsure_btn">
+                       <widget class="QPushButton" name="pushButton_applyBatchTargetText">
                         <property name="minimumSize">
                          <size>
                           <width>0</width>
@@ -1086,7 +1086,7 @@ background-color: #ebeef5;
                      </layout>
                     </item>
                     <item row="1" column="0">
-                     <widget class="QLabel" name="label">
+                     <widget class="QLabel" name="label_targetText">
                       <property name="styleSheet">
                        <string notr="true">background-color: transparent;
 border: 1px solid #ebeef5;
@@ -1100,7 +1100,7 @@ padding: 5px 10px;</string>
                      </widget>
                     </item>
                     <item row="1" column="1" colspan="2">
-                     <widget class="QTextEdit" name="dateEdit">
+                     <widget class="QTextEdit" name="textEdit_targetText">
                       <property name="sizePolicy">
                        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                         <horstretch>0</horstretch>
@@ -1135,7 +1135,7 @@ color: #a8abb2;
                      </widget>
                     </item>
                     <item row="3" column="0">
-                     <widget class="QLabel" name="label_4">
+                     <widget class="QLabel" name="label_imageThreshold">
                       <property name="styleSheet">
                        <string notr="true">background-color: transparent;
 border: 1px solid #ebeef5;
@@ -1149,7 +1149,7 @@ padding: 5px 10px;</string>
                      </widget>
                     </item>
                     <item row="3" column="1">
-                     <widget class="QLineEdit" name="lineEdit_yuzhi">
+                     <widget class="QLineEdit" name="lineEdit_imageThreshold">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -1203,7 +1203,7 @@ padding: 0px;</string>
                      </widget>
                     </item>
                     <item row="4" column="1" colspan="2">
-                     <layout class="QHBoxLayout" name="imageThresholdButtonLayout">
+                     <layout class="QHBoxLayout" name="horizontalLayout_imageThresholdActions">
                       <property name="spacing">
                        <number>6</number>
                       </property>
@@ -1220,7 +1220,7 @@ padding: 0px;</string>
                        <number>0</number>
                       </property>
                       <item>
-                       <widget class="QPushButton" name="pushButton_3">
+                       <widget class="QPushButton" name="pushButton_applyImageThreshold">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -1239,7 +1239,7 @@ padding: 0px;</string>
                        </widget>
                       </item>
                       <item>
-                       <widget class="QPushButton" name="batchImageThresholdButton">
+                       <widget class="QPushButton" name="pushButton_applyBatchImageThreshold">
                         <property name="sizePolicy">
                          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                           <horstretch>0</horstretch>
@@ -1263,16 +1263,16 @@ padding: 0px;</string>
                   </widget>
                  </item>
                  <item>
-                  <widget class="QGroupBox" name="templateMakeFrame">
+                  <widget class="QGroupBox" name="groupBox_templateCreation">
                    <property name="styleSheet">
                     <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                    </property>
                    <property name="title">
                     <string>模板制作</string>
                    </property>
-                   <layout class="QFormLayout" name="templateMakeFormLayout">
+                   <layout class="QFormLayout" name="formLayout_templateCreation">
                     <item row="0" column="1">
-                     <widget class="QPushButton" name="pushButton_5">
+                     <widget class="QPushButton" name="pushButton_saveTemplate">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -1309,12 +1309,12 @@ QPushButton:pressed {
                   </widget>
                  </item>
                  <item>
-                  <layout class="QGridLayout" name="cameraDistanceLayout">
+                  <layout class="QGridLayout" name="gridLayout_photoDistance">
                    <property name="verticalSpacing">
                     <number>15</number>
                    </property>
                    <item row="0" column="0">
-                    <widget class="QLabel" name="label_8">
+                    <widget class="QLabel" name="label_photoDistance">
                      <property name="styleSheet">
                       <string notr="true">background-color: #ffffff;
 border: 1px solid #ebeef5;
@@ -1328,7 +1328,7 @@ padding: 5px 10px;</string>
                     </widget>
                    </item>
                    <item row="0" column="1">
-                    <widget class="QLineEdit" name="lineEdit_6">
+                    <widget class="QLineEdit" name="lineEdit_photoDistance">
                      <property name="minimumSize">
                       <size>
                        <width>0</width>
@@ -1348,7 +1348,7 @@ padding: 5px 10px;</string>
                     </widget>
                    </item>
                    <item row="1" column="1">
-                    <widget class="QPushButton" name="WriteVDpushButton">
+                    <widget class="QPushButton" name="pushButton_applyPhotoDistance">
                      <property name="minimumSize">
                       <size>
                        <width>0</width>
@@ -1378,7 +1378,7 @@ background-color: #ebeef5;
                   </layout>
                  </item>
                  <item>
-                  <spacer name="tab1Frame2BottomSpacer">
+                  <spacer name="verticalSpacer_recipeSettingsBottom">
                    <property name="orientation">
                     <enum>Qt::Vertical</enum>
                    </property>
@@ -1398,20 +1398,20 @@ background-color: #ebeef5;
            </item>
           </layout>
          </widget>
-         <widget class="QWidget" name="tab2">
+         <widget class="QWidget" name="tab_imageSettings">
           <attribute name="title">
            <string> 图像设置 </string>
           </attribute>
           <layout class="QVBoxLayout">
            <item>
-            <widget class="QScrollArea" name="scrollArea_2">
+            <widget class="QScrollArea" name="scrollArea_imageSettings">
              <property name="styleSheet">
               <string notr="true">border:none; background:transparent;</string>
              </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
-             <widget class="QWidget" name="scrollAreaWidgetContents2">
+             <widget class="QWidget" name="widget_imageSettingsScrollContent">
               <property name="geometry">
                <rect>
                 <x>0</x>
@@ -1423,25 +1423,25 @@ background-color: #ebeef5;
               <property name="styleSheet">
                <string notr="true">background:white;</string>
               </property>
-              <layout class="QGridLayout" name="gridLayout_2">
+              <layout class="QGridLayout" name="gridLayout_imageSettings">
                <item row="0" column="0">
-                <widget class="QGroupBox" name="tab1_frame3">
+                <widget class="QGroupBox" name="groupBox_detectionMode">
                  <property name="styleSheet">
                   <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                  </property>
                  <property name="title">
                   <string>识别模式设置</string>
                  </property>
-                 <layout class="QFormLayout" name="formLayout">
+                 <layout class="QFormLayout" name="formLayout_detectionMode">
                   <item row="0" column="0">
-                   <widget class="QLabel" name="label_18">
+                   <widget class="QLabel" name="label_detectionMode">
                     <property name="text">
                      <string>识别模式:</string>
                     </property>
                    </widget>
                   </item>
                   <item row="0" column="1">
-                   <widget class="QComboBox" name="comboBox_4">
+                   <widget class="QComboBox" name="comboBox_detectionMode">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1476,7 +1476,7 @@ background-color: #ebeef5;
                    </widget>
                   </item>
                   <item row="1" column="0" colspan="2">
-                   <widget class="QCheckBox" name="checkBox">
+                   <widget class="QCheckBox" name="checkBox_hardwareTriggerEnabled">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1510,23 +1510,23 @@ QCheckBox::indicator {
                 </widget>
                </item>
                <item row="2" column="0">
-                <widget class="QGroupBox" name="imageSaveFrame">
+                <widget class="QGroupBox" name="groupBox_imageSaving">
                  <property name="styleSheet">
                   <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                  </property>
                  <property name="title">
                   <string>图像保存</string>
                  </property>
-                 <layout class="QFormLayout" name="imageSaveFormLayout">
+                 <layout class="QFormLayout" name="formLayout_imageSaving">
                   <item row="0" column="0">
-                   <widget class="QLabel" name="label_11">
+                   <widget class="QLabel" name="label_imageSaveRange">
                     <property name="text">
                      <string>图像保存:</string>
                     </property>
                    </widget>
                   </item>
                   <item row="0" column="1">
-                   <widget class="QComboBox" name="comboBox">
+                   <widget class="QComboBox" name="comboBox_imageSaveRange">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1556,7 +1556,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="label_saveImageType">
+                   <widget class="QLabel" name="label_imageSaveContent">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1569,7 +1569,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="1" column="1">
-                   <widget class="QComboBox" name="comboBox_saveImageType">
+                   <widget class="QComboBox" name="comboBox_imageSaveContent">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1607,7 +1607,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="2" column="1">
-                   <layout class="QHBoxLayout" name="imageSavePathLayout">
+                   <layout class="QHBoxLayout" name="horizontalLayout_imageSavePath">
                     <item>
                      <widget class="QLineEdit" name="lineEdit_imageSavePath">
                       <property name="minimumSize">
@@ -1649,19 +1649,19 @@ QCheckBox::indicator {
                 </widget>
                </item>
                <item row="3" column="0">
-                <widget class="QGroupBox" name="tab2_frame1">
+                <widget class="QGroupBox" name="groupBox_imageAcquisitionAndProcessing">
                  <property name="styleSheet">
                   <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                  </property>
                  <property name="title">
                   <string>图像采集与处理</string>
                  </property>
-                 <layout class="QGridLayout" name="_4" columnstretch="0,1,0">
+                 <layout class="QGridLayout" name="gridLayout_imageAcquisitionAndProcessing" columnstretch="0,1,0">
                   <property name="verticalSpacing">
                    <number>15</number>
                   </property>
                   <item row="1" column="1">
-                   <widget class="QSpinBox" name="spinBox">
+                   <widget class="QSpinBox" name="spinBox_cameraExposure">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1677,7 +1677,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="1" column="2">
-                   <widget class="QPushButton" name="sureButton">
+                   <widget class="QPushButton" name="pushButton_applyCameraExposure">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1690,14 +1690,14 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="label_19">
+                   <widget class="QLabel" name="label_cameraExposure">
                     <property name="text">
                      <string>相机曝光</string>
                     </property>
                    </widget>
                   </item>
                   <item row="6" column="0">
-                   <widget class="QLabel" name="label_12">
+                   <widget class="QLabel" name="label_colorChannel">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1710,7 +1710,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="7" column="2">
-                   <widget class="QPushButton" name="pushButton_9">
+                   <widget class="QPushButton" name="pushButton_applyImageRotation">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1723,7 +1723,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="5" column="1">
-                   <widget class="QLineEdit" name="lineEdit_14">
+                   <widget class="QLineEdit" name="lineEdit_cameraGain">
                     <property name="sizePolicy">
                      <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                       <horstretch>0</horstretch>
@@ -1742,7 +1742,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="7" column="1">
-                   <widget class="QComboBox" name="comboBox_2">
+                   <widget class="QComboBox" name="comboBox_imageRotation">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1779,14 +1779,14 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="5" column="0">
-                   <widget class="QLabel" name="label_16">
+                   <widget class="QLabel" name="label_cameraGain">
                     <property name="text">
                      <string>相机增益</string>
                     </property>
                    </widget>
                   </item>
                   <item row="5" column="2">
-                   <widget class="QPushButton" name="pushButton_12">
+                   <widget class="QPushButton" name="pushButton_applyCameraGain">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1799,7 +1799,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="9" column="2">
-                   <widget class="QPushButton" name="pushButton_tissueRoughnessThreshold">
+                   <widget class="QPushButton" name="pushButton_applyTissueRoughnessThreshold">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1825,7 +1825,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="6" column="2">
-                   <widget class="QPushButton" name="pushButton_7">
+                   <widget class="QPushButton" name="pushButton_applyColorChannel">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1838,7 +1838,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="6" column="1">
-                   <widget class="QComboBox" name="comboBox_5">
+                   <widget class="QComboBox" name="comboBox_colorChannel">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1868,7 +1868,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="7" column="0">
-                   <widget class="QLabel" name="label_27">
+                   <widget class="QLabel" name="label_imageRotation">
                     <property name="text">
                      <string>图像旋转</string>
                     </property>
@@ -1878,7 +1878,7 @@ QCheckBox::indicator {
                 </widget>
                </item>
                <item row="6" column="0">
-                <spacer name="tab2BottomSpacer">
+                <spacer name="verticalSpacer_imageSettingsBottom">
                  <property name="orientation">
                   <enum>Qt::Vertical</enum>
                  </property>
@@ -1899,20 +1899,20 @@ QCheckBox::indicator {
            </item>
           </layout>
          </widget>
-         <widget class="QWidget" name="tab3">
+         <widget class="QWidget" name="tab_plcSettings">
           <attribute name="title">
            <string> PLC通讯 </string>
           </attribute>
           <layout class="QVBoxLayout">
            <item>
-            <widget class="QScrollArea" name="scrollArea_3">
+            <widget class="QScrollArea" name="scrollArea_plcSettings">
              <property name="styleSheet">
               <string notr="true">border:none; background:transparent;</string>
              </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
-             <widget class="QWidget" name="scrollAreaWidgetContents3">
+             <widget class="QWidget" name="widget_plcSettingsScrollContent">
               <property name="geometry">
                <rect>
                 <x>0</x>
@@ -1932,7 +1932,7 @@ QCheckBox::indicator {
                 <number>20</number>
                </property>
                <item>
-                <widget class="QFrame" name="tab3_frame1">
+                <widget class="QFrame" name="frame_plcTriggerMode">
                  <property name="styleSheet">
                   <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                  </property>
@@ -1941,14 +1941,14 @@ QCheckBox::indicator {
                  </property>
                  <layout class="QHBoxLayout">
                   <item>
-                   <widget class="QLabel" name="label_15">
+                   <widget class="QLabel" name="label_plcTriggerMode">
                     <property name="text">
                      <string>工作模式:</string>
                     </property>
                    </widget>
                   </item>
                   <item>
-                   <widget class="QComboBox" name="comboBox_3">
+                   <widget class="QComboBox" name="comboBox_plcTriggerMode">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1968,7 +1968,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item>
-                   <widget class="QPushButton" name="plcmodebtn">
+                   <widget class="QPushButton" name="pushButton_applyPlcTriggerMode">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1984,7 +1984,7 @@ QCheckBox::indicator {
                 </widget>
                </item>
                <item>
-                <widget class="QFrame" name="tab3_frame2">
+                <widget class="QFrame" name="frame_plcConnection">
                  <property name="styleSheet">
                   <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                  </property>
@@ -1996,7 +1996,7 @@ QCheckBox::indicator {
                    <number>12</number>
                   </property>
                   <item row="0" column="0" colspan="2">
-                   <widget class="QLabel" name="label_7">
+                   <widget class="QLabel" name="label_plcConnectionSection">
                     <property name="styleSheet">
                      <string>font-weight: bold;</string>
                     </property>
@@ -2006,14 +2006,14 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="label_2">
+                   <widget class="QLabel" name="label_plcIpAddress">
                     <property name="text">
                      <string>IP地址:</string>
                     </property>
                    </widget>
                   </item>
                   <item row="1" column="1">
-                   <widget class="QLineEdit" name="lineEdit">
+                   <widget class="QLineEdit" name="lineEdit_plcIpAddress">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2026,7 +2026,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="2" column="0">
-                   <widget class="QLabel" name="label_3">
+                   <widget class="QLabel" name="label_plcRackSlot">
                     <property name="text">
                      <string>Rack/Slot:</string>
                     </property>
@@ -2035,7 +2035,7 @@ QCheckBox::indicator {
                   <item row="2" column="1">
                    <layout class="QHBoxLayout">
                     <item>
-                     <widget class="QLineEdit" name="lineEdit_2">
+                     <widget class="QLineEdit" name="lineEdit_plcRack">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -2048,14 +2048,14 @@ QCheckBox::indicator {
                      </widget>
                     </item>
                     <item>
-                     <widget class="QLabel" name="label_5">
+                     <widget class="QLabel" name="label_plcRackSlotSeparator">
                       <property name="text">
                        <string>/</string>
                       </property>
                      </widget>
                     </item>
                     <item>
-                     <widget class="QLineEdit" name="lineEdit_3">
+                     <widget class="QLineEdit" name="lineEdit_plcSlot">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -2072,7 +2072,7 @@ QCheckBox::indicator {
                   <item row="3" column="0" colspan="2">
                    <layout class="QHBoxLayout">
                     <item>
-                     <widget class="QPushButton" name="ConnectpushButton">
+                     <widget class="QPushButton" name="pushButton_connectPlc">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -2085,7 +2085,7 @@ QCheckBox::indicator {
                      </widget>
                     </item>
                     <item>
-                     <widget class="QPushButton" name="DisconnectpushButton">
+                     <widget class="QPushButton" name="pushButton_disconnectPlc">
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
@@ -2103,16 +2103,16 @@ QCheckBox::indicator {
                 </widget>
                </item>
                <item>
-                <widget class="QFrame" name="tab3_frame3">
+                <widget class="QFrame" name="frame_plcProcessParameters">
                  <property name="styleSheet">
                   <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                  </property>
                  <property name="frameShape">
                   <enum>QFrame::StyledPanel</enum>
                  </property>
-                 <layout class="QGridLayout" name="gridLayout_3">
+                 <layout class="QGridLayout" name="gridLayout_plcProcessParameters">
                   <item row="6" column="1">
-                   <widget class="QLineEdit" name="lineEdit_8">
+                   <widget class="QLineEdit" name="lineEdit_rejectTime">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2125,7 +2125,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="7" column="1">
-                   <widget class="QLineEdit" name="lineEdit_12">
+                   <widget class="QLineEdit" name="lineEdit_rejectPosition">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2138,14 +2138,14 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="6" column="0">
-                   <widget class="QLabel" name="label_10">
+                   <widget class="QLabel" name="label_rejectTime">
                     <property name="text">
                      <string>剔除时间(ms):</string>
                     </property>
                    </widget>
                   </item>
                   <item row="3" column="1">
-                   <widget class="QLineEdit" name="lineEdit_7">
+                   <widget class="QLineEdit" name="lineEdit_rejectDistance">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2158,28 +2158,28 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="2" column="0">
-                   <widget class="QLabel" name="label_13">
+                   <widget class="QLabel" name="label_hardwareTriggerDelay">
                     <property name="text">
                      <string>硬触发延时(ms):</string>
                     </property>
                    </widget>
                   </item>
                   <item row="1" column="0">
-                   <widget class="QLabel" name="label_14">
+                   <widget class="QLabel" name="label_photoTime">
                     <property name="text">
                      <string>拍照时间(ms):</string>
                     </property>
                    </widget>
                   </item>
                   <item row="3" column="0">
-                   <widget class="QLabel" name="label_6">
+                   <widget class="QLabel" name="label_rejectDistance">
                     <property name="text">
                      <string>剔除距离(mm):</string>
                     </property>
                    </widget>
                   </item>
                   <item row="2" column="1">
-                   <widget class="QLineEdit" name="lineEdit_4">
+                   <widget class="QLineEdit" name="lineEdit_hardwareTriggerDelay">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2192,7 +2192,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="0" column="0">
-                   <widget class="QLabel" name="label_9">
+                   <widget class="QLabel" name="label_plcProcessParametersSection">
                     <property name="styleSheet">
                      <string>font-weight: bold;</string>
                     </property>
@@ -2202,14 +2202,14 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="7" column="0">
-                   <widget class="QLabel" name="label_17">
+                   <widget class="QLabel" name="label_rejectPosition">
                     <property name="text">
                      <string>剔除位置:</string>
                     </property>
                    </widget>
                   </item>
                   <item row="1" column="1">
-                   <widget class="QLineEdit" name="lineEdit_20">
+                   <widget class="QLineEdit" name="lineEdit_photoTime">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2222,7 +2222,7 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                   <item row="8" column="1">
-                   <widget class="QPushButton" name="pushButton_8">
+                   <widget class="QPushButton" name="pushButton_applyPlcProcessParameters">
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -2235,18 +2235,18 @@ QCheckBox::indicator {
                    </widget>
                   </item>
                  </layout>
-                 <zorder>pushButton_8</zorder>
-                 <zorder>label_14</zorder>
-                 <zorder>label_17</zorder>
-                 <zorder>lineEdit_20</zorder>
-                 <zorder>lineEdit_12</zorder>
-                 <zorder>label_13</zorder>
-                 <zorder>label_9</zorder>
-                 <zorder>label_6</zorder>
-                 <zorder>lineEdit_7</zorder>
-                 <zorder>lineEdit_4</zorder>
-                 <zorder>label_10</zorder>
-                 <zorder>lineEdit_8</zorder>
+                 <zorder>pushButton_applyPlcProcessParameters</zorder>
+                 <zorder>label_photoTime</zorder>
+                 <zorder>label_rejectPosition</zorder>
+                 <zorder>lineEdit_photoTime</zorder>
+                 <zorder>lineEdit_rejectPosition</zorder>
+                 <zorder>label_hardwareTriggerDelay</zorder>
+                 <zorder>label_plcProcessParametersSection</zorder>
+                 <zorder>label_rejectDistance</zorder>
+                 <zorder>lineEdit_rejectDistance</zorder>
+                 <zorder>lineEdit_hardwareTriggerDelay</zorder>
+                 <zorder>label_rejectTime</zorder>
+                 <zorder>lineEdit_rejectTime</zorder>
                 </widget>
                </item>
               </layout>
@@ -2255,25 +2255,25 @@ QCheckBox::indicator {
            </item>
           </layout>
          </widget>
-         <widget class="QWidget" name="tabSoftwareSettings">
+         <widget class="QWidget" name="tab_softwareSettings">
           <attribute name="title">
            <string> 软件设置 </string>
           </attribute>
-          <layout class="QVBoxLayout" name="softwareSettingsPageLayout">
+          <layout class="QVBoxLayout" name="verticalLayout_softwareSettings">
            <property name="topMargin">
             <number>20</number>
            </property>
            <item>
-            <widget class="QGroupBox" name="softwareDataGroupBox">
+            <widget class="QGroupBox" name="groupBox_softwareData">
              <property name="styleSheet">
               <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
              </property>
              <property name="title">
               <string>软件数据</string>
              </property>
-             <layout class="QFormLayout" name="softwareDataFormLayout">
+             <layout class="QFormLayout" name="formLayout_softwareData">
               <item row="0" column="0">
-               <widget class="QLabel" name="label_softwareDataDir">
+               <widget class="QLabel" name="label_softwareDataDirectory">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -2286,7 +2286,7 @@ QCheckBox::indicator {
                </widget>
               </item>
               <item row="0" column="1">
-               <widget class="QLineEdit" name="lineEdit_softwareDataDir">
+               <widget class="QLineEdit" name="lineEdit_softwareDataDirectory">
                 <property name="minimumSize">
                  <size>
                   <width>0</width>
@@ -2328,7 +2328,7 @@ QCheckBox::indicator {
             </widget>
            </item>
            <item>
-            <spacer name="softwareSettingsVerticalSpacer">
+            <spacer name="verticalSpacer_softwareSettingsBottom">
              <property name="orientation">
               <enum>Qt::Vertical</enum>
              </property>
@@ -2359,7 +2359,7 @@ QCheckBox::indicator {
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="image/image.qrc"/>
+  <include location="../image/image.qrc"/>
  </resources>
  <connections/>
 </ui>

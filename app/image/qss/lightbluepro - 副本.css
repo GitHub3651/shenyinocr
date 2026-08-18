@@ -235,8 +235,8 @@ QMessageBox {
     font-size: 16px;
 }
 
-/* 匹配 objectName 为 image_undetected 的 Label，设为白色 */
-QLabel#image_undetected {
+/* 匹配 objectName 为 imageLabel_inspection 的 Label，设为白色 */
+QLabel#imageLabel_inspection {
     background-color: white; /* 背景色白色 */
     color: #000000; /* 文字色黑色（避免白字白底看不见） */
     border: 2px solid #000000; /* 可选：黑色边框，增强辨识度 */
@@ -248,7 +248,7 @@ QLabel#image_undetected {
 }
 
 /* 若该 Label 是图片类型（带 img 属性），补充适配 */
-QLabel[img="true"]#image_undetected {
+QLabel[img="true"]#imageLabel_inspection {
     background-color: white; /* 覆盖原黑色背景，设为白色 */
     border: 2px solid #000000; /* 黑色边框，与白色背景区分 */
     min-height: 480px;

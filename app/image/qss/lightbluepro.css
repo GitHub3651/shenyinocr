@@ -206,8 +206,8 @@ QSlider::handle:horizontal {
 QMessageBox {
     font-size: 16px;
 }
-/* 匹配 objectName 为 image_undetected 的 Label */
-QLabel#image_undetected {
+/* 匹配 objectName 为 imageLabel_inspection 的 Label */
+QLabel#imageLabel_inspection {
     background-color: white;
     color: #000000;
     border: 2px solid #000000;
@@ -216,8 +216,8 @@ QLabel#image_undetected {
     font-size: 15px;
     font-weight: normal;
 }
-/* 图片类型的 image_undetected Label */
-QLabel[img="true"]#image_undetected {
+/* 图片类型的 imageLabel_inspection Label */
+QLabel[img="true"]#imageLabel_inspection {
     background-color: white;
     border: 2px solid #000000;
     min-height: 480px;

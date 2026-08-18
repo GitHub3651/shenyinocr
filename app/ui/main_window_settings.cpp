@@ -73,17 +73,17 @@ void MainWindow::updateSaveDirButtonText()
 
 void MainWindow::updateImageSaveOptionsVisibility()
 {
-    if (!ui || !ui->comboBox) {
+    if (!ui || !ui->comboBox_imageSaveRange) {
         return;
     }
 
     const bool saveImages =
-            ui->comboBox->currentIndex() != 0;
-    if (ui->label_saveImageType) {
-        ui->label_saveImageType->setVisible(saveImages);
+            ui->comboBox_imageSaveRange->currentIndex() != 0;
+    if (ui->label_imageSaveContent) {
+        ui->label_imageSaveContent->setVisible(saveImages);
     }
-    if (ui->comboBox_saveImageType) {
-        ui->comboBox_saveImageType->setVisible(saveImages);
+    if (ui->comboBox_imageSaveContent) {
+        ui->comboBox_imageSaveContent->setVisible(saveImages);
     }
     if (ui->label_imageSavePath) {
         ui->label_imageSavePath->setVisible(saveImages);
@@ -94,8 +94,8 @@ void MainWindow::updateImageSaveOptionsVisibility()
     if (ui->pushButton_browseImageSavePath) {
         ui->pushButton_browseImageSavePath->setVisible(saveImages);
     }
-    if (ui->imageSaveFrame) {
-        ui->imageSaveFrame->updateGeometry();
+    if (ui->groupBox_imageSaving) {
+        ui->groupBox_imageSaving->updateGeometry();
     }
 }
 
@@ -105,10 +105,10 @@ void MainWindow::updateTissueRoughnessUiVisibility()
         return;
     }
 
-    const bool showTissueThreshold = (ui->comboBox_4->currentIndex() == 3);
+    const bool showTissueThreshold = (ui->comboBox_detectionMode->currentIndex() == 3);
     ui->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     ui->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
-    ui->pushButton_tissueRoughnessThreshold->setVisible(showTissueThreshold);
+    ui->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
 }
 
 void MainWindow::setupTemplateGuide()
@@ -147,12 +147,12 @@ void MainWindow::setupManualCharacterCropUi()
 
 void MainWindow::setupSoftwareSettingsPage()
 {
-    if (!ui || !ui->lineEdit_softwareDataDir || !ui->pushButton_clearSoftwareData
+    if (!ui || !ui->lineEdit_softwareDataDirectory || !ui->pushButton_clearSoftwareData
             || !ui->pushButton_restoreDefaultSettings) {
         return;
     }
 
-    m_softwareDataDirLineEdit = ui->lineEdit_softwareDataDir;
+    m_softwareDataDirLineEdit = ui->lineEdit_softwareDataDirectory;
     m_softwareDataDirLineEdit->setReadOnly(true);
     m_softwareDataDirLineEdit->setCursor(Qt::PointingHandCursor);
     m_softwareDataDirLineEdit->setText(
@@ -343,10 +343,10 @@ void MainWindow::restoreUnappliedSettingsFromApplied()
         const RecipeProfile &settings =
                 m_templateEditorPage->wordTemplateProfiles()[
                     static_cast<size_t>(profileIndex)].settings;
-        QSignalBlocker targetTextBlocker(ui->dateEdit);
-        QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
-        ui->dateEdit->setPlainText(settings.targetText);
-        ui->lineEdit_yuzhi->setText(QString::number(
+        QSignalBlocker targetTextBlocker(ui->textEdit_targetText);
+        QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
+        ui->textEdit_targetText->setPlainText(settings.targetText);
+        ui->lineEdit_imageThreshold->setText(QString::number(
             static_cast<int>(settings.imageThresholdPercent)));
     } else if (isSingleTemplateRecipeMode(currentDetectModeId())
                && m_templateEditorPage->activePreparedRecipe()
@@ -356,10 +356,10 @@ void MainWindow::restoreUnappliedSettingsFromApplied()
         const RecipeProfile settings =
                 m_templateEditorPage->activePreparedRecipe()
                 ->recipe->profiles.first();
-        QSignalBlocker targetTextBlocker(ui->dateEdit);
-        QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
-        ui->dateEdit->setPlainText(settings.targetText);
-        ui->lineEdit_yuzhi->setText(QString::number(
+        QSignalBlocker targetTextBlocker(ui->textEdit_targetText);
+        QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
+        ui->textEdit_targetText->setPlainText(settings.targetText);
+        ui->lineEdit_imageThreshold->setText(QString::number(
             static_cast<int>(settings.imageThresholdPercent)));
     }
     m_updatingMachineSettingsUi = oldUpdating;
@@ -388,7 +388,7 @@ void MainWindow::setupWordTemplateEditorCombo()
 
 void MainWindow::setupDetectModeChangeTracking()
 {
-    connect(ui->comboBox_4,
+    connect(ui->comboBox_detectionMode,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
             [this](int index) {
@@ -476,8 +476,8 @@ bool MainWindow::applyCameraExposureValue(
             m_inspectionApplicationService
             ->applyCameraExposure(exposureValue);
     if (result.minimumValue <= result.maximumValue) {
-        QSignalBlocker blocker(ui->spinBox);
-        ui->spinBox->setRange(
+        QSignalBlocker blocker(ui->spinBox_cameraExposure);
+        ui->spinBox_cameraExposure->setRange(
             result.minimumValue, result.maximumValue);
     }
     if (!result.success && errorMessage) {
@@ -497,7 +497,7 @@ bool MainWindow::applyCameraExposureFromUi(
         return false;
     }
     QString error;
-    if (!applyCameraExposureValue(ui->spinBox->value(), &error)) {
+    if (!applyCameraExposureValue(ui->spinBox_cameraExposure->value(), &error)) {
         const QString message = error.isEmpty()
                 ? QString("相机曝光设置失败") : error;
         if (errors) errors->append(message);
@@ -523,7 +523,7 @@ bool MainWindow::applyCameraGainFromUi(
         return false;
     }
     int gainValue = 0;
-    if (!parseIntValue(ui->lineEdit_14->text(), &gainValue)) {
+    if (!parseIntValue(ui->lineEdit_cameraGain->text(), &gainValue)) {
         const CameraParameterResultDto range =
                 m_inspectionApplicationService
                 ->queryCameraGainRange();
@@ -552,7 +552,7 @@ bool MainWindow::applyCameraGainFromUi(
 
 bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    PLCmode = ui->comboBox_3->currentIndex();
+    PLCmode = ui->comboBox_plcTriggerMode->currentIndex();
 
     if (!m_inspectionApplicationService
             ->runtimeSnapshot().plcConnected) {
@@ -609,13 +609,13 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
 
     PlcRunSettingsCommand plcSettings;
     plcSettings.rejectTime = static_cast<std::uint16_t>(
-                ui->lineEdit_8->text().toUInt());
+                ui->lineEdit_rejectTime->text().toUInt());
     plcSettings.rejectDistance =
-            ui->lineEdit_7->text().toUInt();
+            ui->lineEdit_rejectDistance->text().toUInt();
     plcSettings.photoTime = static_cast<std::uint16_t>(
-                ui->lineEdit_20->text().toUInt());
+                ui->lineEdit_photoTime->text().toUInt());
     plcSettings.photoDistance =
-            ui->lineEdit_6->text().toUInt();
+            ui->lineEdit_photoDistance->text().toUInt();
     const OperationResult result =
             m_inspectionApplicationService
             ->applyPlcRunSettings(plcSettings);
@@ -651,7 +651,7 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
  * @brief 曝光确定按钮点击槽函数
  * @details 设置相机曝光值
  */
-void MainWindow::on_sureButton_clicked()
+void MainWindow::on_pushButton_applyCameraExposure_clicked()
 {
     QStringList errors;
     if (applyCameraExposureFromUi(&errors, true)) {
@@ -669,12 +669,12 @@ void MainWindow::on_sureButton_clicked()
  * @brief PLC连接按钮点击槽函数
  * @details 连接到西门子PLC
  */
-void MainWindow::on_ConnectpushButton_clicked()
+void MainWindow::on_pushButton_connectPlc_clicked()
 {
     PlcConnectionCommand command;
-    command.address = ui->lineEdit->text();
-    command.rack = ui->lineEdit_2->text().toInt();
-    command.slot = ui->lineEdit_3->text().toInt();
+    command.address = ui->lineEdit_plcIpAddress->text();
+    command.rack = ui->lineEdit_plcRack->text().toInt();
+    command.slot = ui->lineEdit_plcSlot->text().toInt();
     const OperationResult result =
             m_inspectionApplicationService->connectPlc(command);
 
@@ -696,7 +696,7 @@ void MainWindow::on_ConnectpushButton_clicked()
 /**
  * @brief PLC断开按钮点击槽函数
  */
-void MainWindow::on_DisconnectpushButton_clicked()
+void MainWindow::on_pushButton_disconnectPlc_clicked()
 {
     const OperationResult result =
             m_inspectionApplicationService->disconnectPlc();
@@ -717,7 +717,7 @@ void MainWindow::on_DisconnectpushButton_clicked()
  * @brief 写入批次时间按钮点击槽函数
  * @details 向PLC DB1.982写入WORD值（批次时间）
  */
-void MainWindow::on_pushButton_8_clicked()
+void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 {
     QStringList errors;
     applyPlcRunSettingsFromUi(&errors, true);
@@ -725,7 +725,7 @@ void MainWindow::on_pushButton_8_clicked()
 
 
 
-void MainWindow::on_cancel_clicked()
+void MainWindow::on_toolButton_stopInspection_clicked()
 {
     if (m_inspectionPage) {
         m_inspectionPage->clearDetectionRoiWarning(QString());
@@ -751,7 +751,7 @@ void MainWindow::on_cancel_clicked()
         }
         clearBarcodeTemplateValidation();
         hideTemplateGuide();
-        ui->statusLabel->setText(
+        ui->label_runtimeStatus->setText(
                     isCameraOpen()
                     ? "已退出模板制作，相机已打开"
                     : "已退出模板制作，相机已关闭");
@@ -775,17 +775,17 @@ void MainWindow::on_cancel_clicked()
  * @brief 目标字符确定按钮点击槽函数
  */
 
-void MainWindow::on_textsure_btn_clicked()
+void MainWindow::on_pushButton_applyTargetText_clicked()
 {
     m_templateEditorPage->applyCurrentTargetText();
 }
 
-void MainWindow::on_batchTextsure_btn_clicked()
+void MainWindow::on_pushButton_applyBatchTargetText_clicked()
 {
     m_templateEditorPage->applyBatchTargetText();
 }
 
-void MainWindow::on_batchImageThresholdButton_clicked()
+void MainWindow::on_pushButton_applyBatchImageThreshold_clicked()
 {
     m_templateEditorPage->applyBatchImageThreshold();
 }
@@ -803,10 +803,10 @@ void MainWindow::applyMachineSettingsToUi(
 
 void MainWindow::applyRecipeProfileToUi(const RecipeProfile &settings)
 {
-    QSignalBlocker targetBlocker(ui->dateEdit);
-    QSignalBlocker thresholdBlocker(ui->lineEdit_yuzhi);
-    ui->dateEdit->setPlainText(settings.targetText);
-    ui->lineEdit_yuzhi->setText(QString::number(static_cast<int>(settings.imageThresholdPercent)));
+    QSignalBlocker targetBlocker(ui->textEdit_targetText);
+    QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
+    ui->textEdit_targetText->setPlainText(settings.targetText);
+    ui->lineEdit_imageThreshold->setText(QString::number(static_cast<int>(settings.imageThresholdPercent)));
     refreshRecipeProfileDirty();
 }
 
@@ -816,9 +816,9 @@ void MainWindow::applyRecipeProfileToUi(const RecipeProfile &settings)
  */
 void MainWindow::setupNonPersistentDefaults()
 {
-    ui->lineEdit_yuzhi->setText(QString::number(
+    ui->lineEdit_imageThreshold->setText(QString::number(
         RecipeProfile::DefaultImageThresholdPercent));
-    ui->dateEdit->setPlainText("");
+    ui->textEdit_targetText->setPlainText("");
     ui->lineEdit_tissueRoughnessThreshold->setText(
         QString::number(
             TissueRecipeParameters().roughnessThreshold,
@@ -826,7 +826,7 @@ void MainWindow::setupNonPersistentDefaults()
 }
 
 // ================= 拦截滚轮误操作事件 =================
-void MainWindow::on_pushButton_7_clicked()
+void MainWindow::on_pushButton_applyColorChannel_clicked()
 {
     m_machineSettingsPage->updateAppliedFromUi("image.color_channel");
     m_machineSettingsPage->refreshDirty("image.color_channel");
@@ -837,7 +837,7 @@ void MainWindow::on_pushButton_7_clicked()
 
 
 //设置相机增益
-void MainWindow::on_pushButton_12_clicked()
+void MainWindow::on_pushButton_applyCameraGain_clicked()
 {
     QStringList errors;
     if (applyCameraGainFromUi(&errors, true)) {
@@ -847,13 +847,13 @@ void MainWindow::on_pushButton_12_clicked()
     }
 }
 
-void MainWindow::on_pushButton_tissueRoughnessThreshold_clicked()
+void MainWindow::on_pushButton_applyTissueRoughnessThreshold_clicked()
 {
     m_templateEditorPage->applyCurrentTissueThreshold();
 }
 
 
-void MainWindow::on_WriteVDpushButton_clicked()
+void MainWindow::on_pushButton_applyPhotoDistance_clicked()
 {
 
     if (!m_inspectionApplicationService
@@ -864,7 +864,7 @@ void MainWindow::on_WriteVDpushButton_clicked()
     }
 
     const std::uint32_t value =
-            ui->lineEdit_6->text().toUInt();
+            ui->lineEdit_photoDistance->text().toUInt();
     const OperationResult result =
             m_inspectionApplicationService
             ->writePlcPhotoDistance(value);

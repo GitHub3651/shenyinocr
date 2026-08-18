@@ -66,7 +66,7 @@ TemplateEditorPage::TemplateEditorPage(
       m_settingsPageController(settingsPageController),
       m_settingsEditState(settingsEditState),
       m_callbacks(callbacks),
-      imageLabel(view.imageLabel)
+      imageLabel(view.imageLabel_templateCanvas)
 {
     if (!m_view.parentWidget || !imageLabel || !m_templateService
             || !m_inspectionService || !m_settingsService
@@ -98,8 +98,8 @@ TemplateEditorPage::TemplateEditorPage(
         ++m_previewSessionId;
         m_captureState = CaptureState::Idle;
         m_lastPreviewFrame.release();
-        if (m_view.statusLabel) {
-            m_view.statusLabel->setText(
+        if (m_view.label_runtimeStatus) {
+            m_view.label_runtimeStatus->setText(
                         isCameraOpen()
                         ? QStringLiteral("模板实时取景已停止，相机已打开")
                         : QStringLiteral("模板实时取景已停止，相机已关闭"));
@@ -125,11 +125,11 @@ void TemplateEditorPage::setEditorsEnabled(bool enabled)
     if (m_manualCharacterCropButton) {
         m_manualCharacterCropButton->setEnabled(enabled);
     }
-    if (m_view.dateEdit) {
-        m_view.dateEdit->setEnabled(enabled);
+    if (m_view.textEdit_targetText) {
+        m_view.textEdit_targetText->setEnabled(enabled);
     }
-    if (m_view.lineEdit_yuzhi) {
-        m_view.lineEdit_yuzhi->setEnabled(enabled);
+    if (m_view.lineEdit_imageThreshold) {
+        m_view.lineEdit_imageThreshold->setEnabled(enabled);
     }
 }
 
@@ -206,10 +206,10 @@ void TemplateEditorPage::applyRecipeProfileToUi(
         m_callbacks.applyRecipeProfileToUi(settings);
         return;
     }
-    QSignalBlocker targetBlocker(m_view.dateEdit);
-    QSignalBlocker thresholdBlocker(m_view.lineEdit_yuzhi);
-    m_view.dateEdit->setPlainText(settings.targetText);
-    m_view.lineEdit_yuzhi->setText(
+    QSignalBlocker targetBlocker(m_view.textEdit_targetText);
+    QSignalBlocker thresholdBlocker(m_view.lineEdit_imageThreshold);
+    m_view.textEdit_targetText->setPlainText(settings.targetText);
+    m_view.lineEdit_imageThreshold->setText(
                 QString::number(settings.imageThresholdPercent));
 }
 
@@ -308,10 +308,10 @@ bool TemplateEditorPage::startTemplatePreview()
         m_callbacks.updateOperationUiState();
     }
     QString errorMessage;
-    const int rotationCode = m_view.comboBox_2
-            ? m_view.comboBox_2->currentIndex() : 0;
-    const int channelCode = m_view.comboBox_5
-            ? m_view.comboBox_5->currentIndex() : 0;
+    const int rotationCode = m_view.comboBox_imageRotation
+            ? m_view.comboBox_imageRotation->currentIndex() : 0;
+    const int channelCode = m_view.comboBox_colorChannel
+            ? m_view.comboBox_colorChannel->currentIndex() : 0;
     if (!m_inspectionService->startTemplatePreview(
             m_previewSessionId, rotationCode, channelCode,
             &errorMessage)) {
@@ -440,8 +440,8 @@ void TemplateEditorPage::handlePreviewFailure(
     }
     resetTemplateCaptureState();
     imageLabel->setTemplateDrawingEnabled(false);
-    if (m_view.statusLabel) {
-        m_view.statusLabel->setText(
+    if (m_view.label_runtimeStatus) {
+        m_view.label_runtimeStatus->setText(
                     isCameraOpen()
                     ? QStringLiteral("模板实时取景失败，相机已打开")
                     : QStringLiteral("模板实时取景失败，相机已关闭"));
@@ -590,10 +590,10 @@ void TemplateEditorPage::saveCurrentTemplate()
         }
     }
 
-    const QString targetText = m_view.dateEdit->toPlainText().trimmed();
+    const QString targetText = m_view.textEdit_targetText->toPlainText().trimmed();
     int threshold = RecipeProfile::DefaultImageThresholdPercent;
     if (characterMode
-            && (!parseIntValue(m_view.lineEdit_yuzhi->text(), &threshold)
+            && (!parseIntValue(m_view.lineEdit_imageThreshold->text(), &threshold)
                 || threshold < 0 || threshold > 100)) {
         showParameterWarning(
                     QStringLiteral("参数错误"),
@@ -753,7 +753,7 @@ void TemplateEditorPage::saveCurrentTemplate()
     clearBarcodeTemplateValidation();
     hideTemplateGuide();
     resetTemplateCaptureState();
-    m_view.statusLabel->setText(
+    m_view.label_runtimeStatus->setText(
                 isCameraOpen()
                 ? QStringLiteral("配方保存完成，相机已打开")
                 : QStringLiteral("配方保存完成，相机已关闭"));

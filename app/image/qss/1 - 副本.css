@@ -90,8 +90,8 @@ QTabWidget QFrame QPushButton {
 }
 
 /* 清零按钮样式 (特殊情况: 红色背景保留白色文本，以保证可读性) */
-QPushButton#cut_cancelButton_2, 
-QPushButton#cut_cancelButton_3 {
+QPushButton#pushButton_resetTotalCount,
+QPushButton#pushButton_resetNgCount {
     background-color: #f56c6c;
     border: 1px solid #303133;
     border-radius: 4px;
@@ -99,13 +99,13 @@ QPushButton#cut_cancelButton_3 {
     color: #ffffff; /* 红色背景必须使用白色文本 */
 }
 
-QPushButton#cut_cancelButton_2:hover, 
-QPushButton#cut_cancelButton_3:hover {
+QPushButton#pushButton_resetTotalCount:hover,
+QPushButton#pushButton_resetNgCount:hover {
     background-color: #f78989;
 }
 
-QPushButton#cut_cancelButton_2:pressed, 
-QPushButton#cut_cancelButton_3:pressed {
+QPushButton#pushButton_resetTotalCount:pressed,
+QPushButton#pushButton_resetNgCount:pressed {
     background-color: #e45656;
 }
 
@@ -146,7 +146,7 @@ QTabBar::tab:selected {
 }
 
 /* --- QToolButton (主控操作台按钮, 确保黑色圆角边框 + 黑色文本) --- */
-QGroupBox#topControlPanel QToolButton {
+QGroupBox#groupBox_mainControls QToolButton {
     border: 1px solid #303133; /* 统一的黑色边框 */
     border-radius: 8px; /* 圆角 */
     padding: 10px;
@@ -156,13 +156,13 @@ QGroupBox#topControlPanel QToolButton {
 }
 
 /* 悬停微动效果 */
-QGroupBox#topControlPanel QToolButton:hover {
+QGroupBox#groupBox_mainControls QToolButton:hover {
     background-color: #f2f6fc;
     margin-top: -2px;
 }
 
 /* --- 结果标签 (确保深色字体) --- */
-QLabel#resultlabel {
+QLabel#label_verdictResult {
     font-size: 40px;
     font-weight: 900;
     color: #ffffff; /* 橙色背景必须是白色文本 */
@@ -170,7 +170,7 @@ QLabel#resultlabel {
     border-radius: 6px;
     padding: 10px;
 }
-QLabel#statusLabel {
+QLabel#label_runtimeStatus {
     font-size: 24px;
     font-weight: bold;
     color: #333333; /* 修正: 从中灰改为深黑 */

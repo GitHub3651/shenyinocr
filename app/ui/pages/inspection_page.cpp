@@ -42,14 +42,14 @@ InspectionPage::resultViewBindings() const
 {
     InspectionViewBindingsDto bindings;
     bindings.showImage = [this](const QImage &image) {
-        if (!m_ui || !m_ui->image_undetected) {
+        if (!m_ui || !m_ui->imageLabel_inspection) {
             return;
         }
         const QPixmap pixmap = QPixmap::fromImage(image);
-        m_ui->image_undetected->setScaledContents(false);
-        m_ui->image_undetected->setAlignment(Qt::AlignCenter);
-        m_ui->image_undetected->setAutoFitPixmap(pixmap);
-        if (!m_ui->image_undetected->isTemplateDrawingEnabled()
+        m_ui->imageLabel_inspection->setScaledContents(false);
+        m_ui->imageLabel_inspection->setAlignment(Qt::AlignCenter);
+        m_ui->imageLabel_inspection->setAutoFitPixmap(pixmap);
+        if (!m_ui->imageLabel_inspection->isTemplateDrawingEnabled()
                 && m_callbacks.updateImageDisplayStatus) {
             m_callbacks.updateImageDisplayStatus(
                         QStringLiteral(
@@ -59,15 +59,15 @@ InspectionPage::resultViewBindings() const
     };
     bindings.showVerdictStyle = [this](
             InspectionVerdictStyleDto style) {
-        if (!m_ui || !m_ui->resultlabel) {
+        if (!m_ui || !m_ui->label_verdictResult) {
             return;
         }
         const QString color =
                 style == InspectionVerdictStyleDto::Correct
                 ? QStringLiteral("#00ff7f")
                 : QStringLiteral("#ff0000");
-        m_ui->resultlabel->setTextFormat(Qt::PlainText);
-        m_ui->resultlabel->setStyleSheet(
+        m_ui->label_verdictResult->setTextFormat(Qt::PlainText);
+        m_ui->label_verdictResult->setStyleSheet(
                     QStringLiteral(
                         "background-color: #eef1f6; "
                         "border-radius: 6px; "
@@ -75,42 +75,42 @@ InspectionPage::resultViewBindings() const
                         "font-weight: 900; "
                         "color: %1;")
                     .arg(color));
-        m_ui->resultlabel->setWordWrap(true);
+        m_ui->label_verdictResult->setWordWrap(true);
     };
     bindings.showVerdictText = [this](const QString &text) {
         if (m_ui) {
-            setLabelTextIfChanged(m_ui->resultlabel, text);
+            setLabelTextIfChanged(m_ui->label_verdictResult, text);
         }
     };
     bindings.showRecognitionText = [this](const QString &text) {
         if (m_ui) {
-            setLabelTextIfChanged(m_ui->resultlabel_7, text);
+            setLabelTextIfChanged(m_ui->label_recognitionText, text);
         }
     };
     bindings.showTemplateName = [this](const QString &text) {
-        if (m_ui && m_ui->currentTemplateName) {
-            m_ui->currentTemplateName->setText(text);
+        if (m_ui && m_ui->lineEdit_currentRecipeName) {
+            m_ui->lineEdit_currentRecipeName->setText(text);
         }
     };
     bindings.showTotalCount = [this](int count) {
-        if (m_ui && m_ui->imagenum) {
-            m_ui->imagenum->setText(QString::number(count));
+        if (m_ui && m_ui->lineEdit_totalCount) {
+            m_ui->lineEdit_totalCount->setText(QString::number(count));
         }
     };
     bindings.showNgCount = [this](int count) {
-        if (m_ui && m_ui->ngnum) {
-            m_ui->ngnum->setText(QString::number(count));
+        if (m_ui && m_ui->lineEdit_ngCount) {
+            m_ui->lineEdit_ngCount->setText(QString::number(count));
         }
     };
     bindings.showPassRate = [this](double passRate) {
-        if (m_ui && m_ui->lineBoxIndex_6) {
-            m_ui->lineBoxIndex_6->setText(
+        if (m_ui && m_ui->lineEdit_passRate) {
+            m_ui->lineEdit_passRate->setText(
                         QString::number(passRate, 'f', 1));
         }
     };
     bindings.showElapsedText = [this](const QString &text) {
-        if (m_ui && m_ui->speedLabel) {
-            m_ui->speedLabel->setText(text);
+        if (m_ui && m_ui->lineEdit_detectionDuration) {
+            m_ui->lineEdit_detectionDuration->setText(text);
         }
     };
     return bindings;
@@ -161,36 +161,36 @@ void InspectionPage::updateOperationState(
         }
     }
 
-    m_ui->plcbtn->setText(operationUi.startDetectionText);
-    m_ui->cancel->setText(operationUi.stopText);
-    m_ui->VideoShoot->setText(operationUi.templateCaptureText);
-    m_ui->HandwareDetect->setEnabled(operationUi.openCameraEnabled);
-    m_ui->plcbtn->setEnabled(operationUi.startDetectionEnabled);
-    m_ui->cancel->setEnabled(operationUi.stopEnabled);
-    m_ui->CloseCamera->setEnabled(operationUi.closeCameraEnabled);
-    m_ui->VideoShoot->setEnabled(operationUi.templateCaptureEnabled);
-    m_ui->pushButton_5->setEnabled(operationUi.saveTemplateEnabled);
+    m_ui->toolButton_startInspection->setText(operationUi.startDetectionText);
+    m_ui->toolButton_stopInspection->setText(operationUi.stopText);
+    m_ui->toolButton_createTemplate->setText(operationUi.templateCaptureText);
+    m_ui->toolButton_openCamera->setEnabled(operationUi.openCameraEnabled);
+    m_ui->toolButton_startInspection->setEnabled(operationUi.startDetectionEnabled);
+    m_ui->toolButton_stopInspection->setEnabled(operationUi.stopEnabled);
+    m_ui->toolButton_closeCamera->setEnabled(operationUi.closeCameraEnabled);
+    m_ui->toolButton_createTemplate->setEnabled(operationUi.templateCaptureEnabled);
+    m_ui->pushButton_saveTemplate->setEnabled(operationUi.saveTemplateEnabled);
     if (!operationUi.statusText.isEmpty()) {
-        m_ui->statusLabel->setText(operationUi.statusText);
+        m_ui->label_runtimeStatus->setText(operationUi.statusText);
     }
 
     if (m_callbacks.setSettingsEnabled) {
         m_callbacks.setSettingsEnabled(operationUi.settingsEnabled);
     }
 
-    if (m_templateAttentionTimer && m_ui->VideoShoot) {
+    if (m_templateAttentionTimer && m_ui->toolButton_createTemplate) {
         if (requestedState == OperationUiState::TemplatePreviewing) {
             if (!m_templateAttentionTimer->isActive()) {
                 if (m_templateAttentionOn) {
                     *m_templateAttentionOn = true;
                 }
-                m_ui->VideoShoot->setProperty(
+                m_ui->toolButton_createTemplate->setProperty(
                             "templateCaptureActive", true);
-                m_ui->VideoShoot->setProperty(
+                m_ui->toolButton_createTemplate->setProperty(
                             "templateCaptureAttention", true);
-                m_ui->VideoShoot->style()->unpolish(m_ui->VideoShoot);
-                m_ui->VideoShoot->style()->polish(m_ui->VideoShoot);
-                m_ui->VideoShoot->update();
+                m_ui->toolButton_createTemplate->style()->unpolish(m_ui->toolButton_createTemplate);
+                m_ui->toolButton_createTemplate->style()->polish(m_ui->toolButton_createTemplate);
+                m_ui->toolButton_createTemplate->update();
                 m_templateAttentionTimer->start();
             }
         } else {
@@ -198,20 +198,20 @@ void InspectionPage::updateOperationState(
             const bool attentionOn = m_templateAttentionOn
                     && *m_templateAttentionOn;
             if (attentionOn
-                    || m_ui->VideoShoot->property(
+                    || m_ui->toolButton_createTemplate->property(
                         "templateCaptureActive").toBool()
-                    || m_ui->VideoShoot->property(
+                    || m_ui->toolButton_createTemplate->property(
                         "templateCaptureAttention").toBool()) {
                 if (m_templateAttentionOn) {
                     *m_templateAttentionOn = false;
                 }
-                m_ui->VideoShoot->setProperty(
+                m_ui->toolButton_createTemplate->setProperty(
                             "templateCaptureActive", false);
-                m_ui->VideoShoot->setProperty(
+                m_ui->toolButton_createTemplate->setProperty(
                             "templateCaptureAttention", false);
-                m_ui->VideoShoot->style()->unpolish(m_ui->VideoShoot);
-                m_ui->VideoShoot->style()->polish(m_ui->VideoShoot);
-                m_ui->VideoShoot->update();
+                m_ui->toolButton_createTemplate->style()->unpolish(m_ui->toolButton_createTemplate);
+                m_ui->toolButton_createTemplate->style()->polish(m_ui->toolButton_createTemplate);
+                m_ui->toolButton_createTemplate->update();
             }
         }
     }
@@ -231,12 +231,12 @@ void InspectionPage::presentFault(
     if (!presentation.isValid() || !m_ui) {
         return;
     }
-    m_ui->statusLabel->setText(presentation.statusText);
-    m_ui->statusLabel->setStyleSheet(
+    m_ui->label_runtimeStatus->setText(presentation.statusText);
+    m_ui->label_runtimeStatus->setStyleSheet(
                 presentation.statusStyleSheet);
-    m_ui->resultlabel->setTextFormat(Qt::PlainText);
-    m_ui->resultlabel->setText(presentation.resultText);
-    m_ui->resultlabel->setStyleSheet(
+    m_ui->label_verdictResult->setTextFormat(Qt::PlainText);
+    m_ui->label_verdictResult->setText(presentation.resultText);
+    m_ui->label_verdictResult->setStyleSheet(
                 presentation.resultStyleSheet);
 
     if (alarmPresented && !*alarmPresented) {
@@ -284,10 +284,10 @@ void InspectionPage::restoreNormalFaultStyle()
     if (!m_ui) {
         return;
     }
-    m_ui->statusLabel->setStyleSheet(
+    m_ui->label_runtimeStatus->setStyleSheet(
                 QStringLiteral(
                     "QLabel{color:#2ecc71; font-weight:bold;}"));
-    m_ui->resultlabel->setStyleSheet(
+    m_ui->label_verdictResult->setStyleSheet(
                 QStringLiteral(
                     "background-color: #eef1f6; "
                     "border-radius: 6px; "
@@ -307,10 +307,10 @@ void InspectionPage::showDetectionRoiWarning()
                 L"\u8bf7\u70b9\u51fb\u3010\u505c\u6b62\u8bc6\u522b\u3011\uff0c"
                 L"\u7136\u540e\u91cd\u65b0\u9009\u62e9\u6216\u5236\u4f5c\u6a21\u677f\u3002");
     qWarning().noquote() << "[DETECTION_ROI]" << warningText;
-    if (m_ui && m_ui->statusLabel) {
-        m_ui->statusLabel->setWordWrap(true);
-        m_ui->statusLabel->setText(warningText);
-        m_ui->statusLabel->setStyleSheet(
+    if (m_ui && m_ui->label_runtimeStatus) {
+        m_ui->label_runtimeStatus->setWordWrap(true);
+        m_ui->label_runtimeStatus->setText(warningText);
+        m_ui->label_runtimeStatus->setStyleSheet(
                     QStringLiteral(
                         "QLabel{color:#d90000;font-weight:900;}"));
     }
@@ -323,10 +323,10 @@ void InspectionPage::clearDetectionRoiWarning(
         return;
     }
     m_detectionRoiWarningActive = false;
-    if (m_ui && m_ui->statusLabel
+    if (m_ui && m_ui->label_runtimeStatus
             && !runningStatusText.isEmpty()) {
-        m_ui->statusLabel->setText(runningStatusText);
-        m_ui->statusLabel->setStyleSheet(
+        m_ui->label_runtimeStatus->setText(runningStatusText);
+        m_ui->label_runtimeStatus->setStyleSheet(
                     QStringLiteral(
                         "QLabel{color:#20b455;font-weight:bold;}"));
     }
@@ -364,10 +364,10 @@ void InspectionPage::reportImageSaveFailure(
                     .arg(m_latestImageSaveError);
         }
         qWarning().noquote() << "[IMAGE_SAVE]" << warningText;
-        if (m_ui && m_ui->statusLabel) {
-            m_ui->statusLabel->setWordWrap(true);
-            m_ui->statusLabel->setText(warningText);
-            m_ui->statusLabel->setStyleSheet(
+        if (m_ui && m_ui->label_runtimeStatus) {
+            m_ui->label_runtimeStatus->setWordWrap(true);
+            m_ui->label_runtimeStatus->setText(warningText);
+            m_ui->label_runtimeStatus->setStyleSheet(
                         QStringLiteral(
                             "QLabel{color:#d90000;font-weight:900;}"));
         }

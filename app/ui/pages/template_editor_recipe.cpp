@@ -78,124 +78,124 @@ void TemplateEditorPage::setupWordTemplateEditorCombo()
 
     {
 
-        if (m_view.textsure_btn) m_view.textsure_btn->setStyleSheet(commonPushButtonStyle);
-        if (m_view.batchTextsure_btn) m_view.batchTextsure_btn->setStyleSheet(commonPushButtonStyle);
-        if (m_view.batchImageThresholdButton) m_view.batchImageThresholdButton->setStyleSheet(commonPushButtonStyle);
-        if (m_view.WriteVDpushButton) m_view.WriteVDpushButton->setStyleSheet(commonPushButtonStyle);
-        if (m_view.pushButton_7) m_view.pushButton_7->setStyleSheet(commonPushButtonStyle);
-        if (m_view.pushButton_3) m_view.pushButton_3->setStyleSheet(commonPushButtonStyle);
-        if (m_view.sureButton) m_view.sureButton->setStyleSheet(commonPushButtonStyle);
-        if (m_view.pushButton_9) m_view.pushButton_9->setStyleSheet(commonPushButtonStyle);
-        if (m_view.pushButton_12) m_view.pushButton_12->setStyleSheet(commonPushButtonStyle);
-        if (m_view.pushButton_tissueRoughnessThreshold) m_view.pushButton_tissueRoughnessThreshold->setStyleSheet(commonPushButtonStyle);
-        if (m_view.plcmodebtn) m_view.plcmodebtn->setStyleSheet(commonPushButtonStyle);
-        if (m_view.ConnectpushButton) m_view.ConnectpushButton->setStyleSheet(commonPushButtonStyle);
-        if (m_view.DisconnectpushButton) m_view.DisconnectpushButton->setStyleSheet(commonPushButtonStyle);
-        if (m_view.pushButton_8) m_view.pushButton_8->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyTargetText) m_view.pushButton_applyTargetText->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyBatchTargetText) m_view.pushButton_applyBatchTargetText->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyBatchImageThreshold) m_view.pushButton_applyBatchImageThreshold->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyPhotoDistance) m_view.pushButton_applyPhotoDistance->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyColorChannel) m_view.pushButton_applyColorChannel->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyImageThreshold) m_view.pushButton_applyImageThreshold->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyCameraExposure) m_view.pushButton_applyCameraExposure->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyImageRotation) m_view.pushButton_applyImageRotation->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyCameraGain) m_view.pushButton_applyCameraGain->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyTissueRoughnessThreshold) m_view.pushButton_applyTissueRoughnessThreshold->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyPlcTriggerMode) m_view.pushButton_applyPlcTriggerMode->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_connectPlc) m_view.pushButton_connectPlc->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_disconnectPlc) m_view.pushButton_disconnectPlc->setStyleSheet(commonPushButtonStyle);
+        if (m_view.pushButton_applyPlcProcessParameters) m_view.pushButton_applyPlcProcessParameters->setStyleSheet(commonPushButtonStyle);
         if (m_view.pushButton_browseImageSavePath) m_view.pushButton_browseImageSavePath->setStyleSheet(commonPushButtonStyle);
     }
 
-    if (m_view.textsure_btn && m_view.batchTextsure_btn) {
-        m_view.textsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        m_view.batchTextsure_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    if (m_view.pushButton_applyTargetText && m_view.pushButton_applyBatchTargetText) {
+        m_view.pushButton_applyTargetText->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        m_view.pushButton_applyBatchTargetText->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
-        QHBoxLayout *buttonLayout = qobject_cast<QHBoxLayout *>(m_view.textsure_btn->parentWidget()
-                ? m_view.textsure_btn->parentWidget()->layout()
+        QHBoxLayout *buttonLayout = qobject_cast<QHBoxLayout *>(m_view.pushButton_applyTargetText->parentWidget()
+                ? m_view.pushButton_applyTargetText->parentWidget()->layout()
                 : nullptr);
         if (buttonLayout) {
             buttonLayout->setStretch(0, 1);
             buttonLayout->setStretch(1, 1);
         }
 
-        m_view.textsure_btn->setToolTip("只保存当前编辑模板的目标字符，并重新加载该模板的字符图片。");
-        m_view.batchTextsure_btn->setToolTip("把当前目标字符保存到所有已选择的字库模板，并分别重新加载字符图片。");
-        m_view.textsure_btn->installEventFilter(m_view.eventFilterTarget);
-        m_view.batchTextsure_btn->installEventFilter(m_view.eventFilterTarget);
+        m_view.pushButton_applyTargetText->setToolTip("只保存当前编辑模板的目标字符，并重新加载该模板的字符图片。");
+        m_view.pushButton_applyBatchTargetText->setToolTip("把当前目标字符保存到所有已选择的字库模板，并分别重新加载字符图片。");
+        m_view.pushButton_applyTargetText->installEventFilter(m_view.eventFilterTarget);
+        m_view.pushButton_applyBatchTargetText->installEventFilter(m_view.eventFilterTarget);
     }
 
     if (m_view.pushButton_browseImageSavePath) {
         m_view.pushButton_browseImageSavePath->installEventFilter(m_view.eventFilterTarget);
     }
 
-    if (m_view.pushButton_7) {
-        m_view.pushButton_7->setToolTip("确认当前选择的颜色通道，用于后续图像处理和识别。");
-        m_view.pushButton_7->installEventFilter(m_view.eventFilterTarget);
+    if (m_view.pushButton_applyColorChannel) {
+        m_view.pushButton_applyColorChannel->setToolTip("确认当前选择的颜色通道，用于后续图像处理和识别。");
+        m_view.pushButton_applyColorChannel->installEventFilter(m_view.eventFilterTarget);
     }
 
     {
-        if (m_view.checkBox) {
-            m_view.checkBox->setToolTip(
+        if (m_view.checkBox_hardwareTriggerEnabled) {
+            m_view.checkBox_hardwareTriggerEnabled->setToolTip(
                         "控制检测的触发方式。\n"
                         "勾选：使用 PLC 外部触发信号控制相机拍照和检测，启动前必须连接 PLC。\n"
                         "不勾选：使用软件软触发，启动后由相机连续采集并检测。");
-            m_view.checkBox->installEventFilter(m_view.eventFilterTarget);
+            m_view.checkBox_hardwareTriggerEnabled->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.pushButton_10) {
-            m_view.pushButton_10->setToolTip("清空当前尚未发出的剔除队列。\n适用于异常停机、误判、手动停止后，防止之前累计的剔除信号继续输出。");
-            m_view.pushButton_10->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.pushButton_resetRejectQueue) {
+            m_view.pushButton_resetRejectQueue->setToolTip("清空当前尚未发出的剔除队列。\n适用于异常停机、误判、手动停止后，防止之前累计的剔除信号继续输出。");
+            m_view.pushButton_resetRejectQueue->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_4) {
-            m_view.label_4->setToolTip("图像判定合格的分数阈值。\n识别匹配分数低于该值时，通常判为不合格；数值越高，判定越严格。");
-            m_view.label_4->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_imageThreshold) {
+            m_view.label_imageThreshold->setToolTip("图像判定合格的分数阈值。\n识别匹配分数低于该值时，通常判为不合格；数值越高，判定越严格。");
+            m_view.label_imageThreshold->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_27) {
-            m_view.label_27->setToolTip("设置图像进入识别前的旋转方向。\n当相机安装方向、产品摆放方向和模板方向不一致时，需要调整这里。");
-            m_view.label_27->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_imageRotation) {
+            m_view.label_imageRotation->setToolTip("设置图像进入识别前的旋转方向。\n当相机安装方向、产品摆放方向和模板方向不一致时，需要调整这里。");
+            m_view.label_imageRotation->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_16) {
-            m_view.label_16->setToolTip("设置相机增益。\n增益越高画面越亮，但噪声也可能增加；一般先调曝光，曝光不足时再调增益。");
-            m_view.label_16->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_cameraGain) {
+            m_view.label_cameraGain->setToolTip("设置相机增益。\n增益越高画面越亮，但噪声也可能增加；一般先调曝光，曝光不足时再调增益。");
+            m_view.label_cameraGain->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_14) {
-            m_view.label_14->setToolTip("PLC拍照信号保持多久。\n相机偶尔漏拍、触发不稳定时可适当加大；正常不要过大，避免影响下一次触发节拍。");
-            m_view.label_14->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_photoTime) {
+            m_view.label_photoTime->setToolTip("PLC拍照信号保持多久。\n相机偶尔漏拍、触发不稳定时可适当加大；正常不要过大，避免影响下一次触发节拍。");
+            m_view.label_photoTime->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_13) {
-            m_view.label_13->setToolTip("相机收到 PLC 拍照信号后，再等待多久才真正曝光采图。\n通常在拍照距离基本正确后，用它做小范围微调。\n画面中产品还没到合适位置就加大；产品已经走过或喷码偏后就减小。");
-            m_view.label_13->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_hardwareTriggerDelay) {
+            m_view.label_hardwareTriggerDelay->setToolTip("相机收到 PLC 拍照信号后，再等待多久才真正曝光采图。\n通常在拍照距离基本正确后，用它做小范围微调。\n画面中产品还没到合适位置就加大；产品已经走过或喷码偏后就减小。");
+            m_view.label_hardwareTriggerDelay->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_6) {
-            m_view.label_6->setToolTip("检测拍照点到剔除机构中心的实际产线距离。\n剔除太早通常加大；剔除太晚通常减小。");
-            m_view.label_6->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_rejectDistance) {
+            m_view.label_rejectDistance->setToolTip("检测拍照点到剔除机构中心的实际产线距离。\n剔除太早通常加大；剔除太晚通常减小。");
+            m_view.label_rejectDistance->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_10) {
-            m_view.label_10->setToolTip("剔除机构保持动作的时长。\n不合格品剔不干净就加大；影响相邻合格品或动作拖尾就减小。");
-            m_view.label_10->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_rejectTime) {
+            m_view.label_rejectTime->setToolTip("剔除机构保持动作的时长。\n不合格品剔不干净就加大；影响相邻合格品或动作拖尾就减小。");
+            m_view.label_rejectTime->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_17) {
-            m_view.label_17->setToolTip("选择第几路剔除输出或第几个剔除口。\n现场有多个气嘴、推杆或剔除工位时使用；填错会从错误位置剔除。");
-            m_view.label_17->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_rejectPosition) {
+            m_view.label_rejectPosition->setToolTip("选择第几路剔除输出或第几个剔除口。\n现场有多个气嘴、推杆或剔除工位时使用；填错会从错误位置剔除。");
+            m_view.label_rejectPosition->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.label_8) {
-            m_view.label_8->setToolTip("上游传感器触发点到相机拍照中心的实际产线距离。\nPLC 根据这个距离判断产品走到相机位置后再发出拍照信号。\n画面中产品还没到拍照位置，说明触发偏早，适当加大；产品已经走过拍照位置，说明触发偏晚，适当减小。");
-            m_view.label_8->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.label_photoDistance) {
+            m_view.label_photoDistance->setToolTip("上游传感器触发点到相机拍照中心的实际产线距离。\nPLC 根据这个距离判断产品走到相机位置后再发出拍照信号。\n画面中产品还没到拍照位置，说明触发偏早，适当加大；产品已经走过拍照位置，说明触发偏晚，适当减小。");
+            m_view.label_photoDistance->installEventFilter(m_view.eventFilterTarget);
         }
-        if (m_view.comboBox_3) {
-            m_view.comboBox_3->setToolTip("PLC触发工作模式。\n连续触发模式：产线连续经过时，PLC按连续节拍触发相机采图和检测。\n间歇触发模式：产品分批、停顿或按间隔到位时，PLC按间歇方式触发采图和检测。");
-            m_view.comboBox_3->installEventFilter(m_view.eventFilterTarget);
+        if (m_view.comboBox_plcTriggerMode) {
+            m_view.comboBox_plcTriggerMode->setToolTip("PLC触发工作模式。\n连续触发模式：产线连续经过时，PLC按连续节拍触发相机采图和检测。\n间歇触发模式：产品分批、停顿或按间隔到位时，PLC按间歇方式触发采图和检测。");
+            m_view.comboBox_plcTriggerMode->installEventFilter(m_view.eventFilterTarget);
         }
     }
 
-    if (m_view.VideoShoot) {
-        m_view.VideoShoot->installEventFilter(m_view.eventFilterTarget);
+    if (m_view.toolButton_createTemplate) {
+        m_view.toolButton_createTemplate->installEventFilter(m_view.eventFilterTarget);
     }
 
-    if (m_view.batchTextsure_btn) {
-        m_view.batchTextsure_btn->hide();
+    if (m_view.pushButton_applyBatchTargetText) {
+        m_view.pushButton_applyBatchTargetText->hide();
     }
-    if (m_view.batchImageThresholdButton) {
-        m_view.batchImageThresholdButton->setToolTip(
+    if (m_view.pushButton_applyBatchImageThreshold) {
+        m_view.pushButton_applyBatchImageThreshold->setToolTip(
                     "把当前图像合格阈值保存到所有已选择的产品模板。");
-        m_view.batchImageThresholdButton->installEventFilter(m_view.eventFilterTarget);
-        m_view.batchImageThresholdButton->hide();
+        m_view.pushButton_applyBatchImageThreshold->installEventFilter(m_view.eventFilterTarget);
+        m_view.pushButton_applyBatchImageThreshold->hide();
     }
 
-    if (m_wordTemplateEditComboBox || !m_view.dateEdit
-            || !m_view.lineEdit_yuzhi) {
+    if (m_wordTemplateEditComboBox || !m_view.textEdit_targetText
+            || !m_view.lineEdit_imageThreshold) {
         return;
     }
 
-    QWidget *parentWidget = m_view.dateEdit->parentWidget();
+    QWidget *parentWidget = m_view.textEdit_targetText->parentWidget();
     if (parentWidget) {
         QGridLayout *targetLayout = qobject_cast<QGridLayout *>(parentWidget->layout());
 
@@ -218,7 +218,7 @@ void TemplateEditorPage::setupWordTemplateEditorCombo()
         m_wordTemplateEditLabel->setStyleSheet(editorBoxStyle);
 
         m_wordTemplateEditComboBox = new QComboBox(m_wordTemplateEditWidget);
-        m_wordTemplateEditComboBox->setObjectName("wordTemplateComboBox");
+        m_wordTemplateEditComboBox->setObjectName("comboBox_wordTemplate");
         m_wordTemplateEditComboBox->setMinimumHeight(50);
         m_wordTemplateEditComboBox->setMaximumHeight(50);
         m_wordTemplateEditComboBox->setMinimumWidth(160);
@@ -239,7 +239,7 @@ void TemplateEditorPage::setupWordTemplateEditorCombo()
                     QStringLiteral("\u53D1\u5E03\u6A21\u677F\u7EC4"),
                     m_wordTemplateEditWidget);
         m_publishTemplateGroupButton->setObjectName(
-                    QStringLiteral("publishTemplateGroupButton"));
+                    QStringLiteral("pushButton_publishTemplateGroup"));
         m_publishTemplateGroupButton->setFixedHeight(50);
         m_publishTemplateGroupButton->setToolTip(
                     QStringLiteral(
@@ -252,7 +252,7 @@ void TemplateEditorPage::setupWordTemplateEditorCombo()
                     QStringLiteral("\u5DF2\u53D1\u5E03\u914D\u65B9"),
                     m_wordTemplateEditWidget);
         m_publishedRecipeButton->setObjectName(
-                    QStringLiteral("publishedRecipeButton"));
+                    QStringLiteral("pushButton_selectPublishedRecipe"));
         m_publishedRecipeButton->setFixedHeight(50);
         m_publishedRecipeButton->setToolTip(
                     QStringLiteral(
@@ -310,10 +310,10 @@ void TemplateEditorPage::clearWordMultiTemplateState()
     m_templateService->clearWordProfiles();
     m_currentWordTemplateEditIndex = -1;
     {
-        QSignalBlocker targetBlocker(m_view.dateEdit);
-        QSignalBlocker thresholdBlocker(m_view.lineEdit_yuzhi);
-        m_view.dateEdit->clear();
-        m_view.lineEdit_yuzhi->setText(QString::number(
+        QSignalBlocker targetBlocker(m_view.textEdit_targetText);
+        QSignalBlocker thresholdBlocker(m_view.lineEdit_imageThreshold);
+        m_view.textEdit_targetText->clear();
+        m_view.lineEdit_imageThreshold->setText(QString::number(
             RecipeProfile::DefaultImageThresholdPercent));
     }
     m_currentTemplateNameVisible = false;
@@ -328,10 +328,10 @@ void TemplateEditorPage::clearSingleTemplateRecipeState()
     m_templateService->setActivePreparedRecipe(PreparedRecipeSnapshot());
     m_currentTemplateDisplayName.clear();
     {
-        QSignalBlocker targetBlocker(m_view.dateEdit);
-        QSignalBlocker thresholdBlocker(m_view.lineEdit_yuzhi);
-        m_view.dateEdit->clear();
-        m_view.lineEdit_yuzhi->setText(QString::number(
+        QSignalBlocker targetBlocker(m_view.textEdit_targetText);
+        QSignalBlocker thresholdBlocker(m_view.lineEdit_imageThreshold);
+        m_view.textEdit_targetText->clear();
+        m_view.lineEdit_imageThreshold->setText(QString::number(
             RecipeProfile::DefaultImageThresholdPercent));
     }
     m_currentTemplateNameVisible = false;
@@ -347,7 +347,7 @@ QString TemplateEditorPage::detectModeIdForIndex(int index) const
 
 QString TemplateEditorPage::currentDetectModeId() const
 {
-    return detectModeIdForIndex(m_view.comboBox_4 ? m_view.comboBox_4->currentIndex() : 1);
+    return detectModeIdForIndex(m_view.comboBox_detectionMode ? m_view.comboBox_detectionMode->currentIndex() : 1);
 }
 
 void TemplateEditorPage::restoreTemplatesForMode(
@@ -412,11 +412,11 @@ void TemplateEditorPage::refreshWordTemplateEditorCombo()
                 currentDetectModeId(), &selectedMode);
     const bool hasWordProfiles = isWordMode && !m_templateService->wordProfiles().empty();
 
-    if (m_view.batchTextsure_btn) {
-        m_view.batchTextsure_btn->setVisible(isWordMode && m_templateService->wordProfiles().size() > 1);
+    if (m_view.pushButton_applyBatchTargetText) {
+        m_view.pushButton_applyBatchTargetText->setVisible(isWordMode && m_templateService->wordProfiles().size() > 1);
     }
-    if (m_view.batchImageThresholdButton) {
-        m_view.batchImageThresholdButton->setVisible(
+    if (m_view.pushButton_applyBatchImageThreshold) {
+        m_view.pushButton_applyBatchImageThreshold->setVisible(
                     isWordMode && m_templateService->wordProfiles().size() > 1);
     }
 
@@ -548,12 +548,12 @@ void TemplateEditorPage::setCurrentWordTemplateEditIndex(int profileIndex)
 
     const WordTemplateProfile &profile = m_templateService->wordProfiles()[static_cast<std::size_t>(profileIndex)];
     {
-        QSignalBlocker blocker(m_view.dateEdit);
-        m_view.dateEdit->setPlainText(profile.settings.targetText);
+        QSignalBlocker blocker(m_view.textEdit_targetText);
+        m_view.textEdit_targetText->setPlainText(profile.settings.targetText);
     }
     {
-        QSignalBlocker blocker(m_view.lineEdit_yuzhi);
-        m_view.lineEdit_yuzhi->setText(QString::number(static_cast<int>(profile.settings.imageThresholdPercent)));
+        QSignalBlocker blocker(m_view.lineEdit_imageThreshold);
+        m_view.lineEdit_imageThreshold->setText(QString::number(static_cast<int>(profile.settings.imageThresholdPercent)));
     }
     refreshRecipeProfileDirty();
 

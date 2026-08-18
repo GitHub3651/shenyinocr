@@ -152,7 +152,7 @@ void MainWindow::finishInspectionStopUi(
 {
     if (result.issue
             == StopInspectionIssue::AcquisitionStillStopping) {
-        ui->statusLabel->setText("停止中，请稍后再关闭相机");
+        ui->label_runtimeStatus->setText("停止中，请稍后再关闭相机");
         updateOperationUiState();
         return;
     }
@@ -160,10 +160,10 @@ void MainWindow::finishInspectionStopUi(
     if (result.cameraRecovery.issue
             == CameraRecoveryIssueDto::ExposureRejected) {
         {
-            QSignalBlocker blocker(ui->spinBox);
-            ui->spinBox->setRange(
+            QSignalBlocker blocker(ui->spinBox_cameraExposure);
+            ui->spinBox_cameraExposure->setRange(
                         0, (std::numeric_limits<int>::max)());
-            ui->spinBox->setValue(
+            ui->spinBox_cameraExposure->setValue(
                         machineSettings().cameraExposure);
         }
         m_machineSettingsPage->refreshDirty("camera.exposure");
@@ -174,7 +174,7 @@ void MainWindow::finishInspectionStopUi(
                     .arg(result.cameraRecovery.errorMessage));
     } else if (result.cameraRecovery.isRecovered()
                && result.cameraRecovery.recoveryAttempted) {
-        ui->statusLabel->setText("相机已打开");
+        ui->label_runtimeStatus->setText("相机已打开");
         if (!result.cameraRecovery.adjustmentMessage.isEmpty()) {
             QMessageBox::information(
                         this,
@@ -213,7 +213,7 @@ void MainWindow::finishInspectionStopUi(
                     QStringLiteral("故障产品收口结果"),
                     result.reconciliationSummary);
     }
-    ui->statusLabel->setText("已停止");
+    ui->label_runtimeStatus->setText("已停止");
     updateOperationUiState();
 }
 
@@ -328,7 +328,7 @@ bool MainWindow::freezeTemplatePreview()
 /**
  * @brief 制作模板按钮点击槽函数
  */
-void MainWindow::on_VideoShoot_clicked()
+void MainWindow::on_toolButton_createTemplate_clicked()
 {
     if (m_templateEditorPage) {
         m_templateEditorPage->handleTemplateCaptureButton();
@@ -418,7 +418,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
  * @brief 阈值确定按钮点击槽函数
  * @details 设置相似度判断阈值
  */
-void MainWindow::on_pushButton_3_clicked()
+void MainWindow::on_pushButton_applyImageThreshold_clicked()
 {
     m_templateEditorPage->applyCurrentImageThreshold();
 }
@@ -427,13 +427,13 @@ void MainWindow::on_pushButton_3_clicked()
  * @brief 保存当前图像按钮点击槽函数
  * @details 打开文件保存对话框，保存当前显示的图像
  */
-void MainWindow::on_pushButton_5_clicked()
+void MainWindow::on_pushButton_saveTemplate_clicked()
 {
     m_templateEditorPage->saveCurrentTemplate();
 }
 
 // 先定义一个保存参数到指定文件夹的函数（可放在MainWindow类中）
-void MainWindow::on_pushButton_4_clicked()
+void MainWindow::on_toolButton_selectRecipe_clicked()
 {
     m_templateEditorPage->selectPublishedRecipeForCurrentMode();
 }
@@ -462,7 +462,7 @@ void MainWindow::on_pushButton_browseImageSavePath_clicked()
 /**
  * @brief 清空总数统计按钮点击槽函数
  */
-void MainWindow::on_cut_cancelButton_2_clicked()
+void MainWindow::on_pushButton_resetTotalCount_clicked()
 {
     m_inspectionApplicationService->resetStatistics();
 }
@@ -470,7 +470,7 @@ void MainWindow::on_cut_cancelButton_2_clicked()
 /**
  * @brief 清空NG数统计按钮点击槽函数
  */
-void MainWindow::on_cut_cancelButton_3_clicked()
+void MainWindow::on_pushButton_resetNgCount_clicked()
 {
     m_inspectionApplicationService->resetNgCount();
 }
@@ -479,7 +479,7 @@ void MainWindow::on_cut_cancelButton_3_clicked()
  * @brief 旋转角度确定按钮点击槽函数
  * @details 设置图像旋转角度（0°、90°、180°、270°）
  */
-void MainWindow::on_pushButton_9_clicked()
+void MainWindow::on_pushButton_applyImageRotation_clicked()
 {
     m_machineSettingsPage->updateAppliedFromUi("image.rotation");
     m_machineSettingsPage->refreshDirty("image.rotation");
@@ -499,25 +499,25 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         return false;
     }
 
-        if (watched == ui->textsure_btn
-            || watched == ui->batchTextsure_btn
-            || watched == ui->batchImageThresholdButton
-            || watched == ui->checkBox
+        if (watched == ui->pushButton_applyTargetText
+            || watched == ui->pushButton_applyBatchTargetText
+            || watched == ui->pushButton_applyBatchImageThreshold
+            || watched == ui->checkBox_hardwareTriggerEnabled
             || watched == ui->pushButton_browseImageSavePath
-            || watched == ui->pushButton_7
-            || watched == ui->pushButton_10
-            || watched == ui->label_4
-            || watched == ui->label_27
-            || watched == ui->label_16
-            || watched == ui->label_14
-            || watched == ui->label_13
-            || watched == ui->label_6
-            || watched == ui->label_10
-            || watched == ui->label_17
-            || watched == ui->label_8
-            || watched == ui->comboBox_3
+            || watched == ui->pushButton_applyColorChannel
+            || watched == ui->pushButton_resetRejectQueue
+            || watched == ui->label_imageThreshold
+            || watched == ui->label_imageRotation
+            || watched == ui->label_cameraGain
+            || watched == ui->label_photoTime
+            || watched == ui->label_hardwareTriggerDelay
+            || watched == ui->label_rejectDistance
+            || watched == ui->label_rejectTime
+            || watched == ui->label_rejectPosition
+            || watched == ui->label_photoDistance
+            || watched == ui->comboBox_plcTriggerMode
             || watched == m_templateEditorPage->manualCharacterCropButton()
-            || watched == ui->VideoShoot) {
+            || watched == ui->toolButton_createTemplate) {
         QWidget *button = qobject_cast<QWidget *>(watched);
         if (!button) {
             return QWidget::eventFilter(watched, event);
@@ -530,8 +530,8 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                 }
 
                 QString tooltipText;
-                if (watched == ui->VideoShoot) {
-                    switch (ui->comboBox_4->currentIndex()) {
+                if (watched == ui->toolButton_createTemplate) {
+                    switch (ui->comboBox_detectionMode->currentIndex()) {
                     case 0:
                         tooltipText =
                                 "制作模板匹配产品模板：\n\n"
@@ -598,7 +598,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 }
 
 //关闭相机按钮
-void MainWindow::on_CloseCamera_clicked()
+void MainWindow::on_toolButton_closeCamera_clicked()
 {
     if (m_templateEditorPage
             && m_templateEditorPage->templateOperationActive()) {
@@ -620,26 +620,26 @@ void MainWindow::on_CloseCamera_clicked()
         return;
     }
     // 清空文本并将文本置0
-    ui->resultlabel->clear();
+    ui->label_verdictResult->clear();
     imageLabel->setTemplateDrawingEnabled(false);
     hideTemplateGuide();
     imageLabel->clear();
-    ui->image_undetected->clear();
-    ui->imagenum->clear();
-    ui->ngnum->clear();
+    ui->imageLabel_inspection->clear();
+    ui->lineEdit_totalCount->clear();
+    ui->lineEdit_ngCount->clear();
     //    ui->ocrResult->clear();
-    ui->resultlabel_7->clear();
-    ui->speedLabel->clear();
+    ui->label_recognitionText->clear();
+    ui->lineEdit_detectionDuration->clear();
     resetTemplateCaptureState();
     if (m_inspectionPage) {
         m_inspectionPage->clearDetectionRoiWarning(QString());
     }
-    ui->statusLabel->setText("相机已关闭");
-    ui->statusLabel->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
+    ui->label_runtimeStatus->setText("相机已关闭");
+    ui->label_runtimeStatus->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
     updateOperationUiState();
 }
 
-void MainWindow::on_plcbtn_clicked()
+void MainWindow::on_toolButton_startInspection_clicked()
 {
     updateHardwareParameterUiEnabled();
     m_machineSettingsPage->refreshAllDirty();
@@ -695,13 +695,13 @@ void MainWindow::on_plcbtn_clicked()
     }
     if (result.acquisitionKind
             == InspectionAcquisitionDto::HardwareTrigger) {
-        ui->image_undetected->clear();
-        ui->imagenum->clear();
-        ui->ngnum->clear();
-        ui->resultlabel_7->clear();
-        ui->speedLabel->clear();
+        ui->imageLabel_inspection->clear();
+        ui->lineEdit_totalCount->clear();
+        ui->lineEdit_ngCount->clear();
+        ui->label_recognitionText->clear();
+        ui->lineEdit_detectionDuration->clear();
     }
-    ui->statusLabel->setText(
+    ui->label_runtimeStatus->setText(
                 result.acquisitionKind
                 == InspectionAcquisitionDto::HardwareTrigger
                 ? "触发模式运行中"
@@ -709,7 +709,7 @@ void MainWindow::on_plcbtn_clicked()
     updateOperationUiState();
 }
 // 检测相机
-void MainWindow::on_HandwareDetect_clicked()
+void MainWindow::on_toolButton_openCamera_clicked()
 {
     if (isInspectionBusy()
             || (m_templateEditorPage
@@ -727,9 +727,9 @@ void MainWindow::on_HandwareDetect_clicked()
     }
 
     PlcConnectionCommand plcCommand;
-    plcCommand.address = ui->lineEdit->text();
-    plcCommand.rack = ui->lineEdit_2->text().toInt();
-    plcCommand.slot = ui->lineEdit_3->text().toInt();
+    plcCommand.address = ui->lineEdit_plcIpAddress->text();
+    plcCommand.rack = ui->lineEdit_plcRack->text().toInt();
+    plcCommand.slot = ui->lineEdit_plcSlot->text().toInt();
     const OpenCameraResult result =
             m_inspectionApplicationService->openCamera(plcCommand);
 
@@ -759,10 +759,10 @@ void MainWindow::on_HandwareDetect_clicked()
             return;
         }
         {
-            QSignalBlocker blocker(ui->spinBox);
-            ui->spinBox->setRange(
+            QSignalBlocker blocker(ui->spinBox_cameraExposure);
+            ui->spinBox_cameraExposure->setRange(
                 0, (std::numeric_limits<int>::max)());
-            ui->spinBox->setValue(
+            ui->spinBox_cameraExposure->setValue(
                 m_appliedMachineSettings.cameraExposure);
         }
         m_machineSettingsPage->refreshDirty("camera.exposure");
@@ -778,16 +778,16 @@ void MainWindow::on_HandwareDetect_clicked()
     m_appliedMachineSettings =
             m_settingsApplicationService->current();
     {
-        QSignalBlocker blocker(ui->spinBox);
-        ui->spinBox->setRange(
+        QSignalBlocker blocker(ui->spinBox_cameraExposure);
+        ui->spinBox_cameraExposure->setRange(
             openResult.exposureMinimum,
             openResult.exposureMaximum);
-        ui->spinBox->setValue(openResult.appliedExposure);
+        ui->spinBox_cameraExposure->setValue(openResult.appliedExposure);
     }
     m_machineSettingsPage->refreshDirty("camera.exposure");
 
-    ui->statusLabel->setText("相机已打开");
-    ui->statusLabel->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
+    ui->label_runtimeStatus->setText("相机已打开");
+    ui->label_runtimeStatus->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
     updateOperationUiState();
     const QString openMessage = openResult.adjustmentMessage.isEmpty()
             ? QString("相机打开成功！")
@@ -797,14 +797,14 @@ void MainWindow::on_HandwareDetect_clicked()
 }
 
 // PLC模式选择
-void MainWindow::on_plcmodebtn_clicked()
+void MainWindow::on_pushButton_applyPlcTriggerMode_clicked()
 {
     QStringList errors;
     applyPlcTriggerModeFromUi(&errors, true);
 }
 
 //剔除队列复位 清空还未发出的剔除信号
-void MainWindow::on_pushButton_10_clicked()
+void MainWindow::on_pushButton_resetRejectQueue_clicked()
 {
     m_inspectionApplicationService->clearPendingDelayedNgRequests();
     QMessageBox::information(this, "提示", "剔除队列已清空！");
@@ -817,7 +817,7 @@ void MainWindow::initStyle()
         if(file.open(QFile::ReadOnly)){
             QString qss = QLatin1String(file.readAll());
             qss +=
-                    "\nQGroupBox#topControlPanel QToolButton:disabled {"
+                    "\nQGroupBox#groupBox_mainControls QToolButton:disabled {"
                     "background-color: #f2f3f5;"
                     "color: #a8abb2;"
                     "border-color: #dcdfe6;"

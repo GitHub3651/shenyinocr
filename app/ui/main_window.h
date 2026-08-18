@@ -81,42 +81,42 @@ public:
 private slots:
     void slot_displayAndDetect(cv::Mat *image);  ///< 显示和检测槽
 
-    void on_VideoShoot_clicked();       ///< 单词采集按钮
-    void on_HandwareDetect_clicked();   ///< 相机检测按钮
-    void on_CloseCamera_clicked();      ///< 关闭相机按钮
-    void on_sureButton_clicked();       ///< 确定按钮
+    void on_toolButton_createTemplate_clicked();       ///< 单词采集按钮
+    void on_toolButton_openCamera_clicked();   ///< 相机检测按钮
+    void on_toolButton_closeCamera_clicked();      ///< 关闭相机按钮
+    void on_pushButton_applyCameraExposure_clicked();       ///< 确定按钮
 
-    void on_plcbtn_clicked();           ///< PLC按钮
-    void on_ConnectpushButton_clicked(); ///< 连接PLC按钮
-    void on_DisconnectpushButton_clicked(); ///< 断开PLC按钮
-    void on_WriteVDpushButton_clicked(); ///< 写入VD按钮
+    void on_toolButton_startInspection_clicked();           ///< PLC按钮
+    void on_pushButton_connectPlc_clicked(); ///< 连接PLC按钮
+    void on_pushButton_disconnectPlc_clicked(); ///< 断开PLC按钮
+    void on_pushButton_applyPhotoDistance_clicked(); ///< 写入VD按钮
 
-    void on_textsure_btn_clicked();     ///< 文本确定按钮
-    void on_batchTextsure_btn_clicked(); ///< 批量文本确定按钮
-    void on_batchImageThresholdButton_clicked(); ///< 批量设置字库模板图像阈值
-    void on_cancel_clicked();           ///< 取消按钮
+    void on_pushButton_applyTargetText_clicked();     ///< 文本确定按钮
+    void on_pushButton_applyBatchTargetText_clicked(); ///< 批量文本确定按钮
+    void on_pushButton_applyBatchImageThreshold_clicked(); ///< 批量设置字库模板图像阈值
+    void on_toolButton_stopInspection_clicked();           ///< 取消按钮
     void closeEvent(QCloseEvent *event) override; ///< 关闭事件
 
-    void on_plcmodebtn_clicked();       ///< PLC模式按钮
+    void on_pushButton_applyPlcTriggerMode_clicked();       ///< PLC模式按钮
 
-    void on_pushButton_3_clicked();
-    void on_pushButton_5_clicked();
-    void on_pushButton_4_clicked();
+    void on_pushButton_applyImageThreshold_clicked();
+    void on_pushButton_saveTemplate_clicked();
+    void on_toolButton_selectRecipe_clicked();
     void on_pushButton_browseImageSavePath_clicked();
-    void on_pushButton_8_clicked();
-    void on_pushButton_9_clicked();
-    void on_cut_cancelButton_2_clicked();
-    void on_cut_cancelButton_3_clicked();
+    void on_pushButton_applyPlcProcessParameters_clicked();
+    void on_pushButton_applyImageRotation_clicked();
+    void on_pushButton_resetTotalCount_clicked();
+    void on_pushButton_resetNgCount_clicked();
 
 
-    void on_pushButton_10_clicked();
+    void on_pushButton_resetRejectQueue_clicked();
 
-    void on_pushButton_7_clicked();
+    void on_pushButton_applyColorChannel_clicked();
 
 
-    void on_pushButton_12_clicked();
+    void on_pushButton_applyCameraGain_clicked();
 
-    void on_pushButton_tissueRoughnessThreshold_clicked();
+    void on_pushButton_applyTissueRoughnessThreshold_clicked();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

@@ -63,7 +63,7 @@ void TemplateEditorPage::updateCurrentTemplateName()
         templateName = m_currentTemplateDisplayName.trimmed();
     }
 
-    m_view.currentTemplateName->setText(templateName);
+    m_view.lineEdit_currentRecipeName->setText(templateName);
 
 }
 
@@ -74,11 +74,11 @@ void TemplateEditorPage::setupTemplateGuide()
         return;
     }
 
-    m_templateGuideFrame = new QFrame(m_view.imagedisplayBox);
-    m_templateGuideFrame->setObjectName("templateGuideFrame");
+    m_templateGuideFrame = new QFrame(m_view.groupBox_imageDisplay);
+    m_templateGuideFrame->setObjectName("frame_templateGuide");
     m_templateGuideFrame->setFrameShape(QFrame::NoFrame);
     m_templateGuideFrame->setStyleSheet(
-                "#templateGuideFrame {"
+                "#frame_templateGuide {"
                 "background-color: transparent;"
                 "border: none;"
                 "}");
@@ -111,7 +111,7 @@ void TemplateEditorPage::setupTemplateGuide()
 
     guideLayout->addWidget(m_templateGuideBodyLabel);
 
-    m_view.verticalLayout_InnerImg->insertWidget(0, m_templateGuideFrame);
+    m_view.verticalLayout_imageDisplay->insertWidget(0, m_templateGuideFrame);
     hideTemplateGuide();
 }
 
@@ -206,7 +206,7 @@ void TemplateEditorPage::updateImageDisplayStatusText(const QString &body)
 
 void TemplateEditorPage::showTemplateGuideForCurrentMode()
 {
-    const int modeIndex = m_view.comboBox_4->currentIndex();
+    const int modeIndex = m_view.comboBox_detectionMode->currentIndex();
     const QString modeId = detectModeIdForIndex(modeIndex);
 
     if (isSingleTemplateRecipeMode(modeId)) {
@@ -240,7 +240,7 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
         return;
     }
 
-    const int modeIndex = m_view.comboBox_4->currentIndex();
+    const int modeIndex = m_view.comboBox_detectionMode->currentIndex();
     const QString modeId = detectModeIdForIndex(modeIndex);
     if (!isSingleTemplateRecipeMode(modeId)
             && !isWordFamilyMode(modeId)) {
@@ -397,7 +397,7 @@ void TemplateEditorPage::setupManualCharacterCropUi()
         return;
     }
 
-    if (!m_view.manualCharacterCropButton) {
+    if (!m_view.pushButton_editCharacterTemplates) {
         return;
     }
 
@@ -416,7 +416,7 @@ void TemplateEditorPage::setupManualCharacterCropUi()
             "background-color: #ebeef5;"
             "}";
 
-    m_manualCharacterCropButton = m_view.manualCharacterCropButton;
+    m_manualCharacterCropButton = m_view.pushButton_editCharacterTemplates;
     m_manualCharacterCropButton->setStyleSheet(splitPushButtonStyle);
     m_manualCharacterCropButton->setMinimumHeight(42);
     m_manualCharacterCropButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -432,11 +432,15 @@ void TemplateEditorPage::setupManualCharacterCropUi()
 
 void TemplateEditorPage::setupRecipeProfileDirtyTracking()
 {
-    m_templateTargetLabelText = m_view.label ? m_view.label->text() : QString("目标字符内容:");
-    m_templateThresholdLabelText = m_view.label_4 ? m_view.label_4->text() : QString("图像合格阈值:");
+    m_templateTargetLabelText = m_view.label_targetText
+            ? m_view.label_targetText->text()
+            : QString("目标字符内容:");
+    m_templateThresholdLabelText = m_view.label_imageThreshold
+            ? m_view.label_imageThreshold->text()
+            : QString("图像合格阈值:");
 
-    if (m_view.dateEdit) {
-        connect(m_view.dateEdit, &QTextEdit::textChanged, this, [this]() {
+    if (m_view.textEdit_targetText) {
+        connect(m_view.textEdit_targetText, &QTextEdit::textChanged, this, [this]() {
             if ((m_callbacks.isUpdatingSettingsUi && m_callbacks.isUpdatingSettingsUi()) || (m_callbacks.isApplyingSettings && m_callbacks.isApplyingSettings())) {
                 return;
             }
@@ -448,8 +452,8 @@ void TemplateEditorPage::setupRecipeProfileDirtyTracking()
             }
         });
     }
-    if (m_view.lineEdit_yuzhi) {
-        connect(m_view.lineEdit_yuzhi, &QLineEdit::textChanged, this, [this](const QString &) {
+    if (m_view.lineEdit_imageThreshold) {
+        connect(m_view.lineEdit_imageThreshold, &QLineEdit::textChanged, this, [this](const QString &) {
             if ((m_callbacks.isUpdatingSettingsUi && m_callbacks.isUpdatingSettingsUi()) || (m_callbacks.isApplyingSettings && m_callbacks.isApplyingSettings())) {
                 return;
             }
@@ -471,11 +475,11 @@ void TemplateEditorPage::refreshTemplateTargetTextDirty()
             && profileIndex >= 0
             && profileIndex < static_cast<int>(m_templateService->wordProfiles().size())) {
         const WordTemplateProfile &profile = m_templateService->wordProfiles()[static_cast<std::size_t>(profileIndex)];
-        dirty = (m_view.dateEdit->toPlainText() != profile.settings.targetText);
+        dirty = (m_view.textEdit_targetText->toPlainText() != profile.settings.targetText);
     } else if (isSingleTemplateRecipeMode(currentDetectModeId())
                && m_templateService->isActive()
                && m_templateService->draft().profiles.size() == 1) {
-        dirty = m_view.dateEdit->toPlainText()
+        dirty = m_view.textEdit_targetText->toPlainText()
                 != m_templateService->draft()
                    .profiles.first().targetText;
     }
@@ -492,7 +496,7 @@ void TemplateEditorPage::refreshTemplateImageThresholdDirty()
             && profileIndex >= 0
             && profileIndex < static_cast<int>(m_templateService->wordProfiles().size())) {
         int thresholdValue = 0;
-        if (!parseIntValue(m_view.lineEdit_yuzhi->text(), &thresholdValue)) {
+        if (!parseIntValue(m_view.lineEdit_imageThreshold->text(), &thresholdValue)) {
             dirty = true;
         } else {
             const WordTemplateProfile &profile = m_templateService->wordProfiles()[static_cast<std::size_t>(profileIndex)];
@@ -502,7 +506,7 @@ void TemplateEditorPage::refreshTemplateImageThresholdDirty()
                && m_templateService->isActive()
                && m_templateService->draft().profiles.size() == 1) {
         int thresholdValue = 0;
-        if (!parseIntValue(m_view.lineEdit_yuzhi->text(), &thresholdValue)) {
+        if (!parseIntValue(m_view.lineEdit_imageThreshold->text(), &thresholdValue)) {
             dirty = true;
         } else {
             dirty = thresholdValue
@@ -542,13 +546,15 @@ void TemplateEditorPage::clearRecipeProfileDirty()
 
 void TemplateEditorPage::updateRecipeProfileDirtyUi()
 {
-    if (m_view.label) {
-        m_view.label->setText(m_settingsEditState->isTemplateTargetDirty()
+    if (m_view.label_targetText) {
+        m_view.label_targetText->setText(
+                    m_settingsEditState->isTemplateTargetDirty()
                            ? m_templateTargetLabelText + " *"
                            : m_templateTargetLabelText);
     }
-    if (m_view.label_4) {
-        m_view.label_4->setText(m_settingsEditState->isTemplateThresholdDirty()
+    if (m_view.label_imageThreshold) {
+        m_view.label_imageThreshold->setText(
+                    m_settingsEditState->isTemplateThresholdDirty()
                              ? m_templateThresholdLabelText + " *"
                              : m_templateThresholdLabelText);
     }
