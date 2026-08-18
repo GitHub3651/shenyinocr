@@ -5,8 +5,8 @@
 #include "ui/pages/machine_settings_page.h"
 
 #include "system_support/machine_settings_policy.h"
+#include "contracts/detection_mode.h"
 #include "ui/controllers/settings_edit_state.h"
-#include "ui_main_window.h"
 
 #include <QAbstractSpinBox>
 #include <QCheckBox>
@@ -22,6 +22,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QSplitter>
 #include <QSplitterHandle>
 #include <QUrl>
 #include <QWidget>
@@ -131,7 +132,7 @@ QString text(const wchar_t *value)
 
 // 函数说明：MachineSettingsPage 构造函数创建组件并初始化其依赖和初始状态。
 MachineSettingsPage::MachineSettingsPage(
-    Ui::MainWindow *ui,
+    const MachineSettingsPageViewBindings &view,
     SettingsApplicationService *settingsService,
     SettingsEditState *editState,
     QString *selectedDirectory,
@@ -140,7 +141,7 @@ MachineSettingsPage::MachineSettingsPage(
     const Callbacks &callbacks,
     QObject *parent)
     : QObject(parent),
-      m_ui(ui),
+      m_view(view),
       m_appliedSettings(settingsService
                         ? &settingsService->editableDraft()
                         : nullptr),
@@ -156,79 +157,90 @@ MachineSettingsPage::MachineSettingsPage(
 // 函数说明：setupBindings 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setupBindings()
 {
-    if (!m_ui || !m_editState) {
+    if (!m_view.comboBox_detectionMode || !m_editState) {
         return;
     }
 
     m_bindings.clear();
     m_hardwareActions.clear();
 
-    registerGlobalSetting("camera.exposure", m_ui->spinBox_cameraExposure,
-                          m_ui->label_cameraExposure, true,
+    {
+        QSignalBlocker blocker(m_view.comboBox_detectionMode);
+        m_view.comboBox_detectionMode->clear();
+        for (const DetectionModeDescriptor &descriptor :
+             detectionModeDescriptors()) {
+            m_view.comboBox_detectionMode->addItem(
+                        QString::fromUtf8(descriptor.displayName),
+                        QLatin1String(descriptor.uiId));
+        }
+    }
+
+    registerGlobalSetting("camera.exposure", m_view.spinBox_cameraExposure,
+                          m_view.label_cameraExposure, true,
                           HardwareDependency::Camera);
-    registerGlobalSetting("camera.gain", m_ui->lineEdit_cameraGain,
-                          m_ui->label_cameraGain, true,
+    registerGlobalSetting("camera.gain", m_view.lineEdit_cameraGain,
+                          m_view.label_cameraGain, true,
                           HardwareDependency::Camera);
-    registerGlobalSetting("image.color_channel", m_ui->comboBox_colorChannel,
-                          m_ui->label_colorChannel, true);
-    registerGlobalSetting("image.rotation", m_ui->comboBox_imageRotation,
-                          m_ui->label_imageRotation, true);
-    registerGlobalSetting("plc.trigger_mode", m_ui->comboBox_plcTriggerMode,
-                          m_ui->label_plcTriggerMode, true,
+    registerGlobalSetting("image.color_channel", m_view.comboBox_colorChannel,
+                          m_view.label_colorChannel, true);
+    registerGlobalSetting("image.rotation", m_view.comboBox_imageRotation,
+                          m_view.label_imageRotation, true);
+    registerGlobalSetting("plc.trigger_mode", m_view.comboBox_plcTriggerMode,
+                          m_view.label_plcTriggerMode, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.photo_distance", m_ui->lineEdit_photoDistance,
-                          m_ui->label_photoDistance, true,
+    registerGlobalSetting("plc.photo_distance", m_view.lineEdit_photoDistance,
+                          m_view.label_photoDistance, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.photo_time", m_ui->lineEdit_photoTime,
-                          m_ui->label_photoTime, true,
+    registerGlobalSetting("plc.photo_time", m_view.lineEdit_photoTime,
+                          m_view.label_photoTime, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.camera_delay", m_ui->lineEdit_hardwareTriggerDelay,
-                          m_ui->label_hardwareTriggerDelay, true,
+    registerGlobalSetting("plc.camera_delay", m_view.lineEdit_hardwareTriggerDelay,
+                          m_view.label_hardwareTriggerDelay, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.reject_distance", m_ui->lineEdit_rejectDistance,
-                          m_ui->label_rejectDistance, true,
+    registerGlobalSetting("plc.reject_distance", m_view.lineEdit_rejectDistance,
+                          m_view.label_rejectDistance, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.reject_time", m_ui->lineEdit_rejectTime,
-                          m_ui->label_rejectTime, true,
+    registerGlobalSetting("plc.reject_time", m_view.lineEdit_rejectTime,
+                          m_view.label_rejectTime, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.reject_position", m_ui->lineEdit_rejectPosition,
-                          m_ui->label_rejectPosition, true,
+    registerGlobalSetting("plc.reject_position", m_view.lineEdit_rejectPosition,
+                          m_view.label_rejectPosition, true,
                           HardwareDependency::PlcRuntime);
-    registerGlobalSetting("plc.ip", m_ui->lineEdit_plcIpAddress,
-                          m_ui->label_plcIpAddress, false,
+    registerGlobalSetting("plc.ip", m_view.lineEdit_plcIpAddress,
+                          m_view.label_plcIpAddress, false,
                           HardwareDependency::PlcConnection);
-    registerGlobalSetting("plc.rack", m_ui->lineEdit_plcRack,
-                          m_ui->label_plcRackSlot, false,
+    registerGlobalSetting("plc.rack", m_view.lineEdit_plcRack,
+                          m_view.label_plcRackSlot, false,
                           HardwareDependency::PlcConnection);
-    registerGlobalSetting("plc.slot", m_ui->lineEdit_plcSlot,
-                          m_ui->label_plcRackSlot, false,
+    registerGlobalSetting("plc.slot", m_view.lineEdit_plcSlot,
+                          m_view.label_plcRackSlot, false,
                           HardwareDependency::PlcConnection);
-    registerGlobalSetting("detect.mode", m_ui->comboBox_detectionMode,
-                          m_ui->label_detectionMode, false);
-    registerGlobalSetting("image.save_mode", m_ui->comboBox_imageSaveRange,
-                          m_ui->label_imageSaveRange, false);
-    registerGlobalSetting("image.save_type", m_ui->comboBox_imageSaveContent,
-                          m_ui->label_imageSaveContent, false);
-    registerGlobalSetting("image.save_path", m_ui->lineEdit_imageSavePath,
-                          m_ui->label_imageSavePath, false);
-    registerGlobalSetting("trigger.enabled", m_ui->checkBox_hardwareTriggerEnabled,
+    registerGlobalSetting("detect.mode", m_view.comboBox_detectionMode,
+                          m_view.label_detectionMode, false);
+    registerGlobalSetting("image.save_mode", m_view.comboBox_imageSaveRange,
+                          m_view.label_imageSaveRange, false);
+    registerGlobalSetting("image.save_type", m_view.comboBox_imageSaveContent,
+                          m_view.label_imageSaveContent, false);
+    registerGlobalSetting("image.save_path", m_view.lineEdit_imageSavePath,
+                          m_view.label_imageSavePath, false);
+    registerGlobalSetting("trigger.enabled", m_view.checkBox_hardwareTriggerEnabled,
                           nullptr, false);
 
-    registerHardwareAction(m_ui->pushButton_applyCameraExposure, HardwareDependency::Camera);
-    registerHardwareAction(m_ui->pushButton_applyCameraGain, HardwareDependency::Camera);
-    registerHardwareAction(m_ui->pushButton_connectPlc,
+    registerHardwareAction(m_view.pushButton_applyCameraExposure, HardwareDependency::Camera);
+    registerHardwareAction(m_view.pushButton_applyCameraGain, HardwareDependency::Camera);
+    registerHardwareAction(m_view.pushButton_connectPlc,
                            HardwareDependency::PlcConnection);
-    registerHardwareAction(m_ui->pushButton_disconnectPlc,
+    registerHardwareAction(m_view.pushButton_disconnectPlc,
                            HardwareDependency::PlcRuntime);
-    registerHardwareAction(m_ui->pushButton_applyPlcTriggerMode,
+    registerHardwareAction(m_view.pushButton_applyPlcTriggerMode,
                            HardwareDependency::PlcRuntime);
-    registerHardwareAction(m_ui->pushButton_applyPhotoDistance,
+    registerHardwareAction(m_view.pushButton_applyPhotoDistance,
                            HardwareDependency::PlcRuntime);
-    registerHardwareAction(m_ui->pushButton_applyPlcProcessParameters,
+    registerHardwareAction(m_view.pushButton_applyPlcProcessParameters,
                            HardwareDependency::PlcRuntime);
 
     QObject::connect(
-        m_ui->comboBox_imageSaveRange,
+        m_view.comboBox_imageSaveRange,
         static_cast<void (QComboBox::*)(int)>(
             &QComboBox::currentIndexChanged),
         this,
@@ -245,7 +257,7 @@ void MachineSettingsPage::setupBindings()
 // 函数说明：setupNumericInputValidators 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setupNumericInputValidators()
 {
-    if (!m_ui) {
+    if (!m_view.comboBox_detectionMode) {
         return;
     }
     auto setIntValidator = [](QLineEdit *lineEdit) {
@@ -254,31 +266,31 @@ void MachineSettingsPage::setupNumericInputValidators()
                 new QIntValidator(0, 2147483647, lineEdit));
         }
     };
-    setIntValidator(m_ui->lineEdit_cameraGain);
-    setIntValidator(m_ui->lineEdit_plcRack);
-    setIntValidator(m_ui->lineEdit_plcSlot);
-    setIntValidator(m_ui->lineEdit_photoDistance);
-    setIntValidator(m_ui->lineEdit_hardwareTriggerDelay);
-    setIntValidator(m_ui->lineEdit_rejectDistance);
-    setIntValidator(m_ui->lineEdit_rejectPosition);
-    m_ui->lineEdit_photoTime->setValidator(
-        new QIntValidator(0, 65535, m_ui->lineEdit_photoTime));
-    m_ui->lineEdit_rejectTime->setValidator(
-        new QIntValidator(0, 65535, m_ui->lineEdit_rejectTime));
+    setIntValidator(m_view.lineEdit_cameraGain);
+    setIntValidator(m_view.lineEdit_plcRack);
+    setIntValidator(m_view.lineEdit_plcSlot);
+    setIntValidator(m_view.lineEdit_photoDistance);
+    setIntValidator(m_view.lineEdit_hardwareTriggerDelay);
+    setIntValidator(m_view.lineEdit_rejectDistance);
+    setIntValidator(m_view.lineEdit_rejectPosition);
+    m_view.lineEdit_photoTime->setValidator(
+        new QIntValidator(0, 65535, m_view.lineEdit_photoTime));
+    m_view.lineEdit_rejectTime->setValidator(
+        new QIntValidator(0, 65535, m_view.lineEdit_rejectTime));
 
-    if (m_ui->lineEdit_imageThreshold) {
-        m_ui->lineEdit_imageThreshold->setValidator(
-            new QIntValidator(0, 100, m_ui->lineEdit_imageThreshold));
-        m_ui->lineEdit_imageThreshold->setMaxLength(3);
-        m_ui->lineEdit_imageThreshold->setToolTip(
-            text(L"\u8bf7\u8f930\u5230100\u4e4b\u95f4\u7684\u6574\u6570\uff0c\u5355\u4f4d\uff1a%"));
+    if (m_view.lineEdit_imageThreshold) {
+        m_view.lineEdit_imageThreshold->setValidator(
+            new QIntValidator(0, 100, m_view.lineEdit_imageThreshold));
+        m_view.lineEdit_imageThreshold->setMaxLength(3);
+        m_view.lineEdit_imageThreshold->setToolTip(
+            text(L"请输0到100之间的整数，单位：%"));
     }
-    if (m_ui->lineEdit_tissueRoughnessThreshold) {
+    if (m_view.lineEdit_tissueRoughnessThreshold) {
         QDoubleValidator *validator = new QDoubleValidator(
             0.001, 1000000.0, 3,
-            m_ui->lineEdit_tissueRoughnessThreshold);
+            m_view.lineEdit_tissueRoughnessThreshold);
         validator->setNotation(QDoubleValidator::StandardNotation);
-        m_ui->lineEdit_tissueRoughnessThreshold->setValidator(validator);
+        m_view.lineEdit_tissueRoughnessThreshold->setValidator(validator);
     }
 }
 
@@ -394,7 +406,7 @@ MachineSettings MachineSettingsPage::defaultsForHardwareState(
 void MachineSettingsPage::applyToUi(
     const MachineSettings &settings)
 {
-    if (!m_ui) {
+    if (!m_view.comboBox_detectionMode) {
         return;
     }
     const bool previousApplying =
@@ -408,50 +420,50 @@ void MachineSettingsPage::applyToUi(
         *m_updatingSettingsUi = true;
     }
 
-    m_ui->comboBox_detectionMode->setCurrentIndex(
+    m_view.comboBox_detectionMode->setCurrentIndex(
         indexOf(detectModeIds(), settings.detectModeId, 1));
-    m_ui->comboBox_imageSaveRange->setCurrentIndex(
+    m_view.comboBox_imageSaveRange->setCurrentIndex(
         indexOf(imageSaveModeIds(), settings.imageSaveModeId, 0));
-    m_ui->comboBox_imageSaveContent->setCurrentIndex(
+    m_view.comboBox_imageSaveContent->setCurrentIndex(
         indexOf(imageSaveTypeIds(), settings.imageSaveTypeId, 1));
-    m_ui->comboBox_colorChannel->setCurrentIndex(
+    m_view.comboBox_colorChannel->setCurrentIndex(
         indexOf(colorChannelIds(), settings.colorChannelId, 0));
-    m_ui->comboBox_imageRotation->setCurrentIndex(
+    m_view.comboBox_imageRotation->setCurrentIndex(
         indexOf(rotationIds(), settings.imageRotationId, 0));
-    m_ui->comboBox_plcTriggerMode->setCurrentIndex(
+    m_view.comboBox_plcTriggerMode->setCurrentIndex(
         indexOf(triggerModeIds(), settings.triggerModeId, 1));
-    m_ui->checkBox_hardwareTriggerEnabled->setChecked(settings.triggerEnabled);
-    m_ui->spinBox_cameraExposure->setValue(settings.cameraExposure);
-    m_ui->lineEdit_cameraGain->setText(
+    m_view.checkBox_hardwareTriggerEnabled->setChecked(settings.triggerEnabled);
+    m_view.spinBox_cameraExposure->setValue(settings.cameraExposure);
+    m_view.lineEdit_cameraGain->setText(
         QString::number(static_cast<int>(settings.cameraGain)));
-    m_ui->lineEdit_plcIpAddress->setText(settings.plcIp);
-    m_ui->lineEdit_plcRack->setText(QString::number(settings.plcRack));
-    m_ui->lineEdit_plcSlot->setText(QString::number(settings.plcSlot));
-    m_ui->lineEdit_photoDistance->setText(QString::number(settings.photoDistance));
-    m_ui->lineEdit_photoTime->setText(QString::number(settings.photoTime));
-    m_ui->lineEdit_hardwareTriggerDelay->setText(QString::number(settings.cameraDelay));
-    m_ui->lineEdit_rejectDistance->setText(QString::number(settings.rejectDistance));
-    m_ui->lineEdit_rejectTime->setText(QString::number(settings.rejectTime));
-    m_ui->lineEdit_rejectPosition->setText(QString::number(settings.rejectPosition));
+    m_view.lineEdit_plcIpAddress->setText(settings.plcIp);
+    m_view.lineEdit_plcRack->setText(QString::number(settings.plcRack));
+    m_view.lineEdit_plcSlot->setText(QString::number(settings.plcSlot));
+    m_view.lineEdit_photoDistance->setText(QString::number(settings.photoDistance));
+    m_view.lineEdit_photoTime->setText(QString::number(settings.photoTime));
+    m_view.lineEdit_hardwareTriggerDelay->setText(QString::number(settings.cameraDelay));
+    m_view.lineEdit_rejectDistance->setText(QString::number(settings.rejectDistance));
+    m_view.lineEdit_rejectTime->setText(QString::number(settings.rejectTime));
+    m_view.lineEdit_rejectPosition->setText(QString::number(settings.rejectPosition));
 
-    if (m_ui->splitter_mainContent
+    if (m_view.splitter_mainContent
             && !settings.rightPanelSplitterState.isEmpty()
-            && !m_ui->splitter_mainContent->restoreState(
+            && !m_view.splitter_mainContent->restoreState(
                 settings.rightPanelSplitterState)) {
         qWarning("[UI_SETTINGS] invalid right panel splitter state");
     }
-    if (m_ui->splitter_mainContent) {
-        const int handleHeight = m_ui->splitter_mainContent
+    if (m_view.splitter_mainContent) {
+        const int handleHeight = m_view.splitter_mainContent
                 ->property("visualHandleHeight").toInt();
         if (handleHeight > 0) {
-            m_ui->splitter_mainContent->setHandleWidth(handleHeight);
+            m_view.splitter_mainContent->setHandleWidth(handleHeight);
             if (QSplitterHandle *handle =
-                    m_ui->splitter_mainContent->handle(1)) {
+                    m_view.splitter_mainContent->handle(1)) {
                 handle->setMinimumHeight(handleHeight);
                 handle->setMaximumHeight(handleHeight);
             }
         }
-        m_ui->splitter_mainContent->setChildrenCollapsible(true);
+        m_view.splitter_mainContent->setChildrenCollapsible(true);
     }
     if (m_selectedDirectory) {
         *m_selectedDirectory = settings.imageSavePath;
@@ -555,7 +567,7 @@ void MachineSettingsPage::registerHardwareAction(
 bool MachineSettingsPage::isDirtyByValue(
     const QString &key) const
 {
-    if (!m_ui || !m_appliedSettings) {
+    if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return false;
     }
     const auto it = m_bindings.constFind(key);
@@ -581,58 +593,58 @@ bool MachineSettingsPage::isDirtyByValue(
     };
 
     if (key == "camera.exposure") {
-        return m_ui->spinBox_cameraExposure->value()
+        return m_view.spinBox_cameraExposure->value()
                 != m_appliedSettings->cameraExposure;
     }
     if (key == "camera.gain") {
-        return intDirty(m_ui->lineEdit_cameraGain,
+        return intDirty(m_view.lineEdit_cameraGain,
                         static_cast<int>(m_appliedSettings->cameraGain));
     }
     if (key == "image.color_channel") {
-        return comboDirty(m_ui->comboBox_colorChannel, colorChannelIds(),
+        return comboDirty(m_view.comboBox_colorChannel, colorChannelIds(),
                           m_appliedSettings->colorChannelId);
     }
     if (key == "image.rotation") {
-        return comboDirty(m_ui->comboBox_imageRotation, rotationIds(),
+        return comboDirty(m_view.comboBox_imageRotation, rotationIds(),
                           m_appliedSettings->imageRotationId);
     }
     if (key == "plc.trigger_mode") {
-        return comboDirty(m_ui->comboBox_plcTriggerMode, triggerModeIds(),
+        return comboDirty(m_view.comboBox_plcTriggerMode, triggerModeIds(),
                           m_appliedSettings->triggerModeId);
     }
     if (key == "plc.photo_distance") {
-        return intDirty(m_ui->lineEdit_photoDistance,
+        return intDirty(m_view.lineEdit_photoDistance,
                         m_appliedSettings->photoDistance);
     }
     if (key == "plc.photo_time") {
-        return intDirty(m_ui->lineEdit_photoTime,
+        return intDirty(m_view.lineEdit_photoTime,
                         m_appliedSettings->photoTime);
     }
     if (key == "plc.camera_delay") {
-        return intDirty(m_ui->lineEdit_hardwareTriggerDelay,
+        return intDirty(m_view.lineEdit_hardwareTriggerDelay,
                         m_appliedSettings->cameraDelay);
     }
     if (key == "plc.reject_distance") {
-        return intDirty(m_ui->lineEdit_rejectDistance,
+        return intDirty(m_view.lineEdit_rejectDistance,
                         m_appliedSettings->rejectDistance);
     }
     if (key == "plc.reject_time") {
-        return intDirty(m_ui->lineEdit_rejectTime,
+        return intDirty(m_view.lineEdit_rejectTime,
                         m_appliedSettings->rejectTime);
     }
     if (key == "plc.reject_position") {
-        return intDirty(m_ui->lineEdit_rejectPosition,
+        return intDirty(m_view.lineEdit_rejectPosition,
                         m_appliedSettings->rejectPosition);
     }
     if (key == "plc.ip") {
-        return m_ui->lineEdit_plcIpAddress->text().trimmed()
+        return m_view.lineEdit_plcIpAddress->text().trimmed()
                 != m_appliedSettings->plcIp.trimmed();
     }
     if (key == "plc.rack") {
-        return intDirty(m_ui->lineEdit_plcRack, m_appliedSettings->plcRack);
+        return intDirty(m_view.lineEdit_plcRack, m_appliedSettings->plcRack);
     }
     if (key == "plc.slot") {
-        return intDirty(m_ui->lineEdit_plcSlot, m_appliedSettings->plcSlot);
+        return intDirty(m_view.lineEdit_plcSlot, m_appliedSettings->plcSlot);
     }
     return false;
 }
@@ -724,64 +736,64 @@ void MachineSettingsPage::updateDirtyLabel(const QString &key)
 void MachineSettingsPage::updateAppliedFromUi(
     const QString &key)
 {
-    if (!m_ui || !m_appliedSettings) {
+    if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
     if (key == "detect.mode") {
         m_appliedSettings->detectModeId = idAt(
-            detectModeIds(), m_ui->comboBox_detectionMode->currentIndex(),
+            detectModeIds(), m_view.comboBox_detectionMode->currentIndex(),
             m_appliedSettings->detectModeId);
     } else if (key == "image.save_mode") {
         m_appliedSettings->imageSaveModeId = idAt(
-            imageSaveModeIds(), m_ui->comboBox_imageSaveRange->currentIndex(),
+            imageSaveModeIds(), m_view.comboBox_imageSaveRange->currentIndex(),
             m_appliedSettings->imageSaveModeId);
     } else if (key == "image.save_type") {
         m_appliedSettings->imageSaveTypeId = idAt(
             imageSaveTypeIds(),
-            m_ui->comboBox_imageSaveContent->currentIndex(),
+            m_view.comboBox_imageSaveContent->currentIndex(),
             m_appliedSettings->imageSaveTypeId);
     } else if (key == "image.save_path" && m_selectedDirectory) {
         m_appliedSettings->imageSavePath = *m_selectedDirectory;
     } else if (key == "trigger.enabled") {
-        m_appliedSettings->triggerEnabled = m_ui->checkBox_hardwareTriggerEnabled->isChecked();
+        m_appliedSettings->triggerEnabled = m_view.checkBox_hardwareTriggerEnabled->isChecked();
     } else if (key == "recipe.history") {
         if (m_callbacks.syncRecipeHistory) {
             m_callbacks.syncRecipeHistory(m_appliedSettings);
         }
     } else if (key == "camera.exposure") {
-        m_appliedSettings->cameraExposure = m_ui->spinBox_cameraExposure->value();
+        m_appliedSettings->cameraExposure = m_view.spinBox_cameraExposure->value();
     } else if (key == "camera.gain") {
-        m_appliedSettings->cameraGain = m_ui->lineEdit_cameraGain->text().toInt();
+        m_appliedSettings->cameraGain = m_view.lineEdit_cameraGain->text().toInt();
     } else if (key == "image.color_channel") {
         m_appliedSettings->colorChannelId = idAt(
-            colorChannelIds(), m_ui->comboBox_colorChannel->currentIndex(),
+            colorChannelIds(), m_view.comboBox_colorChannel->currentIndex(),
             m_appliedSettings->colorChannelId);
     } else if (key == "image.rotation") {
         m_appliedSettings->imageRotationId = idAt(
-            rotationIds(), m_ui->comboBox_imageRotation->currentIndex(),
+            rotationIds(), m_view.comboBox_imageRotation->currentIndex(),
             m_appliedSettings->imageRotationId);
     } else if (key == "plc.trigger_mode") {
         m_appliedSettings->triggerModeId = idAt(
-            triggerModeIds(), m_ui->comboBox_plcTriggerMode->currentIndex(),
+            triggerModeIds(), m_view.comboBox_plcTriggerMode->currentIndex(),
             m_appliedSettings->triggerModeId);
     } else if (key == "plc.photo_distance") {
-        m_appliedSettings->photoDistance = m_ui->lineEdit_photoDistance->text().toInt();
+        m_appliedSettings->photoDistance = m_view.lineEdit_photoDistance->text().toInt();
     } else if (key == "plc.photo_time") {
-        m_appliedSettings->photoTime = m_ui->lineEdit_photoTime->text().toInt();
+        m_appliedSettings->photoTime = m_view.lineEdit_photoTime->text().toInt();
     } else if (key == "plc.camera_delay") {
-        m_appliedSettings->cameraDelay = m_ui->lineEdit_hardwareTriggerDelay->text().toInt();
+        m_appliedSettings->cameraDelay = m_view.lineEdit_hardwareTriggerDelay->text().toInt();
     } else if (key == "plc.reject_distance") {
-        m_appliedSettings->rejectDistance = m_ui->lineEdit_rejectDistance->text().toInt();
+        m_appliedSettings->rejectDistance = m_view.lineEdit_rejectDistance->text().toInt();
     } else if (key == "plc.reject_time") {
-        m_appliedSettings->rejectTime = m_ui->lineEdit_rejectTime->text().toInt();
+        m_appliedSettings->rejectTime = m_view.lineEdit_rejectTime->text().toInt();
     } else if (key == "plc.reject_position") {
-        m_appliedSettings->rejectPosition = m_ui->lineEdit_rejectPosition->text().toInt();
+        m_appliedSettings->rejectPosition = m_view.lineEdit_rejectPosition->text().toInt();
     } else if (key == "plc.ip") {
-        m_appliedSettings->plcIp = m_ui->lineEdit_plcIpAddress->text().trimmed();
+        m_appliedSettings->plcIp = m_view.lineEdit_plcIpAddress->text().trimmed();
     } else if (key == "plc.rack") {
-        m_appliedSettings->plcRack = m_ui->lineEdit_plcRack->text().toInt();
+        m_appliedSettings->plcRack = m_view.lineEdit_plcRack->text().toInt();
     } else if (key == "plc.slot") {
-        m_appliedSettings->plcSlot = m_ui->lineEdit_plcSlot->text().toInt();
+        m_appliedSettings->plcSlot = m_view.lineEdit_plcSlot->text().toInt();
     }
 }
 
@@ -807,16 +819,16 @@ void MachineSettingsPage::syncImmediateSettings()
         << "plc.rack"
         << "plc.slot"
         << "recipe.history");
-    if (m_ui && m_ui->splitter_mainContent && m_appliedSettings) {
+    if (m_view.comboBox_detectionMode && m_view.splitter_mainContent && m_appliedSettings) {
         m_appliedSettings->rightPanelSplitterState =
-            m_ui->splitter_mainContent->saveState();
+            m_view.splitter_mainContent->saveState();
     }
 }
 
 // 函数说明：restoreUnappliedMachineSettings 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restoreUnappliedMachineSettings()
 {
-    if (!m_ui || !m_appliedSettings) {
+    if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
     const bool previousUpdating =
@@ -824,38 +836,38 @@ void MachineSettingsPage::restoreUnappliedMachineSettings()
     if (m_updatingSettingsUi) {
         *m_updatingSettingsUi = true;
     }
-    QSignalBlocker exposure(m_ui->spinBox_cameraExposure);
-    QSignalBlocker gain(m_ui->lineEdit_cameraGain);
-    QSignalBlocker channel(m_ui->comboBox_colorChannel);
-    QSignalBlocker rotation(m_ui->comboBox_imageRotation);
-    QSignalBlocker trigger(m_ui->comboBox_plcTriggerMode);
-    QSignalBlocker photoDistance(m_ui->lineEdit_photoDistance);
-    QSignalBlocker photoTime(m_ui->lineEdit_photoTime);
-    QSignalBlocker cameraDelay(m_ui->lineEdit_hardwareTriggerDelay);
-    QSignalBlocker rejectDistance(m_ui->lineEdit_rejectDistance);
-    QSignalBlocker rejectTime(m_ui->lineEdit_rejectTime);
-    QSignalBlocker rejectPosition(m_ui->lineEdit_rejectPosition);
+    QSignalBlocker exposure(m_view.spinBox_cameraExposure);
+    QSignalBlocker gain(m_view.lineEdit_cameraGain);
+    QSignalBlocker channel(m_view.comboBox_colorChannel);
+    QSignalBlocker rotation(m_view.comboBox_imageRotation);
+    QSignalBlocker trigger(m_view.comboBox_plcTriggerMode);
+    QSignalBlocker photoDistance(m_view.lineEdit_photoDistance);
+    QSignalBlocker photoTime(m_view.lineEdit_photoTime);
+    QSignalBlocker cameraDelay(m_view.lineEdit_hardwareTriggerDelay);
+    QSignalBlocker rejectDistance(m_view.lineEdit_rejectDistance);
+    QSignalBlocker rejectTime(m_view.lineEdit_rejectTime);
+    QSignalBlocker rejectPosition(m_view.lineEdit_rejectPosition);
 
-    m_ui->spinBox_cameraExposure->setValue(m_appliedSettings->cameraExposure);
-    m_ui->lineEdit_cameraGain->setText(QString::number(
+    m_view.spinBox_cameraExposure->setValue(m_appliedSettings->cameraExposure);
+    m_view.lineEdit_cameraGain->setText(QString::number(
         static_cast<int>(m_appliedSettings->cameraGain)));
-    m_ui->comboBox_colorChannel->setCurrentIndex(indexOf(
+    m_view.comboBox_colorChannel->setCurrentIndex(indexOf(
         colorChannelIds(), m_appliedSettings->colorChannelId, 0));
-    m_ui->comboBox_imageRotation->setCurrentIndex(indexOf(
+    m_view.comboBox_imageRotation->setCurrentIndex(indexOf(
         rotationIds(), m_appliedSettings->imageRotationId, 0));
-    m_ui->comboBox_plcTriggerMode->setCurrentIndex(indexOf(
+    m_view.comboBox_plcTriggerMode->setCurrentIndex(indexOf(
         triggerModeIds(), m_appliedSettings->triggerModeId, 1));
-    m_ui->lineEdit_photoDistance->setText(
+    m_view.lineEdit_photoDistance->setText(
         QString::number(m_appliedSettings->photoDistance));
-    m_ui->lineEdit_photoTime->setText(
+    m_view.lineEdit_photoTime->setText(
         QString::number(m_appliedSettings->photoTime));
-    m_ui->lineEdit_hardwareTriggerDelay->setText(
+    m_view.lineEdit_hardwareTriggerDelay->setText(
         QString::number(m_appliedSettings->cameraDelay));
-    m_ui->lineEdit_rejectDistance->setText(
+    m_view.lineEdit_rejectDistance->setText(
         QString::number(m_appliedSettings->rejectDistance));
-    m_ui->lineEdit_rejectTime->setText(
+    m_view.lineEdit_rejectTime->setText(
         QString::number(m_appliedSettings->rejectTime));
-    m_ui->lineEdit_rejectPosition->setText(
+    m_view.lineEdit_rejectPosition->setText(
         QString::number(m_appliedSettings->rejectPosition));
     if (m_updatingSettingsUi) {
         *m_updatingSettingsUi = previousUpdating;
@@ -866,7 +878,7 @@ void MachineSettingsPage::restoreUnappliedMachineSettings()
 // 函数说明：restoreCameraUiFromApplied 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restoreCameraUiFromApplied()
 {
-    if (!m_ui || !m_appliedSettings) {
+    if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
     const bool previousUpdating =
@@ -874,10 +886,10 @@ void MachineSettingsPage::restoreCameraUiFromApplied()
     if (m_updatingSettingsUi) {
         *m_updatingSettingsUi = true;
     }
-    QSignalBlocker exposure(m_ui->spinBox_cameraExposure);
-    QSignalBlocker gain(m_ui->lineEdit_cameraGain);
-    m_ui->spinBox_cameraExposure->setValue(m_appliedSettings->cameraExposure);
-    m_ui->lineEdit_cameraGain->setText(QString::number(
+    QSignalBlocker exposure(m_view.spinBox_cameraExposure);
+    QSignalBlocker gain(m_view.lineEdit_cameraGain);
+    m_view.spinBox_cameraExposure->setValue(m_appliedSettings->cameraExposure);
+    m_view.lineEdit_cameraGain->setText(QString::number(
         static_cast<int>(m_appliedSettings->cameraGain)));
     if (m_updatingSettingsUi) {
         *m_updatingSettingsUi = previousUpdating;
@@ -888,7 +900,7 @@ void MachineSettingsPage::restoreCameraUiFromApplied()
 // 函数说明：restorePlcUiFromApplied 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restorePlcUiFromApplied()
 {
-    if (!m_ui || !m_appliedSettings) {
+    if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
     const bool previousUpdating =
@@ -896,27 +908,27 @@ void MachineSettingsPage::restorePlcUiFromApplied()
     if (m_updatingSettingsUi) {
         *m_updatingSettingsUi = true;
     }
-    QSignalBlocker trigger(m_ui->comboBox_plcTriggerMode);
-    QSignalBlocker photoDistance(m_ui->lineEdit_photoDistance);
-    QSignalBlocker photoTime(m_ui->lineEdit_photoTime);
-    QSignalBlocker cameraDelay(m_ui->lineEdit_hardwareTriggerDelay);
-    QSignalBlocker rejectDistance(m_ui->lineEdit_rejectDistance);
-    QSignalBlocker rejectTime(m_ui->lineEdit_rejectTime);
-    QSignalBlocker rejectPosition(m_ui->lineEdit_rejectPosition);
-    m_ui->comboBox_plcTriggerMode->setCurrentIndex(
+    QSignalBlocker trigger(m_view.comboBox_plcTriggerMode);
+    QSignalBlocker photoDistance(m_view.lineEdit_photoDistance);
+    QSignalBlocker photoTime(m_view.lineEdit_photoTime);
+    QSignalBlocker cameraDelay(m_view.lineEdit_hardwareTriggerDelay);
+    QSignalBlocker rejectDistance(m_view.lineEdit_rejectDistance);
+    QSignalBlocker rejectTime(m_view.lineEdit_rejectTime);
+    QSignalBlocker rejectPosition(m_view.lineEdit_rejectPosition);
+    m_view.comboBox_plcTriggerMode->setCurrentIndex(
         m_appliedSettings->triggerModeId == "trigger_continuous"
             ? 0 : 1);
-    m_ui->lineEdit_photoDistance->setText(
+    m_view.lineEdit_photoDistance->setText(
         QString::number(m_appliedSettings->photoDistance));
-    m_ui->lineEdit_photoTime->setText(
+    m_view.lineEdit_photoTime->setText(
         QString::number(m_appliedSettings->photoTime));
-    m_ui->lineEdit_hardwareTriggerDelay->setText(
+    m_view.lineEdit_hardwareTriggerDelay->setText(
         QString::number(m_appliedSettings->cameraDelay));
-    m_ui->lineEdit_rejectDistance->setText(
+    m_view.lineEdit_rejectDistance->setText(
         QString::number(m_appliedSettings->rejectDistance));
-    m_ui->lineEdit_rejectTime->setText(
+    m_view.lineEdit_rejectTime->setText(
         QString::number(m_appliedSettings->rejectTime));
-    m_ui->lineEdit_rejectPosition->setText(
+    m_view.lineEdit_rejectPosition->setText(
         QString::number(m_appliedSettings->rejectPosition));
     if (m_updatingSettingsUi) {
         *m_updatingSettingsUi = previousUpdating;
@@ -1018,11 +1030,11 @@ void MachineSettingsPage::updateHardwareEnabled(
         restorePlcUiFromApplied();
     }
     const QString cameraReason = text(
-        L"\u8bf7\u5148\u6253\u5f00\u76f8\u673a\u540e\u518d\u8bbe\u7f6e\u8be5\u53c2\u6570\u3002");
+        L"请先打开相机后再设置该参数。");
     const QString plcRunReason = text(
-        L"\u8bf7\u5148\u8fde\u63a5 PLC \u540e\u518d\u8bbe\u7f6e\u8be5\u53c2\u6570\u3002");
+        L"请先连接 PLC 后再设置该参数。");
     const QString plcConnectionReason = text(
-        L"PLC \u5df2\u8fde\u63a5\u3002\u5982\u9700\u4fee\u6539\u8fde\u63a5\u53c2\u6570\uff0c\u8bf7\u5148\u65ad\u5f00 PLC\u3002");
+        L"PLC 已连接。如需修改连接参数，请先断开 PLC。");
     auto state = [&](HardwareDependency dependency,
                      bool *enabled,
                      QString *reason) {

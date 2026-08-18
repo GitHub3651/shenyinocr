@@ -3,6 +3,7 @@
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "barcode_word_detection_pipeline.h"
+#include "contracts/detection_mode.h"
 
 #include "detection/common/detection_roi_geometry.h"
 #include "engines/barcode/barcode_decoder.h"
@@ -44,11 +45,11 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
     output.pose = item.pose;
     output.templateName = templateName;
     output.nextDecodeStrategy = decodeStrategy;
-    output.barcodeState = QStringLiteral("\u672a\u6267\u884c");
-    output.dateState = QStringLiteral("\u672a\u6267\u884c");
+    output.barcodeState = QStringLiteral("未执行");
+    output.dateState = QStringLiteral("未执行");
 
     DetectionResult &result = output.detectionResult;
-    result.modeId = QStringLiteral("barcode_word_detection");
+    result.modeId = detectionModeUiId(DetectionMode::BarcodeWord);
     result.status = DetectionStatus::Cancelled;
     result.diagnostic = QStringLiteral(
                 "Invalid barcode-word detection work item");
@@ -91,7 +92,7 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
 
     if (!item.pose.valid) {
         finishNg(QStringLiteral(
-                     "\u672a\u627e\u5230\u5b9a\u4f4d\u951a\u70b9"));
+                     "未找到定位锚点"));
         return output;
     }
 
@@ -110,14 +111,14 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         output.barcode.errorReason = QStringLiteral(
                     "Barcode polygon is missing or invalid");
         finishNg(QStringLiteral(
-                     "\u4e8c\u7ef4\u7801\u533a\u57df\u914d\u7f6e"
-                     "\u65e0\u6548\u6216\u672a\u6620\u5c04"));
+                     "二维码区域配置"
+                     "无效或未映射"));
         return output;
     }
     if (item.pose.datePoly.size() < 3) {
         finishNg(QStringLiteral(
-                     "\u65e5\u671f\u68c0\u6d4b\u533a\u57df\u914d\u7f6e"
-                     "\u65e0\u6548\u6216\u672a\u6620\u5c04"));
+                     "日期检测区域配置"
+                     "无效或未映射"));
         return output;
     }
 
@@ -134,8 +135,8 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         output.barcode.errorReason = QStringLiteral(
                     "Invalid barcode ROI");
         finishNg(QStringLiteral(
-                     "\u4e8c\u7ef4\u7801\u533a\u57df\u65e0\u6548"
-                     "\u6216\u8d85\u51fa\u56fe\u50cf\u8303\u56f4"));
+                     "二维码区域无效"
+                     "或超出图像范围"));
         return output;
     }
 
@@ -145,8 +146,8 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
                 ? decoder->lastError()
                 : QStringLiteral("Barcode decoder is null");
         output.barcodeState = QStringLiteral(
-                    "\u8bfb\u7801\u5668\u4e0d\u53ef\u7528");
-        finishNg(QStringLiteral("BarcodeDecoder.dll\u4e0d\u53ef\u7528"));
+                    "读码器不可用");
+        finishNg(QStringLiteral("BarcodeDecoder.dll不可用"));
         return output;
     }
 
@@ -191,31 +192,31 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
     }
 
     if (!output.barcode.readable) {
-        output.barcodeState = QStringLiteral("\u4e0d\u53ef\u8bfb");
+        output.barcodeState = QStringLiteral("不可读");
         QString reason;
         if (output.barcode.status == BarcodeReadStatus::Timeout) {
-            reason = QStringLiteral("\u4e8c\u7ef4\u7801\u8bfb\u53d6\u8d85\u65f6");
+            reason = QStringLiteral("二维码读取超时");
         } else if (output.barcode.status
                    == BarcodeReadStatus::InvalidRoi) {
-            reason = QStringLiteral("\u4e8c\u7ef4\u7801\u533a\u57df\u65e0\u6548");
+            reason = QStringLiteral("二维码区域无效");
         } else if (output.barcode.status
                    == BarcodeReadStatus::InternalError) {
             reason = QStringLiteral(
-                        "\u4e8c\u7ef4\u7801\u89e3\u7801\u5668\u5185\u90e8\u9519\u8bef");
+                        "二维码解码器内部错误");
         } else {
             reason = QStringLiteral(
-                        "\u4e8c\u7ef4\u7801\u4e0d\u53ef\u8bfb\u6216"
-                        "\u533a\u57df\u5185\u6ca1\u6709\u4e8c\u7ef4\u7801");
+                        "二维码不可读或"
+                        "区域内没有二维码");
         }
         finishNg(reason);
         return output;
     }
 
-    output.barcodeState = QStringLiteral("\u53ef\u8bfb");
+    output.barcodeState = QStringLiteral("可读");
     if (!output.dateRoiValid) {
         finishNg(QStringLiteral(
-                     "\u65e5\u671f\u68c0\u6d4b\u533a\u57df\u65e0\u6548"
-                     "\u6216\u8d85\u51fa\u56fe\u50cf\u8303\u56f4"));
+                     "日期检测区域无效"
+                     "或超出图像范围"));
         output.barcodeWordResult.barcodeIsReadable = true;
         return output;
     }
@@ -244,16 +245,16 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
 
     if (!output.barcodeWordResult.dateResultProduced) {
         finishNg(QStringLiteral(
-                     "\u65e5\u671f\u68c0\u6d4b\u672a\u4ea7\u751f\u6709\u6548\u7ed3\u679c"));
+                     "日期检测未产生有效结果"));
         return output;
     }
 
     result = output.wordOutput.detectionResult;
-    result.modeId = QStringLiteral("barcode_word_detection");
+    result.modeId = detectionModeUiId(DetectionMode::BarcodeWord);
     result.elapsedMs = elapsedMs();
     output.dateState = output.barcodeWordResult.dateIsOk
-            ? QStringLiteral("\u6b63\u786e")
-            : QStringLiteral("\u9519\u8bef");
+            ? QStringLiteral("正确")
+            : QStringLiteral("错误");
     output.reason = result.diagnostic;
 
     bool hasBarcodeOverlay = false;

@@ -47,10 +47,18 @@ struct DetectionOverlayPolygon {
     QString role;
     std::vector<cv::Point> points;
     double score = 0.0;
+    bool alarm = false;
+};
+
+struct DetectionOverlayEllipse {
+    QString role;
+    cv::Point2f center;
+    cv::Size2f axes;
 };
 
 struct DetectionOverlay {
     std::vector<DetectionOverlayPolygon> polygons;
+    std::vector<DetectionOverlayEllipse> ellipses;
 };
 
 struct DetectionResult {
@@ -58,9 +66,19 @@ struct DetectionResult {
     AlgorithmVerdict verdict = AlgorithmVerdict::NotEvaluated;
     DetectionStatus status = DetectionStatus::SystemFault;
     QString recognizedText;
+    QString presentationText;
+    QString templateName;
     QString diagnostic;
     DetectionOverlay overlay;
     double elapsedMs = 0.0;
+    bool hasPresentationText = false;
+    bool updatesTemplateName = false;
+    bool clearImageLabelRects = false;
+    bool showRoiWarningOnCancelled = false;
+    bool clearRoiWarningOnCompleted = false;
+    bool saveRawOnly = false;
+    bool saveNotEvaluatedAsNg = true;
+    int elapsedDecimals = 0;
 };
 
 struct DetectionCompletion {

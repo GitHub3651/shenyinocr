@@ -115,7 +115,12 @@ void MainWindow::updateTissueRoughnessUiVisibility()
         return;
     }
 
-    const bool showTissueThreshold = (ui->comboBox_detectionMode->currentIndex() == 3);
+    DetectionMode mode = DetectionMode::Word;
+    const bool showTissueThreshold = detectionModeFromUiId(
+                detectModeIdForIndex(
+                    ui->comboBox_detectionMode->currentIndex()),
+                &mode)
+            && mode == DetectionMode::Tissue;
     ui->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     ui->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     ui->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
@@ -431,7 +436,6 @@ void MainWindow::setupDetectModeChangeTracking()
                 const QString previousModeId = m_currentDetectModeId;
                 const QString nextModeId = detectModeIdForIndex(index);
                 resetTemplateCaptureState();
-                m_resultBoundDisplayActive = false;
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
                 if (imageLabel) {

@@ -3,6 +3,7 @@
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "tissue_detection_pipeline.h"
+#include "contracts/detection_mode.h"
 
 // 函数说明：TissueDetectionPipeline 构造函数创建组件并初始化其依赖和初始状态。
 TissueDetectionPipeline::TissueDetectionPipeline(
@@ -23,31 +24,33 @@ DetectionResult TissueDetectionPipeline::toDetectionResult(
     const TissueRollResult &tissueResult)
 {
     DetectionResult result;
-    result.modeId = QStringLiteral("tissue_detection");
+    result.modeId = detectionModeUiId(DetectionMode::Tissue);
     result.verdict = tissueResult.isOk
             ? AlgorithmVerdict::Ok
             : AlgorithmVerdict::Ng;
     result.status = DetectionStatus::Completed;
     result.recognizedText = tissueResult.rollFound
-            ? QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a%1")
+            ? QStringLiteral("粗糙度：%1")
               .arg(tissueResult.roll.roughnessScore, 0, 'f', 3)
-            : QStringLiteral("\u7c97\u7cd9\u5ea6\uff1a--");
+            : QStringLiteral("粗糙度：--");
+    result.presentationText = result.recognizedText;
+    result.hasPresentationText = true;
     result.diagnostic = QString::fromStdString(tissueResult.message);
     result.elapsedMs = static_cast<double>(
                 tissueResult.processingTimeMs);
 
     if (tissueResult.rollFound) {
-        const cv::Rect &box = tissueResult.roll.outerBbox;
-        DetectionOverlayPolygon polygon;
-        polygon.role = QStringLiteral("tissue_roll");
-        polygon.points = {
-            cv::Point(box.x, box.y),
-            cv::Point(box.x + box.width, box.y),
-            cv::Point(box.x + box.width, box.y + box.height),
-            cv::Point(box.x, box.y + box.height)
-        };
-        polygon.score = tissueResult.roll.roughnessScore;
-        result.overlay.polygons.push_back(polygon);
+        DetectionOverlayEllipse outer;
+        outer.role = QStringLiteral("tissue_outer");
+        outer.center = tissueResult.roll.center;
+        outer.axes = tissueResult.roll.outerAxes;
+        result.overlay.ellipses.push_back(outer);
+
+        DetectionOverlayEllipse inner;
+        inner.role = QStringLiteral("tissue_inner");
+        inner.center = tissueResult.roll.innerCenter;
+        inner.axes = tissueResult.roll.innerAxes;
+        result.overlay.ellipses.push_back(inner);
     }
     return result;
 }

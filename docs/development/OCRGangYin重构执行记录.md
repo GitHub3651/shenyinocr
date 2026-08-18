@@ -1520,3 +1520,19 @@
 - [x] Agent静态门禁通过：已删文件和全部已删符号在`app`生产源码/qmake中为0引用；主qmake登记文件缺失为0；`git diff --check`通过；差异不含资源、`.pro.user`、`.ui.autosave`或`app.zip`。Agent未运行或间接触发qmake、构建、测试程序或主程序，等待用户在Qt Creator执行Run qmake、Rebuild和主程序回归后再收口与提交。
 - [x] 2026-08-18用户按S1交付清单完成Run qmake、Rebuild及主程序回归后反馈“没问题”；旧文件删除后的工程可构建运行，二维码+三期模板即时验证和代表检测模式启停未发现回归，S1用户门禁通过。
 - [x] S1没有对应独立用户功能ID，功能表不作状态变更；采集节拍语义修订和engines目录迁移涉及的`CAM-003、CAM-004、RUN-005、SYS-006、TPL-004、DET-004、DET-006、TOOL-002`继续保持`迁移中`，不得以本轮无功能精简门禁替代其真实相机/OCR专项验证。
+
+## 架构精简S2～S7合并实施（2026-08-18，已通过用户统一门禁）
+
+- [x] 用户明确要求不再逐阶段停下验证，一次性完成原计划S2～S7后再统一验收；本轮因此只合并交付节奏，不放宽行为等价、资源冻结、Qt 5.14/qmake/MSVC2017/C++11、真实PLC/机械/现场待验及Agent不运行构建程序等约束。
+- [x] S2统一五模式完成合同和收尾入口：`DetectionResult`承载识别文本、模板名、诊断、Overlay、耗时及模式呈现策略；`ResultService`只保留一个完成回调，统计、存图和PLC仍在同一正式收尾边界且每产品只完成一次。OK继续写0，NG继续写49并约100ms后复位0。
+- [x] S3建立唯一五模式描述表`DetectionModeDescriptor`：模式枚举、Recipe ID、UI ID、中文名称、定位类型、启动依赖、呈现和存图差异均集中登记。整机设置、模板模式记忆、启动预检和UI下拉框改为读取该表，删除固定下标、散落字符串和重复模式分支；装配Registry同时从Runtime迁至Detection。
+- [x] S4将具体检测组装从Runtime迁至Detection：删除`runtime/pipeline_registry.*`，新增`detection/detection_registry.*`；定位、预处理、五种Pipeline和二维码策略由Detection内部组装，Runtime只管理生命周期、容量1队列、产品账本和完成转交，不再识别具体检测模式或算法类型。
+- [x] S5将Profile快照从Runtime迁至Detection并收口构造：删除`runtime/inspection_profile_snapshot.*`，新增`detection/detection_profile_snapshot.*`；Application只提交已选配方和机器参数，不再逐字段拼装字符、二维码及定位内部结构。启动预检按唯一模式描述表检查目标字符、字符模板、条码引擎和多Profile条件。
+- [x] S6完成UI依赖收口：`InspectionPage`和`MachineSettingsPage`改为显式ViewBindings，不再持有整个`Ui::MainWindow`；MainWindow仍是生成UI对象唯一所有者。五个检测模式由描述表动态填充，模板页的模式判断改用`DetectionMode`语义值。
+- [x] S7将正式采集链收为`CaptureWorker → FrameQueue → Detection预处理/定位/Pipeline → ResultService`：CameraSession不再携带定位Profile、预处理正式帧或发布第二条跟踪结果链；模板预览仍保留独立预处理。硬触发容量1队列和QueueFull故障语义不变。
+- [x] 按用户UTF-8要求，`app`正式C++源码中的`\\uXXXX`、`\\UXXXXXXXX`和`\\xNN`转义文本已机械等价转换为可直接阅读的中文/Unicode字符；截图中的`L"\\u2195  \\u62d6\\u52a8\\u8c03\\u6574"`现为`L"↕  拖动调整"`。不改变字符串内容、编码约定或Qt边界。
+- [x] 本轮只精简和重组代码；图片、图标、QSS/CSS、翻译、`.qrc`、模型、DLL、部署资产和用户文件均未删除、未修改。`main_window.ui`只删除硬编码的五个下拉框条目，条目由唯一模式描述表在代码中恢复，不属于资源清理。
+- [x] 87项保留功能统一标为`迁移中`，`MC-001..003`保持`已确认删除`；用户完成一次Run qmake、Rebuild、五模式/设置/模板/相机/存图/统计/PLC回归并确认通过前，不恢复为`已验证`，也不创建本轮提交。
+- [x] 最终Agent静态门禁通过：`app`仍为164个`.h/.cpp`；主工程168个源码、头、UI、qrc和翻译登记项均存在且无重复；5个模式Descriptor唯一；旧Registry/Profile、五套Consumer/handle/finalize、Runtime具体模式分支、Runtime字符/二维码/模式Profile依赖、CameraSession定位和第二结果信号均为0；UI页面持有`Ui::MainWindow *`为0；人类可读Unicode转义为0；资源、`.pro.user`、`.ui.autosave`和`app.zip`差异均为0；`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试可执行文件或主程序，仓库`tests`继续不存在。
+- [x] 2026-08-18用户确认“S2～S7已经验证成功”；本轮统一门禁通过，87项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。
+- [x] 本轮仅据用户确认关闭S2～S7代码与功能门禁；真实PLC在线读写、机械剔除和现场异常恢复仍保持单列待验，不以无PLC、Fake或一般主程序回归替代现场生产验收。

@@ -1,4 +1,4 @@
-﻿#include "recipe_selection_dialog.h"
+#include "recipe_selection_dialog.h"
 // 文件作用：本文件用于显示已发布配方并让用户按检测模式选择目标配方。
 // 主要职责：显示已发布配方并让用户按检测模式选择目标配方。
 // 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
@@ -25,15 +25,15 @@ RecipeSelectionDialog::RecipeSelectionDialog(
     : QDialog(parent)
 {
     setWindowTitle(QStringLiteral(
-                       "\u9009\u62E9\u5DF2\u53D1\u5E03\u914D\u65B9"));
+                       "选择已发布配方"));
     setModal(true);
     resize(520, 360);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     QLabel *descriptionLabel = new QLabel(
                 QStringLiteral(
-                    "\u8BF7\u9009\u62E9\u5F53\u524D\u8BC6\u522B\u6A21\u5F0F"
-                    "\u8981\u52A0\u8F7D\u7684\u4EA7\u54C1\u914D\u65B9\u3002"),
+                    "请选择当前识别模式"
+                    "要加载的产品配方。"),
                 this);
     descriptionLabel->setWordWrap(true);
     layout->addWidget(descriptionLabel);
@@ -45,7 +45,7 @@ RecipeSelectionDialog::RecipeSelectionDialog(
                 ? recipe.recipeId
                 : recipe.displayName.trimmed();
         QListWidgetItem *item = new QListWidgetItem(
-                    QStringLiteral("%1  \uFF08%2 \u4E2AProfile\uFF09")
+                    QStringLiteral("%1  （%2 个Profile）")
                     .arg(displayName)
                     .arg(recipe.profileCount),
                     m_recipeList);
@@ -61,9 +61,9 @@ RecipeSelectionDialog::RecipeSelectionDialog(
                 QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
                 this);
     m_buttonBox->button(QDialogButtonBox::Ok)->setText(
-                QStringLiteral("\u52A0\u8F7D\u914D\u65B9"));
+                QStringLiteral("加载配方"));
     m_buttonBox->button(QDialogButtonBox::Cancel)->setText(
-                QStringLiteral("\u53D6\u6D88"));
+                QStringLiteral("取消"));
     m_buttonBox->button(QDialogButtonBox::Ok)->setEnabled(
                 m_recipeList->currentItem() != nullptr);
     connect(m_recipeList,

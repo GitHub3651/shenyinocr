@@ -6,6 +6,7 @@
 #define CONTRACTS_DETECTION_MODE_H
 
 #include <QString>
+#include <QVector>
 
 // 组件说明：DetectionMode 枚举列出该组件允许使用的稳定状态和选项。
 enum class DetectionMode
@@ -17,7 +18,39 @@ enum class DetectionMode
     BarcodeWord
 };
 
-extern const QString BarcodeWordDetectionMode;
+enum class DetectionTrackingKind
+{
+    WholeFrame,
+    SingleTemplate,
+    MultipleProfiles
+};
+
+// 检测模式的唯一元数据。各层只查询这个描述，不再维护第二套模式分类。
+struct DetectionModeDescriptor
+{
+    DetectionMode mode;
+    const char *recipeId;
+    const char *uiId;
+    const char *displayName;
+    const char *workerLogName;
+    const char *startFailureMessage;
+    DetectionTrackingKind trackingKind;
+    bool requiresTargetText;
+    bool requiresCharacterTemplates;
+    bool requiresBarcodeDecoder;
+    bool clearImageLabelRects;
+    bool showRoiWarningOnCancelled;
+    bool saveRawOnly;
+    bool saveNotEvaluatedAsNg;
+    int elapsedDecimals;
+};
+
+const QVector<DetectionModeDescriptor> &detectionModeDescriptors();
+const DetectionModeDescriptor &detectionModeDescriptor(DetectionMode mode);
+const DetectionModeDescriptor *detectionModeDescriptorFromId(
+    const QString &modeId);
+const DetectionModeDescriptor *detectionModeDescriptorFromUiId(
+    const QString &modeId);
 
 QString detectionModeId(DetectionMode mode);
 bool detectionModeFromId(const QString &modeId, DetectionMode *mode);

@@ -3,6 +3,7 @@
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "word_detection_pipeline.h"
+#include "contracts/detection_mode.h"
 
 #include "detection/common/detection_roi_geometry.h"
 
@@ -125,7 +126,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
     output.pose = item.pose;
     output.templateName = templateName;
     DetectionResult &result = output.detectionResult;
-    result.modeId = QStringLiteral("word_detection");
+    result.modeId = detectionModeUiId(DetectionMode::Word);
     result.status = DetectionStatus::Cancelled;
     result.diagnostic = QStringLiteral("Invalid word detection work item");
     if (!item.isValid() || !item.hasPose) {
@@ -136,8 +137,8 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
         result.status = DetectionStatus::Completed;
         result.verdict = AlgorithmVerdict::Ng;
         result.diagnostic = QStringLiteral(
-                    "\u672a\u627e\u5230\u5b57\u5e93"
-                    "\u5b9a\u4f4d\u533a\u57df");
+                    "未找到字库"
+                    "定位区域");
         result.elapsedMs = item.pose.trackingElapsedMs;
         output.reason = result.diagnostic;
         return output;
@@ -147,8 +148,8 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
             std::chrono::high_resolution_clock::now();
     if (!oriented.valid) {
         result.diagnostic = QStringLiteral(
-                    "\u65e5\u671fROI\u65e0\u6548\u6216"
-                    "\u8d85\u51fa\u539f\u56fe\u8303\u56f4");
+                    "日期ROI无效或"
+                    "超出原图范围");
         return output;
     }
     output.roiValid = true;
@@ -213,27 +214,27 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
 
     if (output.wordResult.isOk) {
         output.reason = QStringLiteral(
-                    "\u8bc6\u522b\u6570\u91cf\u7b49\u4e8e"
-                    "\u76ee\u6807\u6570\u91cf");
+                    "识别数量等于"
+                    "目标数量");
     } else if (output.wordResult.detectedCharacterCount
                < output.wordResult.targetCharacterCount) {
         output.reason = QStringLiteral(
-                    "\u8bc6\u522b\u6570\u91cf\u5c11\u4e8e"
-                    "\u76ee\u6807\u6570\u91cf\uff0c"
-                    "\u5c11%1\u4e2a")
+                    "识别数量少于"
+                    "目标数量，"
+                    "少%1个")
                 .arg(output.wordResult.targetCharacterCount
                      - output.wordResult.detectedCharacterCount);
     } else {
         output.reason = QStringLiteral(
-                    "\u8bc6\u522b\u6570\u91cf\u591a\u4e8e"
-                    "\u76ee\u6807\u6570\u91cf\uff0c"
-                    "\u591a%1\u4e2a")
+                    "识别数量多于"
+                    "目标数量，"
+                    "多%1个")
                 .arg(output.wordResult.detectedCharacterCount
                      - output.wordResult.targetCharacterCount);
     }
     if (!output.missingUnits.isEmpty()) {
         output.reason += QStringLiteral(
-                    "\uff1b\u672a\u5339\u914d\u76ee\u6807=%1")
+                    "；未匹配目标=%1")
                 .arg(output.missingUnits.join(QStringLiteral(", ")));
     }
 

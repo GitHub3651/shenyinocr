@@ -8,7 +8,7 @@
 #include "runtime/detection_worker.h"
 #include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_run_context.h"
-#include "runtime/pipeline_registry.h"
+#include "detection/detection_registry.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "runtime/result_service.h"
 
@@ -76,13 +76,14 @@ public:
     explicit InspectionRuntime(
         const RunIdFactory &runIdFactory,
         const std::shared_ptr<InspectionPlcController> &plcController,
-        const std::shared_ptr<PipelineRegistry> &pipelineRegistry);
+        const std::shared_ptr<DetectionRegistry> &detectionRegistry);
     ~InspectionRuntime();
 
     QString beginStart(
         const MachineSettings &machineSettings,
         const PreparedRecipeSnapshot &preparedRecipe,
-        const InspectionProfileSnapshot &profileSnapshot);
+        const DetectionProfileSnapshot &profileSnapshot,
+        const FramePreprocessSettings &framePreprocess);
     bool commitStart();
     void rollbackStart();
     bool beginStop();
@@ -116,8 +117,8 @@ public:
     PlcOperationResult writePlcPhotoDistance(std::uint32_t photoDistance);
     PlcOperationResult writePlcResultValue(std::uint8_t value);
 
-    BarcodeRuntimeReadiness preparePipeline(DetectionMode mode) const;
-    bool startPipeline(
+    DetectionRuntimeReadiness prepareDetection(DetectionMode mode) const;
+    bool startDetection(
         const ResultServiceRunConfiguration &resultConfiguration,
         QString *errorMessage);
     std::shared_ptr<const FrameData> acceptFrame(
@@ -134,11 +135,8 @@ public:
     std::size_t detectionWorkerQueueCapacity() const;
     bool submitDetectionFrame(
         const std::shared_ptr<const FrameData> &frame);
-    bool submitDetectionWorkItem(const DetectionWorkItem &item);
     DetectionWorkSubmissionResult trySubmitDetectionFrame(
         const std::shared_ptr<const FrameData> &frame);
-    DetectionWorkSubmissionResult trySubmitDetectionWorkItem(
-        const DetectionWorkItem &item);
 
     bool submitUiCompletion(const UiCompletionMailbox::Work &work);
     bool processOneUiCompletion();
@@ -181,7 +179,7 @@ private:
     std::map<quint64, ProductProgress> m_products;
 
     std::shared_ptr<InspectionPlcController> m_plcController;
-    std::shared_ptr<PipelineRegistry> m_pipelineRegistry;
+    std::shared_ptr<DetectionRegistry> m_detectionRegistry;
     std::unique_ptr<ResultService> m_resultService;
 
     mutable std::mutex m_detectionWorkerMutex;

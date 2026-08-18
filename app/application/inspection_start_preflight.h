@@ -4,16 +4,11 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
+#include "contracts/detection_mode.h"
+
 #include <QString>
 #include <QStringList>
 #include <QVector>
-
-enum class InspectionStartModeKind {
-    Tissue,
-    SingleTemplate,
-    WordProfiles,
-    BarcodeWordProfiles
-};
 
 enum class InspectionStartIssue {
     None,
@@ -55,8 +50,7 @@ struct InspectionStartProfileReadiness
 // 组件说明：InspectionStartResourceInput 数据结构集中保存该流程需要的一组相关数据。
 struct InspectionStartResourceInput
 {
-    InspectionStartModeKind modeKind =
-            InspectionStartModeKind::SingleTemplate;
+    DetectionMode mode = DetectionMode::Stamp;
     bool preparedRecipeReady = false;
     bool trackingTemplateReady = false;
     bool dateRegionReady = false;

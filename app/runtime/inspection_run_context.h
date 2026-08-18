@@ -5,7 +5,8 @@
 #pragma once
 
 #include "recipes/prepared_recipe.h"
-#include "runtime/inspection_profile_snapshot.h"
+#include "detection/detection_profile_snapshot.h"
+#include "detection/common/frame_preprocessor.h"
 #include "system_support/settings/machine_settings.h"
 
 #include <QDateTime>
@@ -21,12 +22,14 @@ struct InspectionRunContext
         const QDateTime &startedAtUtcValue,
         const MachineSettings &machineSettingsValue,
         const PreparedRecipeSnapshot &preparedRecipeValue,
-        const InspectionProfileSnapshot &profileSnapshotValue)
+        const DetectionProfileSnapshot &profileSnapshotValue,
+        const FramePreprocessSettings &framePreprocessValue)
         : runId(runIdValue),
           startedAtUtc(startedAtUtcValue),
           machineSettings(machineSettingsValue),
           preparedRecipe(preparedRecipeValue),
-          profileSnapshot(profileSnapshotValue)
+          profileSnapshot(profileSnapshotValue),
+          framePreprocess(framePreprocessValue)
     {
     }
 
@@ -34,5 +37,6 @@ struct InspectionRunContext
     const QDateTime startedAtUtc;
     const MachineSettings machineSettings;
     const PreparedRecipeSnapshot preparedRecipe;
-    const InspectionProfileSnapshot profileSnapshot;
+    const DetectionProfileSnapshot profileSnapshot;
+    const FramePreprocessSettings framePreprocess;
 };

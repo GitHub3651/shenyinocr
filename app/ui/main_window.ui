@@ -1448,31 +1448,6 @@ background-color: #ebeef5;
                       <height>50</height>
                      </size>
                     </property>
-                    <item>
-                     <property name="text">
-                      <string>模板匹配</string>
-                     </property>
-                    </item>
-                    <item>
-                     <property name="text">
-                      <string>字库匹配</string>
-                     </property>
-                    </item>
-                    <item>
-                     <property name="text">
-                      <string>深度模型</string>
-                     </property>
-                    </item>
-                    <item>
-                     <property name="text">
-                      <string>纸巾检测</string>
-                     </property>
-                    </item>
-                    <item>
-                     <property name="text">
-                      <string>二维码+三期</string>
-                     </property>
-                    </item>
                    </widget>
                   </item>
                   <item row="1" column="0" colspan="2">

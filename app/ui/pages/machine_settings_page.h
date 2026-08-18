@@ -17,13 +17,63 @@ class QLabel;
 class QLineEdit;
 class QEvent;
 class QWidget;
+class QCheckBox;
+class QComboBox;
+class QPushButton;
+class QSpinBox;
+class QSplitter;
 // 组件说明：SettingsEditState 组件封装本文件中与其名称对应的单一职责。
 class SettingsEditState;
 
-namespace Ui {
-// 组件说明：MainWindow 组件负责对应界面区域的显示和用户交互。
-class MainWindow;
-}
+struct MachineSettingsPageViewBindings
+{
+    QCheckBox *checkBox_hardwareTriggerEnabled = nullptr;
+    QComboBox *comboBox_colorChannel = nullptr;
+    QComboBox *comboBox_detectionMode = nullptr;
+    QComboBox *comboBox_imageRotation = nullptr;
+    QComboBox *comboBox_imageSaveContent = nullptr;
+    QComboBox *comboBox_imageSaveRange = nullptr;
+    QComboBox *comboBox_plcTriggerMode = nullptr;
+    QLabel *label_cameraExposure = nullptr;
+    QLabel *label_cameraGain = nullptr;
+    QLabel *label_colorChannel = nullptr;
+    QLabel *label_detectionMode = nullptr;
+    QLabel *label_hardwareTriggerDelay = nullptr;
+    QLabel *label_imageRotation = nullptr;
+    QLabel *label_imageSaveContent = nullptr;
+    QLabel *label_imageSavePath = nullptr;
+    QLabel *label_imageSaveRange = nullptr;
+    QLabel *label_photoDistance = nullptr;
+    QLabel *label_photoTime = nullptr;
+    QLabel *label_plcIpAddress = nullptr;
+    QLabel *label_plcRackSlot = nullptr;
+    QLabel *label_plcTriggerMode = nullptr;
+    QLabel *label_rejectDistance = nullptr;
+    QLabel *label_rejectPosition = nullptr;
+    QLabel *label_rejectTime = nullptr;
+    QLineEdit *lineEdit_cameraGain = nullptr;
+    QLineEdit *lineEdit_hardwareTriggerDelay = nullptr;
+    QLineEdit *lineEdit_imageSavePath = nullptr;
+    QLineEdit *lineEdit_imageThreshold = nullptr;
+    QLineEdit *lineEdit_photoDistance = nullptr;
+    QLineEdit *lineEdit_photoTime = nullptr;
+    QLineEdit *lineEdit_plcIpAddress = nullptr;
+    QLineEdit *lineEdit_plcRack = nullptr;
+    QLineEdit *lineEdit_plcSlot = nullptr;
+    QLineEdit *lineEdit_rejectDistance = nullptr;
+    QLineEdit *lineEdit_rejectPosition = nullptr;
+    QLineEdit *lineEdit_rejectTime = nullptr;
+    QLineEdit *lineEdit_tissueRoughnessThreshold = nullptr;
+    QPushButton *pushButton_applyCameraExposure = nullptr;
+    QPushButton *pushButton_applyCameraGain = nullptr;
+    QPushButton *pushButton_applyPhotoDistance = nullptr;
+    QPushButton *pushButton_applyPlcProcessParameters = nullptr;
+    QPushButton *pushButton_applyPlcTriggerMode = nullptr;
+    QPushButton *pushButton_connectPlc = nullptr;
+    QPushButton *pushButton_disconnectPlc = nullptr;
+    QSpinBox *spinBox_cameraExposure = nullptr;
+    QSplitter *splitter_mainContent = nullptr;
+};
 
 // 组件说明：MachineSettingsPage 组件负责对应界面区域的显示和用户交互。
 class MachineSettingsPage : public QObject
@@ -42,7 +92,7 @@ public:
     };
 
     MachineSettingsPage(
-        Ui::MainWindow *ui,
+        const MachineSettingsPageViewBindings &view,
         SettingsApplicationService *settingsService,
         SettingsEditState *editState,
         QString *selectedDirectory,
@@ -132,7 +182,7 @@ private:
         const QString &disabledReason,
         bool showDisabledReason);
 
-    Ui::MainWindow *m_ui = nullptr;
+    MachineSettingsPageViewBindings m_view;
     MachineSettings *m_appliedSettings = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;
     SettingsEditState *m_editState = nullptr;

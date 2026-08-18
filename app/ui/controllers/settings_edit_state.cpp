@@ -109,11 +109,11 @@ QStringList SettingsEditState::templateDirtyNames() const
     QStringList names;
     if (m_templateTargetDirty) {
         names.append(QStringLiteral(
-                         "\u76ee\u6807\u5b57\u7b26\u5185\u5bb9"));
+                         "目标字符内容"));
     }
     if (m_templateThresholdDirty) {
         names.append(QStringLiteral(
-                         "\u56fe\u50cf\u5408\u683c\u9608\u503c"));
+                         "图像合格阈值"));
     }
     return names;
 }
@@ -149,8 +149,8 @@ QString SettingsEditState::dirtySettingsMessage() const
         lines.append(QStringLiteral("- %1").arg(name));
     }
     return QStringLiteral(
-                "\u5b58\u5728\u672a\u5e94\u7528\u53c2\u6570\uff1a\n\n%1\n\n"
-                "\u7ee7\u7eed\u8fd0\u884c\u5c06\u653e\u5f03\u4ee5\u4e0a\u672a\u5e94\u7528\u4fee\u6539\uff0c"
-                "\u5e76\u4f7f\u7528\u4e4b\u524d\u5df2\u8bbe\u7f6e\u7684\u53c2\u6570\u3002")
+                "存在未应用参数：\n\n%1\n\n"
+                "继续运行将放弃以上未应用修改，"
+                "并使用之前已设置的参数。")
             .arg(lines.join(QLatin1Char('\n')));
 }

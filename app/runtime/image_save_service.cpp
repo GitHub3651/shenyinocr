@@ -154,7 +154,7 @@ bool ImageSaveService::writeImage(
     if (!directory.mkpath(fileInfo.absolutePath())) {
         if (errorMessage) {
             *errorMessage = QString::fromWCharArray(
-                        L"\u65e0\u6cd5\u521b\u5efa\u5b58\u56fe\u76ee\u5f55\uff1a%1")
+                        L"无法创建存图目录：%1")
                     .arg(fileInfo.absolutePath());
         }
         return false;
@@ -166,7 +166,7 @@ bool ImageSaveService::writeImage(
     if (image.isNull()) {
         if (errorMessage) {
             *errorMessage = QString::fromWCharArray(
-                        L"\u4e0d\u652f\u6301\u7684\u5b58\u56fe\u50cf\u7d20\u683c\u5f0f\uff1a%1")
+                        L"不支持的存图像素格式：%1")
                     .arg(item.filePath);
         }
         return false;
@@ -177,7 +177,7 @@ bool ImageSaveService::writeImage(
             item.quality)) {
         if (errorMessage) {
             *errorMessage = QString::fromWCharArray(
-                        L"\u56fe\u50cf\u5199\u5165\u5931\u8d25\uff1a%1")
+                        L"图像写入失败：%1")
                     .arg(item.filePath);
         }
         return false;
@@ -215,19 +215,19 @@ void ImageSaveService::workerLoop()
                     failed = true;
                     latestError = errorMessage.trimmed().isEmpty()
                             ? QString::fromWCharArray(
-                                L"\u672a\u77e5\u5b58\u56fe\u5931\u8d25")
+                                L"未知存图失败")
                             : errorMessage;
                 }
             }
         } catch (const std::exception &exception) {
             failed = true;
             latestError = QString::fromWCharArray(
-                        L"\u5b58\u56fe\u5f02\u5e38\uff1a%1")
+                        L"存图异常：%1")
                     .arg(QString::fromLocal8Bit(exception.what()));
         } catch (...) {
             failed = true;
             latestError = QString::fromWCharArray(
-                        L"\u5b58\u56fe\u53d1\u751f\u672a\u77e5\u5f02\u5e38");
+                        L"存图发生未知异常");
         }
 
         quint64 totalFailed = 0;

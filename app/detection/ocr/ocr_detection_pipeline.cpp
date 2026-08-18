@@ -3,6 +3,7 @@
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ocr_detection_pipeline.h"
+#include "contracts/detection_mode.h"
 #include "detection/common/detection_roi_geometry.h"
 
 #include <algorithm>
@@ -85,7 +86,7 @@ DetectionResult OcrDetectionPipeline::detect(
     }
     if (!oriented.valid) {
         DetectionResult invalidResult;
-        invalidResult.modeId = QStringLiteral("ocr_detection");
+        invalidResult.modeId = detectionModeUiId(DetectionMode::Ocr);
         invalidResult.status = DetectionStatus::Cancelled;
         invalidResult.diagnostic = QStringLiteral(
                     "OCR date ROI is invalid");
@@ -118,7 +119,7 @@ DetectionResult OcrDetectionPipeline::toDetectionResult(
         double elapsedMs)
 {
     DetectionResult result;
-    result.modeId = QStringLiteral("ocr_detection");
+    result.modeId = detectionModeUiId(DetectionMode::Ocr);
     result.verdict = ocrResult.isOk
             ? AlgorithmVerdict::Ok
             : AlgorithmVerdict::Ng;
@@ -127,12 +128,12 @@ DetectionResult OcrDetectionPipeline::toDetectionResult(
                 ocrResult.recognizedText);
     result.diagnostic = ocrResult.recognizedText.empty()
             ? QStringLiteral(
-                "\u004f\u0043\u0052\u6e05\u6d17\u540e\u6587\u672c\u4e3a\u7a7a")
+                "OCR清洗后文本为空")
             : (ocrResult.isOk
                ? QStringLiteral(
-                   "\u004f\u0043\u0052\u6587\u672c\u4e0e\u76ee\u6807\u5b8c\u5168\u4e00\u81f4")
+                   "OCR文本与目标完全一致")
                : QStringLiteral(
-                   "\u004f\u0043\u0052\u6587\u672c\u4e0e\u76ee\u6807\u4e0d\u4e00\u81f4"));
+                   "OCR文本与目标不一致"));
     result.elapsedMs = elapsedMs;
 
     const auto appendPolygon = [&result](

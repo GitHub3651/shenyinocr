@@ -28,31 +28,21 @@ enum class DetectionWorkSubmissionResult
 class DetectionWorker
 {
 public:
-    typedef std::function<DetectionResult(
-        const std::shared_ptr<const FrameData> &)> Detector;
-    typedef std::function<DetectionResult(
-        const DetectionWorkItem &)> WorkItemDetector;
+    typedef std::function<DetectionCompletion(
+        const std::shared_ptr<const FrameData> &)> Executor;
     typedef std::function<void(
         const DetectionCompletion &)> CompletionConsumer;
     typedef std::function<void(const QString &)> FailureConsumer;
 
     DetectionWorker(
         std::size_t queueCapacity,
-        const Detector &detector,
-        const CompletionConsumer &completionConsumer,
-        const FailureConsumer &failureConsumer = FailureConsumer());
-    DetectionWorker(
-        std::size_t queueCapacity,
-        const WorkItemDetector &detector,
+        const Executor &executor,
         const CompletionConsumer &completionConsumer,
         const FailureConsumer &failureConsumer = FailureConsumer());
     ~DetectionWorker();
 
     bool start();
-    bool submit(const DetectionWorkItem &item);
     bool submit(const std::shared_ptr<const FrameData> &frame);
-    DetectionWorkSubmissionResult trySubmit(
-        const DetectionWorkItem &item);
     DetectionWorkSubmissionResult trySubmit(
         const std::shared_ptr<const FrameData> &frame);
     void requestStop();
@@ -68,7 +58,7 @@ private:
     void reportFailure(const QString &message) const;
 
     FrameQueue m_queue;
-    WorkItemDetector m_detector;
+    Executor m_executor;
     CompletionConsumer m_completionConsumer;
     FailureConsumer m_failureConsumer;
 

@@ -229,17 +229,6 @@ bool CameraSession::prepareInspection(
         }
         return false;
     }
-    if (!m_positioner.configure(
-                configuration.runPlan.trackingKind,
-                configuration.trackingProfiles,
-                configuration.singleDatePolygon,
-                configuration.singleTrackingTemplate)) {
-        if (errorMessage) {
-            *errorMessage = QStringLiteral("运行定位资源初始化失败。");
-        }
-        return false;
-    }
-
     CameraResult result;
     if (configuration.runPlan.acquisitionKind
             == InspectionAcquisitionKind::HardwareTrigger) {
@@ -572,16 +561,16 @@ InspectionCameraParameterResult CameraSession::applySavedExposure(
 // 函数说明：handleFrame 函数执行对应事件或业务处理。
 void CameraSession::handleFrame(const CameraFrame &frame)
 {
-    cv::Mat image;
-    if (!FramePreprocessor::transform(
-                frame.image,
-                m_configuration.framePreprocess,
-                &image)) {
-        return;
-    }
-    replaceCurrentImage(image);
     const CameraSessionCallbacks callbacks = callbacksSnapshot();
     if (m_preview) {
+        cv::Mat image;
+        if (!FramePreprocessor::transform(
+                    frame.image,
+                    m_configuration.framePreprocess,
+                    &image)) {
+            return;
+        }
+        replaceCurrentImage(image);
         if (!m_previewFramePending.exchange(true)
                 && callbacks.previewFrameReady) {
             callbacks.previewFrameReady(m_previewSessionId, image);
@@ -589,18 +578,7 @@ void CameraSession::handleFrame(const CameraFrame &frame)
         return;
     }
 
-    DetectionPose pose;
-    if (m_configuration.runPlan.trackingKind
-            != InspectionTrackingKind::WholeFrame) {
-        pose = m_positioner.locate(image);
-        if (callbacks.trackingPoseReady) {
-            callbacks.trackingPoseReady(pose);
-        }
-    }
-    if (callbacks.streamingFrameReady) {
-        callbacks.streamingFrameReady(image);
-    }
-    submitFrame(image, pose);
+    submitFrame(frame.image);
 }
 
 // 函数说明：handleCaptureError 函数执行对应事件或业务处理。
@@ -651,8 +629,7 @@ void CameraSession::handleCaptureStopped()
 
 // 函数说明：submitFrame 函数执行对应事件或业务处理。
 void CameraSession::submitFrame(
-    const cv::Mat &image,
-    const DetectionPose &pose)
+    const cv::Mat &image)
 {
     if (image.empty()) {
         return;
@@ -664,13 +641,6 @@ void CameraSession::submitFrame(
     if (!m_runtime->isDetectionWorkerActive()) {
         return;
     }
-    const bool wholeFrame = m_configuration.runPlan.trackingKind
-            == InspectionTrackingKind::WholeFrame;
-    const bool profileMode = m_configuration.runPlan.trackingKind
-            == InspectionTrackingKind::WordProfiles;
-    if (!wholeFrame && !profileMode && !pose.valid) {
-        return;
-    }
     const std::shared_ptr<const FrameData> frame =
             m_runtime->acceptFrame(image);
     if (!frame) {
@@ -679,10 +649,7 @@ void CameraSession::submitFrame(
 
     if (m_configuration.runPlan.acquisitionKind
             == InspectionAcquisitionKind::SoftwareTrigger) {
-        const bool accepted = wholeFrame
-                ? m_runtime->submitDetectionFrame(frame)
-                : m_runtime->submitDetectionWorkItem(
-                    makeDetectionWorkItem(frame, pose));
+        const bool accepted = m_runtime->submitDetectionFrame(frame);
         if (!accepted) {
             qDebug() << "[DETECTION_WORKER] software frame rejected"
                      << frame->productKey.runId
@@ -691,10 +658,8 @@ void CameraSession::submitFrame(
         return;
     }
 
-    const DetectionWorkSubmissionResult submission = wholeFrame
-            ? m_runtime->trySubmitDetectionFrame(frame)
-            : m_runtime->trySubmitDetectionWorkItem(
-                makeDetectionWorkItem(frame, pose));
+    const DetectionWorkSubmissionResult submission =
+            m_runtime->trySubmitDetectionFrame(frame);
     if (submission == DetectionWorkSubmissionResult::QueueFull) {
         const CameraSessionCallbacks callbacks = callbacksSnapshot();
         if (callbacks.enterFault) {

@@ -16,7 +16,6 @@
 
 #include <opencv2/core.hpp>
 
-#include <atomic>
 #include <memory>
 
 #include "application/inspection_application_service.h"
@@ -68,7 +67,8 @@ public:
         QWidget *parent = nullptr);
     ~MainWindow();
 
-    Ui::MainWindow *viewForComposition() const;
+    InspectionPageViewBindings inspectionPageViewBindings() const;
+    MachineSettingsPageViewBindings machineSettingsPageViewBindings() const;
     QTimer *templateAttentionTimerForComposition() const;
     bool *templateAttentionFlagForComposition();
     SettingsEditState *settingsEditStateForComposition();
@@ -197,7 +197,6 @@ private:
     TemplateEditorPage *m_templateEditorPage = nullptr;
 
     using OperationState = OperationUiState;
-    std::atomic<bool> m_resultBoundDisplayActive{false};
     bool m_applicationExitInProgress = false;
     InspectionPage *m_inspectionPage = nullptr;
     bool m_faultAlarmPresented = false;

@@ -15,7 +15,7 @@
 #include "devices/plc/vendor/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
 #include "application/template_application_service.h"
-#include "runtime/pipeline_registry.h"
+#include "detection/detection_registry.h"
 #include "application/settings_application_service.h"
 #include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_runtime.h"
@@ -52,11 +52,11 @@ void showRuntimeGuardExitMessage(const QString &message)
 {
     QMessageBox messageBox(
                 QMessageBox::Critical,
-                QStringLiteral("\u63D0\u793A"),
+                QStringLiteral("提示"),
                 message,
                 QMessageBox::NoButton);
     messageBox.addButton(
-                QStringLiteral("\u786E\u8BA4\u9000\u51FA"),
+                QStringLiteral("确认退出"),
                 QMessageBox::AcceptRole);
     messageBox.setWindowModality(Qt::ApplicationModal);
     messageBox.exec();
@@ -110,8 +110,8 @@ int ApplicationStartup::run(int argc, char *argv[])
 
     if (!RuntimeGuard::check()) {
         showRuntimeGuardExitMessage(
-                    QStringLiteral("\u7CFB\u7EDF\u521D\u59CB\u5316\u5931\u8D25\uFF0C"
-                                   "\u8BF7\u8054\u7CFB\u4F9B\u5E94\u5546\u3002"));
+                    QStringLiteral("系统初始化失败，"
+                                   "请联系供应商。"));
         return -1;
     }
 
@@ -122,8 +122,8 @@ int ApplicationStartup::run(int argc, char *argv[])
                 []() {
         if (!RuntimeGuard::check()) {
             showRuntimeGuardExitMessage(
-                        QStringLiteral("\u7A0B\u5E8F\u51FA\u9519\uFF0C\u5373\u5C06\u9000\u51FA\uFF0C"
-                                       "\u8BF7\u8054\u7CFB\u4F9B\u5E94\u5546\u3002"));
+                        QStringLiteral("程序出错，即将退出，"
+                                       "请联系供应商。"));
             QCoreApplication::quit();
         }
     });
@@ -134,7 +134,7 @@ int ApplicationStartup::run(int argc, char *argv[])
         QMessageBox::warning(
                     nullptr,
                     QStringLiteral("Warning"),
-                    QStringLiteral("\u7A0B\u5E8F\u8FD0\u884C\u4E2D\u907F\u514D\u91CD\u590D\u6253\u5F00"));
+                    QStringLiteral("程序运行中避免重复打开"));
         return 0;
     }
 
@@ -212,14 +212,14 @@ int ApplicationStartup::run(int argc, char *argv[])
                     new PaddleOcrEngine(ocrConfigPath));
         const std::shared_ptr<IBarcodeDecoder> barcodeDecoder(
                     new BarcodeDecoderAdapter);
-        const std::shared_ptr<PipelineRegistry> pipelineRegistry(
-                    new PipelineRegistry(ocrEngine, barcodeDecoder));
+        const std::shared_ptr<DetectionRegistry> detectionRegistry(
+                    new DetectionRegistry(ocrEngine, barcodeDecoder));
         const std::shared_ptr<InspectionRuntime>
                 runtime(
                     new InspectionRuntime(
                         InspectionRuntime::RunIdFactory(),
                         plcController,
-                        pipelineRegistry));
+                        detectionRegistry));
         const std::shared_ptr<CameraSession> cameraSession(
                     new CameraSession(
                         cameraDevice,
@@ -246,12 +246,12 @@ int ApplicationStartup::run(int argc, char *argv[])
                     templateService);
         inspectionPage.reset(new InspectionPage(
                     &window,
-                    window.viewForComposition(),
+                    window.inspectionPageViewBindings(),
                     window.templateAttentionTimerForComposition(),
                     window.templateAttentionFlagForComposition(),
                     window.inspectionPageCallbacks()));
         machineSettingsPage.reset(new MachineSettingsPage(
-                    window.viewForComposition(),
+                    window.machineSettingsPageViewBindings(),
                     settingsService.get(),
                     window.settingsEditStateForComposition(),
                     window.selectedDirectoryForComposition(),

@@ -127,7 +127,7 @@ protected:
 
         if (m_image.isNull()) {
             painter.setPen(Qt::gray);
-            painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("\u6CA1\u6709\u53EF\u663E\u793A\u7684\u55B7\u7801\u533A\u57DF\u56FE\u50CF"));
+            painter.drawText(rect(), Qt::AlignCenter, QStringLiteral("没有可显示的喷码区域图像"));
             return;
         }
 
@@ -294,7 +294,7 @@ QMap<QString, QImage> CharacterTemplateEditorDialog::characterImages() const
 // 函数说明：buildUi 函数创建、准备或启动对应流程。
 void CharacterTemplateEditorDialog::buildUi()
 {
-    setWindowTitle(QStringLiteral("\u5206\u5272\u5B57\u7B26\u6A21\u677F"));
+    setWindowTitle(QStringLiteral("分割字符模板"));
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     resize(920, 760);
 
@@ -316,7 +316,7 @@ void CharacterTemplateEditorDialog::buildUi()
     contentLayout->addLayout(leftLayout, 1);
     contentLayout->addLayout(rightLayout);
 
-    QLabel *drawHint = new QLabel(QStringLiteral("\u5728\u55B7\u7801\u533A\u57DF\u56FE\u50CF\u4E0A\u6309\u4F4F\u9F20\u6807\u5DE6\u952E\u62D6\u62FD\uFF0C\u9010\u4E2A\u6846\u9009\u5B57\u7B26\u3002\n\u5B57\u7B26\u6846\u9009\u987A\u5E8F\u4E0D\u9650\uFF0C\u7CFB\u7EDF\u4F1A\u5728\u547D\u540D\u524D\u81EA\u52A8\u6309\u4F4D\u7F6E\u6392\u5E8F\u3002"), m_drawPage);
+    QLabel *drawHint = new QLabel(QStringLiteral("在喷码区域图像上按住鼠标左键拖拽，逐个框选字符。\n字符框选顺序不限，系统会在命名前自动按位置排序。"), m_drawPage);
     drawHint->setWordWrap(true);
     drawHint->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
     leftLayout->addWidget(drawHint);
@@ -331,7 +331,7 @@ void CharacterTemplateEditorDialog::buildUi()
 
     QImage sampleImage(":/sample1.png");
     if (!sampleImage.isNull()) {
-        QLabel *sampleTitle = new QLabel(QStringLiteral("\u7ED3\u679C\u793A\u610F\u56FE\uFF1A"), m_drawPage);
+        QLabel *sampleTitle = new QLabel(QStringLiteral("结果示意图："), m_drawPage);
         sampleTitle->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
         leftLayout->addWidget(sampleTitle);
 
@@ -344,7 +344,7 @@ void CharacterTemplateEditorDialog::buildUi()
         leftLayout->addWidget(sampleLabel);
     }
 
-    QLabel *existingTitle = new QLabel(QStringLiteral("\u5B57\u7B26\u6A21\u677F\u9884\u89C8\uFF1A"), m_drawPage);
+    QLabel *existingTitle = new QLabel(QStringLiteral("字符模板预览："), m_drawPage);
     existingTitle->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
     rightLayout->addWidget(existingTitle);
 
@@ -363,10 +363,10 @@ void CharacterTemplateEditorDialog::buildUi()
     drawLayout->addLayout(contentLayout, 1);
 
     QHBoxLayout *drawButtonLayout = new QHBoxLayout();
-    QPushButton *undoButton = new QPushButton(QStringLiteral("\u64A4\u9500\u4E0A\u4E00\u4E2A\u5B57\u7B26\u6846"), m_drawPage);
-    QPushButton *clearButton = new QPushButton(QStringLiteral("\u6E05\u7A7A\u6240\u6709\u5B57\u7B26\u6846"), m_drawPage);
-    QPushButton *nextButton = new QPushButton(QStringLiteral("\u4E0B\u4E00\u6B65\u547D\u540D"), m_drawPage);
-    QPushButton *cancelButton = new QPushButton(QStringLiteral("\u53D6\u6D88"), m_drawPage);
+    QPushButton *undoButton = new QPushButton(QStringLiteral("撤销上一个字符框"), m_drawPage);
+    QPushButton *clearButton = new QPushButton(QStringLiteral("清空所有字符框"), m_drawPage);
+    QPushButton *nextButton = new QPushButton(QStringLiteral("下一步命名"), m_drawPage);
+    QPushButton *cancelButton = new QPushButton(QStringLiteral("取消"), m_drawPage);
     drawButtonLayout->addWidget(undoButton);
     drawButtonLayout->addWidget(clearButton);
     drawButtonLayout->addStretch();
@@ -385,8 +385,8 @@ void CharacterTemplateEditorDialog::buildUi()
         m_sortedBoxes = m_cropLabel->items();
         if (m_sortedBoxes.isEmpty()) {
             QMessageBox::warning(this,
-                                 QStringLiteral("\u63D0\u793A"),
-                                 QStringLiteral("\u8BF7\u5148\u6846\u9009\u81F3\u5C11\u4E00\u4E2A\u5B57\u7B26\u3002"));
+                                 QStringLiteral("提示"),
+                                 QStringLiteral("请先框选至少一个字符。"));
             return;
         }
 
@@ -407,7 +407,7 @@ void CharacterTemplateEditorDialog::buildUi()
     namePageLayout->setContentsMargins(10, 10, 10, 10);
     namePageLayout->setSpacing(8);
 
-    QLabel *nameHint = new QLabel(QStringLiteral("\u8BF7\u4E3A\u6BCF\u4E2A\u5B57\u7B26\u56FE\u7247\u586B\u5199\u5B57\u7B26\u540D\u79F0\u3002\u4F8B\u5982\u5B57\u7B26 1 \u53EA\u586B\u5199 1\uFF0C\u91CD\u590D\u540D\u79F0\u4F1A\u81EA\u52A8\u751F\u6210 1(1)\u30011(2)\u3002"), m_namePage);
+    QLabel *nameHint = new QLabel(QStringLiteral("请为每个字符图片填写字符名称。例如字符 1 只填写 1，重复名称会自动生成 1(1)、1(2)。"), m_namePage);
     nameHint->setWordWrap(true);
     nameHint->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
     namePageLayout->addWidget(nameHint);
@@ -422,9 +422,9 @@ void CharacterTemplateEditorDialog::buildUi()
     namePageLayout->addWidget(scrollArea, 1);
 
     QHBoxLayout *nameButtonLayout = new QHBoxLayout();
-    QPushButton *backButton = new QPushButton(QStringLiteral("\u8FD4\u56DE\u6846\u9009"), m_namePage);
-    QPushButton *saveButton = new QPushButton(QStringLiteral("\u4FDD\u5B58\u5B57\u7B26\u6A21\u677F"), m_namePage);
-    QPushButton *cancelNameButton = new QPushButton(QStringLiteral("\u53D6\u6D88"), m_namePage);
+    QPushButton *backButton = new QPushButton(QStringLiteral("返回框选"), m_namePage);
+    QPushButton *saveButton = new QPushButton(QStringLiteral("保存字符模板"), m_namePage);
+    QPushButton *cancelNameButton = new QPushButton(QStringLiteral("取消"), m_namePage);
     nameButtonLayout->addWidget(backButton);
     nameButtonLayout->addStretch();
     nameButtonLayout->addWidget(saveButton);
@@ -483,10 +483,10 @@ void CharacterTemplateEditorDialog::rebuildNamePage()
         previewLabel->setPixmap(QPixmap::fromImage(preview).scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         QLineEdit *nameEdit = new QLineEdit(rowWidget);
-        nameEdit->setPlaceholderText(QStringLiteral("\u8BF7\u8F93\u5165\u5B57\u7B26\u540D\u79F0"));
+        nameEdit->setPlaceholderText(QStringLiteral("请输入字符名称"));
         nameEdit->setText(m_sortedBoxes.at(i).name.trimmed());
 
-        QLabel *errorLabel = new QLabel(QStringLiteral("\u5B57\u7B26\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A"), rowWidget);
+        QLabel *errorLabel = new QLabel(QStringLiteral("字符名称不能为空"), rowWidget);
         errorLabel->setStyleSheet("QLabel { color: #d93025; }");
         errorLabel->hide();
 
@@ -550,7 +550,7 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
 
     const QList<CharacterBox> boxes = m_cropLabel ? m_cropLabel->previewItems() : m_initialBoxes;
     if (boxes.isEmpty()) {
-        QLabel *emptyLabel = new QLabel(QStringLiteral("\u5F53\u524D\u8FD8\u6CA1\u6709\u5B57\u7B26\u6846\uFF0C\u8BF7\u5728\u5DE6\u4FA7\u6846\u9009\u5B57\u7B26\u3002"));
+        QLabel *emptyLabel = new QLabel(QStringLiteral("当前还没有字符框，请在左侧框选字符。"));
         emptyLabel->setWordWrap(true);
         emptyLabel->setStyleSheet("QLabel { color: #909399; }");
         m_previewGrid->addWidget(emptyLabel, 0, 0);
@@ -578,7 +578,7 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
         }
 
         const QString boxName = box.name.trimmed();
-        QString displayText = boxName.isEmpty() ? QStringLiteral("\u672A\u547D\u540D") : boxName;
+        QString displayText = boxName.isEmpty() ? QStringLiteral("未命名") : boxName;
         if (!boxName.isEmpty()) {
             const QString fileName = nextAvailableFileName(boxName, reservedFileNames);
             reservedFileNames.append(fileName);
@@ -654,7 +654,7 @@ void CharacterTemplateEditorDialog::refreshSaveNamePreviews()
 
         const QString fileName = nextAvailableFileName(baseName, reservedFileNames);
         reservedFileNames.append(fileName);
-        label->setText(QStringLiteral("\u5C06\u4FDD\u5B58\u4E3A\uFF1A%1").arg(fileName));
+        label->setText(QStringLiteral("将保存为：%1").arg(fileName));
     }
 }
 
@@ -665,8 +665,8 @@ bool CharacterTemplateEditorDialog::saveTemplates()
             || m_nameEdits.size() != m_sortedBoxes.size()) {
         QMessageBox::warning(
                     this,
-                    QStringLiteral("\u63D0\u793A"),
-                    QStringLiteral("\u6CA1\u6709\u53EF\u4FDD\u5B58\u7684\u5B57\u7B26\u6A21\u677F\u3002"));
+                    QStringLiteral("提示"),
+                    QStringLiteral("没有可保存的字符模板。"));
         return false;
     }
 
@@ -691,8 +691,8 @@ bool CharacterTemplateEditorDialog::saveTemplates()
         if (invalid) {
             QMessageBox::warning(
                         this,
-                        QStringLiteral("\u63D0\u793A"),
-                        QStringLiteral("\u5B57\u7B26\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A\u6216\u5305\u542B \\ / : * ? \" < > |\u3002"));
+                        QStringLiteral("提示"),
+                        QStringLiteral("字符名称不能为空或包含 \\ / : * ? \" < > |。"));
             return false;
         }
     }

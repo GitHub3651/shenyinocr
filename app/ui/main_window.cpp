@@ -87,9 +87,9 @@ MainWindow::MainWindow(
                         operationUiState() == OperationState::Detecting
                         ? (ui->checkBox_hardwareTriggerEnabled->isChecked()
                            ? QString::fromWCharArray(
-                               L"\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d")
+                               L"触发模式运行中")
                            : QString::fromWCharArray(
-                               L"\u8f6f\u89e6\u53d1\u6a21\u5f0f\u8fd0\u884c\u4e2d"))
+                               L"软触发模式运行中"))
                         : QString());
         }
     };
@@ -115,8 +115,8 @@ MainWindow::MainWindow(
         rightPanelHandle->setCursor(Qt::SplitVCursor);
         rightPanelHandle->setToolTip(
                     QString::fromWCharArray(
-                        L"\u4e0a\u4e0b\u62d6\u52a8"
-                        L"\u8c03\u6574\u533a\u57df\u9ad8\u5ea6"));
+                        L"上下拖动"
+                        L"调整区域高度"));
 
         QHBoxLayout *handleLayout =
                 new QHBoxLayout(rightPanelHandle);
@@ -125,7 +125,7 @@ MainWindow::MainWindow(
 
         QLabel *handleGrip =
                 new QLabel(QString::fromWCharArray(
-                               L"\u2195  \u62d6\u52a8\u8c03\u6574"),
+                               L"↕  拖动调整"),
                            rightPanelHandle);
         handleGrip->setObjectName("label_mainContentSplitterGrip");
         handleGrip->setAlignment(Qt::AlignCenter);
@@ -206,16 +206,6 @@ MainWindow::MainWindow(
             &MainWindow::checkInspectionPlcHealth);
     m_plcHealthTimer->start();
     connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::streamingFrameReady,
-            this,
-            [this](cv::Mat image) {
-        if (image.empty() || m_resultBoundDisplayActive.load()) {
-            return;
-        }
-        slot_displayAndDetect(&image);
-    },
-    Qt::QueuedConnection);
-    connect(m_inspectionApplicationService.get(),
             &InspectionApplicationService::captureStopped,
             this,
             [this](bool preview) {
@@ -225,9 +215,8 @@ MainWindow::MainWindow(
         if (operationUiState() == OperationState::Detecting) {
             m_inspectionApplicationService
                     ->completeUnexpectedAcquisitionStop();
-            m_resultBoundDisplayActive.store(false);
             m_barcodeWordRunActive = false;
-            ui->label_runtimeStatus->setText("\u8bc6\u522b\u7ebf\u7a0b\u5df2\u505c\u6b62");
+            ui->label_runtimeStatus->setText("识别线程已停止");
             updateOperationUiState();
         }
     },
@@ -243,10 +232,78 @@ MainWindow::MainWindow(
     qDebug() << "MainWindow shell constructed";
 }
 
-// 函数说明：viewForComposition 函数实现名称所表示的处理步骤。
-Ui::MainWindow *MainWindow::viewForComposition() const
+InspectionPageViewBindings MainWindow::inspectionPageViewBindings() const
 {
-    return ui;
+    InspectionPageViewBindings view;
+    view.imageLabel_inspection = ui->imageLabel_inspection;
+    view.label_recognitionText = ui->label_recognitionText;
+    view.label_runtimeStatus = ui->label_runtimeStatus;
+    view.label_verdictResult = ui->label_verdictResult;
+    view.lineEdit_currentRecipeName = ui->lineEdit_currentRecipeName;
+    view.lineEdit_detectionDuration = ui->lineEdit_detectionDuration;
+    view.lineEdit_ngCount = ui->lineEdit_ngCount;
+    view.lineEdit_passRate = ui->lineEdit_passRate;
+    view.lineEdit_totalCount = ui->lineEdit_totalCount;
+    view.pushButton_saveTemplate = ui->pushButton_saveTemplate;
+    view.toolButton_closeCamera = ui->toolButton_closeCamera;
+    view.toolButton_createTemplate = ui->toolButton_createTemplate;
+    view.toolButton_openCamera = ui->toolButton_openCamera;
+    view.toolButton_startInspection = ui->toolButton_startInspection;
+    view.toolButton_stopInspection = ui->toolButton_stopInspection;
+    return view;
+}
+
+MachineSettingsPageViewBindings
+MainWindow::machineSettingsPageViewBindings() const
+{
+    MachineSettingsPageViewBindings view;
+    view.checkBox_hardwareTriggerEnabled = ui->checkBox_hardwareTriggerEnabled;
+    view.comboBox_colorChannel = ui->comboBox_colorChannel;
+    view.comboBox_detectionMode = ui->comboBox_detectionMode;
+    view.comboBox_imageRotation = ui->comboBox_imageRotation;
+    view.comboBox_imageSaveContent = ui->comboBox_imageSaveContent;
+    view.comboBox_imageSaveRange = ui->comboBox_imageSaveRange;
+    view.comboBox_plcTriggerMode = ui->comboBox_plcTriggerMode;
+    view.label_cameraExposure = ui->label_cameraExposure;
+    view.label_cameraGain = ui->label_cameraGain;
+    view.label_colorChannel = ui->label_colorChannel;
+    view.label_detectionMode = ui->label_detectionMode;
+    view.label_hardwareTriggerDelay = ui->label_hardwareTriggerDelay;
+    view.label_imageRotation = ui->label_imageRotation;
+    view.label_imageSaveContent = ui->label_imageSaveContent;
+    view.label_imageSavePath = ui->label_imageSavePath;
+    view.label_imageSaveRange = ui->label_imageSaveRange;
+    view.label_photoDistance = ui->label_photoDistance;
+    view.label_photoTime = ui->label_photoTime;
+    view.label_plcIpAddress = ui->label_plcIpAddress;
+    view.label_plcRackSlot = ui->label_plcRackSlot;
+    view.label_plcTriggerMode = ui->label_plcTriggerMode;
+    view.label_rejectDistance = ui->label_rejectDistance;
+    view.label_rejectPosition = ui->label_rejectPosition;
+    view.label_rejectTime = ui->label_rejectTime;
+    view.lineEdit_cameraGain = ui->lineEdit_cameraGain;
+    view.lineEdit_hardwareTriggerDelay = ui->lineEdit_hardwareTriggerDelay;
+    view.lineEdit_imageSavePath = ui->lineEdit_imageSavePath;
+    view.lineEdit_imageThreshold = ui->lineEdit_imageThreshold;
+    view.lineEdit_photoDistance = ui->lineEdit_photoDistance;
+    view.lineEdit_photoTime = ui->lineEdit_photoTime;
+    view.lineEdit_plcIpAddress = ui->lineEdit_plcIpAddress;
+    view.lineEdit_plcRack = ui->lineEdit_plcRack;
+    view.lineEdit_plcSlot = ui->lineEdit_plcSlot;
+    view.lineEdit_rejectDistance = ui->lineEdit_rejectDistance;
+    view.lineEdit_rejectPosition = ui->lineEdit_rejectPosition;
+    view.lineEdit_rejectTime = ui->lineEdit_rejectTime;
+    view.lineEdit_tissueRoughnessThreshold = ui->lineEdit_tissueRoughnessThreshold;
+    view.pushButton_applyCameraExposure = ui->pushButton_applyCameraExposure;
+    view.pushButton_applyCameraGain = ui->pushButton_applyCameraGain;
+    view.pushButton_applyPhotoDistance = ui->pushButton_applyPhotoDistance;
+    view.pushButton_applyPlcProcessParameters = ui->pushButton_applyPlcProcessParameters;
+    view.pushButton_applyPlcTriggerMode = ui->pushButton_applyPlcTriggerMode;
+    view.pushButton_connectPlc = ui->pushButton_connectPlc;
+    view.pushButton_disconnectPlc = ui->pushButton_disconnectPlc;
+    view.spinBox_cameraExposure = ui->spinBox_cameraExposure;
+    view.splitter_mainContent = ui->splitter_mainContent;
+    return view;
 }
 
 // 函数说明：templateAttentionTimerForComposition 函数实现名称所表示的处理步骤。
@@ -457,6 +514,7 @@ void MainWindow::attachPages(
 
     m_machineSettingsPage->setupNumericInputValidators();
     setupNonPersistentDefaults();
+    m_machineSettingsPage->setupBindings();
     m_machineSettingsPage->initialize(
                 m_settingsApplicationService->current());
     m_templateApplicationService->replacePublishedRecipeIdsByMode(
@@ -464,7 +522,6 @@ void MainWindow::attachPages(
     m_currentDetectModeId = currentDetectModeId();
     restoreTemplatesForMode(m_currentDetectModeId, false);
     setupDetectModeChangeTracking();
-    m_machineSettingsPage->setupBindings();
     m_machineSettingsPage->clearAllDirty();
     clearRecipeProfileDirty();
     updateOperationUiState();

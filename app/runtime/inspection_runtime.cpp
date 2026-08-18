@@ -13,13 +13,13 @@
 InspectionRuntime::InspectionRuntime(
     const RunIdFactory &runIdFactory,
     const std::shared_ptr<InspectionPlcController> &plcController,
-    const std::shared_ptr<PipelineRegistry> &pipelineRegistry)
+    const std::shared_ptr<DetectionRegistry> &detectionRegistry)
     : m_runIdFactory(runIdFactory),
       m_plcController(plcController),
-      m_pipelineRegistry(pipelineRegistry)
+      m_detectionRegistry(detectionRegistry)
 {
-    if (!m_pipelineRegistry) {
-        throw std::invalid_argument("PipelineRegistry is required");
+    if (!m_detectionRegistry) {
+        throw std::invalid_argument("DetectionRegistry is required");
     }
     m_resultService.reset(new ResultService(*this));
 }
@@ -47,7 +47,8 @@ QString InspectionRuntime::createRunId() const
 QString InspectionRuntime::beginStart(
     const MachineSettings &machineSettings,
     const PreparedRecipeSnapshot &preparedRecipe,
-    const InspectionProfileSnapshot &profileSnapshot)
+    const DetectionProfileSnapshot &profileSnapshot,
+    const FramePreprocessSettings &framePreprocess)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Idle
@@ -63,7 +64,8 @@ QString InspectionRuntime::beginStart(
         QDateTime::currentDateTimeUtc(),
         machineSettings,
         preparedRecipe,
-        profileSnapshot));
+        profileSnapshot,
+        framePreprocess));
     m_acceptedProductSequence = 0;
     m_completedProductCount = 0;
     m_lastCompletedProductSequence = 0;
@@ -318,19 +320,19 @@ PlcOperationResult InspectionRuntime::writePlcResultValue(std::uint8_t value)
             : PlcOperationResult(-1);
 }
 
-// 函数说明：preparePipeline 函数创建、准备或启动对应流程。
-BarcodeRuntimeReadiness InspectionRuntime::preparePipeline(
+// 函数说明：prepareDetection 函数创建、准备或启动对应流程。
+DetectionRuntimeReadiness InspectionRuntime::prepareDetection(
     DetectionMode mode) const
 {
-    return m_pipelineRegistry->prepare(mode);
+    return m_detectionRegistry->prepare(mode);
 }
 
-// 函数说明：startPipeline 函数创建、准备或启动对应流程。
-bool InspectionRuntime::startPipeline(
+// 函数说明：startDetection 函数创建、准备或启动对应流程。
+bool InspectionRuntime::startDetection(
     const ResultServiceRunConfiguration &resultConfiguration,
     QString *errorMessage)
 {
-    PipelineRegistryRequest request;
+    DetectionRegistryRequest request;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_state != InspectionRuntimeState::Starting
@@ -345,6 +347,7 @@ bool InspectionRuntime::startPipeline(
         request.mode = m_runContext->preparedRecipe->recipe->detectionMode;
         request.preparedRecipe = m_runContext->preparedRecipe;
         request.profileSnapshot = m_runContext->profileSnapshot;
+        request.framePreprocess = m_runContext->framePreprocess;
     }
 
     const DetectionWorker::FailureConsumer failureConsumer =
@@ -353,10 +356,8 @@ bool InspectionRuntime::startPipeline(
                     InspectionFaultReason::RuntimeInvariantViolation,
                     message);
     };
-    const PipelineCreationResult creation = m_pipelineRegistry->create(
-                request,
-                m_resultService->pipelineConsumers(),
-                failureConsumer);
+    const DetectionPipelineCreationResult creation =
+            m_detectionRegistry->create(request);
     if (!creation.isAccepted()) {
         if (errorMessage) {
             *errorMessage = creation.errorMessage;
@@ -364,26 +365,29 @@ bool InspectionRuntime::startPipeline(
         return false;
     }
 
+    const std::shared_ptr<DetectionWorker> worker(new DetectionWorker(
+        1, creation.executor, m_resultService->completionConsumer(),
+        failureConsumer));
     waitForDetectionWorkerStop();
     {
         std::lock_guard<std::mutex> workerLock(m_detectionWorkerMutex);
         std::lock_guard<std::mutex> stateLock(m_mutex);
         if (m_state != InspectionRuntimeState::Starting
                 || !m_uiCompletionMailbox.reopen()
-                || !creation.worker->start()) {
+                || !worker->start()) {
             m_uiCompletionMailbox.cancel();
             if (errorMessage) {
                 *errorMessage = creation.startFailureMessage;
             }
             return false;
         }
-        m_detectionWorker = creation.worker;
+        m_detectionWorker = worker;
         m_detectionWorkerActive.store(true);
         m_resultService->configureRun(resultConfiguration);
     }
     qDebug() << "[DETECTION_WORKER]" << creation.workerLogName
              << "worker started queueCapacity="
-             << static_cast<qulonglong>(creation.worker->queueCapacity());
+             << static_cast<qulonglong>(worker->queueCapacity());
     return true;
 }
 
@@ -455,7 +459,10 @@ DetectionCompletion InspectionRuntime::complete(
     }
     const std::shared_ptr<const FrameData> acceptedFrame =
             accepted->second.lock();
-    if (!acceptedFrame || acceptedFrame.get() != frame.get()) {
+    if (!acceptedFrame
+            || acceptedFrame->productKey.runId != frame->productKey.runId
+            || acceptedFrame->productKey.sequence
+               != frame->productKey.sequence) {
         return DetectionCompletion();
     }
 
@@ -560,20 +567,6 @@ bool InspectionRuntime::submitDetectionFrame(
             && worker->submit(frame);
 }
 
-// 函数说明：submitDetectionWorkItem 函数执行对应事件或业务处理。
-bool InspectionRuntime::submitDetectionWorkItem(
-    const DetectionWorkItem &item)
-{
-    std::shared_ptr<DetectionWorker> worker;
-    {
-        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
-        worker = m_detectionWorker;
-    }
-    return m_detectionWorkerActive.load()
-            && worker
-            && worker->submit(item);
-}
-
 // 函数说明：trySubmitDetectionFrame 函数实现名称所表示的处理步骤。
 DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionFrame(
     const std::shared_ptr<const FrameData> &frame)
@@ -586,20 +579,6 @@ DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionFrame(
     return !m_detectionWorkerActive.load() || !worker
             ? DetectionWorkSubmissionResult::NotRunning
             : worker->trySubmit(frame);
-}
-
-// 函数说明：trySubmitDetectionWorkItem 函数实现名称所表示的处理步骤。
-DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionWorkItem(
-    const DetectionWorkItem &item)
-{
-    std::shared_ptr<DetectionWorker> worker;
-    {
-        std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
-        worker = m_detectionWorker;
-    }
-    return !m_detectionWorkerActive.load() || !worker
-            ? DetectionWorkSubmissionResult::NotRunning
-            : worker->trySubmit(item);
 }
 
 // 函数说明：submitUiCompletion 函数执行对应事件或业务处理。

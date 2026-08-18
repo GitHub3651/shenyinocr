@@ -4,6 +4,8 @@
 // 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 
+#include "contracts/detection_mode.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -156,12 +158,12 @@ bool isCanonicalUuid(const QString &value)
 // 函数说明：detectionModeJsonIds 函数执行对应事件或业务处理。
 QStringList detectionModeJsonIds()
 {
-    return QStringList()
-            << QStringLiteral("stamp")
-            << QStringLiteral("word")
-            << QStringLiteral("ocr")
-            << QStringLiteral("tissue")
-            << QStringLiteral("barcodeWord");
+    QStringList ids;
+    for (const DetectionModeDescriptor &descriptor :
+         detectionModeDescriptors()) {
+        ids.append(QLatin1String(descriptor.recipeId));
+    }
+    return ids;
 }
 
 // 函数说明：imageSaveRangeJsonIds 函数实现名称所表示的处理步骤。

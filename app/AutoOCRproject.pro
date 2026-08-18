@@ -72,8 +72,8 @@ SOURCES += \
     runtime/capture_worker.cpp \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
-    runtime/pipeline_registry.cpp \
-    runtime/inspection_profile_snapshot.cpp \
+    detection/detection_registry.cpp \
+    detection/detection_profile_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_plc_controller.cpp \
     runtime/inspection_runtime.cpp \
@@ -159,8 +159,8 @@ HEADERS += \
     runtime/capture_worker.h \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
-    runtime/pipeline_registry.h \
-    runtime/inspection_profile_snapshot.h \
+    detection/detection_registry.h \
+    detection/detection_profile_snapshot.h \
     application/template_editor_contract.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_plc_controller.h \

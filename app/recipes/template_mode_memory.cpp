@@ -8,19 +8,11 @@
 // 函数说明：modeIdForIndex 函数实现名称所表示的处理步骤。
 QString TemplateModeMemory::modeIdForIndex(int index)
 {
-    static const DetectionMode modes[] = {
-        DetectionMode::Stamp,
-        DetectionMode::Word,
-        DetectionMode::Ocr,
-        DetectionMode::Tissue,
-        DetectionMode::BarcodeWord
-    };
-    const int modeCount = static_cast<int>(
-                sizeof(modes) / sizeof(modes[0]));
-    return detectionModeUiId(
-                index >= 0 && index < modeCount
-                ? modes[index]
-                : DetectionMode::Word);
+    const QVector<DetectionModeDescriptor> &descriptors =
+            detectionModeDescriptors();
+    return index >= 0 && index < descriptors.size()
+            ? QLatin1String(descriptors.at(index).uiId)
+            : detectionModeUiId(DetectionMode::Word);
 }
 
 QMap<QString, QString> &TemplateModeMemory::publishedRecipeIdsByMode()

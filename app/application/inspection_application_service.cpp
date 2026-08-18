@@ -36,39 +36,6 @@ ApplicationRuntimeState applicationState(
     }
 }
 
-// 函数说明：modeKind 函数实现名称所表示的处理步骤。
-InspectionStartModeKind modeKind(DetectionMode mode)
-{
-    switch (mode) {
-    case DetectionMode::Tissue:
-        return InspectionStartModeKind::Tissue;
-    case DetectionMode::Word:
-        return InspectionStartModeKind::WordProfiles;
-    case DetectionMode::BarcodeWord:
-        return InspectionStartModeKind::BarcodeWordProfiles;
-    case DetectionMode::Stamp:
-    case DetectionMode::Ocr:
-    default:
-        return InspectionStartModeKind::SingleTemplate;
-    }
-}
-
-// 函数说明：trackingKind 函数实现名称所表示的处理步骤。
-InspectionTrackingKind trackingKind(DetectionMode mode)
-{
-    switch (mode) {
-    case DetectionMode::Tissue:
-        return InspectionTrackingKind::WholeFrame;
-    case DetectionMode::Word:
-    case DetectionMode::BarcodeWord:
-        return InspectionTrackingKind::WordProfiles;
-    case DetectionMode::Stamp:
-    case DetectionMode::Ocr:
-    default:
-        return InspectionTrackingKind::SingleTemplate;
-    }
-}
-
 // 函数说明：hasCompleteCharacterTemplates 函数检查相关状态并返回判断结果。
 bool hasCompleteCharacterTemplates(
     const PreparedRecipeProfile &profile)
@@ -95,45 +62,15 @@ bool hasCompleteCharacterTemplates(
     return true;
 }
 
-// 函数说明：profileSnapshotFromPreparedRecipe 函数实现名称所表示的处理步骤。
-InspectionProfileSnapshot profileSnapshotFromPreparedRecipe(
-    const PreparedRecipe &prepared)
-{
-    std::vector<InspectionProfileSource> sources;
-    sources.reserve(static_cast<std::size_t>(prepared.profiles.size()));
-    for (const PreparedRecipeProfile &profile : prepared.profiles) {
-        InspectionProfileSource source;
-        source.name = profile.definition.name;
-        source.trackingTemplate = profile.trackingTemplate;
-        source.barcodePoly = profile.barcodePolygon;
-        source.datePoly = profile.datePolygon;
-        source.targetText = profile.definition.targetText;
-        source.imageThreshold =
-                profile.definition.imageThresholdPercent;
-        source.digitTemplates = profile.characterTemplates;
-        source.digitTemplateTargetIndexes =
-                profile.characterTemplateTargetIndexes;
-        source.barcodeOptions.formatMask =
-                profile.definition.barcodeParameters.formatMask;
-        source.barcodeOptions.roiPaddingPercent =
-                profile.definition.barcodeParameters.roiPaddingPercent;
-        source.barcodeOptions.maxDecodeTimeMs =
-                profile.definition.barcodeParameters.maxDecodeTimeMs;
-        source.barcodeOptions.enableFallback =
-                profile.definition.barcodeParameters.enableFallback;
-        sources.push_back(source);
-    }
-    return InspectionProfileSnapshotBuilder::create(sources);
-}
-
 // 函数说明：resourceInputFor 函数实现名称所表示的处理步骤。
 InspectionStartResourceInput resourceInputFor(
     const PreparedRecipe &prepared,
     DetectionMode mode,
-    const BarcodeRuntimeReadiness &barcode)
+    const DetectionRuntimeReadiness &detectionReadiness)
 {
     InspectionStartResourceInput input;
-    input.modeKind = modeKind(mode);
+    input.mode = mode;
+    const DetectionModeDescriptor &descriptor = detectionModeDescriptor(mode);
     input.preparedRecipeReady = static_cast<bool>(prepared.recipe);
     if (prepared.profiles.isEmpty()) {
         return input;
@@ -142,19 +79,18 @@ InspectionStartResourceInput resourceInputFor(
     const PreparedRecipeProfile &first = prepared.profiles.first();
     input.trackingTemplateReady = !first.trackingTemplate.empty();
     input.dateRegionReady = first.datePolygon.size() >= 3;
-    input.targetTextRequired = mode == DetectionMode::Stamp
-            || mode == DetectionMode::Ocr;
+    input.targetTextRequired = descriptor.requiresTargetText;
     input.targetTextReady =
             !first.definition.targetText.trimmed().isEmpty();
     input.characterTemplatesRequired =
-            mode == DetectionMode::Stamp;
+            descriptor.requiresCharacterTemplates;
     input.characterTemplatesReady =
             hasCompleteCharacterTemplates(first);
-    input.barcodeDecoderReady = barcode.ready;
-    input.barcodeDecoderError = barcode.errorMessage;
+    input.barcodeDecoderReady = detectionReadiness.ready;
+    input.barcodeDecoderError = detectionReadiness.errorMessage;
 
-    if (mode == DetectionMode::Word
-            || mode == DetectionMode::BarcodeWord) {
+    if (descriptor.trackingKind
+            == DetectionTrackingKind::MultipleProfiles) {
         for (const PreparedRecipeProfile &profile : prepared.profiles) {
             InspectionStartProfileReadiness readiness;
             readiness.displayName = profile.definition.name;
@@ -163,7 +99,7 @@ InspectionStartResourceInput resourceInputFor(
             readiness.calibrationReady =
                     profile.datePolygon.size() >= 3;
             readiness.barcodeRegionReady =
-                    mode != DetectionMode::BarcodeWord
+                    !descriptor.requiresBarcodeDecoder
                     || profile.barcodePolygon.size() == 4;
             readiness.dateRegionReady =
                     profile.datePolygon.size() >= 3;
@@ -194,8 +130,6 @@ FramePreprocessSettings framePreprocessSettings(
 // 函数说明：cameraConfiguration 函数实现名称所表示的处理步骤。
 CameraSessionCaptureConfiguration cameraConfiguration(
     const MachineSettings &settings,
-    const PreparedRecipeSnapshot &prepared,
-    const InspectionProfileSnapshot &profileSnapshot,
     const InspectionRunPlan &runPlan)
 {
     CameraSessionCaptureConfiguration output;
@@ -209,13 +143,6 @@ CameraSessionCaptureConfiguration cameraConfiguration(
     }
     output.exposure = settings.cameraExposure;
     output.gain = settings.cameraGain;
-    output.trackingProfiles = profileSnapshot.trackingProfiles;
-    if (prepared && !prepared->profiles.isEmpty()) {
-        const PreparedRecipeProfile &profile = prepared->profiles.first();
-        output.singleDatePolygon = profile.datePolygon;
-        output.singleTrackingTemplate =
-                profile.trackingTemplate.clone();
-    }
     return output;
 }
 
@@ -438,12 +365,6 @@ InspectionApplicationService::InspectionApplicationService(
     qRegisterMetaType<InspectionFaultReason>(
                 "InspectionFaultReason");
     CameraSessionCallbacks callbacks;
-    callbacks.streamingFrameReady = [this](const cv::Mat &image) {
-        emit streamingFrameReady(image.clone());
-    };
-    callbacks.trackingPoseReady = [this](const DetectionPose &pose) {
-        m_runtime->resultService().updatePose(pose);
-    };
     callbacks.previewFrameReady = [this](
             quint64 sessionId,
             const cv::Mat &image) {
@@ -530,12 +451,12 @@ StartInspectionResult InspectionApplicationService::start(
                     recipeError);
     }
 
-    BarcodeRuntimeReadiness barcode;
-    if (detectionMode == DetectionMode::BarcodeWord) {
-        barcode = m_runtime->preparePipeline(detectionMode);
+    DetectionRuntimeReadiness detectionReadiness;
+    if (detectionModeDescriptor(detectionMode).requiresBarcodeDecoder) {
+        detectionReadiness = m_runtime->prepareDetection(detectionMode);
     }
     const InspectionStartResourceInput resourceInput =
-            resourceInputFor(*prepared, detectionMode, barcode);
+            resourceInputFor(*prepared, detectionMode, detectionReadiness);
     const InspectionStartPreflightResult resourceResult =
             InspectionStartPreflight::evaluateResources(resourceInput);
     if (!resourceResult.isAccepted()) {
@@ -547,17 +468,15 @@ StartInspectionResult InspectionApplicationService::start(
     }
 
     const InspectionRunPlan runPlan = InspectionRunConfiguration::createPlan(
-                trackingKind(detectionMode),
-                settings.triggerEnabled,
-                detectionMode == DetectionMode::BarcodeWord);
+                settings.triggerEnabled);
     if (runPlan.acquisitionKind
             == InspectionAcquisitionKind::HardwareTrigger) {
         m_runtime->resetStatistics();
     }
-    InspectionProfileSnapshot profileSnapshot;
-    if (detectionMode == DetectionMode::Word
-            || detectionMode == DetectionMode::BarcodeWord) {
-        profileSnapshot = profileSnapshotFromPreparedRecipe(*prepared);
+    DetectionProfileSnapshot profileSnapshot;
+    if (detectionModeDescriptor(detectionMode).trackingKind
+            == DetectionTrackingKind::MultipleProfiles) {
+        profileSnapshot = DetectionProfileSnapshotBuilder::create(*prepared);
         if (!profileSnapshot.isValid()) {
             return rejectStart(
                         InspectionStartIssue::WordProfilesMissing,
@@ -567,7 +486,8 @@ StartInspectionResult InspectionApplicationService::start(
     }
 
     const QString runId = m_runtime->beginStart(
-                settings, prepared, profileSnapshot);
+                settings, prepared, profileSnapshot,
+                framePreprocessSettings(settings));
     if (runId.isEmpty()) {
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
@@ -591,8 +511,6 @@ StartInspectionResult InspectionApplicationService::start(
     if (!m_cameraSession->prepareInspection(
                 cameraConfiguration(
                     settings,
-                    prepared,
-                    profileSnapshot,
                     runPlan),
                 &cameraError)) {
         const InspectionCameraRecoveryResult recovery =
@@ -639,7 +557,7 @@ StartInspectionResult InspectionApplicationService::start(
     }
 
     QString executionError;
-    if (!m_runtime->startPipeline(
+    if (!m_runtime->startDetection(
                 resultConfiguration(settings),
                 &executionError)) {
         m_cameraSession->stopInspection();

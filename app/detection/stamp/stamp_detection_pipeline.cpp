@@ -3,6 +3,7 @@
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "stamp_detection_pipeline.h"
+#include "contracts/detection_mode.h"
 
 #include "detection/common/detection_roi_geometry.h"
 
@@ -75,7 +76,7 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
     StampDetectionWorkOutput output;
     output.pose = item.pose;
     output.hasOverlapDetection = static_cast<bool>(detectOverlap);
-    output.detectionResult.modeId = QStringLiteral("stamp_detection");
+    output.detectionResult.modeId = detectionModeUiId(DetectionMode::Stamp);
     output.detectionResult.status = DetectionStatus::Cancelled;
     output.detectionResult.diagnostic =
             QStringLiteral("Invalid stamp detection work item");
@@ -122,19 +123,19 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
     if (!output.stampResult.characterIsOk
             && output.stampResult.overlapIsOk) {
         result.diagnostic = QStringLiteral(
-                    "\u55b7\u7801\u4e0d\u5408\u683c");
+                    "喷码不合格");
     } else if (output.stampResult.characterIsOk
                && !output.stampResult.overlapIsOk) {
         result.diagnostic = QStringLiteral(
-                    "\u94a2\u5370\u91cd\u53e0");
+                    "钢印重叠");
     } else if (!output.stampResult.isOk) {
         result.diagnostic = QStringLiteral(
-                    "\u55b7\u7801\u4e0e\u94a2\u5370"
-                    "\u5747\u4e0d\u5408\u683c");
+                    "喷码与钢印"
+                    "均不合格");
     } else {
         result.diagnostic = QStringLiteral(
-                    "\u55b7\u7801\u4e0e\u94a2\u5370"
-                    "\u5747\u5408\u683c");
+                    "喷码与钢印"
+                    "均合格");
     }
     result.elapsedMs = static_cast<double>(
                 std::chrono::duration_cast<std::chrono::milliseconds>(

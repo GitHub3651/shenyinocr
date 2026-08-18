@@ -28,12 +28,9 @@ public:
     explicit FrameQueue(std::size_t capacity);
     ~FrameQueue();
 
-    bool submit(const DetectionWorkItem &item);
     bool submit(const std::shared_ptr<const FrameData> &frame);
-    FrameQueueSubmitResult trySubmit(const DetectionWorkItem &item);
     FrameQueueSubmitResult trySubmit(
         const std::shared_ptr<const FrameData> &frame);
-    bool waitAndTake(DetectionWorkItem *item);
     bool waitAndTake(std::shared_ptr<const FrameData> *frame);
 
     std::size_t cancel();
@@ -47,6 +44,6 @@ private:
     mutable std::mutex m_mutex;
     std::condition_variable m_frameAvailable;
     std::condition_variable m_spaceAvailable;
-    std::deque<DetectionWorkItem> m_items;
+    std::deque<std::shared_ptr<const FrameData> > m_items;
     bool m_cancelled = false;
 };

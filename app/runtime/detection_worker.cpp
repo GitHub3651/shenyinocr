@@ -9,28 +9,11 @@
 // 函数说明：DetectionWorker 构造函数创建组件并初始化其依赖和初始状态。
 DetectionWorker::DetectionWorker(
     std::size_t queueCapacity,
-    const Detector &detector,
-    const CompletionConsumer &completionConsumer,
-    const FailureConsumer &failureConsumer)
-    : DetectionWorker(
-          queueCapacity,
-          WorkItemDetector(
-              [detector](const DetectionWorkItem &item) {
-        return detector(item.frame);
-    }),
-          completionConsumer,
-          failureConsumer)
-{
-}
-
-// 函数说明：DetectionWorker 构造函数创建组件并初始化其依赖和初始状态。
-DetectionWorker::DetectionWorker(
-    std::size_t queueCapacity,
-    const WorkItemDetector &detector,
+    const Executor &executor,
     const CompletionConsumer &completionConsumer,
     const FailureConsumer &failureConsumer)
     : m_queue(queueCapacity),
-      m_detector(detector),
+      m_executor(executor),
       m_completionConsumer(completionConsumer),
       m_failureConsumer(failureConsumer),
       m_running(false),
@@ -53,7 +36,7 @@ bool DetectionWorker::start()
     std::lock_guard<std::mutex> lock(m_lifecycleMutex);
     if (m_thread.joinable()
             || m_running.load()
-            || !m_detector
+            || !m_executor
             || !m_completionConsumer
             || !m_queue.reopen()) {
         return false;
@@ -81,55 +64,33 @@ bool DetectionWorker::start()
 
 // 函数说明：submit 函数执行对应事件或业务处理。
 bool DetectionWorker::submit(
-    const DetectionWorkItem &item)
+    const std::shared_ptr<const FrameData> &frame)
 {
     if (!m_running.load() || m_stopRequested.load()) {
         return false;
     }
-    return m_queue.submit(item);
-}
-
-// 函数说明：submit 函数执行对应事件或业务处理。
-bool DetectionWorker::submit(
-    const std::shared_ptr<const FrameData> &frame)
-{
-    DetectionWorkItem item;
-    item.frame = frame;
-    return submit(item);
+    return m_queue.submit(frame);
 }
 
 // 函数说明：trySubmit 函数实现名称所表示的处理步骤。
 DetectionWorkSubmissionResult DetectionWorker::trySubmit(
-    const DetectionWorkItem &item)
+    const std::shared_ptr<const FrameData> &frame)
 {
-    if (!item.isValid()) {
+    if (!frame || !frame->productKey.isValid()
+            || frame->originalImage.empty()) {
         return DetectionWorkSubmissionResult::InvalidItem;
     }
     if (!m_running.load() || m_stopRequested.load()) {
         return DetectionWorkSubmissionResult::NotRunning;
     }
-
-    const FrameQueueSubmitResult result = m_queue.trySubmit(item);
-    switch (result) {
-    case FrameQueueSubmitResult::Accepted:
-        return DetectionWorkSubmissionResult::Accepted;
-    case FrameQueueSubmitResult::InvalidItem:
-        return DetectionWorkSubmissionResult::InvalidItem;
-    case FrameQueueSubmitResult::Cancelled:
-        return DetectionWorkSubmissionResult::Cancelled;
-    case FrameQueueSubmitResult::Full:
-        return DetectionWorkSubmissionResult::QueueFull;
-    }
-    return DetectionWorkSubmissionResult::Cancelled;
-}
-
-// 函数说明：trySubmit 函数实现名称所表示的处理步骤。
-DetectionWorkSubmissionResult DetectionWorker::trySubmit(
-    const std::shared_ptr<const FrameData> &frame)
-{
-    DetectionWorkItem item;
-    item.frame = frame;
-    return trySubmit(item);
+    const FrameQueueSubmitResult result = m_queue.trySubmit(frame);
+    return result == FrameQueueSubmitResult::Accepted
+            ? DetectionWorkSubmissionResult::Accepted
+            : result == FrameQueueSubmitResult::InvalidItem
+              ? DetectionWorkSubmissionResult::InvalidItem
+              : result == FrameQueueSubmitResult::Full
+                ? DetectionWorkSubmissionResult::QueueFull
+                : DetectionWorkSubmissionResult::Cancelled;
 }
 
 // 函数说明：requestStop 函数实现名称所表示的处理步骤。
@@ -179,8 +140,8 @@ quint64 DetectionWorker::cancelledFrameCount() const
 void DetectionWorker::run()
 {
     while (!m_stopRequested.load()) {
-        DetectionWorkItem item;
-        if (!m_queue.waitAndTake(&item)) {
+        std::shared_ptr<const FrameData> frame;
+        if (!m_queue.waitAndTake(&frame)) {
             break;
         }
         if (m_stopRequested.load()) {
@@ -188,9 +149,9 @@ void DetectionWorker::run()
             break;
         }
 
-        DetectionResult result;
+        DetectionCompletion completion;
         try {
-            result = m_detector(item);
+            completion = m_executor(frame);
         } catch (const std::exception &error) {
             reportFailure(QString::fromLocal8Bit(error.what()));
             m_cancelledFrameCount.fetch_add(1);
@@ -208,9 +169,12 @@ void DetectionWorker::run()
             break;
         }
 
-        DetectionCompletion completion;
-        completion.frame = item.frame;
-        completion.result = result;
+        if (!completion.isValid()) {
+            reportFailure(QStringLiteral("检测执行器未返回有效结果"));
+            m_cancelledFrameCount.fetch_add(1);
+            requestStop();
+            break;
+        }
         try {
             m_completionConsumer(completion);
             m_processedFrameCount.fetch_add(1);

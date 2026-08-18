@@ -10,7 +10,7 @@
 
 // 函数说明：configure 函数更新或应用对应的配置和状态。
 bool InspectionPositioner::configure(
-    InspectionTrackingKind trackingKind,
+    DetectionTrackingKind trackingKind,
     const std::vector<WordTrackingProfile> &profiles,
     const std::vector<cv::Point2f> &singleDatePolygon,
     const cv::Mat &singleTrackingTemplate)
@@ -19,10 +19,10 @@ bool InspectionPositioner::configure(
     m_singleDatePolygon = singleDatePolygon;
     m_singleMatcher.clear();
     m_profiles.clear();
-    if (trackingKind == InspectionTrackingKind::WholeFrame) {
+    if (trackingKind == DetectionTrackingKind::WholeFrame) {
         return true;
     }
-    if (trackingKind == InspectionTrackingKind::SingleTemplate) {
+    if (trackingKind == DetectionTrackingKind::SingleTemplate) {
         return singleDatePolygon.size() >= 3U
                 && m_singleMatcher.init(singleTrackingTemplate);
     }
@@ -50,11 +50,11 @@ bool InspectionPositioner::configure(
 // 函数说明：locate 函数实现名称所表示的处理步骤。
 DetectionPose InspectionPositioner::locate(const cv::Mat &image) const
 {
-    if (m_trackingKind == InspectionTrackingKind::WholeFrame
+    if (m_trackingKind == DetectionTrackingKind::WholeFrame
             || image.empty()) {
         return DetectionPose();
     }
-    if (m_trackingKind == InspectionTrackingKind::SingleTemplate) {
+    if (m_trackingKind == DetectionTrackingKind::SingleTemplate) {
         return m_singleMatcher.match(image, m_singleDatePolygon);
     }
     if (m_profiles.empty()) {
@@ -96,10 +96,4 @@ DetectionPose InspectionPositioner::locate(const cv::Mat &image) const
             std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - started).count();
     return pose;
-}
-
-// 函数说明：trackingKind 函数实现名称所表示的处理步骤。
-InspectionTrackingKind InspectionPositioner::trackingKind() const
-{
-    return m_trackingKind;
 }

@@ -8,7 +8,7 @@
 #include "runtime/image_save_service.h"
 #include "runtime/inspection_presentation.h"
 #include "runtime/inspection_presentation_renderer.h"
-#include "runtime/pipeline_registry.h"
+#include "runtime/detection_worker.h"
 #include "runtime/result_presentation_mailbox.h"
 
 #include <QObject>
@@ -105,7 +105,7 @@ public:
     void bindView(const InspectionPresentationViewBindings &bindings);
     void configureRun(const ResultServiceRunConfiguration &configuration);
     bool requiresPlcForRun() const;
-    PipelineResultConsumers pipelineConsumers();
+    DetectionWorker::CompletionConsumer completionConsumer();
 
     void clear();
     void clearTransientView();
@@ -116,7 +116,6 @@ public:
         const cv::Mat &image,
         bool tissueMode,
         bool productionRunning);
-    void updatePose(const DetectionPose &pose);
     void presentTotalAndNgCounts(int totalCount, int ngCount);
     void presentNgCount(int ngCount);
     ProductKey lastPresentedProductKey() const;
@@ -157,8 +156,8 @@ private:
 
     bool postUiWork(const UiCompletionMailbox::Work &work);
     DetectionCompletion acceptCompletion(
-        const DetectionCompletion &completion,
-        const char *modeName);
+        const DetectionCompletion &completion);
+    void handleCompletion(const DetectionCompletion &completion);
     ResultServiceProcessOutcome process(const ProcessRequest &request);
     DetectionResultSaveAction imageSaveActionFor(
         AlgorithmVerdict verdict) const;
@@ -174,36 +173,6 @@ private:
     void enterPlcFault(const QString &diagnostic);
 
     static qint64 presentationElapsedMs(
-        const DetectionCompletion &completion);
-    void handleTissueCompletion(
-        const DetectionCompletion &completion,
-        const TissueRollResult &tissueResult);
-    void handleOcrCompletion(
-        const DetectionCompletion &completion,
-        const DetectionPose &pose);
-    void handleStampCompletion(
-        const DetectionCompletion &completion,
-        const StampDetectionWorkOutput &output);
-    void handleWordCompletion(
-        const DetectionCompletion &completion,
-        const WordDetectionWorkOutput &output);
-    void handleBarcodeWordCompletion(
-        const DetectionCompletion &completion,
-        const BarcodeWordDetectionWorkOutput &output);
-    void finalizeTissue(
-        const TissueRollResult &tissueResult,
-        const DetectionCompletion &completion);
-    void finalizeOcr(
-        const DetectionPose &pose,
-        const DetectionCompletion &completion);
-    void finalizeStamp(
-        const StampDetectionWorkOutput &output,
-        const DetectionCompletion &completion);
-    void finalizeWord(
-        const WordDetectionWorkOutput &output,
-        const DetectionCompletion &completion);
-    void finalizeBarcodeWord(
-        const BarcodeWordDetectionWorkOutput &output,
         const DetectionCompletion &completion);
     void clearPreviousOverlay(bool clearImageLabelRects) const;
 

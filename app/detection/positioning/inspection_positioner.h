@@ -6,28 +6,22 @@
 
 #include "detection/positioning/detection_pose.h"
 #include "detection/positioning/tracking_pose_matcher.h"
+#include "contracts/detection_mode.h"
 
 #include <opencv2/core.hpp>
 
 #include <vector>
-
-enum class InspectionTrackingKind {
-    WholeFrame,
-    SingleTemplate,
-    WordProfiles
-};
 
 // 组件说明：InspectionPositioner 组件提供对应设备或检测能力的统一实现。
 class InspectionPositioner
 {
 public:
     bool configure(
-        InspectionTrackingKind trackingKind,
+        DetectionTrackingKind trackingKind,
         const std::vector<WordTrackingProfile> &profiles,
         const std::vector<cv::Point2f> &singleDatePolygon,
         const cv::Mat &singleTrackingTemplate);
     DetectionPose locate(const cv::Mat &image) const;
-    InspectionTrackingKind trackingKind() const;
 
 private:
     // 组件说明：ProfileState 数据结构集中保存该流程需要的一组相关数据。
@@ -40,8 +34,8 @@ private:
         TrackingPoseMatcher matcher;
     };
 
-    InspectionTrackingKind m_trackingKind =
-            InspectionTrackingKind::WholeFrame;
+    DetectionTrackingKind m_trackingKind =
+            DetectionTrackingKind::WholeFrame;
     std::vector<cv::Point2f> m_singleDatePolygon;
     TrackingPoseMatcher m_singleMatcher;
     std::vector<ProfileState> m_profiles;

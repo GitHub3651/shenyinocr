@@ -11,7 +11,7 @@ const int MachineSettings::CurrentSchemaVersion;
 // 函数说明：MachineSettings 构造函数创建组件并初始化其依赖和初始状态。
 MachineSettings::MachineSettings()
     : schemaVersion(CurrentSchemaVersion),
-      detectModeId(QStringLiteral("word_detection")),
+      detectModeId(detectionModeUiId(DetectionMode::Word)),
       imageSaveModeId(QStringLiteral("save_none")),
       imageSaveTypeId(QStringLiteral("save_annotated_only")),
       imageJpegQuality(92),
@@ -44,12 +44,12 @@ MachineSettings::MachineSettings()
 // 函数说明：machineSettingsDetectionModeIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsDetectionModeIds()
 {
-    return QStringList()
-            << QStringLiteral("stamp_detection")
-            << QStringLiteral("word_detection")
-            << QStringLiteral("ocr_detection")
-            << QStringLiteral("tissue_detection")
-            << BarcodeWordDetectionMode;
+    QStringList ids;
+    for (const DetectionModeDescriptor &descriptor :
+         detectionModeDescriptors()) {
+        ids.append(QLatin1String(descriptor.uiId));
+    }
+    return ids;
 }
 
 // 函数说明：machineSettingsImageSaveModeIds 函数实现名称所表示的处理步骤。

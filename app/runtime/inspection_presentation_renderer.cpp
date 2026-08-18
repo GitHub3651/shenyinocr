@@ -105,10 +105,9 @@ void drawCharacter(
         textThickness);
 }
 
-// 函数说明：drawTissueRoll 函数实现名称所表示的处理步骤。
-void drawTissueRoll(
+void drawTissueEllipse(
     cv::Mat &image,
-    const TissueRollPresentation &roll)
+    const DetectionOverlayEllipse &ellipse)
 {
     if (image.empty()) {
         return;
@@ -118,48 +117,18 @@ void drawTissueRoll(
     const int thickness = std::max(
         2,
         static_cast<int>(2 * dynamicScale));
-    const int outerRadius = std::max(
+    const int radius = std::max(
         1,
-        cvRound(std::max(roll.outerAxes.width, roll.outerAxes.height)));
-    const int innerRadius = std::max(
-        1,
-        cvRound(std::max(roll.innerAxes.width, roll.innerAxes.height)));
+        cvRound(std::max(ellipse.axes.width, ellipse.axes.height)));
 
     cv::circle(
         image,
-        cv::Point(cvRound(roll.center.x), cvRound(roll.center.y)),
-        outerRadius,
-        cv::Scalar(0, 255, 255),
+        cv::Point(cvRound(ellipse.center.x), cvRound(ellipse.center.y)),
+        radius,
+        ellipse.role == QLatin1String("tissue_inner")
+                ? cv::Scalar(255, 0, 0)
+                : cv::Scalar(0, 255, 255),
         thickness);
-    cv::circle(
-        image,
-        cv::Point(cvRound(roll.innerCenter.x), cvRound(roll.innerCenter.y)),
-        innerRadius,
-        cv::Scalar(255, 0, 0),
-        thickness);
-}
-
-// 函数说明：transformPolygonForPose 函数校验、转换或恢复对应数据。
-void transformPolygonForPose(
-    DetectionOverlayPolygon *polygon,
-    const cv::Point2f &oldCenter,
-    const cv::Point2f &newCenter,
-    float angleDifference)
-{
-    if (!polygon) {
-        return;
-    }
-    for (cv::Point &point : polygon->points) {
-        const cv::Point2f relative(
-            point.x - oldCenter.x,
-            point.y - oldCenter.y);
-        const cv::Point2f rotated = rotateRelativePoint(
-            relative,
-            angleDifference);
-        point = cv::Point(
-            cvRound(rotated.x + newCenter.x),
-            cvRound(rotated.y + newCenter.y));
-    }
 }
 }
 
@@ -220,8 +189,8 @@ bool InspectionPresentationRenderer::present(
     m_viewBindings.showVerdictStyle(snapshot.verdictStyle);
     m_viewBindings.showVerdictText(
                 snapshot.verdictStyle == DetectionVerdictViewStyle::Correct
-                ? QStringLiteral("\u6b63\u786e")
-                : QStringLiteral("\u9519\u8bef"));
+                ? QStringLiteral("正确")
+                : QStringLiteral("错误"));
     m_viewBindings.showRecognitionText(snapshot.recognitionText);
     if (snapshot.updatesTemplateName) {
         m_viewBindings.showTemplateName(snapshot.templateName);
@@ -273,55 +242,10 @@ const ProductKey &InspectionPresentationRenderer::lastPresentedProductKey() cons
 
 // 函数说明：installDetectionResult 函数实现名称所表示的处理步骤。
 void InspectionPresentationRenderer::installDetectionResult(
-    const DetectionResult &result,
-    const DetectionPose &pose,
-    bool stampIsOverlap)
+    const DetectionResult &result)
 {
     clear();
-    m_state.pose = pose;
-    m_state.stampIsOverlap = stampIsOverlap;
-    for (const DetectionOverlayPolygon &polygon : result.overlay.polygons) {
-        if (polygon.role == QLatin1String("character")
-                || polygon.role == QLatin1String("stamp")) {
-            m_state.detailPolygons.push_back(polygon);
-        }
-    }
-}
-
-// 函数说明：installTissueRoll 函数实现名称所表示的处理步骤。
-void InspectionPresentationRenderer::installTissueRoll(
-    const TissueRollPresentation &roll,
-    bool hasTissueRoll)
-{
-    clear();
-    if (hasTissueRoll) {
-        m_state.tissueRoll = roll;
-        m_state.hasTissueRoll = true;
-    }
-}
-
-// 函数说明：updatePose 函数更新或应用对应的配置和状态。
-void InspectionPresentationRenderer::updatePose(
-    const DetectionPose &pose)
-{
-    if (!pose.valid) {
-        m_state.detailPolygons.clear();
-        m_state.pose = pose;
-        return;
-    }
-
-    if (m_state.pose.valid && !m_state.detailPolygons.empty()) {
-        const float angleDifference =
-                pose.angleDeg - m_state.pose.angleDeg;
-        for (DetectionOverlayPolygon &polygon : m_state.detailPolygons) {
-            transformPolygonForPose(
-                &polygon,
-                m_state.pose.anchorCenter,
-                pose.anchorCenter,
-                angleDifference);
-        }
-    }
-    m_state.pose = pose;
+    m_state.overlay = result.overlay;
 }
 
 // 函数说明：state 函数实现名称所表示的处理步骤。
@@ -362,7 +286,7 @@ QImage InspectionPresentationRenderer::renderFrame(
         static_cast<int>(1.5 * dynamicScale));
 
     for (const DetectionOverlayPolygon &polygon :
-         m_state.detailPolygons) {
+         m_state.overlay.polygons) {
         if (polygon.role == QLatin1String("character")) {
             drawCharacter(
                 displayImage,
@@ -373,37 +297,33 @@ QImage InspectionPresentationRenderer::renderFrame(
         }
     }
 
-    drawPolygon(
-        displayImage,
-        m_state.pose.trackingPoly,
-        cv::Scalar(255, 0, 0),
-        boxThickness);
-    drawPolygon(
-        displayImage,
-        m_state.pose.barcodePoly,
-        cv::Scalar(0, 255, 255),
-        boxThickness);
-    drawPolygon(
-        displayImage,
-        m_state.pose.datePoly,
-        cv::Scalar(0, 255, 0),
-        boxThickness);
-
     for (const DetectionOverlayPolygon &polygon :
-         m_state.detailPolygons) {
-        if (polygon.role == QLatin1String("stamp")) {
+         m_state.overlay.polygons) {
+        if (polygon.role == QLatin1String("tracking")) {
+            drawPolygon(displayImage, polygon.points,
+                        cv::Scalar(255, 0, 0), boxThickness);
+        } else if (polygon.role == QLatin1String("barcode")) {
+            drawPolygon(displayImage, polygon.points,
+                        cv::Scalar(0, 255, 255), boxThickness);
+        } else if (polygon.role == QLatin1String("date")) {
+            drawPolygon(displayImage, polygon.points,
+                        cv::Scalar(0, 255, 0), boxThickness);
+        } else if (polygon.role == QLatin1String("stamp")) {
             drawPolygon(
                 displayImage,
                 polygon.points,
-                m_state.stampIsOverlap
+                polygon.alarm
                 ? cv::Scalar(0, 0, 255)
                 : cv::Scalar(0, 255, 255),
                 boxThickness);
         }
     }
 
-    if (includeTissueOverlay && m_state.hasTissueRoll) {
-        drawTissueRoll(displayImage, m_state.tissueRoll);
+    if (includeTissueOverlay) {
+        for (const DetectionOverlayEllipse &ellipse :
+             m_state.overlay.ellipses) {
+            drawTissueEllipse(displayImage, ellipse);
+        }
     }
 
     const QImage rendered(

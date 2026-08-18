@@ -12,13 +12,31 @@
 #include <functional>
 
 class QTimer;
-// 组件说明：QWidget 组件封装本文件中与其名称对应的单一职责。
 class QWidget;
+class QLabel;
+class QLineEdit;
+class QPushButton;
+class QToolButton;
+class ImageLabel;
 
-namespace Ui {
-// 组件说明：MainWindow 组件负责对应界面区域的显示和用户交互。
-class MainWindow;
-}
+struct InspectionPageViewBindings
+{
+    ImageLabel *imageLabel_inspection = nullptr;
+    QLabel *label_recognitionText = nullptr;
+    QLabel *label_runtimeStatus = nullptr;
+    QLabel *label_verdictResult = nullptr;
+    QLineEdit *lineEdit_currentRecipeName = nullptr;
+    QLineEdit *lineEdit_detectionDuration = nullptr;
+    QLineEdit *lineEdit_ngCount = nullptr;
+    QLineEdit *lineEdit_passRate = nullptr;
+    QLineEdit *lineEdit_totalCount = nullptr;
+    QPushButton *pushButton_saveTemplate = nullptr;
+    QToolButton *toolButton_closeCamera = nullptr;
+    QToolButton *toolButton_createTemplate = nullptr;
+    QToolButton *toolButton_openCamera = nullptr;
+    QToolButton *toolButton_startInspection = nullptr;
+    QToolButton *toolButton_stopInspection = nullptr;
+};
 
 // 组件说明：InspectionPage 组件负责对应界面区域的显示和用户交互。
 class InspectionPage
@@ -34,7 +52,7 @@ public:
 
     InspectionPage(
         QWidget *rootWidget,
-        Ui::MainWindow *ui,
+        const InspectionPageViewBindings &view,
         QTimer *templateAttentionTimer,
         bool *templateAttentionOn,
         const Callbacks &callbacks);
@@ -60,7 +78,7 @@ public:
 
 private:
     QWidget *m_rootWidget = nullptr;
-    Ui::MainWindow *m_ui = nullptr;
+    InspectionPageViewBindings m_view;
     QTimer *m_templateAttentionTimer = nullptr;
     bool *m_templateAttentionOn = nullptr;
     Callbacks m_callbacks;

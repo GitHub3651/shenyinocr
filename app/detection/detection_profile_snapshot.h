@@ -1,6 +1,6 @@
 // 文件作用：本文件用于把配方Profile准备为检测线程可直接读取的只读运行快照。
 // 主要职责：把配方Profile准备为检测线程可直接读取的只读运行快照。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 模块位置：检测层；把PreparedRecipe转换为检测线程只读快照。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
@@ -8,27 +8,11 @@
 #include "detection/positioning/detection_pose.h"
 #include "detection/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
-#include "recipes/product_recipe.h"
+#include "recipes/prepared_recipe.h"
 
 #include <QString>
 
 #include <vector>
-
-// 组件说明：InspectionProfileSource 数据结构集中保存该流程需要的一组相关数据。
-struct InspectionProfileSource
-{
-    QString name;
-    cv::Mat trackingTemplate;
-    std::vector<cv::Point2f> barcodePoly;
-    std::vector<cv::Point2f> datePoly;
-    QString targetText;
-    int imageThreshold =
-            RecipeProfile::DefaultImageThresholdPercent;
-    std::vector<cv::Mat> digitTemplates;
-    std::vector<int> digitTemplateTargetIndexes;
-    BarcodeDecodeOptions barcodeOptions;
-    BarcodeWordDecodeStrategyState decodeStrategy;
-};
 
 // 组件说明：DetectionModeWorkerProfile 数据结构集中保存该流程需要的一组相关数据。
 struct DetectionModeWorkerProfile
@@ -42,8 +26,8 @@ struct DetectionModeWorkerProfile
     BarcodeWordDecodeStrategyState decodeStrategy;
 };
 
-// 组件说明：InspectionProfileSnapshot 数据结构集中传递该流程需要的只读数据或回调。
-struct InspectionProfileSnapshot
+// 组件说明：DetectionProfileSnapshot是检测线程使用的只读Profile快照。
+struct DetectionProfileSnapshot
 {
     std::vector<WordTrackingProfile> trackingProfiles;
     std::vector<DetectionModeWorkerProfile> detectionProfiles;
@@ -55,18 +39,12 @@ struct InspectionProfileSnapshot
                 && trackingProfiles.size() == detectionProfiles.size();
     }
 
-    // 函数说明：clear 函数停止流程、清理状态或释放对应资源。
-    void clear()
-    {
-        trackingProfiles.clear();
-        detectionProfiles.clear();
-    }
 };
 
-// 组件说明：InspectionProfileSnapshotBuilder 组件封装本文件中与其名称对应的单一职责。
-class InspectionProfileSnapshotBuilder
+// 组件说明：DetectionProfileSnapshotBuilder集中完成运行Profile准备。
+class DetectionProfileSnapshotBuilder
 {
 public:
-    static InspectionProfileSnapshot create(
-        const std::vector<InspectionProfileSource> &sources);
+    static DetectionProfileSnapshot create(
+        const PreparedRecipe &preparedRecipe);
 };

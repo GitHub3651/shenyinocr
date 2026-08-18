@@ -219,10 +219,12 @@ void TemplateEditorPage::showTemplateGuideForCurrentMode()
 {
     const int modeIndex = m_view.comboBox_detectionMode->currentIndex();
     const QString modeId = detectModeIdForIndex(modeIndex);
+    DetectionMode mode = DetectionMode::Word;
+    detectionModeFromUiId(modeId, &mode);
 
     if (isSingleTemplateRecipeMode(modeId)) {
         updateTemplateGuideText(
-                    modeId == QStringLiteral("ocr_detection")
+                    mode == DetectionMode::Ocr
                         ? "深度模型模板制作"
                         : "模板匹配模板制作",
                     "请按住鼠标左键拖动，框选定位区域。");
@@ -231,7 +233,7 @@ void TemplateEditorPage::showTemplateGuideForCurrentMode()
 
     if (isWordFamilyMode(modeId)) {
         const bool barcodeWordMode =
-                modeId == BarcodeWordDetectionMode;
+                modeId == detectionModeUiId(DetectionMode::BarcodeWord);
         updateTemplateGuideText(
                     barcodeWordMode
                         ? "二维码+三期模板制作"
@@ -254,6 +256,8 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
 
     const int modeIndex = m_view.comboBox_detectionMode->currentIndex();
     const QString modeId = detectModeIdForIndex(modeIndex);
+    DetectionMode mode = DetectionMode::Word;
+    detectionModeFromUiId(modeId, &mode);
     if (!isSingleTemplateRecipeMode(modeId)
             && !isWordFamilyMode(modeId)) {
         if (m_templateGuideFrame && m_templateGuideFrame->isVisible()) {
@@ -263,14 +267,14 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
     }
 
     const bool barcodeWordMode =
-            modeId == BarcodeWordDetectionMode;
+            modeId == detectionModeUiId(DetectionMode::BarcodeWord);
     const bool guideVisible =
             m_templateGuideFrame && m_templateGuideFrame->isVisible();
     const QString title = barcodeWordMode
             ? "二维码+三期模板制作"
-            : (modeId == QStringLiteral("word_detection")
+            : (mode == DetectionMode::Word
                ? "字库匹配模板制作"
-               : (modeId == QStringLiteral("ocr_detection")
+               : (mode == DetectionMode::Ocr
                   ? "深度模型模板制作"
                   : "模板匹配模板制作"));
     const QString trackingRegionName = "定位区域";
@@ -385,7 +389,8 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
             saveMessageBox.setIcon(QMessageBox::Question);
             saveMessageBox.setWindowTitle("保存模板");
             saveMessageBox.setText(
-                        currentDetectModeId() == BarcodeWordDetectionMode
+                        currentDetectModeId()
+                        == detectionModeUiId(DetectionMode::BarcodeWord)
                             ? "定位锚点、二维码区域和日期检测区域均已完成。\n\n是否立即保存当前产品模板？"
                             : "喷码检测区域已闭合。\n\n是否立即保存当前产品模板？");
             QPushButton *saveButton = saveMessageBox.addButton("保存", QMessageBox::AcceptRole);

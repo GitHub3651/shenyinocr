@@ -241,29 +241,29 @@ void TemplateEditorPage::setupWordTemplateEditorCombo()
                     "}");
 
         m_publishTemplateGroupButton = new QPushButton(
-                    QStringLiteral("\u53D1\u5E03\u6A21\u677F\u7EC4"),
+                    QStringLiteral("发布模板组"),
                     m_wordTemplateEditWidget);
         m_publishTemplateGroupButton->setObjectName(
                     QStringLiteral("pushButton_publishTemplateGroup"));
         m_publishTemplateGroupButton->setFixedHeight(50);
         m_publishTemplateGroupButton->setToolTip(
                     QStringLiteral(
-                        "\u628A\u5F53\u524D\u901A\u8FC7\u65E7\u201C\u9009\u62E9\u6A21\u677F\u201D"
-                        "\u52A0\u8F7D\u7684\u591A\u4E2AProfile\uFF0C\u6309\u5F53\u524D\u987A\u5E8F"
-                        "\u53D1\u5E03\u4E3A\u4E00\u4E2A\u4EA7\u54C1\u914D\u65B9\u3002"));
+                        "把当前通过旧“选择模板”"
+                        "加载的多个Profile，按当前顺序"
+                        "发布为一个产品配方。"));
         m_publishTemplateGroupButton->setStyleSheet(commonPushButtonStyle);
 
         m_publishedRecipeButton = new QPushButton(
-                    QStringLiteral("\u5DF2\u53D1\u5E03\u914D\u65B9"),
+                    QStringLiteral("已发布配方"),
                     m_wordTemplateEditWidget);
         m_publishedRecipeButton->setObjectName(
                     QStringLiteral("pushButton_selectPublishedRecipe"));
         m_publishedRecipeButton->setFixedHeight(50);
         m_publishedRecipeButton->setToolTip(
                     QStringLiteral(
-                        "\u4ECE\u8F6F\u4EF6\u914D\u65B9\u5E93\u4E2D\u9009\u62E9"
-                        "\u5F53\u524D\u6A21\u5F0F\u5DF2\u7ECF\u53D1\u5E03\u7684"
-                        "\u4EA7\u54C1\u914D\u65B9\u3002"));
+                        "从软件配方库中选择"
+                        "当前模式已经发布的"
+                        "产品配方。"));
         m_publishedRecipeButton->setStyleSheet(commonPushButtonStyle);
 
         editorLayout->addWidget(m_wordTemplateEditLabel);
@@ -415,12 +415,12 @@ void TemplateEditorPage::refreshWordTemplateEditorCombo()
     const bool isWordMode = isWordFamilyMode(currentDetectModeId());
     const bool isSingleMode = isSingleTemplateRecipeMode(
                 currentDetectModeId());
-    const bool isStampMode =
-            currentDetectModeId() == QStringLiteral("stamp_detection");
-    const bool isTemplateMode = isWordMode || isSingleMode;
     DetectionMode selectedMode = DetectionMode::Word;
     const bool isRecipeMode = detectionModeFromUiId(
                 currentDetectModeId(), &selectedMode);
+    const bool isStampMode = isRecipeMode
+            && selectedMode == DetectionMode::Stamp;
+    const bool isTemplateMode = isWordMode || isSingleMode;
     const bool hasWordProfiles = isWordMode && !m_templateService->wordProfiles().empty();
 
     if (m_view.pushButton_applyBatchTargetText) {
@@ -447,8 +447,8 @@ void TemplateEditorPage::refreshWordTemplateEditorCombo()
                     canPublishWordGroup || canPublishSingleTemplate);
         m_publishTemplateGroupButton->setText(
                     isSingleMode
-                    ? QStringLiteral("\u53D1\u5E03\u5F53\u524D\u6A21\u677F")
-                    : QStringLiteral("\u53D1\u5E03\u6A21\u677F\u7EC4"));
+                    ? QStringLiteral("发布当前模板")
+                    : QStringLiteral("发布模板组"));
         m_publishTemplateGroupButton->setToolTip(
                     QStringLiteral("事务保存当前产品配方及其完整资源目录。"));
     }
@@ -488,8 +488,8 @@ void TemplateEditorPage::refreshWordTemplateEditorCombo()
     if (m_wordTemplateEditLabel) {
         m_wordTemplateEditLabel->setText(
                     selectedMode == DetectionMode::Tissue
-                    ? QStringLiteral("\u5F53\u524D\u4EA7\u54C1\u914D\u65B9:")
-                    : QStringLiteral("\u5F53\u524D\u7F16\u8F91\u6A21\u677F:"));
+                    ? QStringLiteral("当前产品配方:")
+                    : QStringLiteral("当前编辑模板:"));
     }
     m_wordTemplateEditComboBox->setVisible(isTemplateMode);
     if (m_publishedRecipeButton) {
@@ -620,20 +620,20 @@ void TemplateEditorPage::selectPublishedRecipe()
 {
     if (isInspectionBusy() || templateOperationActive()) {
         showParameterWarning(
-                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("提示"),
                     QStringLiteral(
-                        "\u8BF7\u5148\u505C\u6B62\u8BC6\u522B\u6216\u9000\u51FA"
-                        "\u6A21\u677F\u5236\u4F5C\uFF0C\u518D\u9009\u62E9"
-                        "\u5DF2\u53D1\u5E03\u914D\u65B9\u3002"));
+                        "请先停止识别或退出"
+                        "模板制作，再选择"
+                        "已发布配方。"));
         return;
     }
 
     DetectionMode detectionMode;
     if (!detectionModeFromUiId(currentDetectModeId(), &detectionMode)) {
         showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("提示"),
                     QStringLiteral(
-                        "\u5F53\u524D\u8BC6\u522B\u6A21\u5F0F\u65E0\u6548\u3002"));
+                        "当前识别模式无效。"));
         return;
     }
 
@@ -641,9 +641,9 @@ void TemplateEditorPage::selectPublishedRecipe()
     QString catalogError;
     if (!m_templateService->listRecipes(&catalog, &catalogError)) {
         showParameterCritical(
-                    QStringLiteral("\u4E25\u91CD\u8B66\u544A"),
+                    QStringLiteral("严重警告"),
                     QStringLiteral(
-                        "\u4EA7\u54C1\u914D\u65B9\u5217\u8868\u8BFB\u53D6\u5931\u8D25\uFF1A\n%1")
+                        "产品配方列表读取失败：\n%1")
                     .arg(catalogError));
         return;
     }
@@ -656,10 +656,10 @@ void TemplateEditorPage::selectPublishedRecipe()
     }
     if (matchingRecipes.isEmpty()) {
         showParameterInfoAsError(
-                    QStringLiteral("\u63D0\u793A"),
+                    QStringLiteral("提示"),
                     QStringLiteral(
-                        "\u5F53\u524D\u8BC6\u522B\u6A21\u5F0F\u8FD8\u6CA1\u6709"
-                        "\u53EF\u52A0\u8F7D\u7684\u5DF2\u53D1\u5E03\u914D\u65B9\u3002"));
+                        "当前识别模式还没有"
+                        "可加载的已发布配方。"));
         return;
     }
 
@@ -695,21 +695,21 @@ void TemplateEditorPage::selectPublishedRecipe()
             m_templateService->draft();
     QString message = detectionMode == DetectionMode::Tissue
             ? QStringLiteral(
-                "\u5DF2\u52A0\u8F7D\u7EB8\u5DFE\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\u3002")
+                "已加载纸巾产品配方“%1”。")
               .arg(activeRecipe.displayName)
             : QStringLiteral(
-                "\u5DF2\u52A0\u8F7D\u4EA7\u54C1\u914D\u65B9\u201C%1\u201D\uFF0C"
-                "\u5171 %2 \u4E2AProfile\u3002")
+                "已加载产品配方“%1”，"
+                "共 %2 个Profile。")
               .arg(activeRecipe.displayName)
               .arg(activeRecipe.profiles.size());
     if (!pendingMessages.isEmpty()) {
         message += QStringLiteral(
-                    "\n\n\u4EE5\u4E0BProfile\u76EE\u6807\u5B57\u7B26"
-                    "\u5F85\u786E\u8BA4\uFF1A\n%1")
+                    "\n\n以下Profile目标字符"
+                    "待确认：\n%1")
                 .arg(pendingMessages.join(QLatin1Char('\n')));
-        showParameterWarning(QStringLiteral("\u63D0\u793A"), message);
+        showParameterWarning(QStringLiteral("提示"), message);
     } else {
-        showParameterInfo(QStringLiteral("\u63D0\u793A"), message);
+        showParameterInfo(QStringLiteral("提示"), message);
     }
 }
 

@@ -27,7 +27,7 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                 new PaddleOCR::OCRConfig(configPath.toStdString()));
     m_impl->config->PrintConfigInfo();
     qDebug().noquote() << QString::fromWCharArray(
-                    L"2. config.txt \u8bfb\u53d6\u5b8c\u6bd5");
+                    L"2. config.txt 读取完毕");
 
     const PaddleOCR::OCRConfig &config = *m_impl->config;
     m_impl->detector.reset(
@@ -46,8 +46,8 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                     config.use_tensorrt,
                     config.use_fp16));
     qDebug().noquote() << QString::fromWCharArray(
-                    L"3. DBDetector \u6a21\u578b\u52a0\u8f7d"
-                    L"\u5b8c\u6bd5");
+                    L"3. DBDetector 模型加载"
+                    L"完毕");
 
     if (config.use_angle_cls) {
         m_impl->classifier.reset(
@@ -62,8 +62,8 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                         config.use_tensorrt,
                         config.use_fp16));
         qDebug().noquote() << QString::fromWCharArray(
-                        L"4. Classifier \u89d2\u5ea6\u5206\u7c7b"
-                        L"\u6a21\u578b\u52a0\u8f7d\u5b8c\u6bd5");
+                        L"4. Classifier 角度分类"
+                        L"模型加载完毕");
     }
 
     m_impl->recognizer.reset(
@@ -78,8 +78,8 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                     config.use_tensorrt,
                     config.use_fp16));
     qDebug().noquote() << QString::fromWCharArray(
-                    L"5. CRNNRecognizer \u6a21\u578b\u52a0\u8f7d"
-                    L"\u5b8c\u6bd5");
+                    L"5. CRNNRecognizer 模型加载"
+                    L"完毕");
 }
 
 PaddleOcrEngine::~PaddleOcrEngine() = default;

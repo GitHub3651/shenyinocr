@@ -11,23 +11,10 @@
 
 #include <functional>
 
-// 组件说明：TissueRollPresentation 数据结构集中传递该流程需要的只读数据或回调。
-struct TissueRollPresentation
-{
-    cv::Point2f center;
-    cv::Size2f outerAxes;
-    cv::Point2f innerCenter;
-    cv::Size2f innerAxes;
-};
-
 // 组件说明：InspectionPresentationRenderState 数据结构集中保存该流程需要的一组相关数据。
 struct InspectionPresentationRenderState
 {
-    DetectionPose pose;
-    std::vector<DetectionOverlayPolygon> detailPolygons;
-    bool stampIsOverlap = false;
-    TissueRollPresentation tissueRoll;
-    bool hasTissueRoll = false;
+    DetectionOverlay overlay;
 };
 
 // 组件说明：InspectionPresentationViewBindings 数据结构集中传递该流程需要的只读数据或回调。
@@ -61,14 +48,7 @@ public:
     void presentNgCount(int ngCount);
     const ProductKey &lastPresentedProductKey() const;
 
-    void installDetectionResult(
-        const DetectionResult &result,
-        const DetectionPose &pose,
-        bool stampIsOverlap = false);
-    void installTissueRoll(
-        const TissueRollPresentation &roll,
-        bool hasTissueRoll);
-    void updatePose(const DetectionPose &pose);
+    void installDetectionResult(const DetectionResult &result);
 
     const InspectionPresentationRenderState &state() const;
     QImage renderFrame(

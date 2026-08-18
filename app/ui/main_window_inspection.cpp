@@ -48,7 +48,6 @@ void MainWindow::presentInspectionFault()
     if (!m_inspectionPage) {
         return;
     }
-    m_resultBoundDisplayActive.store(true);
     updateOperationUiState();
     m_inspectionPage->presentFault(
                 m_inspectionApplicationService->faultSnapshot(),
@@ -199,7 +198,6 @@ void MainWindow::finishInspectionStopUi(
     }
     hideTemplateGuide();
     m_inspectionApplicationService->clearResultView();
-    m_resultBoundDisplayActive.store(false);
     m_barcodeWordRunActive = false;
     if (result.issue == StopInspectionIssue::RuntimeFault
             || result.issue
@@ -566,8 +564,11 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 
                 QString tooltipText;
                 if (watched == ui->toolButton_createTemplate) {
-                    switch (ui->comboBox_detectionMode->currentIndex()) {
-                    case 0:
+                    DetectionMode mode = DetectionMode::Word;
+                    detectionModeFromUiId(detectModeIdForIndex(
+                        ui->comboBox_detectionMode->currentIndex()), &mode);
+                    switch (mode) {
+                    case DetectionMode::Stamp:
                         tooltipText =
                                 "制作模板匹配产品模板：\n\n"
                                 "1. 点击【制作模板】进入实时取景。\n"
@@ -575,7 +576,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                                 "3. 在冻结图像上框选定位区域和检测区域。\n"
                                 "4. 点击【保存模板】保存产品模板。";
                         break;
-                    case 1:
+                    case DetectionMode::Word:
                         tooltipText =
                                 "制作字库产品模板步骤：\n\n"
                                 "1. 点击【制作模板】进入实时取景。\n"
@@ -584,17 +585,17 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                                 "4. 用鼠标左键点击喷码区域边缘，右键闭合。\n"
                                 "5. 点击【保存模板】保存产品模板。";
                         break;
-                    case 2:
+                    case DetectionMode::Ocr:
                         tooltipText =
                                 "点击后进入实时取景，再次点击可冻结当前画面。\n\n"
                                 "深度模型模式通常不需要制作传统产品模板。";
                         break;
-                    case 3:
+                    case DetectionMode::Tissue:
                         tooltipText =
                                 "点击后进入实时取景，再次点击可冻结当前画面。\n\n"
                                 "纸巾检测通常不需要制作产品模板。";
                         break;
-                    case 4:
+                    case DetectionMode::BarcodeWord:
                         tooltipText =
                                 "制作二维码+三期产品模板步骤：\n\n"
                                 "1. 点击【制作模板】进入实时取景。\n"
@@ -603,9 +604,6 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                                 "4. 框选二维码区域并等待扫描验证。\n"
                                 "5. 用鼠标左键点击日期区域边缘，右键闭合。\n"
                                 "6. 点击【保存模板】保存产品模板。";
-                        break;
-                    default:
-                        tooltipText = "点击后进入实时取景，再次点击冻结当前画面。";
                         break;
                     }
                 } else {
@@ -721,7 +719,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
                 &activeMode);
     m_barcodeWordRunActive =
             activeMode == DetectionMode::BarcodeWord;
-    m_resultBoundDisplayActive.store(true);
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
     }

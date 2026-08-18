@@ -35,21 +35,21 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
                 " border:2px solid #d32f2f;}");
 
     QStringList details;
-    details << QStringLiteral("\u6545\u969c\u539f\u56e0\uff1a%1")
+    details << QStringLiteral("故障原因：%1")
                .arg(snapshot.reasonText);
     if (!snapshot.diagnostic.isEmpty()) {
-        details << QStringLiteral("\u8bca\u65ad\u4fe1\u606f\uff1a%1")
+        details << QStringLiteral("诊断信息：%1")
                    .arg(snapshot.diagnostic);
     }
     details << QStringLiteral(
-                   "\u672c\u6b21\u8fd0\u884c\u5df2\u63a5\u6536 %1 \u4ef6\uff0c\u5df2\u5b8c\u6210 %2 \u4ef6\u3002")
+                   "本次运行已接收 %1 件，已完成 %2 件。")
                .arg(snapshot.acceptedProductCount)
                .arg(snapshot.completedProductCount);
     details << QStringLiteral(
                    "输送线状态未知，请使用输送线自身控制确认停线，"
                    "并隔离故障期间的产品。");
     details << QStringLiteral(
-                   "\u786e\u8ba4\u73b0\u573a\u5df2\u5b89\u5168\u5904\u7406\u540e\uff0c\u70b9\u51fb\u3010\u786e\u8ba4\u6545\u969c\u5e76\u6062\u590d\u3011\u89e3\u9664\u8f6f\u4ef6\u9501\u5b9a\u3002");
+                   "确认现场已安全处理后，点击【确认故障并恢复】解除软件锁定。");
     presentation.operatorMessage = details.join(QStringLiteral("\n\n"));
     return presentation;
 }

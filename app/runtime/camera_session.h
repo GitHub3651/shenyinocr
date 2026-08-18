@@ -6,7 +6,6 @@
 
 #include "detection/positioning/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
-#include "detection/positioning/inspection_positioner.h"
 #include "devices/camera/camera_device.h"
 #include "runtime/capture_worker.h"
 #include "runtime/inspection_runtime.h"
@@ -113,16 +112,11 @@ struct CameraSessionCaptureConfiguration
     float hardwareTriggerDelayMicroseconds = 0.0f;
     int exposure = 0;
     int gain = 0;
-    std::vector<WordTrackingProfile> trackingProfiles;
-    std::vector<cv::Point2f> singleDatePolygon;
-    cv::Mat singleTrackingTemplate;
 };
 
 // 组件说明：CameraSessionCallbacks 数据结构集中传递该流程需要的只读数据或回调。
 struct CameraSessionCallbacks
 {
-    std::function<void(const cv::Mat &)> streamingFrameReady;
-    std::function<void(const DetectionPose &)> trackingPoseReady;
     std::function<void(quint64, const cv::Mat &)> previewFrameReady;
     std::function<void(quint64, const QString &)> previewFailed;
     std::function<void(bool)> captureStopped;
@@ -185,14 +179,13 @@ private:
     void handleFrame(const CameraFrame &frame);
     void handleCaptureError(CameraFrameStatus status, int nativeErrorCode);
     void handleCaptureStopped();
-    void submitFrame(const cv::Mat &image, const DetectionPose &pose);
+    void submitFrame(const cv::Mat &image);
     CameraSessionCallbacks callbacksSnapshot() const;
 
     std::shared_ptr<ICameraDevice> m_cameraDevice;
     InspectionRuntime *m_runtime = nullptr;
     CaptureWorker m_captureWorker;
     CameraSessionCaptureConfiguration m_configuration;
-    InspectionPositioner m_positioner;
     bool m_open = false;
     bool m_prepared = false;
     std::atomic<bool> m_preview{false};

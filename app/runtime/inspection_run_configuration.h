@@ -4,8 +4,6 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include "detection/positioning/inspection_positioner.h"
-
 enum class InspectionAcquisitionKind {
     SoftwareTrigger,
     HardwareTrigger
@@ -16,9 +14,6 @@ struct InspectionRunPlan
 {
     InspectionAcquisitionKind acquisitionKind =
             InspectionAcquisitionKind::SoftwareTrigger;
-    InspectionTrackingKind trackingKind =
-            InspectionTrackingKind::SingleTemplate;
-    bool barcodeWordHardTriggerMode = false;
 };
 
 // 组件说明：InspectionRunConfiguration 组件集中描述相关配置、规则和运行参数。
@@ -26,7 +21,5 @@ class InspectionRunConfiguration
 {
 public:
     static InspectionRunPlan createPlan(
-        InspectionTrackingKind trackingKind,
-        bool hardwareTriggerEnabled,
-        bool barcodeWordMode = false);
+        bool hardwareTriggerEnabled);
 };

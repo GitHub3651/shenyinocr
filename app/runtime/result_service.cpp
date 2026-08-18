@@ -62,30 +62,6 @@ DetectionVerdictViewStyle verdictStyle(AlgorithmVerdict verdict)
             : DetectionVerdictViewStyle::Error;
 }
 
-// 函数说明：profileTemplateName 函数实现名称所表示的处理步骤。
-QString profileTemplateName(
-    const QString &templateName,
-    const DetectionPose &pose,
-    bool *updatesTemplateName)
-{
-    if (updatesTemplateName) {
-        *updatesTemplateName = false;
-    }
-    if (!templateName.trimmed().isEmpty()) {
-        if (updatesTemplateName) {
-            *updatesTemplateName = true;
-        }
-        return templateName;
-    }
-    if (!pose.valid) {
-        if (updatesTemplateName) {
-            *updatesTemplateName = true;
-        }
-        return QStringLiteral("--");
-    }
-    return QString();
-}
-
 } // namespace
 
 // 函数说明：ResultService 构造函数创建组件并初始化其依赖和初始状态。
@@ -159,36 +135,11 @@ bool ResultService::requiresPlcForRun() const
     return m_runConfiguration.plcOutputEnabled;
 }
 
-// 函数说明：pipelineConsumers 函数实现名称所表示的处理步骤。
-PipelineResultConsumers ResultService::pipelineConsumers()
+DetectionWorker::CompletionConsumer ResultService::completionConsumer()
 {
-    PipelineResultConsumers consumers;
-    consumers.tissue = [this](
-        const DetectionCompletion &completion,
-        const TissueRollResult &output) {
-        handleTissueCompletion(completion, output);
+    return [this](const DetectionCompletion &completion) {
+        handleCompletion(completion);
     };
-    consumers.ocr = [this](
-        const DetectionCompletion &completion,
-        const DetectionPose &pose) {
-        handleOcrCompletion(completion, pose);
-    };
-    consumers.stamp = [this](
-        const DetectionCompletion &completion,
-        const StampDetectionWorkOutput &output) {
-        handleStampCompletion(completion, output);
-    };
-    consumers.word = [this](
-        const DetectionCompletion &completion,
-        const WordDetectionWorkOutput &output) {
-        handleWordCompletion(completion, output);
-    };
-    consumers.barcodeWord = [this](
-        const DetectionCompletion &completion,
-        const BarcodeWordDetectionWorkOutput &output) {
-        handleBarcodeWordCompletion(completion, output);
-    };
-    return consumers;
 }
 
 // 函数说明：clear 函数停止流程、清理状态或释放对应资源。
@@ -227,13 +178,6 @@ bool ResultService::presentPreviewFrame(
         return false;
     }
     return renderAndPresentFrame(image, tissueMode);
-}
-
-// 函数说明：updatePose 函数更新或应用对应的配置和状态。
-void ResultService::updatePose(const DetectionPose &pose)
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    m_presentationRenderer.updatePose(pose);
 }
 
 // 函数说明：presentTotalAndNgCounts 函数执行对应事件或业务处理。
@@ -387,14 +331,13 @@ bool ResultService::postUiWork(const UiCompletionMailbox::Work &work)
 
 // 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
 DetectionCompletion ResultService::acceptCompletion(
-    const DetectionCompletion &completion,
-    const char *modeName)
+    const DetectionCompletion &completion)
 {
     const DetectionCompletion accepted = m_runtime.complete(
                 completion.frame, completion.result);
     if (!accepted.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale" << modeName
-                 << "completion ignored";
+        qDebug() << "[DETECTION_WORKER] stale completion ignored"
+                 << completion.result.modeId;
     }
     return accepted;
 }
@@ -677,284 +620,68 @@ qint64 ResultService::presentationElapsedMs(
             QDateTime::currentDateTimeUtc()));
 }
 
-// 函数说明：handleTissueCompletion 函数执行对应事件或业务处理。
-void ResultService::handleTissueCompletion(
-    const DetectionCompletion &completion,
-    const TissueRollResult &output)
+void ResultService::handleCompletion(
+    const DetectionCompletion &completion)
 {
-    const DetectionCompletion accepted = acceptCompletion(
-                completion, "tissue");
-    if (accepted.isValid()) {
-        finalizeTissue(output, accepted);
-    }
-}
-
-// 函数说明：handleOcrCompletion 函数执行对应事件或业务处理。
-void ResultService::handleOcrCompletion(
-    const DetectionCompletion &completion,
-    const DetectionPose &pose)
-{
-    const DetectionCompletion accepted = acceptCompletion(completion, "OCR");
-    if (accepted.isValid()
-            && accepted.result.status != DetectionStatus::Cancelled) {
-        finalizeOcr(pose, accepted);
-    }
-}
-
-// 函数说明：handleStampCompletion 函数执行对应事件或业务处理。
-void ResultService::handleStampCompletion(
-    const DetectionCompletion &completion,
-    const StampDetectionWorkOutput &output)
-{
-    const DetectionCompletion accepted = acceptCompletion(
-                completion, "stamp");
+    const DetectionCompletion accepted = acceptCompletion(completion);
     if (!accepted.isValid()) {
         return;
     }
-    if (accepted.result.status == DetectionStatus::Cancelled) {
-        ResultServiceCallbacks callbacks;
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            callbacks = m_callbacks;
-        }
-        if (callbacks.showDetectionRoiWarning) {
-            postUiWork(callbacks.showDetectionRoiWarning);
-        }
-        return;
-    }
+
     ResultServiceCallbacks callbacks;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         callbacks = m_callbacks;
     }
-    if (callbacks.clearDetectionRoiWarning) {
+    if (accepted.result.status == DetectionStatus::Cancelled) {
+        m_runtime.claimResult(accepted.frame->productKey);
+        if (accepted.result.showRoiWarningOnCancelled
+                && callbacks.showDetectionRoiWarning) {
+            postUiWork(callbacks.showDetectionRoiWarning);
+        }
+        return;
+    }
+    if (accepted.result.clearRoiWarningOnCompleted
+            && callbacks.clearDetectionRoiWarning) {
         postUiWork(callbacks.clearDetectionRoiWarning);
     }
-    finalizeStamp(output, accepted);
-}
 
-// 函数说明：handleWordCompletion 函数执行对应事件或业务处理。
-void ResultService::handleWordCompletion(
-    const DetectionCompletion &completion,
-    const WordDetectionWorkOutput &output)
-{
-    const DetectionCompletion accepted = acceptCompletion(
-                completion, "word");
-    if (accepted.isValid()
-            && accepted.result.status != DetectionStatus::Cancelled) {
-        finalizeWord(output, accepted);
-    }
-}
-
-// 函数说明：handleBarcodeWordCompletion 函数执行对应事件或业务处理。
-void ResultService::handleBarcodeWordCompletion(
-    const DetectionCompletion &completion,
-    const BarcodeWordDetectionWorkOutput &output)
-{
-    const DetectionCompletion accepted = acceptCompletion(
-                completion, "barcode-word");
-    if (accepted.isValid()
-            && accepted.result.status != DetectionStatus::Cancelled) {
-        finalizeBarcodeWord(output, accepted);
-    }
-}
-
-// 函数说明：finalizeTissue 函数实现名称所表示的处理步骤。
-void ResultService::finalizeTissue(
-    const TissueRollResult &output,
-    const DetectionCompletion &completion)
-{
     ProcessRequest request;
-    request.completion = completion;
+    request.completion = accepted;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         request.saveOptions = m_runConfiguration.saveOptions;
     }
-    const QString recognitionText = output.rollFound
-            ? QStringLiteral("粗糙度：%1").arg(
-                output.roll.roughnessScore, 0, 'f', 3)
-            : QStringLiteral("粗糙度：--");
-    request.preparePresentation = [this, completion, output,
-        recognitionText]() {
-        TissueRollPresentation roll;
-        if (output.rollFound) {
-            roll.center = output.roll.center;
-            roll.outerAxes = output.roll.outerAxes;
-            roll.innerCenter = output.roll.innerCenter;
-            roll.innerAxes = output.roll.innerAxes;
-        }
-        m_presentationRenderer.installTissueRoll(roll, output.rollFound);
+    request.saveOptions.layout = accepted.result.saveRawOnly
+            ? ResultSaveLayout::RawOnly
+            : ResultSaveLayout::AnnotatedAndRaw;
+    request.saveOptions.saveNotEvaluatedAsNg =
+            accepted.result.saveNotEvaluatedAsNg;
+    request.preparePresentation = [this, accepted]() {
+        m_presentationRenderer.installDetectionResult(accepted.result);
         InspectionPresentation presentation;
         presentation.image = m_presentationRenderer.renderFrame(
-                    completion.frame->originalImage, true);
-        presentation.verdictStyle = verdictStyle(completion.result.verdict);
-        presentation.recognitionText = recognitionText;
+                    accepted.frame->originalImage, true);
+        presentation.verdictStyle = verdictStyle(accepted.result.verdict);
+        presentation.recognitionText = accepted.result.hasPresentationText
+                ? accepted.result.presentationText
+                : QString();
+        presentation.updatesTemplateName =
+                accepted.result.updatesTemplateName;
+        presentation.templateName = accepted.result.templateName;
         return presentation;
     };
-    request.beforePresent = [this]() {
-        clearPreviousOverlay(false);
+    request.beforePresent = [this, accepted]() {
+        clearPreviousOverlay(accepted.result.clearImageLabelRects);
     };
-    request.finalizePresentation = [completion](
+    request.finalizePresentation = [accepted](
         InspectionPresentation *presentation) {
-        presentation->elapsedText = QStringLiteral("检测耗时 %1 毫秒")
-                .arg(presentationElapsedMs(completion));
-    };
-    process(request);
-}
-
-// 函数说明：finalizeOcr 函数实现名称所表示的处理步骤。
-void ResultService::finalizeOcr(
-    const DetectionPose &pose,
-    const DetectionCompletion &completion)
-{
-    ProcessRequest request;
-    request.completion = completion;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        request.saveOptions = m_runConfiguration.saveOptions;
-    }
-    request.saveOptions.layout = ResultSaveLayout::RawOnly;
-    request.preparePresentation = [this, completion, pose]() {
-        m_presentationRenderer.installDetectionResult(
-                    completion.result, pose);
-        InspectionPresentation presentation;
-        presentation.image = m_presentationRenderer.renderFrame(
-                    completion.frame->originalImage, false);
-        presentation.verdictStyle = verdictStyle(completion.result.verdict);
-        presentation.recognitionText = completion.result.recognizedText;
-        return presentation;
-    };
-    request.beforePresent = [this]() { clearPreviousOverlay(false); };
-    request.finalizePresentation = [completion](
-        InspectionPresentation *presentation) {
-        presentation->elapsedText = QStringLiteral("检测耗时 %1 毫秒")
-                .arg(presentationElapsedMs(completion));
-    };
-    process(request);
-}
-
-// 函数说明：finalizeStamp 函数实现名称所表示的处理步骤。
-void ResultService::finalizeStamp(
-    const StampDetectionWorkOutput &output,
-    const DetectionCompletion &completion)
-{
-    ProcessRequest request;
-    request.completion = completion;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        request.saveOptions = m_runConfiguration.saveOptions;
-    }
-    request.saveOptions.saveNotEvaluatedAsNg = false;
-    request.preparePresentation = [this, completion, output]() {
-        m_presentationRenderer.installDetectionResult(
-                    completion.result,
-                    output.pose,
-                    output.hasOverlapDetection
-                    && !output.stampResult.overlapIsOk);
-        InspectionPresentation presentation;
-        presentation.image = m_presentationRenderer.renderFrame(
-                    completion.frame->originalImage, false);
-        presentation.verdictStyle = verdictStyle(completion.result.verdict);
-        return presentation;
-    };
-    request.beforePresent = [this]() {
-        clearPreviousOverlay(true);
-    };
-    request.finalizePresentation = [completion](
-        InspectionPresentation *presentation) {
-        presentation->elapsedText = QStringLiteral("检测耗时 %1 毫秒")
-                .arg(presentationElapsedMs(completion));
-    };
-    process(request);
-}
-
-// 函数说明：finalizeWord 函数实现名称所表示的处理步骤。
-void ResultService::finalizeWord(
-    const WordDetectionWorkOutput &output,
-    const DetectionCompletion &completion)
-{
-    bool updatesTemplateName = false;
-    const QString templateName = profileTemplateName(
-                output.templateName, output.pose, &updatesTemplateName);
-    ProcessRequest request;
-    request.completion = completion;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        request.saveOptions = m_runConfiguration.saveOptions;
-    }
-    request.saveOptions.saveNotEvaluatedAsNg = false;
-    request.preparePresentation = [this, completion, output,
-        updatesTemplateName, templateName]() {
-        m_presentationRenderer.installDetectionResult(
-                    completion.result, output.pose);
-        InspectionPresentation presentation;
-        presentation.image = m_presentationRenderer.renderFrame(
-                    completion.frame->originalImage, false);
-        presentation.verdictStyle = verdictStyle(completion.result.verdict);
-        presentation.updatesTemplateName = updatesTemplateName;
-        presentation.templateName = templateName;
-        return presentation;
-    };
-    request.beforePresent = [this]() {
-        clearPreviousOverlay(true);
-    };
-    request.finalizePresentation = [completion](
-        InspectionPresentation *presentation) {
-        presentation->elapsedText = QStringLiteral("检测耗时 %1 毫秒")
-                .arg(presentationElapsedMs(completion));
-    };
-    process(request);
-}
-
-// 函数说明：finalizeBarcodeWord 函数实现名称所表示的处理步骤。
-void ResultService::finalizeBarcodeWord(
-    const BarcodeWordDetectionWorkOutput &output,
-    const DetectionCompletion &completion)
-{
-    bool updatesTemplateName = false;
-    const QString templateName = profileTemplateName(
-                output.templateName, output.pose, &updatesTemplateName);
-    QStringList lines;
-    lines.append(QStringLiteral("二维码：%1").arg(output.barcodeState));
-    if (!output.barcode.text.isEmpty()) {
-        lines.append(QStringLiteral("二维码内容：%1").arg(
-            output.barcode.text));
-    }
-    lines.append(QStringLiteral("日期：%1").arg(output.dateState));
-    if ((!output.barcodeWordResult.barcodeIsReadable
-         || !output.barcodeWordResult.dateDetectionExecuted)
-            && !output.reason.trimmed().isEmpty()) {
-        lines.append(QStringLiteral("原因：%1").arg(output.reason));
-    }
-
-    ProcessRequest request;
-    request.completion = completion;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        request.saveOptions = m_runConfiguration.saveOptions;
-    }
-    request.saveOptions.saveNotEvaluatedAsNg = false;
-    request.preparePresentation = [this, completion, output, lines,
-        updatesTemplateName, templateName]() {
-        m_presentationRenderer.installDetectionResult(
-                    completion.result, output.pose);
-        InspectionPresentation presentation;
-        presentation.image = m_presentationRenderer.renderFrame(
-                    completion.frame->originalImage, false);
-        presentation.verdictStyle = verdictStyle(completion.result.verdict);
-        presentation.recognitionText = lines.join(QStringLiteral("\n"));
-        presentation.updatesTemplateName = updatesTemplateName;
-        presentation.templateName = templateName;
-        return presentation;
-    };
-    request.beforePresent = [this]() {
-        clearPreviousOverlay(true);
-    };
-    request.finalizePresentation = [completion](
-        InspectionPresentation *presentation) {
-        presentation->elapsedText = QStringLiteral("检测耗时 %1 ms")
-                .arg(static_cast<double>(presentationElapsedMs(completion)),
-                     0, 'f', 2);
+        const qint64 elapsed = presentationElapsedMs(accepted);
+        presentation->elapsedText = accepted.result.elapsedDecimals > 0
+                ? QStringLiteral("检测耗时 %1 ms").arg(
+                    static_cast<double>(elapsed), 0, 'f',
+                    accepted.result.elapsedDecimals)
+                : QStringLiteral("检测耗时 %1 毫秒").arg(elapsed);
     };
     process(request);
 }

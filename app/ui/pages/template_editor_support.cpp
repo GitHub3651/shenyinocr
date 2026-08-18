@@ -42,10 +42,11 @@ bool parseIntValue(const QString &text, int *value)
 // 函数说明：isSingleTemplateRecipeMode 函数检查相关状态并返回判断结果。
 bool isSingleTemplateRecipeMode(const QString &modeId)
 {
-    DetectionMode mode;
-    return detectionModeFromUiId(modeId, &mode)
-            && (mode == DetectionMode::Stamp
-                || mode == DetectionMode::Ocr);
+    const DetectionModeDescriptor *descriptor =
+            detectionModeDescriptorFromUiId(modeId);
+    return descriptor
+            && descriptor->trackingKind
+               == DetectionTrackingKind::SingleTemplate;
 }
 
 // 函数说明：imageFromBgrMat 函数实现名称所表示的处理步骤。

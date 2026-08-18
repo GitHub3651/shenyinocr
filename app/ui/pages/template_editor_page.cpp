@@ -381,7 +381,7 @@ bool TemplateEditorPage::freezeTemplatePreview()
             || isWordFamilyMode(modeId);
     clearBarcodeTemplateValidation();
     imageLabel->setBarcodeRegionRequired(
-                modeId == BarcodeWordDetectionMode);
+                modeId == detectionModeUiId(DetectionMode::BarcodeWord));
     imageLabel->setTemplateDrawingEnabled(needsTemplateDrawing);
     if (needsTemplateDrawing) {
         imageLabel->resetDrawingStep();
@@ -882,7 +882,8 @@ TemplateEditorPage::barcodeTemplateValidationOptions() const
 {
     BarcodeRecipeParameters parameters;
     const int profileIndex = currentWordTemplateProfileIndex();
-    if (currentDetectModeId() == BarcodeWordDetectionMode
+    if (currentDetectModeId()
+            == detectionModeUiId(DetectionMode::BarcodeWord)
             && profileIndex >= 0
             && profileIndex
                < static_cast<int>(m_templateService->wordProfiles().size())) {

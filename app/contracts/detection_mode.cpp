@@ -4,71 +4,116 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "contracts/detection_mode.h"
 
-const QString BarcodeWordDetectionMode =
-    QStringLiteral("barcode_word_detection");
+namespace {
+
+const QVector<DetectionModeDescriptor> &descriptors()
+{
+    static const QVector<DetectionModeDescriptor> values = {
+        { DetectionMode::Stamp, "stamp", "stamp_detection", "模板匹配",
+          "stamp", "无法启动钢印检测工作线程。",
+          DetectionTrackingKind::SingleTemplate, true, true, false,
+          true, true, false, false, 0 },
+        { DetectionMode::Word, "word", "word_detection", "字库匹配",
+          "word", "无法启动字库检测工作线程。",
+          DetectionTrackingKind::MultipleProfiles, true, true, false,
+          true, false, false, false, 0 },
+        { DetectionMode::Ocr, "ocr", "ocr_detection", "深度模型",
+          "OCR", "无法启动深度OCR检测工作线程。",
+          DetectionTrackingKind::SingleTemplate, true, false, false,
+          false, false, true, true, 0 },
+        { DetectionMode::Tissue, "tissue", "tissue_detection", "纸巾检测",
+          "tissue", "无法启动纸巾检测工作线程。",
+          DetectionTrackingKind::WholeFrame, false, false, false,
+          false, false, false, true, 0 },
+        { DetectionMode::BarcodeWord, "barcodeWord", "barcode_word_detection",
+          "二维码+三期", "barcode-word", "无法启动二维码+三期检测工作线程。",
+          DetectionTrackingKind::MultipleProfiles,
+          true, true, true, true, false, false, false, 2 }
+    };
+    return values;
+}
+
+} // namespace
+
+const QVector<DetectionModeDescriptor> &detectionModeDescriptors()
+{
+    return descriptors();
+}
+
+const DetectionModeDescriptor &detectionModeDescriptor(DetectionMode mode)
+{
+    for (const DetectionModeDescriptor &descriptor : descriptors()) {
+        if (descriptor.mode == mode) {
+            return descriptor;
+        }
+    }
+    return descriptors().first();
+}
+
+const DetectionModeDescriptor *detectionModeDescriptorFromId(
+    const QString &modeId)
+{
+    for (const DetectionModeDescriptor &descriptor : descriptors()) {
+        if (modeId == QLatin1String(descriptor.recipeId)) {
+            return &descriptor;
+        }
+    }
+    return nullptr;
+}
+
+const DetectionModeDescriptor *detectionModeDescriptorFromUiId(
+    const QString &modeId)
+{
+    for (const DetectionModeDescriptor &descriptor : descriptors()) {
+        if (modeId == QLatin1String(descriptor.uiId)) {
+            return &descriptor;
+        }
+    }
+    return nullptr;
+}
 
 // 函数说明：detectionModeId 函数执行对应事件或业务处理。
 QString detectionModeId(DetectionMode mode)
 {
-    switch (mode) {
-    case DetectionMode::Stamp: return QStringLiteral("stamp");
-    case DetectionMode::Word: return QStringLiteral("word");
-    case DetectionMode::Ocr: return QStringLiteral("ocr");
-    case DetectionMode::Tissue: return QStringLiteral("tissue");
-    case DetectionMode::BarcodeWord: return QStringLiteral("barcodeWord");
-    }
-    return QString();
+    return QLatin1String(detectionModeDescriptor(mode).recipeId);
 }
 
 // 函数说明：detectionModeFromId 函数执行对应事件或业务处理。
 bool detectionModeFromId(const QString &id, DetectionMode *mode)
 {
-    if (!mode) return false;
-    if (id == QLatin1String("stamp")) *mode = DetectionMode::Stamp;
-    else if (id == QLatin1String("word")) *mode = DetectionMode::Word;
-    else if (id == QLatin1String("ocr")) *mode = DetectionMode::Ocr;
-    else if (id == QLatin1String("tissue")) *mode = DetectionMode::Tissue;
-    else if (id == QLatin1String("barcodeWord")) {
-        *mode = DetectionMode::BarcodeWord;
-    } else {
+    const DetectionModeDescriptor *descriptor =
+            detectionModeDescriptorFromId(id);
+    if (!mode || !descriptor) {
         return false;
     }
+    *mode = descriptor->mode;
     return true;
 }
 
 // 函数说明：detectionModeUiId 函数执行对应事件或业务处理。
 QString detectionModeUiId(DetectionMode mode)
 {
-    switch (mode) {
-    case DetectionMode::Stamp: return QStringLiteral("stamp_detection");
-    case DetectionMode::Word: return QStringLiteral("word_detection");
-    case DetectionMode::Ocr: return QStringLiteral("ocr_detection");
-    case DetectionMode::Tissue: return QStringLiteral("tissue_detection");
-    case DetectionMode::BarcodeWord: return BarcodeWordDetectionMode;
-    }
-    return QString();
+    return QLatin1String(detectionModeDescriptor(mode).uiId);
 }
 
 // 函数说明：detectionModeFromUiId 函数执行对应事件或业务处理。
 bool detectionModeFromUiId(const QString &id, DetectionMode *mode)
 {
-    if (!mode) return false;
-    if (id == QLatin1String("stamp_detection")) *mode = DetectionMode::Stamp;
-    else if (id == QLatin1String("word_detection")) *mode = DetectionMode::Word;
-    else if (id == QLatin1String("ocr_detection")) *mode = DetectionMode::Ocr;
-    else if (id == QLatin1String("tissue_detection")) {
-        *mode = DetectionMode::Tissue;
-    } else if (id == BarcodeWordDetectionMode) {
-        *mode = DetectionMode::BarcodeWord;
-    } else {
+    const DetectionModeDescriptor *descriptor =
+            detectionModeDescriptorFromUiId(id);
+    if (!mode || !descriptor) {
         return false;
     }
+    *mode = descriptor->mode;
     return true;
 }
 
 // 函数说明：isWordFamilyMode 函数检查相关状态并返回判断结果。
 bool isWordFamilyMode(const QString &modeId)
 {
-    return modeId == QLatin1String("word_detection")
-        || modeId == BarcodeWordDetectionMode;
+    const DetectionModeDescriptor *descriptor =
+            detectionModeDescriptorFromUiId(modeId);
+    return descriptor
+            && descriptor->trackingKind
+               == DetectionTrackingKind::MultipleProfiles;
 }

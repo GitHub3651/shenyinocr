@@ -88,9 +88,9 @@ bool BarcodeDecoderAdapter::ensureLoaded()
         const DWORD loadError = GetLastError();
         m_impl->error =
                 QString::fromWCharArray(
-                    L"\u65e0\u6cd5\u52a0\u8f7d\u4e8c\u7ef4\u7801"
-                    L"\u89e3\u7801DLL\uff1a%1\uff08Windows"
-                    L"\u9519\u8bef\u7801=%2\uff09")
+                    L"无法加载二维码"
+                    L"解码DLL：%1（Windows"
+                    L"错误码=%2）")
                 .arg(decoderPath)
                 .arg(static_cast<qulonglong>(loadError));
         return false;
@@ -106,8 +106,8 @@ bool BarcodeDecoderAdapter::ensureLoaded()
     if (!functions.getVersion || !functions.decodeLuma8) {
         m_impl->error =
                 QString::fromWCharArray(
-                    L"\u4e8c\u7ef4\u7801\u89e3\u7801DLL"
-                    L"\u7f3a\u5c11\u63a5\u53e3\uff1a%1")
+                    L"二维码解码DLL"
+                    L"缺少接口：%1")
                 .arg(decoderPath);
         FreeLibrary(module);
         return false;

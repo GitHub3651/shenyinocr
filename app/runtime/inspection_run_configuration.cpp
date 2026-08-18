@@ -6,15 +6,11 @@
 
 // 函数说明：createPlan 函数创建、准备或启动对应流程。
 InspectionRunPlan InspectionRunConfiguration::createPlan(
-    InspectionTrackingKind trackingKind,
-    bool hardwareTriggerEnabled,
-    bool barcodeWordMode)
+    bool hardwareTriggerEnabled)
 {
     InspectionRunPlan plan;
     plan.acquisitionKind = hardwareTriggerEnabled
             ? InspectionAcquisitionKind::HardwareTrigger
             : InspectionAcquisitionKind::SoftwareTrigger;
-    plan.trackingKind = trackingKind;
-    plan.barcodeWordHardTriggerMode = barcodeWordMode;
     return plan;
 }

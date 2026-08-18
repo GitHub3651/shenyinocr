@@ -14,28 +14,28 @@ OperationUiSnapshot OperationUiPolicy::create(OperationUiState state)
     snapshot.settingsEnabled = snapshot.enableAllOperations;
     snapshot.startDetectionText =
             state == OperationUiState::Detecting
-            ? QStringLiteral("\u91c7\u96c6\u4e2d...")
+            ? QStringLiteral("采集中...")
             : (state == OperationUiState::Stopping
-               ? QStringLiteral("\u505c\u6b62\u4e2d...")
-               : QStringLiteral("\u542f\u52a8\u8bc6\u522b"));
+               ? QStringLiteral("停止中...")
+               : QStringLiteral("启动识别"));
 
     const bool templateOperation =
             state == OperationUiState::TemplatePreviewing
             || state == OperationUiState::TemplateFrozen;
     snapshot.stopText =
             state == OperationUiState::Fault
-            ? QStringLiteral("\u786e\u8ba4\u6545\u969c\u5e76\u6062\u590d")
+            ? QStringLiteral("确认故障并恢复")
             : (state == OperationUiState::Stopping
-            ? QStringLiteral("\u505c\u6b62\u4e2d...")
+            ? QStringLiteral("停止中...")
             : (templateOperation
-               ? QStringLiteral("\u9000\u51fa\u6a21\u677f\u5236\u4f5c")
-               : QStringLiteral("\u505c\u6b62\u8bc6\u522b")));
+               ? QStringLiteral("退出模板制作")
+               : QStringLiteral("停止识别")));
     snapshot.templateCaptureText =
             state == OperationUiState::TemplatePreviewing
-            ? QStringLiteral("\u62cd\u7167\u5e76\u5f00\u59cb\u6846\u9009")
+            ? QStringLiteral("拍照并开始框选")
             : (state == OperationUiState::TemplateFrozen
-               ? QStringLiteral("\u91cd\u65b0\u53d6\u666f")
-               : QStringLiteral("\u5236\u4f5c\u6a21\u677f"));
+               ? QStringLiteral("重新取景")
+               : QStringLiteral("制作模板"));
 
     switch (state) {
     case OperationUiState::CameraClosed:
@@ -61,20 +61,20 @@ OperationUiSnapshot OperationUiPolicy::create(OperationUiState state)
     case OperationUiState::Fault:
         snapshot.stopEnabled = true;
         snapshot.statusText = QStringLiteral(
-                    "\u7cfb\u7edf\u6545\u969c\uff1a\u68c0\u6d4b\u5df2\u6682\u505c");
+                    "系统故障：检测已暂停");
         break;
     case OperationUiState::TemplatePreviewing:
         snapshot.stopEnabled = true;
         snapshot.templateCaptureEnabled = true;
         snapshot.statusText = QStringLiteral(
-                    "\u6a21\u677f\u5236\u4f5c\u4e2d\uff1a\u5b9e\u65f6\u53d6\u666f");
+                    "模板制作中：实时取景");
         break;
     case OperationUiState::TemplateFrozen:
         snapshot.stopEnabled = true;
         snapshot.templateCaptureEnabled = true;
         snapshot.saveTemplateEnabled = true;
         snapshot.statusText = QStringLiteral(
-                    "\u6a21\u677f\u5236\u4f5c\u4e2d\uff1a\u8bf7\u5b8c\u6210\u6846\u9009\u5e76\u4fdd\u5b58");
+                    "模板制作中：请完成框选并保存");
         break;
     }
     return snapshot;

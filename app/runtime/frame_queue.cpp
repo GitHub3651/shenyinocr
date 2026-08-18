@@ -18,12 +18,12 @@ FrameQueue::~FrameQueue()
 
 // 函数说明：submit 函数执行对应事件或业务处理。
 bool FrameQueue::submit(
-    const DetectionWorkItem &item)
+    const std::shared_ptr<const FrameData> &frame)
 {
-    if (!item.isValid()) {
+    if (!frame || !frame->productKey.isValid()
+            || frame->originalImage.empty()) {
         return false;
     }
-
     std::unique_lock<std::mutex> lock(m_mutex);
     m_spaceAvailable.wait(lock, [this]() {
         return m_cancelled || m_items.size() < m_capacity;
@@ -31,30 +31,20 @@ bool FrameQueue::submit(
     if (m_cancelled) {
         return false;
     }
-
-    m_items.push_back(item);
+    m_items.push_back(frame);
     lock.unlock();
     m_frameAvailable.notify_one();
     return true;
 }
 
-// 函数说明：submit 函数执行对应事件或业务处理。
-bool FrameQueue::submit(
-    const std::shared_ptr<const FrameData> &frame)
-{
-    DetectionWorkItem item;
-    item.frame = frame;
-    return submit(item);
-}
-
 // 函数说明：trySubmit 函数实现名称所表示的处理步骤。
 FrameQueueSubmitResult FrameQueue::trySubmit(
-    const DetectionWorkItem &item)
+    const std::shared_ptr<const FrameData> &frame)
 {
-    if (!item.isValid()) {
+    if (!frame || !frame->productKey.isValid()
+            || frame->originalImage.empty()) {
         return FrameQueueSubmitResult::InvalidItem;
     }
-
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_cancelled) {
         return FrameQueueSubmitResult::Cancelled;
@@ -62,43 +52,9 @@ FrameQueueSubmitResult FrameQueue::trySubmit(
     if (m_items.size() >= m_capacity) {
         return FrameQueueSubmitResult::Full;
     }
-
-    m_items.push_back(item);
+    m_items.push_back(frame);
     m_frameAvailable.notify_one();
     return FrameQueueSubmitResult::Accepted;
-}
-
-// 函数说明：trySubmit 函数实现名称所表示的处理步骤。
-FrameQueueSubmitResult FrameQueue::trySubmit(
-    const std::shared_ptr<const FrameData> &frame)
-{
-    DetectionWorkItem item;
-    item.frame = frame;
-    return trySubmit(item);
-}
-
-// 函数说明：waitAndTake 函数读取、等待或计算对应的数据。
-bool FrameQueue::waitAndTake(
-    DetectionWorkItem *item)
-{
-    if (!item) {
-        return false;
-    }
-
-    std::unique_lock<std::mutex> lock(m_mutex);
-    m_frameAvailable.wait(lock, [this]() {
-        return m_cancelled || !m_items.empty();
-    });
-    if (m_cancelled) {
-        *item = DetectionWorkItem();
-        return false;
-    }
-
-    *item = m_items.front();
-    m_items.pop_front();
-    lock.unlock();
-    m_spaceAvailable.notify_one();
-    return true;
 }
 
 // 函数说明：waitAndTake 函数读取、等待或计算对应的数据。
@@ -109,20 +65,25 @@ bool FrameQueue::waitAndTake(
         return false;
     }
 
-    DetectionWorkItem item;
-    if (!waitAndTake(&item)) {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    m_frameAvailable.wait(lock, [this]() {
+        return m_cancelled || !m_items.empty();
+    });
+    if (m_cancelled) {
         frame->reset();
         return false;
     }
-
-    *frame = item.frame;
+    *frame = m_items.front();
+    m_items.pop_front();
+    lock.unlock();
+    m_spaceAvailable.notify_one();
     return true;
 }
 
 // 函数说明：cancel 函数检查相关状态并返回判断结果。
 std::size_t FrameQueue::cancel()
 {
-    std::deque<DetectionWorkItem> releasedItems;
+    std::deque<std::shared_ptr<const FrameData> > releasedItems;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_cancelled = true;
