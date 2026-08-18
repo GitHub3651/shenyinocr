@@ -397,9 +397,10 @@ StartInspectionResult InspectionApplicationService::start(
 {
     const MachineSettings settings = m_settings->current();
     InspectionStartAccessInput access;
-    access.templateOperationActive = command.templateOperationActive;
     access.runtimeBusy = m_runtime->isBusy();
-    access.cameraOpen = m_cameraOpen;
+    access.templateOperationActive = !access.runtimeBusy
+            && m_cameraSession->isCapturing();
+    access.cameraOpen = m_cameraSession->isOpen();
     access.dirtySettings = m_settings->hasUnappliedChanges()
             || !command.unappliedChanges.isEmpty();
     access.plcTriggerEnabled = settings.triggerEnabled;
@@ -510,10 +511,8 @@ StartInspectionResult InspectionApplicationService::start(
                     settings,
                     hardwareTriggerEnabled),
                 &cameraError)) {
-        const InspectionCameraRecoveryResult recovery =
-                m_cameraSession->restorePreviewReady(
+        m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
-        m_cameraOpen = recovery.cameraOpen;
         m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
@@ -527,17 +526,15 @@ StartInspectionResult InspectionApplicationService::start(
     }
 
     if (m_runtime->isPlcConnected()) {
-        const OperationResult trigger = applyPlcTriggerMode(
+        const OperationResult trigger = applyPlcTriggerModeToDevice(
                     settings.triggerModeId);
         const OperationResult parameters = trigger.isSuccess()
-                ? applyPlcRunSettings(plcRunSettings(settings))
+                ? applyPlcRunSettingsToDevice(plcRunSettings(settings))
                 : trigger;
         if (!trigger.isSuccess() || !parameters.isSuccess()) {
             m_cameraSession->stopInspection();
-            const InspectionCameraRecoveryResult recovery =
-                    m_cameraSession->restorePreviewReady(
+            m_cameraSession->restorePreviewReady(
                         settings.cameraExposure, persistExposure);
-            m_cameraOpen = recovery.cameraOpen;
             m_runtime->rollbackStart();
             publishSnapshot();
             const ApplicationError error = !trigger.isSuccess()
@@ -558,10 +555,8 @@ StartInspectionResult InspectionApplicationService::start(
                 resultConfiguration(settings),
                 &executionError)) {
         m_cameraSession->stopInspection();
-        const InspectionCameraRecoveryResult recovery =
-                m_cameraSession->restorePreviewReady(
+        m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
-        m_cameraOpen = recovery.cameraOpen;
         m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
@@ -575,10 +570,8 @@ StartInspectionResult InspectionApplicationService::start(
     }
     if (!m_cameraSession->startInspection(&cameraError)) {
         m_cameraSession->stopInspection();
-        const InspectionCameraRecoveryResult recovery =
-                m_cameraSession->restorePreviewReady(
+        m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
-        m_cameraOpen = recovery.cameraOpen;
         m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
@@ -592,10 +585,8 @@ StartInspectionResult InspectionApplicationService::start(
     }
     if (!m_runtime->commitStart()) {
         m_cameraSession->stopInspection();
-        const InspectionCameraRecoveryResult recovery =
-                m_cameraSession->restorePreviewReady(
+        m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
-        m_cameraOpen = recovery.cameraOpen;
         m_runtime->rollbackStart();
         publishSnapshot();
         return rejectStart(
@@ -668,9 +659,8 @@ StopInspectionResult InspectionApplicationService::stop(
                         settings.cameraExposure,
                         persistExposure));
     } else {
-        result.cameraRecovery.cameraOpen = m_cameraOpen;
+        result.cameraRecovery.cameraOpen = m_cameraSession->isOpen();
     }
-    m_cameraOpen = result.cameraRecovery.cameraOpen;
     m_runtime->finishStop();
 
     if (!recoveringFault
@@ -732,7 +722,7 @@ OpenCameraResult InspectionApplicationService::openCamera(
         result.snapshot = runtimeSnapshot();
         return result;
     }
-    if (m_cameraOpen) {
+    if (m_cameraSession->isOpen()) {
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_ALREADY_OPEN"),
                     QStringLiteral("相机已连接！"));
@@ -771,7 +761,6 @@ OpenCameraResult InspectionApplicationService::openCamera(
         publishSnapshot();
         return result;
     }
-    m_cameraOpen = true;
     result.operation = OperationResult::accepted();
     result.snapshot = runtimeSnapshot();
     publishSnapshot();
@@ -786,10 +775,14 @@ OperationResult InspectionApplicationService::closeCamera()
                     QStringLiteral("CAMERA_RUNTIME_BUSY"),
                     QStringLiteral("相机正在检测采图中，请先停止识别。"));
     }
-    if (m_cameraOpen) {
+    if (m_cameraSession->isCapturing()) {
+        return OperationResult::rejected(
+                    QStringLiteral("CAMERA_CAPTURE_BUSY"),
+                    QStringLiteral("相机正在取景，请先退出模板制作。"));
+    }
+    if (m_cameraSession->isOpen()) {
         m_cameraSession->close();
     }
-    m_cameraOpen = false;
     m_runtime->resetStatistics();
     publishSnapshot();
     return OperationResult::accepted();
@@ -799,6 +792,16 @@ OperationResult InspectionApplicationService::closeCamera()
 OperationResult InspectionApplicationService::connectPlc(
     const PlcConnectionCommand &command)
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_RUNTIME_BUSY"),
+                    QStringLiteral("当前有任务正在运行，不能连接 PLC。"));
+    }
+    if (m_runtime->isPlcConnected()) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_ALREADY_CONNECTED"),
+                    QStringLiteral("PLC 已连接。"));
+    }
     const PlcOperationResult result = m_runtime->connectPlc(
                 command.address, command.rack, command.slot);
     publishSnapshot();
@@ -813,6 +816,16 @@ OperationResult InspectionApplicationService::connectPlc(
 // 函数说明：disconnectPlc 函数建立或断开对应外部连接。
 OperationResult InspectionApplicationService::disconnectPlc()
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_RUNTIME_BUSY"),
+                    QStringLiteral("当前有任务正在运行，不能断开 PLC。"));
+    }
+    if (!m_runtime->isPlcConnected()) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_NOT_CONNECTED"),
+                    QStringLiteral("PLC 未连接。"));
+    }
     const PlcOperationResult result = m_runtime->disconnectPlc();
     publishSnapshot();
     return result.isSuccess()
@@ -825,6 +838,18 @@ OperationResult InspectionApplicationService::disconnectPlc()
 
 // 函数说明：applyPlcTriggerMode 函数更新或应用对应的配置和状态。
 OperationResult InspectionApplicationService::applyPlcTriggerMode(
+    const QString &modeId)
+{
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_RUNTIME_BUSY"),
+                    QStringLiteral("当前有任务正在运行，不能修改 PLC 参数。"));
+    }
+    return applyPlcTriggerModeToDevice(modeId);
+}
+
+OperationResult
+InspectionApplicationService::applyPlcTriggerModeToDevice(
     const QString &modeId)
 {
     if (!m_runtime->isPlcConnected()) {
@@ -852,6 +877,18 @@ OperationResult InspectionApplicationService::applyPlcTriggerMode(
 
 // 函数说明：applyPlcRunSettings 函数更新或应用对应的配置和状态。
 OperationResult InspectionApplicationService::applyPlcRunSettings(
+    const PlcRunSettingsCommand &command)
+{
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_RUNTIME_BUSY"),
+                    QStringLiteral("当前有任务正在运行，不能修改 PLC 参数。"));
+    }
+    return applyPlcRunSettingsToDevice(command);
+}
+
+OperationResult
+InspectionApplicationService::applyPlcRunSettingsToDevice(
     const PlcRunSettingsCommand &command)
 {
     if (!m_runtime->isPlcConnected()) {
@@ -900,6 +937,11 @@ OperationResult InspectionApplicationService::applyPlcRunSettings(
 OperationResult InspectionApplicationService::writePlcPhotoDistance(
     std::uint32_t value)
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("PLC_RUNTIME_BUSY"),
+                    QStringLiteral("当前有任务正在运行，不能修改 PLC 参数。"));
+    }
     if (!m_runtime->isPlcConnected()) {
         return OperationResult::rejected(
                     QStringLiteral("PLC_NOT_CONNECTED"),
@@ -919,6 +961,14 @@ CameraParameterResultDto
 // 函数说明：queryCameraGainRange 函数读取、等待或计算对应的数据。
 InspectionApplicationService::queryCameraGainRange()
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle
+            || !m_cameraSession->isOpen()
+            || m_cameraSession->isCapturing()) {
+        CameraParameterResultDto result;
+        result.diagnostic = QStringLiteral(
+                    "当前相机状态不能查询增益范围。");
+        return result;
+    }
     return cameraParameterDto(m_cameraSession->queryGainRange());
 }
 
@@ -926,6 +976,14 @@ CameraParameterResultDto
 // 函数说明：applyCameraExposure 函数更新或应用对应的配置和状态。
 InspectionApplicationService::applyCameraExposure(int exposure)
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle
+            || !m_cameraSession->isOpen()
+            || m_cameraSession->isCapturing()) {
+        CameraParameterResultDto result;
+        result.diagnostic = QStringLiteral(
+                    "请在相机已打开且没有检测或取景时设置曝光。");
+        return result;
+    }
     return cameraParameterDto(m_cameraSession->applyExposure(exposure));
 }
 
@@ -933,28 +991,77 @@ CameraParameterResultDto
 // 函数说明：applyCameraGain 函数更新或应用对应的配置和状态。
 InspectionApplicationService::applyCameraGain(int gain)
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle
+            || !m_cameraSession->isOpen()
+            || m_cameraSession->isCapturing()) {
+        CameraParameterResultDto result;
+        result.diagnostic = QStringLiteral(
+                    "请在相机已打开且没有检测或取景时设置增益。");
+        return result;
+    }
     return cameraParameterDto(m_cameraSession->applyGain(gain));
 }
 
 // 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
-bool InspectionApplicationService::startTemplatePreview(
+OperationResult InspectionApplicationService::startTemplatePreview(
     quint64 sessionId,
     int rotationCode,
-    int colorChannelCode,
-    QString *errorMessage)
+    int colorChannelCode)
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_RUNTIME_BUSY"),
+                    QStringLiteral("当前正在进行正式检测，请先停止识别。"));
+    }
+    if (!m_cameraSession->isOpen()) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_CAMERA_CLOSED"),
+                    QStringLiteral("请先点击【打开相机】！"));
+    }
+    if (m_cameraSession->isCapturing()) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_CAPTURE_BUSY"),
+                    QStringLiteral("相机采集线程仍在运行，请先停止当前任务。"));
+    }
+    const InspectionCameraParameterResult exposure =
+            m_cameraSession->applyExposure(
+                m_settings->current().cameraExposure);
+    if (!exposure.success) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_EXPOSURE_FAILED"),
+                    QStringLiteral("制作模板前应用相机曝光失败。"),
+                    exposure.diagnostic);
+    }
     FramePreprocessSettings settings;
     settings.rotation = static_cast<FrameRotation>(rotationCode);
     settings.colorChannel =
             static_cast<FrameColorChannel>(colorChannelCode);
-    return m_cameraSession->startPreview(
-                sessionId, settings, errorMessage);
+    QString errorMessage;
+    if (!m_cameraSession->startPreview(
+            sessionId, settings, &errorMessage)) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_PREVIEW_START_FAILED"),
+                    errorMessage.isEmpty()
+                    ? QStringLiteral("实时取景线程启动失败。")
+                    : errorMessage,
+                    errorMessage);
+    }
+    return OperationResult::accepted();
 }
 
 // 函数说明：stopTemplatePreview 函数停止流程、清理状态或释放对应资源。
-bool InspectionApplicationService::stopTemplatePreview()
+OperationResult InspectionApplicationService::stopTemplatePreview()
 {
-    return m_cameraSession->stopPreview();
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_RUNTIME_BUSY"),
+                    QStringLiteral("当前正在进行正式检测，不能停止模板取景。"));
+    }
+    return m_cameraSession->stopPreview()
+            ? OperationResult::accepted()
+            : OperationResult::rejected(
+                QStringLiteral("TEMPLATE_PREVIEW_STOP_FAILED"),
+                QStringLiteral("实时取景线程尚未停止，请稍后重试。"));
 }
 
 // 函数说明：acknowledgeTemplatePreviewFrame 函数停止流程、清理状态或释放对应资源。
@@ -986,13 +1093,7 @@ void InspectionApplicationService::replaceCurrentCameraImage(
 // 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::isCameraOpen() const
 {
-    return m_cameraOpen && m_cameraSession->isOpen();
-}
-
-// 函数说明：isCapturing 函数检查相关状态并返回判断结果。
-bool InspectionApplicationService::isCapturing() const
-{
-    return m_cameraSession->isCapturing();
+    return m_cameraSession->isOpen();
 }
 
 // 函数说明：shutdown 函数实现名称所表示的处理步骤。
@@ -1001,9 +1102,8 @@ void InspectionApplicationService::shutdown()
     m_runtime->beginStop();
     m_cameraSession->stopInspection();
     m_runtime->waitForStop();
-    if (m_cameraOpen) {
+    if (m_cameraSession->isOpen()) {
         m_cameraSession->close();
-        m_cameraOpen = false;
     }
     if (m_runtime->isPlcConnected()) {
         m_runtime->disconnectPlc();
@@ -1024,7 +1124,7 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     m_runtime->beginStop();
     m_cameraSession->stopInspection();
     m_runtime->waitForStop();
-    if (m_cameraOpen) {
+    if (m_cameraSession->isOpen()) {
         const MachineSettings settings = m_settings->current();
         const CameraSession::PersistAdjustedExposure persistExposure =
                 [this](int adjustedExposure, QString *errorMessage) {
@@ -1037,10 +1137,8 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
             }
             return saved.isSuccess();
         };
-        const InspectionCameraRecoveryResult recovery =
-                m_cameraSession->restorePreviewReady(
+        m_cameraSession->restorePreviewReady(
                     settings.cameraExposure, persistExposure);
-        m_cameraOpen = recovery.cameraOpen;
     }
     m_runtime->finishStop();
     m_activeRecipeId.clear();
@@ -1125,24 +1223,43 @@ void InspectionApplicationService::presentPreviewFrame(
 }
 
 // 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::resetStatistics()
+OperationResult InspectionApplicationService::resetStatistics()
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("STATISTICS_RUNTIME_BUSY"),
+                    QStringLiteral("请先停止当前任务再清零统计。"));
+    }
     m_runtime->resetStatistics();
     m_runtime->resultService().presentTotalAndNgCounts(
                 m_runtime->totalCount(), m_runtime->ngCount());
+    return OperationResult::accepted();
 }
 
 // 函数说明：resetNgCount 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::resetNgCount()
+OperationResult InspectionApplicationService::resetNgCount()
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("STATISTICS_RUNTIME_BUSY"),
+                    QStringLiteral("请先停止当前任务再清零统计。"));
+    }
     m_runtime->resetNgCount();
     m_runtime->resultService().presentNgCount(m_runtime->ngCount());
+    return OperationResult::accepted();
 }
 
 // 函数说明：clearPendingDelayedNgRequests 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::clearPendingDelayedNgRequests()
+OperationResult
+InspectionApplicationService::clearPendingDelayedNgRequests()
 {
+    if (m_runtime->state() != InspectionRuntimeState::Idle) {
+        return OperationResult::rejected(
+                    QStringLiteral("REJECT_QUEUE_RUNTIME_BUSY"),
+                    QStringLiteral("请先停止当前任务再清空剔除队列。"));
+    }
     m_runtime->clearPendingDelayedNgRequests();
+    return OperationResult::accepted();
 }
 
 // 函数说明：checkPlcHealth 函数校验、转换或恢复对应数据。
@@ -1193,7 +1310,7 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
 {
     RuntimeSnapshot snapshot;
     snapshot.state = applicationState(m_runtime->state());
-    snapshot.cameraOpen = m_cameraOpen;
+    snapshot.cameraOpen = m_cameraSession->isOpen();
     snapshot.plcConnected = m_runtime->isPlcConnected();
     snapshot.runId = m_runtime->runId();
     snapshot.recipeId = m_activeRecipeId;

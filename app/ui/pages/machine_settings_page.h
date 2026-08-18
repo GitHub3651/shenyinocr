@@ -5,6 +5,7 @@
 #pragma once
 
 #include "application/settings_application_service.h"
+#include "ui/controllers/operation_ui_policy.h"
 
 #include <QList>
 #include <QMap>
@@ -87,7 +88,6 @@ public:
         std::function<void()> updateImageSaveOptionsVisibility;
         std::function<void()> updateSaveDirectoryText;
         std::function<void()> updateTissueVisibility;
-        std::function<void()> updateOperationUiState;
         std::function<void(const QString &)> reportDirectoryOpenFailure;
     };
 
@@ -124,11 +124,7 @@ public:
     void clearAllDirty();
     void restoreUnappliedMachineSettings();
 
-    void updateHardwareEnabled(
-        bool cameraOpen,
-        bool plcConnected,
-        bool operationBusy);
-    void setAllEditorsEnabled(bool enabled);
+    void applyOperationState(const OperationUiSnapshot &snapshot);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

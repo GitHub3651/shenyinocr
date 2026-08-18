@@ -45,8 +45,6 @@ public:
     // 组件说明：Callbacks 数据结构集中传递该流程需要的只读数据或回调。
     struct Callbacks
     {
-        std::function<void(bool)> setSettingsEnabled;
-        std::function<void()> refreshHardwareSettingsEnabled;
         std::function<void(const QString &)> updateImageDisplayStatus;
     };
 
@@ -60,9 +58,9 @@ public:
     InspectionPage &operator=(const InspectionPage &) = delete;
 
     InspectionViewBindingsDto resultViewBindings() const;
-    void updateOperationState(
+    void applyOperationState(
         OperationUiState requestedState,
-        bool runtimeFaulted);
+        const OperationUiSnapshot &operationUi);
     void presentFault(
         const ApplicationFaultSnapshot &snapshot,
         bool *alarmPresented);

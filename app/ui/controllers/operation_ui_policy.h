@@ -21,23 +21,45 @@ enum class OperationUiState
 // 组件说明：OperationUiSnapshot 数据结构集中传递该流程需要的只读数据或回调。
 struct OperationUiSnapshot
 {
-    bool enableAllOperations = false;
-    bool openCameraEnabled = false;
-    bool startDetectionEnabled = false;
-    bool stopEnabled = false;
-    bool closeCameraEnabled = false;
-    bool templateCaptureEnabled = false;
-    bool saveTemplateEnabled = false;
-    bool settingsEnabled = false;
+    struct Access
+    {
+        bool enabled = false;
+        QString disabledReason;
+    };
+
+    bool cameraOpen = false;
+    bool plcConnected = false;
+    Access openCamera;
+    Access startDetection;
+    Access stop;
+    Access closeCamera;
+    Access templateCapture;
+    Access saveTemplate;
+    Access generalSettings;
+    Access cameraSettings;
+    Access plcConnection;
+    Access plcRuntime;
+    Access recipeSelection;
+    Access recipeEditing;
+    Access statisticsReset;
+    Access rejectQueueReset;
     QString startDetectionText;
     QString stopText;
     QString templateCaptureText;
     QString statusText;
 };
 
+// 组件说明：OperationUiContext 汇总一次UI权限计算所需的唯一状态快照。
+struct OperationUiContext
+{
+    OperationUiState state = OperationUiState::CameraClosed;
+    bool cameraOpen = false;
+    bool plcConnected = false;
+};
+
 // 组件说明：OperationUiPolicy 组件集中描述相关配置、规则和运行参数。
 class OperationUiPolicy
 {
 public:
-    static OperationUiSnapshot create(OperationUiState state);
+    static OperationUiSnapshot create(const OperationUiContext &context);
 };

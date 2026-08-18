@@ -53,6 +53,31 @@
 
 using namespace TemplateEditorSupport;
 
+namespace {
+
+void applyWidgetAccess(
+    QWidget *widget,
+    const OperationUiSnapshot::Access &access)
+{
+    if (!widget) {
+        return;
+    }
+    static const char originalToolTipProperty[] =
+            "_operationOriginalToolTip";
+    if (!widget->property(originalToolTipProperty).isValid()) {
+        widget->setProperty(
+                    originalToolTipProperty,
+                    widget->toolTip());
+    }
+    widget->setEnabled(access.enabled);
+    widget->setToolTip(
+                access.enabled
+                ? widget->property(originalToolTipProperty).toString()
+                : access.disabledReason);
+}
+
+} // namespace
+
 // 函数说明：TemplateEditorPage 构造函数创建组件并初始化其依赖和初始状态。
 TemplateEditorPage::TemplateEditorPage(
     const TemplateEditorViewBindings &view,
@@ -116,27 +141,46 @@ TemplateEditorPage::TemplateEditorPage(
     Qt::QueuedConnection);
 }
 
-// 函数说明：setEditorsEnabled 函数更新或应用对应的配置和状态。
-void TemplateEditorPage::setEditorsEnabled(bool enabled)
+// 函数说明：applyOperationState 根据统一权限快照更新配方编辑控件。
+void TemplateEditorPage::applyOperationState(
+    const OperationUiSnapshot &snapshot)
 {
-    if (m_wordTemplateEditComboBox) {
-        m_wordTemplateEditComboBox->setEnabled(enabled);
-    }
-    if (m_publishTemplateGroupButton) {
-        m_publishTemplateGroupButton->setEnabled(enabled);
-    }
-    if (m_publishedRecipeButton) {
-        m_publishedRecipeButton->setEnabled(enabled);
-    }
-    if (m_manualCharacterCropButton) {
-        m_manualCharacterCropButton->setEnabled(enabled);
-    }
-    if (m_view.textEdit_targetText) {
-        m_view.textEdit_targetText->setEnabled(enabled);
-    }
-    if (m_view.lineEdit_imageThreshold) {
-        m_view.lineEdit_imageThreshold->setEnabled(enabled);
-    }
+    applyWidgetAccess(
+                m_wordTemplateEditComboBox,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_publishTemplateGroupButton,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_publishedRecipeButton,
+                snapshot.recipeSelection);
+    applyWidgetAccess(
+                m_manualCharacterCropButton,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.textEdit_targetText,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.lineEdit_imageThreshold,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.lineEdit_tissueRoughnessThreshold,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.pushButton_applyTargetText,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.pushButton_applyBatchTargetText,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.pushButton_applyImageThreshold,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.pushButton_applyBatchImageThreshold,
+                snapshot.recipeEditing);
+    applyWidgetAccess(
+                m_view.pushButton_applyTissueRoughnessThreshold,
+                snapshot.recipeEditing);
 }
 
 // 函数说明：guideFrame 函数实现名称所表示的处理步骤。
@@ -234,12 +278,6 @@ QWidget *TemplateEditorPage::dialogParent() const
     return m_view.parentWidget;
 }
 
-// 函数说明：isInspectionBusy 函数检查相关状态并返回判断结果。
-bool TemplateEditorPage::isInspectionBusy() const
-{
-    return m_inspectionService->runtimeSnapshot().isInspectionBusy();
-}
-
 // 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。
 bool TemplateEditorPage::isCameraOpen() const
 {
@@ -265,7 +303,7 @@ bool TemplateEditorPage::stopTemplatePreview()
         return true;
     }
     ++m_previewSessionId;
-    return m_inspectionService->stopTemplatePreview();
+    return m_inspectionService->stopTemplatePreview().isSuccess();
 }
 
 // 函数说明：resetTemplateCaptureState 函数停止流程、清理状态或释放对应资源。
@@ -290,61 +328,38 @@ void TemplateEditorPage::resetTemplateCaptureState()
 // 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
 bool TemplateEditorPage::startTemplatePreview()
 {
-    if (!isCameraOpen()) {
+    ++m_previewSessionId;
+    const int rotationCode = m_view.comboBox_imageRotation
+            ? m_view.comboBox_imageRotation->currentIndex() : 0;
+    const int channelCode = m_view.comboBox_colorChannel
+            ? m_view.comboBox_colorChannel->currentIndex() : 0;
+    const OperationResult result =
+            m_inspectionService->startTemplatePreview(
+                m_previewSessionId, rotationCode, channelCode);
+    if (!result.isSuccess()) {
+        QString message = result.error.userMessage.isEmpty()
+                ? QStringLiteral("实时取景线程启动失败。")
+                : result.error.userMessage;
+        if (!result.error.diagnostic.isEmpty()
+                && result.error.diagnostic != message) {
+            message += QStringLiteral("\n%1")
+                    .arg(result.error.diagnostic);
+        }
         showParameterWarning(
                     QStringLiteral("提示"),
-                    QStringLiteral("请先点击【打开相机】！"));
-        return false;
-    }
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("当前正在进行正式检测，请先点击【停止识别】。"));
-        return false;
-    }
-    if (m_inspectionService->isCapturing()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("相机采集线程仍在运行，请先停止当前任务。"));
-        return false;
-    }
-    const CameraParameterResultDto exposure =
-            m_inspectionService->applyCameraExposure(
-                m_settingsService->current().cameraExposure);
-    if (!exposure.success) {
-        showParameterWarning(
-                    QStringLiteral("警告"),
-                    QStringLiteral("制作模板前应用相机曝光失败：\n%1")
-                    .arg(exposure.diagnostic));
+                    message);
         return false;
     }
     imageLabel->setTemplateDrawingEnabled(false);
     imageLabel->clearSelection();
     clearBarcodeTemplateValidation();
     m_lastPreviewFrame.release();
-    ++m_previewSessionId;
     m_captureState = CaptureState::Previewing;
     if (m_callbacks.clearTransientView) {
         m_callbacks.clearTransientView();
     }
     if (m_callbacks.updateOperationUiState) {
         m_callbacks.updateOperationUiState();
-    }
-    QString errorMessage;
-    const int rotationCode = m_view.comboBox_imageRotation
-            ? m_view.comboBox_imageRotation->currentIndex() : 0;
-    const int channelCode = m_view.comboBox_colorChannel
-            ? m_view.comboBox_colorChannel->currentIndex() : 0;
-    if (!m_inspectionService->startTemplatePreview(
-            m_previewSessionId, rotationCode, channelCode,
-            &errorMessage)) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    errorMessage.isEmpty()
-                    ? QStringLiteral("实时取景线程启动失败。")
-                    : errorMessage);
-        resetTemplateCaptureState();
-        return false;
     }
     updateImageDisplayStatusText(
                 QStringLiteral(
@@ -401,18 +416,6 @@ bool TemplateEditorPage::freezeTemplatePreview()
 // 函数说明：handleTemplateCaptureButton 函数执行对应事件或业务处理。
 void TemplateEditorPage::handleTemplateCaptureButton()
 {
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("当前正在进行正式检测，请先点击【停止识别】。"));
-        return;
-    }
-    if (!isCameraOpen()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先点击【打开相机】！"));
-        return;
-    }
     if (m_captureState == CaptureState::Previewing) {
         freezeTemplatePreview();
         return;
@@ -482,24 +485,16 @@ void TemplateEditorPage::handlePreviewFailure(
 // 函数说明：selectPublishedRecipeForCurrentMode 函数读取、等待或计算对应的数据。
 void TemplateEditorPage::selectPublishedRecipeForCurrentMode()
 {
-    if (isInspectionBusy() || templateOperationActive()) {
-        QMessageBox::warning(
-                    dialogParent(),
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先停止识别或退出模板制作，再选择产品配方。"));
-        return;
-    }
     selectPublishedRecipe();
 }
 
 // 函数说明：saveCurrentTemplate 函数保存或发布对应的数据和资源。
 void TemplateEditorPage::saveCurrentTemplate()
 {
-    if (isInspectionBusy()
-            || m_captureState == CaptureState::Previewing) {
+    if (m_captureState == CaptureState::Previewing) {
         showParameterWarning(
                     QStringLiteral("提示"),
-                    QStringLiteral("当前状态不能保存配方，请先停止识别或冻结模板画面。"));
+                    QStringLiteral("请先冻结模板画面再保存配方。"));
         return;
     }
     DetectionMode mode;

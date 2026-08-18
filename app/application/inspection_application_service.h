@@ -28,7 +28,6 @@ enum class InspectionFaultReason;
 // 组件说明：StartInspectionCommand 数据结构集中传递该流程需要的只读数据或回调。
 struct StartInspectionCommand
 {
-    bool templateOperationActive = false;
     QStringList unappliedChanges;
 };
 
@@ -138,18 +137,16 @@ public:
     CameraParameterResultDto queryCameraGainRange();
     CameraParameterResultDto applyCameraExposure(int exposure);
     CameraParameterResultDto applyCameraGain(int gain);
-    bool startTemplatePreview(
+    OperationResult startTemplatePreview(
         quint64 sessionId,
         int rotationCode,
-        int colorChannelCode,
-        QString *errorMessage);
-    bool stopTemplatePreview();
+        int colorChannelCode);
+    OperationResult stopTemplatePreview();
     void acknowledgeTemplatePreviewFrame(quint64 sessionId);
     bool hasCurrentCameraImage() const;
     cv::Mat currentCameraImageClone() const;
     void replaceCurrentCameraImage(const cv::Mat &image);
     bool isCameraOpen() const;
-    bool isCapturing() const;
     void shutdown();
     void completeUnexpectedAcquisitionStop();
     void setUiCallbacks(const InspectionUiCallbacks &callbacks);
@@ -161,9 +158,9 @@ public:
         const cv::Mat &image,
         bool tissueMode,
         bool productionRunning);
-    void resetStatistics();
-    void resetNgCount();
-    void clearPendingDelayedNgRequests();
+    OperationResult resetStatistics();
+    OperationResult resetNgCount();
+    OperationResult clearPendingDelayedNgRequests();
     void checkPlcHealth();
     ApplicationFaultSnapshot faultSnapshot() const;
 
@@ -187,6 +184,9 @@ private:
         const QString &code,
         const QString &userMessage,
         int nativeErrorCode) const;
+    OperationResult applyPlcTriggerModeToDevice(const QString &modeId);
+    OperationResult applyPlcRunSettingsToDevice(
+        const PlcRunSettingsCommand &command);
     void publishSnapshot();
     void enterFault(
         InspectionFaultReason reason,
@@ -196,6 +196,5 @@ private:
     std::shared_ptr<CameraSession> m_cameraSession;
     std::shared_ptr<SettingsApplicationService> m_settings;
     std::shared_ptr<RecipeStore> m_recipes;
-    bool m_cameraOpen = false;
     QString m_activeRecipeId;
 };

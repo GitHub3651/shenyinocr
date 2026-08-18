@@ -146,7 +146,6 @@ private:
     void setupRecipeProfileDirtyTracking();
     void refreshRecipeProfileDirty();
     void clearRecipeProfileDirty();
-    void updateHardwareParameterUiEnabled();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
     void updateImageSaveOptionsVisibility();
@@ -163,9 +162,6 @@ private:
     QString detectModeIdForIndex(int index) const;
     QString currentDetectModeId() const;
     void restoreTemplatesForMode(const QString &modeId, bool showMessage);
-    bool startTemplatePreview();
-    bool freezeTemplatePreview();
-    bool stopTemplatePreview(int waitTimeMs = 1500);
     void resetTemplateCaptureState();
     void updateOperationUiState();
     OperationUiState operationUiState() const;

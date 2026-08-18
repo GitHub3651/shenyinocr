@@ -478,6 +478,27 @@ S8只删除“包装一层但没有独立策略或生命周期”的代码，不
 
 实际代码文件数已从164降到157：`runtime`从24降到21，`recipes`从12降到8。S8没有修改任何图片、图标、QSS/CSS、翻译、`.qrc`、模型、DLL、配方Schema、资源目录或资源内容。2026-08-18用户确认统一门禁通过，受影响32项功能恢复为`已验证`。
 
+### 5.6 S9 UI状态与命令门禁统一（2026-08-18）
+
+S9解决的是同一操作在MainWindow、Page、Application和Runtime之间重复判断、互相覆盖的问题，不以增加抽象层或让所有动作机械地复制三次`if`为目标。
+
+| 操作类型 | 保护层级 | 统一规则 |
+|---|---|---|
+| 状态文字、提示、纯显示交互 | UI一层 | 只影响显示，不改变业务、设备或持久化状态。 |
+| 设置草稿、配方编辑和发布 | UI + Application/Store | UI根据统一快照禁用；Application/Store继续执行字段校验、Schema约束和事务保存。 |
+| 检测启停、Fault恢复、相机、模板取景、PLC、统计和剔除队列 | UI + Application + Runtime/Session/Device | UI负责可见可用性，Application负责命令当前是否允许，底层负责线程、连接、事务和SDK不变量；三层职责不同。 |
+
+具体修改边界：
+
+1. `OperationUiPolicy`接收一次`OperationUiContext`，唯一输出开关相机、启停、模板、普通设置、相机设置、PLC连接/运行参数、配方、统计和剔除队列的`Access{enabled, disabledReason}`。
+2. `MainWindow::updateOperationUiState()`只读取一次`RuntimeSnapshot`并分发同一权限快照；`InspectionPage`只更新明确绑定的主操作按钮，不再`findChildren<QAbstractButton *>()`扫描并覆盖整窗控件。
+3. `MachineSettingsPage`按None/Camera/PlcConnection/PlcRuntime四种依赖应用权限；`TemplateEditorPage`按配方选择和配方编辑权限应用，不再保留“全部编辑器启用”入口。
+4. UI槽删除忙碌、相机已开/未开、PLC已连/未连和采集线程状态的重复业务判断，只保留输入格式、确认对话框和页面内部CaptureState转换。
+5. `InspectionApplicationService`直接以`InspectionRuntime`和`CameraSession`真实状态裁决公开命令；删除`m_cameraOpen`状态副本。公开PLC命令要求Idle，正式启动内部下发则使用私有设备助手，避免公开门禁阻断启动事务。
+6. 模板取景、统计清零和剔除队列清理改为结构化`OperationResult`；拒绝时UI显示Application给出的稳定中文原因，不再把失败误报为成功。
+
+S9不增删代码文件，不修改资源、算法、配方Schema、统计口径、PLC地址/值或约100ms脉冲时序。2026-08-18用户确认Run qmake、Rebuild和统一人工回归通过，受影响59项已由`迁移中`恢复为`已验证`。
+
 ## 六、暂时保留，不应为了少文件而合并的模块
 
 以下组件具备明确职责或安全价值，应继续保留：
@@ -517,6 +538,8 @@ S1 零调用代码清理（已完成，属于用户批准的低风险先行批�
 → S5 Application启动预检和接口收缩
 → S6 UI模式索引清理与页面所有权拆分
 → S7 定位/预处理迁入DetectionWorker
+→ S8 Runtime/Recipes认知精简
+→ S9 UI状态与命令门禁统一（当前等待统一门禁）
 ```
 
 本轮采用“内部分阶段、对外单批次”：结果合同、模式注册、配方边界、Application、UI和线程职责仍按顺序收口；用户只在末尾执行一次Run qmake、Rebuild和完整回归。
@@ -548,13 +571,14 @@ rg -n "\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8}|\\x[0-9A-Fa-f]{2,8}" app -g "*.h" -g 
 ```
 
 - 若上述搜索未来命中协议、正则或机器测试数据，必须以精确文件和行为理由建立最小白名单；当前基线没有这类例外。
+- S9完成后，整窗`findChildren<QAbstractButton *>`操作禁用、`m_cameraOpen`状态副本、页面级全部编辑器开关和UI槽内重复Runtime/相机/PLC业务判断为0；所有设备类公开命令保留Application结构化拒绝路径。
 - `git diff --check`通过。
 - 差异中不包含`*.pro.user`、`*.ui.autosave`、`app.zip`或其他用户文件。
 - Agent不运行qmake、构建、测试程序或主程序。
 
 ### 8.3 本轮唯一的用户Qt Creator门禁
 
-G0与S2～S7全部代码完成后，由用户只执行一次：
+每个已批准的合并批次全部代码完成后，由用户只执行一次：
 
 1. Run qmake。
 2. Rebuild主工程。

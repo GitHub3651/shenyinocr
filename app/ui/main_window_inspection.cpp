@@ -42,6 +42,31 @@
 
 #pragma execution_character_set("utf-8")
 
+namespace {
+
+void applyWidgetAccess(
+    QWidget *widget,
+    const OperationUiSnapshot::Access &access)
+{
+    if (!widget) {
+        return;
+    }
+    static const char originalToolTipProperty[] =
+            "_operationOriginalToolTip";
+    if (!widget->property(originalToolTipProperty).isValid()) {
+        widget->setProperty(
+                    originalToolTipProperty,
+                    widget->toolTip());
+    }
+    widget->setEnabled(access.enabled);
+    widget->setToolTip(
+                access.enabled
+                ? widget->property(originalToolTipProperty).toString()
+                : access.disabledReason);
+}
+
+} // namespace
+
 // 函数说明：presentInspectionFault 函数执行对应事件或业务处理。
 void MainWindow::presentInspectionFault()
 {
@@ -256,16 +281,6 @@ void MainWindow::clearBarcodeTemplateValidation()
 // 函数说明：operationUiState 函数实现名称所表示的处理步骤。
 OperationUiState MainWindow::operationUiState() const
 {
-    if (m_templateEditorPage
-            && m_templateEditorPage->captureState()
-               == TemplateEditorPage::CaptureState::Previewing) {
-        return OperationState::TemplatePreviewing;
-    }
-    if (m_templateEditorPage
-            && m_templateEditorPage->captureState()
-               == TemplateEditorPage::CaptureState::Frozen) {
-        return OperationState::TemplateFrozen;
-    }
     const RuntimeSnapshot snapshot =
             m_inspectionApplicationService->runtimeSnapshot();
     switch (snapshot.state) {
@@ -278,6 +293,16 @@ OperationUiState MainWindow::operationUiState() const
         return OperationState::Fault;
     case ApplicationRuntimeState::Idle:
     default:
+        if (m_templateEditorPage
+                && m_templateEditorPage->captureState()
+                   == TemplateEditorPage::CaptureState::Previewing) {
+            return OperationState::TemplatePreviewing;
+        }
+        if (m_templateEditorPage
+                && m_templateEditorPage->captureState()
+                   == TemplateEditorPage::CaptureState::Frozen) {
+            return OperationState::TemplateFrozen;
+        }
         return snapshot.cameraOpen
                 ? OperationState::CameraReady
                 : OperationState::CameraClosed;
@@ -307,19 +332,53 @@ const MachineSettings &MainWindow::machineSettings() const
 // 函数说明：updateOperationUiState 函数更新或应用对应的配置和状态。
 void MainWindow::updateOperationUiState()
 {
-    if (m_inspectionPage) {
-        m_inspectionPage->updateOperationState(
-                    operationUiState(),
-                    operationUiState() == OperationState::Fault);
+    if (!m_inspectionPage) {
+        return;
     }
-}
+    const RuntimeSnapshot runtime =
+            m_inspectionApplicationService->runtimeSnapshot();
+    OperationUiContext context;
+    context.state = operationUiState();
+    context.cameraOpen = runtime.cameraOpen;
+    context.plcConnected = runtime.plcConnected;
+    const OperationUiSnapshot snapshot =
+            OperationUiPolicy::create(context);
 
-// 函数说明：stopTemplatePreview 函数停止流程、清理状态或释放对应资源。
-bool MainWindow::stopTemplatePreview(int waitTimeMs)
-{
-    Q_UNUSED(waitTimeMs)
-    return m_templateEditorPage
-            && m_templateEditorPage->stopTemplatePreview();
+    m_inspectionPage->applyOperationState(context.state, snapshot);
+    if (m_machineSettingsPage) {
+        m_machineSettingsPage->applyOperationState(snapshot);
+    }
+    if (m_templateEditorPage) {
+        m_templateEditorPage->applyOperationState(snapshot);
+    }
+
+    applyWidgetAccess(
+                ui->toolButton_selectRecipe,
+                snapshot.recipeSelection);
+    applyWidgetAccess(
+                ui->pushButton_browseImageSavePath,
+                snapshot.generalSettings);
+    applyWidgetAccess(
+                ui->pushButton_applyImageRotation,
+                snapshot.generalSettings);
+    applyWidgetAccess(
+                ui->pushButton_applyColorChannel,
+                snapshot.generalSettings);
+    applyWidgetAccess(
+                ui->pushButton_clearSoftwareData,
+                snapshot.generalSettings);
+    applyWidgetAccess(
+                ui->pushButton_restoreDefaultSettings,
+                snapshot.generalSettings);
+    applyWidgetAccess(
+                ui->pushButton_resetTotalCount,
+                snapshot.statisticsReset);
+    applyWidgetAccess(
+                ui->pushButton_resetNgCount,
+                snapshot.statisticsReset);
+    applyWidgetAccess(
+                ui->pushButton_resetRejectQueue,
+                snapshot.rejectQueueReset);
 }
 
 // 函数说明：resetTemplateCaptureState 函数停止流程、清理状态或释放对应资源。
@@ -328,20 +387,6 @@ void MainWindow::resetTemplateCaptureState()
     if (m_templateEditorPage) {
         m_templateEditorPage->resetTemplateCaptureState();
     }
-}
-
-// 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
-bool MainWindow::startTemplatePreview()
-{
-    return m_templateEditorPage
-            && m_templateEditorPage->startTemplatePreview();
-}
-
-// 函数说明：freezeTemplatePreview 函数实现名称所表示的处理步骤。
-bool MainWindow::freezeTemplatePreview()
-{
-    return m_templateEditorPage
-            && m_templateEditorPage->freezeTemplatePreview();
 }
 
 /**
@@ -494,7 +539,11 @@ void MainWindow::on_pushButton_browseImageSavePath_clicked()
 // 函数说明：on_pushButton_resetTotalCount_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_resetTotalCount_clicked()
 {
-    m_inspectionApplicationService->resetStatistics();
+    const OperationResult result =
+            m_inspectionApplicationService->resetStatistics();
+    if (!result.isSuccess()) {
+        showParameterWarning(QStringLiteral("提示"), result.error.userMessage);
+    }
 }
 
 /**
@@ -503,7 +552,11 @@ void MainWindow::on_pushButton_resetTotalCount_clicked()
 // 函数说明：on_pushButton_resetNgCount_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_resetNgCount_clicked()
 {
-    m_inspectionApplicationService->resetNgCount();
+    const OperationResult result =
+            m_inspectionApplicationService->resetNgCount();
+    if (!result.isSuccess()) {
+        showParameterWarning(QStringLiteral("提示"), result.error.userMessage);
+    }
 }
 
 /**
@@ -563,7 +616,9 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                 }
 
                 QString tooltipText;
-                if (watched == ui->toolButton_createTemplate) {
+                if (!button->isEnabled()) {
+                    tooltipText = button->toolTip();
+                } else if (watched == ui->toolButton_createTemplate) {
                     DetectionMode mode = DetectionMode::Word;
                     detectionModeFromUiId(detectModeIdForIndex(
                         ui->comboBox_detectionMode->currentIndex()), &mode);
@@ -633,23 +688,13 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 //关闭相机按钮
 void MainWindow::on_toolButton_closeCamera_clicked()
 {
-    if (m_templateEditorPage
-            && m_templateEditorPage->templateOperationActive()) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前正在制作模板，请先点击【退出模板制作】。");
-        return;
-    }
-
     const OperationResult closeResult =
             m_inspectionApplicationService->closeCamera();
     if (!closeResult.isSuccess()) {
         QMessageBox::warning(
                     this,
                     "警告",
-                    "相机正在检测采图中！\n"
-                    "请先点击【停止识别】完全停止检测后，再关闭相机。");
+                    closeResult.error.userMessage);
         return;
     }
     // 清空文本并将文本置0
@@ -675,15 +720,12 @@ void MainWindow::on_toolButton_closeCamera_clicked()
 // 函数说明：on_toolButton_startInspection_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_toolButton_startInspection_clicked()
 {
-    updateHardwareParameterUiEnabled();
+    updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
     refreshRecipeProfileDirty();
     updateCurrentTemplateName();
 
     StartInspectionCommand command;
-    command.templateOperationActive =
-            m_templateEditorPage
-            && m_templateEditorPage->templateOperationActive();
     command.unappliedChanges = m_settingsEditState.dirtyNames();
     StartInspectionResult result =
             m_inspectionApplicationService->start(command);
@@ -744,27 +786,22 @@ void MainWindow::on_toolButton_startInspection_clicked()
 // 检测相机
 void MainWindow::on_toolButton_openCamera_clicked()
 {
-    if (isInspectionBusy()
-            || (m_templateEditorPage
-                && m_templateEditorPage->templateOperationActive())) {
-        QMessageBox::warning(
-                    this,
-                    "提示",
-                    "当前有任务正在运行，不能重新打开相机。");
-        return;
-    }
-    if (isCameraOpen())
-    {
-        QMessageBox::warning(this, "警告", "相机已连接！");
-        return;
-    }
-
     PlcConnectionCommand plcCommand;
     plcCommand.address = ui->lineEdit_plcIpAddress->text();
     plcCommand.rack = ui->lineEdit_plcRack->text().toInt();
     plcCommand.slot = ui->lineEdit_plcSlot->text().toInt();
     const OpenCameraResult result =
             m_inspectionApplicationService->openCamera(plcCommand);
+
+    if (!result.operation.isSuccess()
+            && result.camera.isSuccess()) {
+        QMessageBox::warning(
+                    this,
+                    QStringLiteral("提示"),
+                    result.operation.error.userMessage);
+        updateOperationUiState();
+        return;
+    }
 
     if (result.plcConnectionFailed)
     {
@@ -776,7 +813,7 @@ void MainWindow::on_toolButton_openCamera_clicked()
     saveSettings(false);
     qDebug()<<"opencamera，plc connect success";
     }
-    updateHardwareParameterUiEnabled();
+    updateOperationUiState();
 
     const CameraOpenResultDto &openResult = result.camera;
     if (!openResult.isSuccess()) {
@@ -839,7 +876,14 @@ void MainWindow::on_pushButton_applyPlcTriggerMode_clicked()
 //剔除队列复位 清空还未发出的剔除信号
 void MainWindow::on_pushButton_resetRejectQueue_clicked()
 {
-    m_inspectionApplicationService->clearPendingDelayedNgRequests();
+    const OperationResult result =
+            m_inspectionApplicationService->clearPendingDelayedNgRequests();
+    if (!result.isSuccess()) {
+        QMessageBox::warning(
+                    this, QStringLiteral("提示"),
+                    result.error.userMessage);
+        return;
+    }
     QMessageBox::information(this, "提示", "剔除队列已清空！");
 }
 

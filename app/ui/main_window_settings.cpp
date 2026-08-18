@@ -255,7 +255,7 @@ void MainWindow::clearCurrentSoftwareData()
     }
     m_machineSettingsPage->clearAllDirty();
     clearRecipeProfileDirty();
-    updateHardwareParameterUiEnabled();
+    updateOperationUiState();
     showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
 }
 
@@ -291,7 +291,7 @@ void MainWindow::restoreDefaultMachineSettings()
         imageLabel->clearSelection();
     }
     clearRecipeProfileDirty();
-    updateHardwareParameterUiEnabled();
+    updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
 
     if (!saveSettings(false)) {
@@ -329,24 +329,6 @@ bool MainWindow::saveSettings(bool showErrorMessage)
                  << errorMessage;
     }
     return false;
-}
-
-// 函数说明：updateHardwareParameterUiEnabled 函数更新或应用对应的配置和状态。
-void MainWindow::updateHardwareParameterUiEnabled()
-{
-    if (!m_machineSettingsPage) {
-        return;
-    }
-    const bool cameraOpen = isCameraOpen();
-    const bool operationBusy =
-            isInspectionBusy()
-            || (m_templateEditorPage
-                && m_templateEditorPage->templateOperationActive());
-    m_machineSettingsPage->updateHardwareEnabled(
-                cameraOpen,
-                m_inspectionApplicationService
-                ->runtimeSnapshot().plcConnected,
-                operationBusy);
 }
 
 // 函数说明：dirtySettingsMessage 函数实现名称所表示的处理步骤。
@@ -532,12 +514,6 @@ bool MainWindow::applyCameraExposureFromUi(
     QStringList *errors,
     bool showSuccessMessage)
 {
-    if (!isCameraOpen()) {
-        const QString message = "未打开相机，无法设置曝光！";
-        if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("警告", message);
-        return false;
-    }
     QString error;
     if (!applyCameraExposureValue(ui->spinBox_cameraExposure->value(), &error)) {
         const QString message = error.isEmpty()
@@ -558,13 +534,6 @@ bool MainWindow::applyCameraGainFromUi(
     QStringList *errors,
     bool showSuccessMessage)
 {
-    if (!isCameraOpen()) {
-        const QString message =
-                "相机未初始化或未打开，无法设置增益！";
-        if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("提示", message);
-        return false;
-    }
     int gainValue = 0;
     if (!parseIntValue(ui->lineEdit_cameraGain->text(), &gainValue)) {
         const CameraParameterResultDto range =
@@ -598,17 +567,6 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
 {
     PLCmode = ui->comboBox_plcTriggerMode->currentIndex();
 
-    if (!m_inspectionApplicationService
-            ->runtimeSnapshot().plcConnected) {
-        const QString message = "PLC未连接！";
-        if (showSuccessMessage) {
-            if (errors) errors->append(message);
-            showParameterWarning("警告", message);
-            return false;
-        }
-        return true;
-    }
-
     if (PLCmode != 0 && PLCmode != 1) {
         const QString message = "PLC触发模式无效";
         if (errors) errors->append(message);
@@ -640,18 +598,6 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
 // 函数说明：applyPlcRunSettingsFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    if (!m_inspectionApplicationService
-            ->runtimeSnapshot().plcConnected) {
-        const QString message = "PLC未连接！";
-        if (showSuccessMessage) {
-            if (errors) errors->append(message);
-            showParameterWarning("警告", message);
-            return false;
-        }
-        return true;
-    }
-
-
     PlcRunSettingsCommand plcSettings;
     plcSettings.rejectTime = static_cast<std::uint16_t>(
                 ui->lineEdit_rejectTime->text().toUInt());
@@ -730,13 +676,14 @@ void MainWindow::on_pushButton_connectPlc_clicked()
         m_machineSettingsPage->updateAppliedFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
         m_machineSettingsPage->refreshDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
         saveSettings(false);
-        updateHardwareParameterUiEnabled();
+        updateOperationUiState();
         QMessageBox::information(this, "success", "PLC连接成功");
     }
     else
     {
-        updateHardwareParameterUiEnabled();
-        QMessageBox::critical(this, "error", "PLC连接失败");
+        updateOperationUiState();
+        QMessageBox::critical(
+                    this, "error", result.error.userMessage);
     }
 }
 
@@ -751,13 +698,14 @@ void MainWindow::on_pushButton_disconnectPlc_clicked()
 
     if (result.isSuccess())
     {
-        updateHardwareParameterUiEnabled();
+        updateOperationUiState();
         QMessageBox::information(this, "success", "PLC断开成功");
     }
     else
     {
-        updateHardwareParameterUiEnabled();
-        QMessageBox::critical(this, "error", "PLC断开失败");
+        updateOperationUiState();
+        QMessageBox::critical(
+                    this, "error", result.error.userMessage);
     }
 }
 
@@ -913,14 +861,6 @@ void MainWindow::on_pushButton_applyTissueRoughnessThreshold_clicked()
 // 函数说明：on_pushButton_applyPhotoDistance_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyPhotoDistance_clicked()
 {
-
-    if (!m_inspectionApplicationService
-            ->runtimeSnapshot().plcConnected)
-    {
-        showParameterWarning("警告", "PLC未连接！");
-        return;
-    }
-
     const std::uint32_t value =
             ui->lineEdit_photoDistance->text().toUInt();
     const OperationResult result =
@@ -930,7 +870,7 @@ void MainWindow::on_pushButton_applyPhotoDistance_clicked()
     if (!result.isSuccess())
     {
         // 写入失败
-        showParameterWarning("error", "设置拍照距离失败");
+        showParameterWarning("error", result.error.userMessage);
     }
     else
     {

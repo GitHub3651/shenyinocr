@@ -192,7 +192,6 @@ MainWindow::MainWindow(
             this,
             [this](const RuntimeSnapshot &) {
         updateOperationUiState();
-        updateHardwareParameterUiEnabled();
     });
 
     // UI 文件中已经是 ImageLabel，直接使用。
@@ -346,20 +345,6 @@ bool *MainWindow::updatingSettingsUiFlagForComposition()
 InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
 {
     InspectionPage::Callbacks callbacks;
-    callbacks.setSettingsEnabled = [this](bool enabled) {
-        if (m_machineSettingsPage) {
-            m_machineSettingsPage->setAllEditorsEnabled(enabled);
-        }
-        if (ui->comboBox_detectionMode) {
-            ui->comboBox_detectionMode->setEnabled(enabled);
-        }
-        if (m_templateEditorPage) {
-            m_templateEditorPage->setEditorsEnabled(enabled);
-        }
-    };
-    callbacks.refreshHardwareSettingsEnabled = [this]() {
-        updateHardwareParameterUiEnabled();
-    };
     callbacks.updateImageDisplayStatus = [this](const QString &text) {
         updateImageDisplayStatusText(text);
     };
@@ -388,9 +373,6 @@ MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
     };
     callbacks.updateTissueVisibility = [this]() {
         updateTissueRoughnessUiVisibility();
-    };
-    callbacks.updateOperationUiState = [this]() {
-        updateOperationUiState();
     };
     callbacks.reportDirectoryOpenFailure = [this](const QString &path) {
         showParameterWarning(
@@ -501,7 +483,12 @@ void MainWindow::attachPages(
     m_templateEditorPage = templateEditorPage;
     m_inspectionApplicationService->bindView(
                 m_inspectionPage->resultViewBindings());
-    m_inspectionApplicationService->resetStatistics();
+    const OperationResult resetResult =
+            m_inspectionApplicationService->resetStatistics();
+    if (!resetResult.isSuccess()) {
+        qWarning() << "初始化统计清零被拒绝："
+                   << resetResult.error.code;
+    }
     ui->textEdit_targetText->setWordWrapMode(QTextOption::WordWrap);
     setupRecipeProfileDirtyTracking();
     setupWordTemplateEditorCombo();
@@ -543,12 +530,18 @@ void MainWindow::attachPages(
             saveSettings(false);
             QMessageBox::information(this, "提示", "PLC 自动连接成功");
         } else {
-            const QString errorMessage = QString(
+            const bool stateRejected =
+                    result.error.code == QStringLiteral("PLC_RUNTIME_BUSY")
+                    || result.error.code
+                       == QStringLiteral("PLC_ALREADY_CONNECTED");
+            const QString errorMessage = stateRejected
+                    ? result.error.userMessage
+                    : QString(
                         "PLC 自动连接失败！\n尝试连接的地址：%1\n"
                         "请检查网络或稍后手动连接！").arg(targetIp);
             QMessageBox::warning(this, "警告", errorMessage);
         }
-        updateHardwareParameterUiEnabled();
+        updateOperationUiState();
     });
 }
 

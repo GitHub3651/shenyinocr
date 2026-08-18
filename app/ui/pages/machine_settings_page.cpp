@@ -1017,76 +1017,53 @@ void MachineSettingsPage::setHardwareControlEnabled(
     }
 }
 
-// 函数说明：updateHardwareEnabled 函数更新或应用对应的配置和状态。
-void MachineSettingsPage::updateHardwareEnabled(
-    bool cameraOpen,
-    bool plcConnected,
-    bool operationBusy)
+// 函数说明：applyOperationState 根据统一权限快照更新设置页控件。
+void MachineSettingsPage::applyOperationState(
+    const OperationUiSnapshot &snapshot)
 {
-    if (!cameraOpen) {
+    if (!snapshot.cameraOpen) {
         restoreCameraUiFromApplied();
     }
-    if (!plcConnected) {
+    if (!snapshot.plcConnected) {
         restorePlcUiFromApplied();
     }
-    const QString cameraReason = text(
-        L"请先打开相机后再设置该参数。");
-    const QString plcRunReason = text(
-        L"请先连接 PLC 后再设置该参数。");
-    const QString plcConnectionReason = text(
-        L"PLC 已连接。如需修改连接参数，请先断开 PLC。");
-    auto state = [&](HardwareDependency dependency,
-                     bool *enabled,
-                     QString *reason) {
+    auto accessFor = [&](HardwareDependency dependency)
+            -> OperationUiSnapshot::Access {
         switch (dependency) {
         case HardwareDependency::Camera:
-            *enabled = cameraOpen;
-            *reason = cameraReason;
-            break;
+            return snapshot.cameraSettings;
         case HardwareDependency::PlcConnection:
-            *enabled = !plcConnected;
-            *reason = plcConnectionReason;
-            break;
+            return snapshot.plcConnection;
         case HardwareDependency::PlcRuntime:
-            *enabled = plcConnected;
-            *reason = plcRunReason;
-            break;
+            return snapshot.plcRuntime;
         case HardwareDependency::None:
-            *enabled = true;
-            reason->clear();
-            break;
+        default:
+            return snapshot.generalSettings;
         }
     };
     for (auto it = m_bindings.constBegin();
          it != m_bindings.constEnd(); ++it) {
-        if (it.value().hardwareDependency == HardwareDependency::None) {
-            continue;
-        }
-        bool enabled = true;
-        QString reason;
-        state(it.value().hardwareDependency, &enabled, &reason);
-        setHardwareControlEnabled(it.value().editor, enabled, reason, true);
-        setHardwareControlEnabled(it.value().label, enabled, reason, false);
+        const OperationUiSnapshot::Access access =
+                accessFor(it.value().hardwareDependency);
+        setHardwareControlEnabled(
+                    it.value().editor,
+                    access.enabled,
+                    access.disabledReason,
+                    true);
+        setHardwareControlEnabled(
+                    it.value().label,
+                    access.enabled,
+                    access.disabledReason,
+                    false);
     }
     for (const HardwareActionBinding &binding : m_hardwareActions) {
-        bool enabled = true;
-        QString reason;
-        state(binding.hardwareDependency, &enabled, &reason);
-        setHardwareControlEnabled(binding.control, enabled, reason, true);
-    }
-    if (operationBusy && m_callbacks.updateOperationUiState) {
-        m_callbacks.updateOperationUiState();
-    }
-}
-
-// 函数说明：setAllEditorsEnabled 函数更新或应用对应的配置和状态。
-void MachineSettingsPage::setAllEditorsEnabled(bool enabled)
-{
-    for (auto it = m_bindings.constBegin();
-         it != m_bindings.constEnd(); ++it) {
-        if (it.value().editor) {
-            it.value().editor->setEnabled(enabled);
-        }
+        const OperationUiSnapshot::Access access =
+                accessFor(binding.hardwareDependency);
+        setHardwareControlEnabled(
+                    binding.control,
+                    access.enabled,
+                    access.disabledReason,
+                    true);
     }
 }
 

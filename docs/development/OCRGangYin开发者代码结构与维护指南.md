@@ -1,15 +1,15 @@
 # OCRGangYin 开发者代码结构与维护指南
 
-版本：1.3
+版本：1.4
 编制日期：2026-08-18
-代码基线：`b22ff8d`之后的S8 Runtime/Recipes认知精简工作树
+代码基线：`66aedc7`之后的S9 UI状态与命令门禁统一工作树
 适用工程：`app/AutoOCRproject.pro`，Qt 5.14、qmake、MSVC2017、C++11
 
 ## 一、文档范围和阅读方式
 
 本文面向第一次接手OCRGangYin代码的开发者。第二章只统计并展示`app/`当前全部157个C++代码文件：83个`.h`和74个`.cpp`；后续章节逐个解释这些代码文件。`AutoOCRproject.pro`、`main_window.ui`、`image.qrc`、两份翻译源文件以及Release部署脚本作为工程辅助文件单独说明，但不计入代码文件数。图片、图标、CSS、`.qm`、模型和DLL属于资源或部署资产，不纳入代码文件树。
 
-S8已于2026-08-18通过用户Qt Creator统一门禁，本文件描述的是已验证的S8最终代码。S8只合并了无独立策略的包装层：`runtime`现有21个代码文件，`recipes`现有8个代码文件；算法、资源、Schema、统计和正常PLC时序没有改变。
+S8与S9均已于2026-08-18通过用户Qt Creator统一门禁。`OperationUiPolicy`现在是所有操作控件的唯一UI权限矩阵，`InspectionApplicationService`是相机、PLC、检测、模板取景、统计和剔除队列命令的业务裁决边界。S9不增加代码文件，不修改算法、资源、Schema、统计口径或正常PLC时序。
 
 建议按任务选择阅读深度：
 
@@ -457,8 +457,8 @@ Fault不是产品NG。禁止为未完成产品猜测补发49。正常PLC合同�
 | `app/application/inspection_ui_contract.h` | 定义结果视图绑定、判定样式、UI回调和`ApplicationFaultSnapshot`。 | 只允许普通Qt值和回调；不得放入设备或Worker所有权。 |
 | `app/application/inspection_start_preflight.h` | 定义启动拒绝原因、访问条件、Profile/资源输入和`InspectionStartPreflightResult`。 | 新增启动条件应成为明确Issue，不要在UI和Runtime各写一份布尔判断。 |
 | `app/application/inspection_start_preflight.cpp` | 实现启动访问顺序和资源门禁：忙碌、相机、设置dirty、PLC、配方、目标字符、模板、Profile、条码引擎等。 | 拒绝顺序会影响用户看到的第一条提示，调整时必须做五模式失败路径回归。 |
-| `app/application/inspection_application_service.h` | 声明正式检测应用边界：启动/停止、相机、PLC、模板预览、统计清零、Fault确认、快照和UI绑定；同时定义结构化命令/结果DTO。 | 这是UI唯一运行用例入口；不要新增“为了方便”直接返回Runtime或Device对象的接口。 |
-| `app/application/inspection_application_service.cpp` | 编排完整启动事务、不可变运行快照、相机准备/恢复、软硬触发、停止、Fault、相机参数、PLC命令、模板预览和UI发布；把Runtime/Camera结果映射为Application DTO和中文提示。 | 文件较大但职责是单一用例边界。扩展时优先提取纯映射/预检，不把五模式算法或设备SDK塞入此文件。启动失败必须回滚Runtime并恢复相机。 |
+| `app/application/inspection_application_service.h` | 声明正式检测应用边界：启动/停止、相机、PLC、模板预览、统计清零、Fault确认、快照和UI绑定；同时定义结构化命令/结果DTO。 | 这是UI唯一运行用例入口；所有会改变设备、Runtime或生产数据的公开命令必须返回结构化结果，不能只靠按钮禁用。 |
+| `app/application/inspection_application_service.cpp` | 编排完整启动事务、不可变运行快照、相机准备/恢复、软硬触发、停止、Fault、相机参数、PLC命令、模板预览和UI发布；S9在这里统一检查Runtime、相机采集和PLC连接状态，并直接读取`CameraSession`真实打开状态。 | UI槽不再复制业务`if`。扩展命令时先在此定义允许状态，再委托Runtime/Session/Device保证线程和设备不变量；启动内部下发PLC参数必须走私有设备助手，不能被公开命令的Idle门禁误拦截。 |
 | `app/application/settings_application_service.h` | 声明机器设置的当前值、草稿、可编辑草稿、应用、放弃、默认、清空和路径查询。 | UI不得直接调用MachineSettingsStore。 |
 | `app/application/settings_application_service.cpp` | 在内存中维护已应用值与草稿，调用Store执行事务保存，统一转换保存失败为`OperationResult`。 | `current`和`draft`的区别必须保留；运行参数只使用已应用值。 |
 | `app/application/template_editor_contract.h` | 定义模板编辑跨UI/Application DTO：条码验证选项、字库Profile、配方目录项和损坏项。 | 保持为数据合同，不放对话框、文件写入或算法所有权。 |
@@ -661,12 +661,30 @@ UI负责控件、鼠标键盘、对话框和完整结果显示。它可以收集
 
 | 文件 | 详细职责 | 维护要点 |
 |---|---|---|
-| `app/ui/controllers/operation_ui_policy.h` | 定义UI操作状态、输入快照和纯策略`OperationUiPolicy`，集中描述各按钮/编辑器在CameraClosed/Ready、Preview、Detecting、Stopping、Fault时的使能。 | 它不是运行状态机；输入来自RuntimeSnapshot，输出只控制UI。 |
-| `app/ui/controllers/operation_ui_policy.cpp` | 根据运行、相机、模板操作和Fault状态计算开关相机、启停、模板、设置等控件使能。 | 新按钮应接入同一策略，不要在多个槽函数散写enable条件。 |
+| `app/ui/controllers/operation_ui_policy.h` | 定义七种UI操作状态、`OperationUiContext`和统一`OperationUiSnapshot`。每类操作使用`Access{enabled, disabledReason}`同时给出可用状态和禁用原因。 | 它不是运行状态机；输入只来自Runtime快照、相机/PLC连接和模板页面CaptureState，输出只控制UI，不代替Application裁决。 |
+| `app/ui/controllers/operation_ui_policy.cpp` | 唯一计算开关相机、启停、模板、设置、配方、PLC、统计和剔除队列的权限、按钮文字及状态提示。 | 新增可执行控件必须先归入这里的一类Access，再由所属Page显式应用；禁止重新扫描整窗按钮或在多个槽函数复制状态条件。 |
 | `app/ui/controllers/settings_edit_state.h` | 定义设置dirty登记表，以及模板目标/阈值dirty状态。 | 只记录UI编辑状态，不持久化设置。 |
 | `app/ui/controllers/settings_edit_state.cpp` | 注册全局设置显示名，计算全局/模板dirty项并生成“未应用参数”提示文本。 | 字段名用于用户提示；新增设置需同时登记和清理。 |
 | `app/ui/presenters/inspection_fault_presenter.h` | 定义Fault标题、正文、严重程度和恢复按钮状态的纯展示模型。 | 不操作Runtime或设备。 |
 | `app/ui/presenters/inspection_fault_presenter.cpp` | 将`ApplicationFaultSnapshot`映射为明确的中文Fault提示，强调视觉暂停和输送线状态未知。 | 禁止显示“传送带已停止”或“机械剔除成功”等软件无法确认的信息。 |
+
+S9后的七状态权限矩阵如下。表中的“PLC连接/参数”还要叠加实际`plcConnected`：未连接时允许编辑连接参数和连接，已连接时允许断开与下发运行参数。
+
+| UI状态 | 打开相机 | 启动检测 | 停止/恢复 | 关闭相机 | 模板取景 | 保存模板 | 普通设置/配方 | 统计/队列清理 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `CameraClosed` | 是 | 否 | 否 | 否 | 否 | 否 | 是 | 是 |
+| `CameraReady` | 否 | 是 | 否 | 是 | 是 | 否 | 是 | 是 |
+| `Detecting` | 否 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
+| `Stopping` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `Fault` | 否 | 否 | 是，表示确认并恢复 | 否 | 否 | 否 | 否 | 否 |
+| `TemplatePreviewing` | 否 | 否 | 是，表示退出模板制作 | 否 | 是，表示拍照冻结 | 否 | 否 | 否 |
+| `TemplateFrozen` | 否 | 否 | 是，表示退出模板制作 | 否 | 是，表示重新取景 | 是 | 否 | 否 |
+
+维护时不要把“按钮已禁用”和“命令一定安全”混为一谈。当前按风险分为三类：
+
+1. 纯显示、提示、展开/折叠等不改变业务状态的交互，只需要UI自身约束。
+2. 设置草稿、配方编辑和发布使用UI权限加Application/Store的数据校验与事务；底层不再复制“是否正在运行”的UI条件。
+3. 正式检测、相机开关/参数、模板取景、PLC连接/写入、统计和剔除队列清理使用三层职责：UI策略负责可见可用性，`InspectionApplicationService`负责命令是否允许，Runtime/CameraSession/Device负责线程、连接、事务和SDK不变量。三层判断的内容不同，不应复制同一个布尔表达式。
 
 ### 11.2 对话框和自定义控件
 
@@ -685,22 +703,22 @@ UI负责控件、鼠标键盘、对话框和完整结果显示。它可以收集
 |---|---|---|
 | `app/ui/main_window.h` | 声明MainWindow、三个页面组合、Application服务引用、UI布局状态、Qt自动槽和跨页面回调。 | MainWindow不是业务所有者；新业务优先进入Page/Application，不继续扩大头文件字段。 |
 | `app/ui/main_window.cpp` | 构造`Ui::MainWindow`，建立三个显式ViewBindings和Callbacks，attach页面，恢复设置，连接顶层服务，处理析构和OpenCV窗口清理。 | 只有此类拥有生成的Ui对象。三个Page不得重新接收整份`Ui::MainWindow *`。 |
-| `app/ui/main_window_inspection.cpp` | MainWindow中与运行操作有关的槽和兼容转发：开关相机、开始/停止、Fault提示/确认、模板预览入口、结果显示、统计清零、存图目录和关闭事件。多数动作委托InspectionPage、TemplateEditorPage或Application服务。 | 自动槽名称受`.ui`控件名约束。新增运行判断不要绕过OperationUiPolicy和Application。 |
-| `app/ui/main_window_settings.cpp` | MainWindow中设置与模板跨页协调：设置恢复/保存、dirty、硬件参数动作、模式切换、模板恢复、字库Profile选择、阈值/目标/纸巾参数和PLC工艺按钮转发。 | 它是过渡性的窗口协调文件；新设置优先进入MachineSettingsPage，新模板行为进入TemplateEditorPage，避免继续膨胀。 |
+| `app/ui/main_window_inspection.cpp` | MainWindow中与运行操作有关的槽和兼容转发；S9由`updateOperationUiState()`读取一次Runtime快照、构造一次Context和Snapshot，再分发给三个Page及少数跨页按钮。 | 自动槽只收集参数、调用Application并呈现结果；不要重新加入“忙碌/相机已开/PLC已连”等业务前置判断。Runtime/Fault优先于模板页面本地状态。 |
+| `app/ui/main_window_settings.cpp` | MainWindow中设置与模板跨页协调：设置恢复/保存、dirty、硬件参数动作、模式切换、模板恢复、字库Profile选择、阈值/目标/纸巾参数和PLC工艺按钮转发。 | 相机与PLC槽直接消费Application结构化结果；连接和运行状态由统一策略显示、Application裁决。参数格式校验仍属于UI，不应删除。 |
 
 ### 11.4 InspectionPage
 
 | 文件 | 详细职责 | 维护要点 |
 |---|---|---|
 | `app/ui/pages/inspection_page.h` | 定义检测页显式控件绑定和Callbacks，声明结果视图绑定、操作状态、Fault、ROI警告和存图错误接口。 | ViewBindings必须列出真正需要的控件，禁止改回整窗指针。 |
-| `app/ui/pages/inspection_page.cpp` | 把Runtime状态映射到按钮/样式，安装结果显示回调，呈现Fault、检测ROI警告、标注图缺失和存图累计错误。 | 页面只显示，不直接统计或决定Fault。 |
+| `app/ui/pages/inspection_page.cpp` | 显式把统一权限快照应用到开关相机、启停、模板取景和保存按钮；同时安装结果显示回调，呈现Fault、ROI警告、标注图缺失和存图累计错误。 | 不得恢复`findChildren<QAbstractButton *>`整窗扫描；页面只更新明确拥有的控件，不覆盖MachineSettingsPage和TemplateEditorPage的细分权限。 |
 
 ### 11.5 MachineSettingsPage
 
 | 文件 | 详细职责 | 维护要点 |
 |---|---|---|
 | `app/ui/pages/machine_settings_page.h` | 定义机器设置全部显式控件绑定、保存/硬件动作Callbacks、设置/硬件依赖登记结构和页面接口。 | 新设置必须有明确绑定、dirty名、验证和MachineSettings字段；不要依赖控件编号猜语义。 |
-| `app/ui/pages/machine_settings_page.cpp` | 初始化验证器、滚轮保护和目录控件；在UI与MachineSettings间双向映射；维护dirty、保存、清空/默认、硬件使能、曝光/增益/PLC恢复和软件目录打开。 | UI范围校验不是唯一防线，Store/Application仍需验证。立即下发的硬件值与持久化草稿要保持一致。 |
+| `app/ui/pages/machine_settings_page.cpp` | 初始化验证器、滚轮保护和目录控件；在UI与MachineSettings间双向映射；按None/Camera/PlcConnection/PlcRuntime四种依赖把统一权限快照应用到编辑器、标签和动作按钮。 | UI范围校验不是唯一防线，Store/Application仍需验证。新增控件必须登记正确依赖；不要再写页面级“全部启用/全部禁用”。 |
 
 ### 11.6 TemplateEditorPage
 
@@ -709,7 +727,7 @@ UI负责控件、鼠标键盘、对话框和完整结果显示。它可以收集
 | 文件 | 详细职责 | 维护要点 |
 |---|---|---|
 | `app/ui/pages/template_editor_page.h` | 定义模板页控件绑定、回调、CaptureState、所有公开交互和页面私有状态；同一个类的实现分散到下面四个主题`.cpp`。 | 新方法按“基础流程/视图/配方/Profile命令”放入对应实现文件；不要新建只转发的Controller。 |
-| `app/ui/pages/template_editor_page.cpp` | 模板页构造、通用提示、设置保存、Profile显示、预览启动/冻结/停止、帧/失败回调、选择/保存入口和条码模板即时验证状态。 | 预览不创建ProductKey，不进入统计/PLC/存图；停止必须回到一致CaptureState。 |
+| `app/ui/pages/template_editor_page.cpp` | 模板页构造、统一配方编辑权限应用、预览启动/冻结/停止、帧/失败回调、选择/保存入口和条码模板即时验证状态。模板预览只提交参数并消费Application的`OperationResult`。 | 预览不创建ProductKey，不进入统计/PLC/存图；不要在按钮槽复制Runtime/CameraSession状态判断，停止必须回到一致CaptureState。 |
 | `app/ui/pages/template_editor_view.cpp` | 模板制作引导文字/高度/闪烁、ImageLabel事件、dirty显示、手工字符裁切入口和已有字符资产编辑。 | 只处理交互和展示；坐标/持久化委托Geometry/Application。 |
 | `app/ui/pages/template_editor_recipe.cpp` | 五模式ID查询、跨模式已发布配方恢复、目录选择、纸巾/单Profile/多Profile激活、发布、同UUID重发和当前Profile选择。 | 模式ID从DetectionModeDescriptor读取；不要依赖下拉框固定整数。发布必须经过当前RecipeEditorSession和Store事务。 |
 | `app/ui/pages/template_editor_profile_commands.cpp` | 显示字库原图、载入字符模板、保存单/多Profile、应用单个/批量目标文字和图像阈值、应用纸巾阈值。 | 单项/批量编辑必须保持Profile索引和assetSources同步，失败不能部分发布正式配方。 |
@@ -864,9 +882,11 @@ UI负责控件、鼠标键盘、对话框和完整结果显示。它可以收集
 8. 无QThread::terminate、detach、危险release或线程所有权泄漏。
 9. 差异不含.pro.user、.ui.autosave、app.zip或未批准资源。
 10. git diff --check通过。
+11. 所有可执行控件的`setEnabled`来源可追溯到唯一`OperationUiSnapshot`，不存在整窗按钮扫描和页面间相互覆盖。
+12. UI运行槽不复制Runtime、相机采集或PLC连接业务判断；设备类命令在Application仍有结构化拒绝路径。
 ```
 
-## 二十一、S8完成状态
+## 二十一、S8与S9完成状态
 
 - 已删除7个无独立策略的包装文件。
 - `app`自研`.h/.cpp`为157个。
@@ -874,3 +894,5 @@ UI负责控件、鼠标键盘、对话框和完整结果显示。它可以收集
 - `recipes`为8个，只保留ProductRecipe、PreparedRecipe、RecipeStore、RecipeEditorSession四组职责。
 - 资源差异为0，算法、Schema、统计和正常PLC时序不变。
 - 2026-08-18用户确认Run qmake、Rebuild和统一回归通过；受影响32项功能已恢复为`已验证`，S8进入最终本地提交收口。
+- S9不增删代码文件；它把分散的UI使能收口为一份权限快照，并按风险保留UI、Application、Runtime/Device不同职责的保护。
+- 2026-08-18用户确认S9统一门禁通过；受影响59项已恢复为`已验证`，正式功能状态为`已验证87/已确认删除3`，S9进入最终本地提交收口。

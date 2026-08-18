@@ -1553,3 +1553,17 @@
 - [x] Agent静态门禁通过：`app`自研`.h/.cpp`为157个，`runtime`21个、`recipes`8个；主qmake共161个源码/头/UI/qrc/翻译登记项，缺失0、重复0；7个已删文件及全部旧类型引用为0；人类可读Unicode转义0；资源差异0；32项迁移中、55项已验证、3项已确认删除；`tests`与`app.zip`均不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试可执行文件或主程序。
 - [x] 2026-08-18用户确认S8统一门禁“验证通过”；32项受影响功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC在线读写、机械剔除和现场异常恢复继续单列待验，不以本轮一般验证替代现场生产验收。
 - [x] S8提交前最终Agent静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`，其他状态均为0；`app`代码文件157个、`runtime`21个、`recipes`8个；主qmake登记161个源码/头/UI/qrc/翻译项，缺失0、重复0，157个`.h/.cpp`与磁盘代码清单完全一致。7个已删包装文件和旧类型引用、人类可读Unicode转义、资源差异及用户文件差异均为0；开发者指南代码树157/157，`tests`与`app.zip`不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试程序或主程序；运行门禁结论来自用户确认。
+
+## S9 UI状态与命令门禁统一（2026-08-18，已通过用户统一门禁）
+
+- [x] 用户批准由Agent按风险自行判断UI单层、应用/数据双层和设备/Runtime三层保护；目标不是在每层复制相同`if`，而是统一UI显示、应用层唯一业务裁决、底层只保证线程/设备/事务安全。
+- [x] 开始基线为分支`codex/ocrgangyin-refactor`、HEAD `66aedc7 refactor: 完成 Runtime 与 Recipes 认知精简`、工作区干净且`app.zip`不存在；本轮不修改图片、图标、QSS/CSS、翻译、`.qrc`、模型、DLL或部署资源，不运行qmake、构建、测试程序或主程序。
+- [x] 从七种主操作状态、相机开关与参数、模板预览/冻结/保存、五模式启停、PLC连接与写入、设置/配方编辑、统计和剔除队列清理、Fault恢复及退出生命周期重新追踪；实际影响59项：`SYS-009..010、UI-001..006、SET-001..013、TPL-001..016、CAM-001..006、RUN-001..006、PLC-001..007、RES-001..003`。这些功能已由`已验证`改为`迁移中`，其余28项保持`已验证`，`MC-001..003`保持`已确认删除`。
+- [x] `OperationUiPolicy`已成为唯一UI权限矩阵：一次接收七状态、相机打开和PLC连接上下文，一次输出主操作、模板、普通/相机/PLC设置、配方、统计和剔除队列的`Access{enabled, disabledReason}`；MainWindow只生成和分发一份快照，三个Page显式更新自己拥有的控件。
+- [x] `InspectionPage`已删除整窗`findChildren<QAbstractButton *>`扫描和“先全禁再全开”；`MachineSettingsPage`已删除页面级全部编辑器开关，按None/Camera/PlcConnection/PlcRuntime应用同一快照；`TemplateEditorPage`按配方选择/编辑权限应用，禁用提示不再被模板操作说明覆盖。
+- [x] UI槽已删除忙碌、相机打开/关闭、相机采集和PLC连接状态的重复业务前置判断，只保留输入格式、确认对话框和模板页面内部CaptureState路由。开关相机、相机参数、PLC、模板取景、统计和剔除队列均消费Application结构化结果，拒绝不再误报成功。
+- [x] `InspectionApplicationService`删除`m_cameraOpen`状态副本，统一读取`CameraSession::isOpen/isCapturing`；公开相机、PLC、模板取景、统计和剔除队列命令在Application裁决允许状态，正式启动内部PLC下发使用私有设备助手，Runtime/CameraSession/Device继续负责线程、连接和SDK不变量。因UI不再查询采集状态，同时删除零调用的Application `isCapturing()`和三个MainWindow模板预览转发。
+- [x] 开发者指南已升级为1.4，补充七状态权限矩阵、三类风险分层和新增控件维护方法；架构精简计划补充S9目标、边界和门禁。代码文件仍为157个，`runtime`21个、`recipes`8个，本轮不增删或修改资源。
+- [x] 当前Agent静态门禁通过：20个差异文件严格UTF-8；主qmake 161个登记项唯一且缺失0；整窗按钮扫描、旧页面级开关、`m_cameraOpen`、UI提交模板忙碌状态和Application零调用采集查询均为0；UI业务控件`setEnabled`只剩统一Access应用点，对话框内部选择有效性除外；Application结构化设备/运行拒绝码均存在；人类可读Unicode转义和资源差异均为0；`app.zip`与`tests`不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试程序或主程序。
+- [x] 2026-08-18用户确认S9统一门禁“没问题”：Qt Creator Run qmake、Rebuild及59项范围人工回归通过；59项受影响功能已由`迁移中`恢复为`已验证`，正式功能状态恢复为`已验证87/已确认删除3`。真实PLC在线读写、机械剔除和现场异常恢复继续单列待验，不以本轮一般验证替代现场生产验收。
+- [x] S9提交前最终Agent静态门禁通过：20个差异文件与本轮白名单完全一致且均为严格UTF-8；90个正式功能ID唯一，状态为`已验证87/已确认删除3`，其他状态均为0；`app`代码文件157个、`runtime`21个、`recipes`8个；主qmake登记161项且重复0、缺失0；整窗按钮扫描、旧页面级开关、`m_cameraOpen`、UI模板忙碌副本、Application零调用采集查询、人类可读Unicode转义、资源差异均为0；`app.zip`与`tests`不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试程序或主程序；运行门禁结论来自用户确认。

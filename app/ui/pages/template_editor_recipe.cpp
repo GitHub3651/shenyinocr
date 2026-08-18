@@ -622,16 +622,6 @@ void TemplateEditorPage::publishCurrentRecipeSession()
 // 函数说明：selectPublishedRecipe 函数读取、等待或计算对应的数据。
 void TemplateEditorPage::selectPublishedRecipe()
 {
-    if (isInspectionBusy() || templateOperationActive()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral(
-                        "请先停止识别或退出"
-                        "模板制作，再选择"
-                        "已发布配方。"));
-        return;
-    }
-
     DetectionMode detectionMode;
     if (!detectionModeFromUiId(currentDetectModeId(), &detectionMode)) {
         showParameterInfoAsError(

@@ -244,12 +244,6 @@ bool TemplateEditorPage::publishWordTemplateRecipeEdits(
 // 函数说明：applyCurrentTargetText 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyCurrentTargetText()
 {
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先停止检测后再修改目标字符。"));
-        return;
-    }
     if (!m_templateService->isActive()) {
         showParameterInfoAsError(
                     QStringLiteral("提示"),
@@ -386,12 +380,6 @@ void TemplateEditorPage::applyBatchTargetText()
         applyCurrentTargetText();
         return;
     }
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先停止检测后再批量修改模板字符。"));
-        return;
-    }
     if (!m_templateService->isActive()
             || m_templateService->wordProfiles().empty()) {
         showParameterInfoAsError(
@@ -473,12 +461,6 @@ void TemplateEditorPage::applyBatchTargetText()
 // 函数说明：applyCurrentImageThreshold 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyCurrentImageThreshold()
 {
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先停止检测后再修改模板阈值。"));
-        return;
-    }
     int threshold = 0;
     if (!parseIntValue(
                 m_view.lineEdit_imageThreshold->text(), &threshold)
@@ -581,12 +563,6 @@ void TemplateEditorPage::applyCurrentImageThreshold()
 // 函数说明：applyCurrentTissueThreshold 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyCurrentTissueThreshold()
 {
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先停止检测后再修改纸巾配方阈值。"));
-        return;
-    }
     bool valid = false;
     const double threshold =
             m_view.lineEdit_tissueRoughnessThreshold
@@ -645,12 +621,6 @@ void TemplateEditorPage::applyBatchImageThreshold()
 {
     if (!isWordFamilyMode(currentDetectModeId())) {
         applyCurrentImageThreshold();
-        return;
-    }
-    if (isInspectionBusy()) {
-        showParameterWarning(
-                    QStringLiteral("提示"),
-                    QStringLiteral("请先停止检测后再批量修改模板阈值。"));
         return;
     }
     int threshold = 0;

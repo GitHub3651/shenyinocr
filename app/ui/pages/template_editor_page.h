@@ -5,6 +5,7 @@
 #pragma once
 
 #include "application/template_application_service.h"
+#include "ui/controllers/operation_ui_policy.h"
 
 #include <QMap>
 #include <QObject>
@@ -119,7 +120,7 @@ public:
         const TemplateEditorPageCallbacks &callbacks,
         QObject *parent = nullptr);
 
-    void setEditorsEnabled(bool enabled);
+    void applyOperationState(const OperationUiSnapshot &snapshot);
     QFrame *guideFrame() const;
     QPushButton *manualCharacterCropButton() const;
 
@@ -226,7 +227,6 @@ public:
 
 private:
     QWidget *dialogParent() const;
-    bool isInspectionBusy() const;
     bool isCameraOpen() const;
     void showParameterInfo(const QString &title,
                            const QString &message);

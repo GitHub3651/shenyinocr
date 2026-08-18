@@ -21,6 +21,27 @@
 
 namespace {
 
+void applyButtonAccess(
+    QAbstractButton *button,
+    const OperationUiSnapshot::Access &access)
+{
+    if (!button) {
+        return;
+    }
+    static const char originalToolTipProperty[] =
+            "_operationOriginalToolTip";
+    if (!button->property(originalToolTipProperty).isValid()) {
+        button->setProperty(
+                    originalToolTipProperty,
+                    button->toolTip());
+    }
+    button->setEnabled(access.enabled);
+    button->setToolTip(
+                access.enabled
+                ? button->property(originalToolTipProperty).toString()
+                : access.disabledReason);
+}
+
 // 函数说明：setLabelTextIfChanged 函数更新或应用对应的配置和状态。
 void setLabelTextIfChanged(QLabel *label, const QString &text)
 {
@@ -29,7 +50,7 @@ void setLabelTextIfChanged(QLabel *label, const QString &text)
     }
 }
 
-}
+} // namespace
 
 // 函数说明：InspectionPage 构造函数创建组件并初始化其依赖和初始状态。
 InspectionPage::InspectionPage(
@@ -126,67 +147,30 @@ InspectionPage::resultViewBindings() const
     return bindings;
 }
 
-// 函数说明：updateOperationState 函数更新或应用对应的配置和状态。
-void InspectionPage::updateOperationState(
+// 函数说明：applyOperationState 根据统一权限快照更新检测页控件。
+void InspectionPage::applyOperationState(
     OperationUiState requestedState,
-    bool runtimeFaulted)
+    const OperationUiSnapshot &operationUi)
 {
     if (!m_view.label_runtimeStatus || !m_rootWidget) {
         return;
     }
 
-    const QList<QAbstractButton *> operationButtons =
-            m_rootWidget->findChildren<QAbstractButton *>();
-    for (QAbstractButton *button : operationButtons) {
-        if (!button) {
-            continue;
-        }
-        const QString marker = QStringLiteral(
-                    "/* operation-disabled-style */");
-        if (!button->styleSheet().contains(marker)) {
-            button->setStyleSheet(
-                        button->styleSheet()
-                        + QStringLiteral(
-                            "\n/* operation-disabled-style */"
-                            "QPushButton:disabled,"
-                            "QToolButton:disabled,"
-                            "QCheckBox:disabled {"
-                            "background-color: #f2f3f5;"
-                            "color: #a8abb2;"
-                            "border-color: #dcdfe6;"
-                            "}"));
-        }
-        button->setEnabled(false);
-    }
-
-    const OperationUiState effectiveState = runtimeFaulted
-            ? OperationUiState::Fault
-            : requestedState;
-    const OperationUiSnapshot operationUi =
-            OperationUiPolicy::create(effectiveState);
-    if (operationUi.enableAllOperations) {
-        for (QAbstractButton *button : operationButtons) {
-            if (button) {
-                button->setEnabled(true);
-            }
-        }
-    }
-
     m_view.toolButton_startInspection->setText(operationUi.startDetectionText);
     m_view.toolButton_stopInspection->setText(operationUi.stopText);
     m_view.toolButton_createTemplate->setText(operationUi.templateCaptureText);
-    m_view.toolButton_openCamera->setEnabled(operationUi.openCameraEnabled);
-    m_view.toolButton_startInspection->setEnabled(operationUi.startDetectionEnabled);
-    m_view.toolButton_stopInspection->setEnabled(operationUi.stopEnabled);
-    m_view.toolButton_closeCamera->setEnabled(operationUi.closeCameraEnabled);
-    m_view.toolButton_createTemplate->setEnabled(operationUi.templateCaptureEnabled);
-    m_view.pushButton_saveTemplate->setEnabled(operationUi.saveTemplateEnabled);
+    applyButtonAccess(m_view.toolButton_openCamera, operationUi.openCamera);
+    applyButtonAccess(
+                m_view.toolButton_startInspection,
+                operationUi.startDetection);
+    applyButtonAccess(m_view.toolButton_stopInspection, operationUi.stop);
+    applyButtonAccess(m_view.toolButton_closeCamera, operationUi.closeCamera);
+    applyButtonAccess(
+                m_view.toolButton_createTemplate,
+                operationUi.templateCapture);
+    applyButtonAccess(m_view.pushButton_saveTemplate, operationUi.saveTemplate);
     if (!operationUi.statusText.isEmpty()) {
         m_view.label_runtimeStatus->setText(operationUi.statusText);
-    }
-
-    if (m_callbacks.setSettingsEnabled) {
-        m_callbacks.setSettingsEnabled(operationUi.settingsEnabled);
     }
 
     if (m_templateAttentionTimer && m_view.toolButton_createTemplate) {
@@ -227,10 +211,6 @@ void InspectionPage::updateOperationState(
         }
     }
 
-    if (operationUi.enableAllOperations
-            && m_callbacks.refreshHardwareSettingsEnabled) {
-        m_callbacks.refreshHardwareSettingsEnabled();
-    }
 }
 
 // 函数说明：presentFault 函数执行对应事件或业务处理。
