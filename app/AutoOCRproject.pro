@@ -247,11 +247,13 @@ DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341
 else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341d
 
-# Let Qt Creator run the Release executable from its build directory.  The
-# validated dist package remains the source of runtime DLLs, models and config.
+# Let Qt Creator run the Release executable from its build directory. The
+# validated dist package provides non-Qt runtime assets; the active Qt kit
+# deploys its matching Qt libraries and plugins.
 win32:CONFIG(release, debug|release) {
     RUNTIME_DEPLOY_SCRIPT = $$shell_path($$PROJECT_ROOT/app/system_support/deployment/deploy_runtime.ps1)
     RUNTIME_DEPLOY_SOURCE = $$shell_path($$PROJECT_ROOT/dist/ShengYin)
     RUNTIME_DEPLOY_DESTINATION = $$shell_path($$OUT_PWD/release)
-    QMAKE_POST_LINK += powershell -NoProfile -ExecutionPolicy Bypass -File $$RUNTIME_DEPLOY_SCRIPT -Source $$RUNTIME_DEPLOY_SOURCE -Destination $$RUNTIME_DEPLOY_DESTINATION
+    RUNTIME_DEPLOY_QT_BIN = $$shell_path($$[QT_INSTALL_BINS])
+    QMAKE_POST_LINK += powershell -NoProfile -ExecutionPolicy Bypass -File $$quote($$RUNTIME_DEPLOY_SCRIPT) -Source $$quote($$RUNTIME_DEPLOY_SOURCE) -Destination $$quote($$RUNTIME_DEPLOY_DESTINATION) -QtBinDirectory $$quote($$RUNTIME_DEPLOY_QT_BIN)
 }
