@@ -1,3 +1,7 @@
+// 文件作用：本文件用于实现模板配方选择、发布、模式切换和页面状态刷新。
+// 主要职责：实现模板配方选择、发布、模式切换和页面状态刷新。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 /**
  * @file ui/pages/template_editor_recipe.cpp
  * @brief 模板模式、Profile选择和配方发布交互。
@@ -54,6 +58,7 @@
 
 using namespace TemplateEditorSupport;
 
+// 函数说明：setupWordTemplateEditorCombo 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setupWordTemplateEditorCombo()
 {
     const QString commonPushButtonStyle =
@@ -301,6 +306,7 @@ void TemplateEditorPage::setupWordTemplateEditorCombo()
 
 
 
+// 函数说明：clearWordMultiTemplateState 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::clearWordMultiTemplateState()
 {
     clearBarcodeTemplateValidation();
@@ -322,6 +328,7 @@ void TemplateEditorPage::clearWordMultiTemplateState()
     clearRecipeProfileDirty();
 }
 
+// 函数说明：clearSingleTemplateRecipeState 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::clearSingleTemplateRecipeState()
 {
     m_templateService->cancel();
@@ -340,16 +347,19 @@ void TemplateEditorPage::clearSingleTemplateRecipeState()
     clearRecipeProfileDirty();
 }
 
+// 函数说明：detectModeIdForIndex 函数执行对应事件或业务处理。
 QString TemplateEditorPage::detectModeIdForIndex(int index) const
 {
     return TemplateModeMemory::modeIdForIndex(index);
 }
 
+// 函数说明：currentDetectModeId 函数读取、等待或计算对应的数据。
 QString TemplateEditorPage::currentDetectModeId() const
 {
     return detectModeIdForIndex(m_view.comboBox_detectionMode ? m_view.comboBox_detectionMode->currentIndex() : 1);
 }
 
+// 函数说明：restoreTemplatesForMode 函数校验、转换或恢复对应数据。
 void TemplateEditorPage::restoreTemplatesForMode(
         const QString &modeId,
         bool showMessage)
@@ -399,6 +409,7 @@ void TemplateEditorPage::restoreTemplatesForMode(
     }
 }
 
+// 函数说明：refreshWordTemplateEditorCombo 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::refreshWordTemplateEditorCombo()
 {
     const bool isWordMode = isWordFamilyMode(currentDetectModeId());
@@ -501,6 +512,7 @@ void TemplateEditorPage::refreshWordTemplateEditorCombo()
     }
 }
 
+// 函数说明：applyWordTemplateEditorSelection 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyWordTemplateEditorSelection(int comboIndex)
 {
     if (!m_wordTemplateEditComboBox || comboIndex < 0) {
@@ -516,6 +528,7 @@ void TemplateEditorPage::applyWordTemplateEditorSelection(int comboIndex)
     setCurrentWordTemplateEditIndex(profileIndex);
 }
 
+// 函数说明：setCurrentWordTemplateEditIndex 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setCurrentWordTemplateEditIndex(int profileIndex)
 {
     if (profileIndex < 0
@@ -565,16 +578,19 @@ void TemplateEditorPage::setCurrentWordTemplateEditIndex(int profileIndex)
     displayWordTemplateRawImage(profile);
 }
 
+// 函数说明：publishCurrentWordTemplateGroup 函数保存或发布对应的数据和资源。
 void TemplateEditorPage::publishCurrentWordTemplateGroup()
 {
     publishCurrentRecipeSession();
 }
 
+// 函数说明：publishCurrentSingleTemplateRecipe 函数保存或发布对应的数据和资源。
 void TemplateEditorPage::publishCurrentSingleTemplateRecipe()
 {
     publishCurrentRecipeSession();
 }
 
+// 函数说明：publishCurrentRecipeSession 函数保存或发布对应的数据和资源。
 void TemplateEditorPage::publishCurrentRecipeSession()
 {
     if (!m_templateService->isActive()) {
@@ -599,6 +615,7 @@ void TemplateEditorPage::publishCurrentRecipeSession()
                 QStringLiteral("当前产品配方已完整保存。"));
 }
 
+// 函数说明：selectPublishedRecipe 函数读取、等待或计算对应的数据。
 void TemplateEditorPage::selectPublishedRecipe()
 {
     if (isInspectionBusy() || templateOperationActive()) {
@@ -696,6 +713,7 @@ void TemplateEditorPage::selectPublishedRecipe()
     }
 }
 
+// 函数说明：activatePublishedTissueRecipe 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::activatePublishedTissueRecipe(
         const QString &recipeId,
         bool showErrorMessage,
@@ -763,6 +781,7 @@ bool TemplateEditorPage::activatePublishedTissueRecipe(
     return true;
 }
 
+// 函数说明：activatePublishedWordRecipe 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::activatePublishedWordRecipe(
         const QString &recipeId,
         const QString &modeId,
@@ -888,6 +907,7 @@ bool TemplateEditorPage::activatePublishedWordRecipe(
 }
 
 
+// 函数说明：activatePublishedSingleTemplateRecipe 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::activatePublishedSingleTemplateRecipe(
         const QString &recipeId,
         const QString &modeId,
@@ -965,6 +985,7 @@ bool TemplateEditorPage::activatePublishedSingleTemplateRecipe(
     return true;
 }
 
+// 函数说明：republishSingleTemplateRecipeSettings 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::republishSingleTemplateRecipeSettings(
         const RecipeProfile &settings,
         QString *errorMessage)
@@ -1006,6 +1027,7 @@ bool TemplateEditorPage::republishSingleTemplateRecipeSettings(
     return true;
 }
 
+// 函数说明：currentWordTemplateProfileIndex 函数读取、等待或计算对应的数据。
 int TemplateEditorPage::currentWordTemplateProfileIndex() const
 {
     if (m_currentWordTemplateEditIndex < 0

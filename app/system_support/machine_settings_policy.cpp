@@ -1,5 +1,10 @@
+// 文件作用：本文件用于集中给出机器设置默认值、范围检查和跨字段约束。
+// 主要职责：集中给出机器设置默认值、范围检查和跨字段约束。
+// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "system_support/machine_settings_policy.h"
 
+// 函数说明：defaultsForHardwareState 函数实现名称所表示的处理步骤。
 MachineSettings MachineSettingsPolicy::defaultsForHardwareState(
     const MachineSettings &applied,
     const MachineSettings &defaults,

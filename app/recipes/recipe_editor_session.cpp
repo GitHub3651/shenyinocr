@@ -1,3 +1,7 @@
+// 文件作用：本文件用于维护模板编辑事务、草稿状态和提交取消边界。
+// 主要职责：维护模板编辑事务、草稿状态和提交取消边界。
+// 模块位置：配方层；负责产品参数、资源和编辑事务，不依赖界面或检测实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "recipes/recipe_editor_session.h"
 
 #include <QDir>
@@ -6,6 +10,7 @@
 
 namespace {
 
+// 函数说明：setError 函数更新或应用对应的配置和状态。
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
@@ -13,6 +18,7 @@ void setError(QString *errorMessage, const QString &message)
     }
 }
 
+// 函数说明：validSessionHeader 函数实现名称所表示的处理步骤。
 bool validSessionHeader(const ProductRecipe &recipe,
                         QString *errorMessage)
 {
@@ -30,6 +36,7 @@ bool validSessionHeader(const ProductRecipe &recipe,
 
 } // namespace
 
+// 函数说明：RecipeEditorSession 构造函数创建组件并初始化其依赖和初始状态。
 RecipeEditorSession::RecipeEditorSession(
     const QString &editorWorkspacesRootPath)
     : m_workspacesRoot(editorWorkspacesRootPath.trimmed().isEmpty()
@@ -38,11 +45,13 @@ RecipeEditorSession::RecipeEditorSession(
 {
 }
 
+// 函数说明：~RecipeEditorSession 析构函数按生命周期要求释放组件持有的资源。
 RecipeEditorSession::~RecipeEditorSession()
 {
     reset();
 }
 
+// 函数说明：reset 函数停止流程、清理状态或释放对应资源。
 void RecipeEditorSession::reset()
 {
     const QString activeWorkspace = workspacePath();
@@ -64,6 +73,7 @@ void RecipeEditorSession::reset()
     m_assetSourcePaths.clear();
 }
 
+// 函数说明：beginNew 函数创建、准备或启动对应流程。
 bool RecipeEditorSession::beginNew(const ProductRecipe &recipe,
                                    QString *errorMessage)
 {
@@ -90,6 +100,7 @@ bool RecipeEditorSession::beginNew(const ProductRecipe &recipe,
     return true;
 }
 
+// 函数说明：beginEdit 函数创建、准备或启动对应流程。
 bool RecipeEditorSession::beginEdit(const RecipeStore &store,
                                     const QString &recipeId,
                                     QString *errorMessage)
@@ -124,21 +135,25 @@ bool RecipeEditorSession::beginEdit(const RecipeStore &store,
     return true;
 }
 
+// 函数说明：isActive 函数检查相关状态并返回判断结果。
 bool RecipeEditorSession::isActive() const
 {
     return m_state != RecipeEditorSessionState::Inactive;
 }
 
+// 函数说明：state 函数实现名称所表示的处理步骤。
 RecipeEditorSessionState RecipeEditorSession::state() const
 {
     return m_state;
 }
 
+// 函数说明：sessionId 函数实现名称所表示的处理步骤。
 QString RecipeEditorSession::sessionId() const
 {
     return m_sessionId;
 }
 
+// 函数说明：workspacePath 函数实现名称所表示的处理步骤。
 QString RecipeEditorSession::workspacePath() const
 {
     return m_workspacesRoot.isEmpty() || m_sessionId.isEmpty()
@@ -146,6 +161,7 @@ QString RecipeEditorSession::workspacePath() const
             : QDir(m_workspacesRoot).filePath(m_sessionId);
 }
 
+// 函数说明：recipe 函数实现名称所表示的处理步骤。
 const ProductRecipe &RecipeEditorSession::recipe() const
 {
     return m_recipe;
@@ -156,6 +172,7 @@ QMap<QString, QString> RecipeEditorSession::assetSourcePaths() const
     return m_assetSourcePaths;
 }
 
+// 函数说明：replaceDraft 函数更新或应用对应的配置和状态。
 bool RecipeEditorSession::replaceDraft(
         const ProductRecipe &recipe,
         const QMap<QString, QString> &assetSourcePaths,
@@ -185,6 +202,7 @@ bool RecipeEditorSession::replaceDraft(
     return true;
 }
 
+// 函数说明：updateProfile 函数更新或应用对应的配置和状态。
 bool RecipeEditorSession::updateProfile(int profileIndex,
                                         const RecipeProfile &profile,
                                         QString *errorMessage)
@@ -204,6 +222,7 @@ bool RecipeEditorSession::updateProfile(int profileIndex,
     return true;
 }
 
+// 函数说明：publish 函数保存或发布对应的数据和资源。
 bool RecipeEditorSession::publish(
         const RecipeStore &store,
         PreparedRecipeSnapshot *preparedRecipe,

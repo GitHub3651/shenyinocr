@@ -1,3 +1,7 @@
+// 文件作用：本文件用于管理相机打开、参数下发、预览、正式采集和停止恢复的完整会话。
+// 主要职责：管理相机打开、参数下发、预览、正式采集和停止恢复的完整会话。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
@@ -16,6 +20,7 @@
 #include <mutex>
 #include <vector>
 
+// 组件说明：InspectionCameraOpenIssue 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionCameraOpenIssue
 {
     None,
@@ -25,6 +30,7 @@ enum class InspectionCameraOpenIssue
     InitializationFailed
 };
 
+// 组件说明：InspectionCameraParameterResult 数据结构保存一次操作的结果、状态和错误信息。
 struct InspectionCameraParameterResult
 {
     bool success = false;
@@ -35,6 +41,7 @@ struct InspectionCameraParameterResult
     QString diagnostic;
 };
 
+// 组件说明：InspectionCameraOpenResult 数据结构保存一次操作的结果、状态和错误信息。
 struct InspectionCameraOpenResult
 {
     InspectionCameraOpenIssue issue = InspectionCameraOpenIssue::None;
@@ -46,12 +53,14 @@ struct InspectionCameraOpenResult
     QString adjustmentMessage;
     QString diagnostic;
 
+    // 函数说明：isSuccess 函数检查相关状态并返回判断结果。
     bool isSuccess() const
     {
         return issue == InspectionCameraOpenIssue::None;
     }
 };
 
+// 组件说明：InspectionCameraRecoveryIssue 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionCameraRecoveryIssue
 {
     None,
@@ -60,6 +69,7 @@ enum class InspectionCameraRecoveryIssue
     InitializationFailed
 };
 
+// 组件说明：InspectionCameraRecoveryResult 数据结构保存一次操作的结果、状态和错误信息。
 struct InspectionCameraRecoveryResult
 {
     InspectionCameraRecoveryIssue issue =
@@ -69,28 +79,33 @@ struct InspectionCameraRecoveryResult
     QString adjustmentMessage;
     QString errorMessage;
 
+    // 函数说明：isRecovered 函数检查相关状态并返回判断结果。
     bool isRecovered() const
     {
         return issue == InspectionCameraRecoveryIssue::None;
     }
 };
 
+// 组件说明：CameraCaptureStopResult 数据结构保存一次操作的结果、状态和错误信息。
 struct CameraCaptureStopResult
 {
     bool wasRunning = false;
     bool stopped = true;
 
+    // 函数说明：allStopped 函数检查相关状态并返回判断结果。
     bool allStopped() const
     {
         return stopped;
     }
 
+    // 函数说明：shouldRestoreCamera 函数检查相关状态并返回判断结果。
     bool shouldRestoreCamera() const
     {
         return wasRunning;
     }
 };
 
+// 组件说明：CameraSessionCaptureConfiguration 组件集中描述相关配置、规则和运行参数。
 struct CameraSessionCaptureConfiguration
 {
     InspectionRunPlan runPlan;
@@ -103,6 +118,7 @@ struct CameraSessionCaptureConfiguration
     cv::Mat singleTrackingTemplate;
 };
 
+// 组件说明：CameraSessionCallbacks 数据结构集中传递该流程需要的只读数据或回调。
 struct CameraSessionCallbacks
 {
     std::function<void(const cv::Mat &)> streamingFrameReady;
@@ -113,6 +129,7 @@ struct CameraSessionCallbacks
     std::function<void(InspectionFaultReason, const QString &)> enterFault;
 };
 
+// 组件说明：CameraSession 组件封装对应业务职责和生命周期边界。
 class CameraSession
 {
 public:

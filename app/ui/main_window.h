@@ -1,3 +1,7 @@
+// 文件作用：本文件用于构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
+// 主要职责：构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #ifndef OCRGANGYIN_UI_MAIN_WINDOW_H
 #define OCRGANGYIN_UI_MAIN_WINDOW_H
 
@@ -38,6 +42,7 @@ class QPushButton;
 class QLineEdit;
 class QTimer;
 class QCloseEvent;
+// 组件说明：TemplateApplicationService 组件封装对应业务职责和生命周期边界。
 class TemplateApplicationService;
 
 /**
@@ -50,6 +55,7 @@ class TemplateApplicationService;
  * - PLC通信
  * - 图像跟踪
  */
+// 组件说明：MainWindow 组件负责对应界面区域的显示和用户交互。
 class MainWindow : public QWidget
 {
     Q_OBJECT

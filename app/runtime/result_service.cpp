@@ -1,3 +1,7 @@
+// 文件作用：本文件用于作为唯一检测结果入口，统一完成去重、统计、PLC、存图和界面呈现。
+// 主要职责：作为唯一检测结果入口，统一完成去重、统计、PLC、存图和界面呈现。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/result_service.h"
 
 #include "runtime/inspection_runtime.h"
@@ -13,6 +17,7 @@
 
 namespace {
 
+// 函数说明：normalizedFormat 函数校验、转换或恢复对应数据。
 QString normalizedFormat(QString format)
 {
     format = format.trimmed();
@@ -22,6 +27,7 @@ QString normalizedFormat(QString format)
     return format.isEmpty() ? QStringLiteral("png") : format.toLower();
 }
 
+// 函数说明：resultDirectoryName 函数实现名称所表示的处理步骤。
 QString resultDirectoryName(DetectionResultSaveAction action)
 {
     return action == DetectionResultSaveAction::SaveNg
@@ -29,6 +35,7 @@ QString resultDirectoryName(DetectionResultSaveAction action)
             : QStringLiteral("ok");
 }
 
+// 函数说明：saveItem 函数保存或发布对应的数据和资源。
 ImageSaveItem saveItem(
     const QImage &image,
     const std::shared_ptr<const FrameData> &frame,
@@ -47,6 +54,7 @@ ImageSaveItem saveItem(
     return item;
 }
 
+// 函数说明：verdictStyle 函数实现名称所表示的处理步骤。
 DetectionVerdictViewStyle verdictStyle(AlgorithmVerdict verdict)
 {
     return verdict == AlgorithmVerdict::Ok
@@ -54,6 +62,7 @@ DetectionVerdictViewStyle verdictStyle(AlgorithmVerdict verdict)
             : DetectionVerdictViewStyle::Error;
 }
 
+// 函数说明：profileTemplateName 函数实现名称所表示的处理步骤。
 QString profileTemplateName(
     const QString &templateName,
     const DetectionPose &pose,
@@ -79,6 +88,7 @@ QString profileTemplateName(
 
 } // namespace
 
+// 函数说明：ResultService 构造函数创建组件并初始化其依赖和初始状态。
 ResultService::ResultService(
     InspectionRuntime &runtime,
     QObject *parent)
@@ -111,23 +121,27 @@ ResultService::ResultService(
     Qt::QueuedConnection);
 }
 
+// 函数说明：~ResultService 析构函数按生命周期要求释放组件持有的资源。
 ResultService::~ResultService()
 {
     shutdown();
 }
 
+// 函数说明：setCallbacks 函数更新或应用对应的配置和状态。
 void ResultService::setCallbacks(const ResultServiceCallbacks &callbacks)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_callbacks = callbacks;
 }
 
+// 函数说明：bindView 函数实现名称所表示的处理步骤。
 void ResultService::bindView(const InspectionPresentationViewBindings &bindings)
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     m_presentationRenderer.bindView(bindings);
 }
 
+// 函数说明：configureRun 函数更新或应用对应的配置和状态。
 void ResultService::configureRun(
     const ResultServiceRunConfiguration &configuration)
 {
@@ -138,12 +152,14 @@ void ResultService::configureRun(
     m_pendingPlcResetProducts.clear();
 }
 
+// 函数说明：requiresPlcForRun 函数实现名称所表示的处理步骤。
 bool ResultService::requiresPlcForRun() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_runConfiguration.plcOutputEnabled;
 }
 
+// 函数说明：pipelineConsumers 函数实现名称所表示的处理步骤。
 PipelineResultConsumers ResultService::pipelineConsumers()
 {
     PipelineResultConsumers consumers;
@@ -175,18 +191,21 @@ PipelineResultConsumers ResultService::pipelineConsumers()
     return consumers;
 }
 
+// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 void ResultService::clear()
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     m_presentationRenderer.clear();
 }
 
+// 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
 void ResultService::clearTransientView()
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     m_presentationRenderer.clearTransientView();
 }
 
+// 函数说明：renderAndPresentFrame 函数执行对应事件或业务处理。
 bool ResultService::renderAndPresentFrame(
     const cv::Mat &image,
     bool includeTissueOverlay)
@@ -198,6 +217,7 @@ bool ResultService::renderAndPresentFrame(
             && m_presentationRenderer.presentFrame(rendered);
 }
 
+// 函数说明：presentPreviewFrame 函数执行对应事件或业务处理。
 bool ResultService::presentPreviewFrame(
     const cv::Mat &image,
     bool tissueMode,
@@ -209,78 +229,91 @@ bool ResultService::presentPreviewFrame(
     return renderAndPresentFrame(image, tissueMode);
 }
 
+// 函数说明：updatePose 函数更新或应用对应的配置和状态。
 void ResultService::updatePose(const DetectionPose &pose)
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     m_presentationRenderer.updatePose(pose);
 }
 
+// 函数说明：presentTotalAndNgCounts 函数执行对应事件或业务处理。
 void ResultService::presentTotalAndNgCounts(int totalCount, int ngCount)
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     m_presentationRenderer.presentTotalAndNgCounts(totalCount, ngCount);
 }
 
+// 函数说明：presentNgCount 函数执行对应事件或业务处理。
 void ResultService::presentNgCount(int ngCount)
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     m_presentationRenderer.presentNgCount(ngCount);
 }
 
+// 函数说明：lastPresentedProductKey 函数实现名称所表示的处理步骤。
 ProductKey ResultService::lastPresentedProductKey() const
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
     return m_presentationRenderer.lastPresentedProductKey();
 }
 
+// 函数说明：statistics 函数实现名称所表示的处理步骤。
 DetectionResultStatistics ResultService::statistics() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_statistics;
 }
 
+// 函数说明：abnormalStatistics 函数实现名称所表示的处理步骤。
 DetectionAbnormalStatistics ResultService::abnormalStatistics() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_abnormalStatistics;
 }
 
+// 函数说明：totalCount 函数校验、转换或恢复对应数据。
 int ResultService::totalCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_statistics.totalCount;
 }
 
+// 函数说明：ngCount 函数实现名称所表示的处理步骤。
 int ResultService::ngCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_statistics.ngCount;
 }
 
+// 函数说明：pendingDelayedNgCount 函数实现名称所表示的处理步骤。
 int ResultService::pendingDelayedNgCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return static_cast<int>(m_delayedNgRequests.size());
 }
 
+// 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetStatistics()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_statistics = DetectionResultStatistics();
 }
 
+// 函数说明：resetAbnormalStatistics 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetAbnormalStatistics()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_abnormalStatistics = DetectionAbnormalStatistics();
 }
 
+// 函数说明：resetNgCount 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetNgCount()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_statistics.ngCount = 0;
 }
 
+// 函数说明：clearPendingDelayedNgRequests 函数停止流程、清理状态或释放对应资源。
 void ResultService::clearPendingDelayedNgRequests()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -288,6 +321,7 @@ void ResultService::clearPendingDelayedNgRequests()
     m_delayedNgRequests.swap(empty);
 }
 
+// 函数说明：recordSystemFault 函数实现名称所表示的处理步骤。
 void ResultService::recordSystemFault()
 {
     ResultServiceCallbacks callbacks;
@@ -303,6 +337,7 @@ void ResultService::recordSystemFault()
     }
 }
 
+// 函数说明：recordUnconfirmedProducts 函数实现名称所表示的处理步骤。
 void ResultService::recordUnconfirmedProducts(int count)
 {
     if (count <= 0) {
@@ -313,12 +348,14 @@ void ResultService::recordUnconfirmedProducts(int count)
             static_cast<quint64>(count);
 }
 
+// 函数说明：recordPostFaultDroppedFrame 函数实现名称所表示的处理步骤。
 void ResultService::recordPostFaultDroppedFrame()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     ++m_abnormalStatistics.postFaultDroppedFrameCount;
 }
 
+// 函数说明：shutdown 函数实现名称所表示的处理步骤。
 void ResultService::shutdown()
 {
     m_plcResetTimer.stop();
@@ -328,6 +365,7 @@ void ResultService::shutdown()
     }
 }
 
+// 函数说明：postUiWork 函数实现名称所表示的处理步骤。
 bool ResultService::postUiWork(const UiCompletionMailbox::Work &work)
 {
     if (!m_runtime.submitUiCompletion(work)) {
@@ -347,6 +385,7 @@ bool ResultService::postUiWork(const UiCompletionMailbox::Work &work)
     return posted;
 }
 
+// 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
 DetectionCompletion ResultService::acceptCompletion(
     const DetectionCompletion &completion,
     const char *modeName)
@@ -360,6 +399,7 @@ DetectionCompletion ResultService::acceptCompletion(
     return accepted;
 }
 
+// 函数说明：imageSaveActionFor 函数实现名称所表示的处理步骤。
 DetectionResultSaveAction ResultService::imageSaveActionFor(
     AlgorithmVerdict verdict) const
 {
@@ -378,6 +418,7 @@ DetectionResultSaveAction ResultService::imageSaveActionFor(
             : DetectionResultSaveAction::DoNotSave;
 }
 
+// 函数说明：consumeDueDelayedNgRequest 函数执行对应事件或业务处理。
 bool ResultService::consumeDueDelayedNgRequest(ProductKey *productKey)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -393,6 +434,7 @@ bool ResultService::consumeDueDelayedNgRequest(ProductKey *productKey)
     return true;
 }
 
+// 函数说明：process 函数执行对应事件或业务处理。
 ResultServiceProcessOutcome ResultService::process(
     const ProcessRequest &request)
 {
@@ -471,6 +513,7 @@ ResultServiceProcessOutcome ResultService::process(
     return outcome;
 }
 
+// 函数说明：submitImageSave 函数执行对应事件或业务处理。
 bool ResultService::submitImageSave(
     const ProcessRequest &request,
     DetectionResultSaveAction saveAction,
@@ -540,6 +583,7 @@ bool ResultService::submitImageSave(
             && m_imageSaveService->submit(task).isAccepted();
 }
 
+// 函数说明：requestPlc 函数实现名称所表示的处理步骤。
 bool ResultService::requestPlc(
     DetectionPlcAction action,
     const ProductKey &productKey)
@@ -588,6 +632,7 @@ bool ResultService::requestPlc(
     return true;
 }
 
+// 函数说明：resetPlcPulse 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetPlcPulse()
 {
     std::vector<ProductKey> pending;
@@ -610,6 +655,7 @@ void ResultService::resetPlcPulse()
     }
 }
 
+// 函数说明：enterPlcFault 函数实现名称所表示的处理步骤。
 void ResultService::enterPlcFault(const QString &diagnostic)
 {
     m_runtime.enterFault(
@@ -617,6 +663,7 @@ void ResultService::enterPlcFault(const QString &diagnostic)
                 diagnostic);
 }
 
+// 函数说明：presentationElapsedMs 函数执行对应事件或业务处理。
 qint64 ResultService::presentationElapsedMs(
     const DetectionCompletion &completion)
 {
@@ -630,6 +677,7 @@ qint64 ResultService::presentationElapsedMs(
             QDateTime::currentDateTimeUtc()));
 }
 
+// 函数说明：handleTissueCompletion 函数执行对应事件或业务处理。
 void ResultService::handleTissueCompletion(
     const DetectionCompletion &completion,
     const TissueRollResult &output)
@@ -641,6 +689,7 @@ void ResultService::handleTissueCompletion(
     }
 }
 
+// 函数说明：handleOcrCompletion 函数执行对应事件或业务处理。
 void ResultService::handleOcrCompletion(
     const DetectionCompletion &completion,
     const DetectionPose &pose)
@@ -652,6 +701,7 @@ void ResultService::handleOcrCompletion(
     }
 }
 
+// 函数说明：handleStampCompletion 函数执行对应事件或业务处理。
 void ResultService::handleStampCompletion(
     const DetectionCompletion &completion,
     const StampDetectionWorkOutput &output)
@@ -683,6 +733,7 @@ void ResultService::handleStampCompletion(
     finalizeStamp(output, accepted);
 }
 
+// 函数说明：handleWordCompletion 函数执行对应事件或业务处理。
 void ResultService::handleWordCompletion(
     const DetectionCompletion &completion,
     const WordDetectionWorkOutput &output)
@@ -695,6 +746,7 @@ void ResultService::handleWordCompletion(
     }
 }
 
+// 函数说明：handleBarcodeWordCompletion 函数执行对应事件或业务处理。
 void ResultService::handleBarcodeWordCompletion(
     const DetectionCompletion &completion,
     const BarcodeWordDetectionWorkOutput &output)
@@ -707,6 +759,7 @@ void ResultService::handleBarcodeWordCompletion(
     }
 }
 
+// 函数说明：finalizeTissue 函数实现名称所表示的处理步骤。
 void ResultService::finalizeTissue(
     const TissueRollResult &output,
     const DetectionCompletion &completion)
@@ -749,6 +802,7 @@ void ResultService::finalizeTissue(
     process(request);
 }
 
+// 函数说明：finalizeOcr 函数实现名称所表示的处理步骤。
 void ResultService::finalizeOcr(
     const DetectionPose &pose,
     const DetectionCompletion &completion)
@@ -779,6 +833,7 @@ void ResultService::finalizeOcr(
     process(request);
 }
 
+// 函数说明：finalizeStamp 函数实现名称所表示的处理步骤。
 void ResultService::finalizeStamp(
     const StampDetectionWorkOutput &output,
     const DetectionCompletion &completion)
@@ -813,6 +868,7 @@ void ResultService::finalizeStamp(
     process(request);
 }
 
+// 函数说明：finalizeWord 函数实现名称所表示的处理步骤。
 void ResultService::finalizeWord(
     const WordDetectionWorkOutput &output,
     const DetectionCompletion &completion)
@@ -850,6 +906,7 @@ void ResultService::finalizeWord(
     process(request);
 }
 
+// 函数说明：finalizeBarcodeWord 函数实现名称所表示的处理步骤。
 void ResultService::finalizeBarcodeWord(
     const BarcodeWordDetectionWorkOutput &output,
     const DetectionCompletion &completion)
@@ -902,6 +959,7 @@ void ResultService::finalizeBarcodeWord(
     process(request);
 }
 
+// 函数说明：clearPreviousOverlay 函数停止流程、清理状态或释放对应资源。
 void ResultService::clearPreviousOverlay(bool clearImageLabelRects) const
 {
     ResultServiceCallbacks callbacks;

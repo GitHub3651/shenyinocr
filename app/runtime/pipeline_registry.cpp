@@ -1,3 +1,7 @@
+// 文件作用：本文件用于按稳定检测模式注册并选择唯一检测流水线。
+// 主要职责：按稳定检测模式注册并选择唯一检测流水线。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/pipeline_registry.h"
 
 #include "detection/stamp/overlap_detector.h"
@@ -11,26 +15,31 @@ namespace {
 
 const std::size_t kPipelineQueueCapacity = 1;
 
+// 组件说明：TissueState 数据结构集中保存该流程需要的一组相关数据。
 struct TissueState
 {
     TissueRollResult output;
 };
 
+// 组件说明：OcrState 数据结构集中保存该流程需要的一组相关数据。
 struct OcrState
 {
     DetectionPose pose;
 };
 
+// 组件说明：StampState 数据结构集中保存该流程需要的一组相关数据。
 struct StampState
 {
     StampDetectionWorkOutput output;
 };
 
+// 组件说明：WordState 数据结构集中保存该流程需要的一组相关数据。
 struct WordState
 {
     WordDetectionWorkOutput output;
 };
 
+// 组件说明：BarcodeWordState 数据结构集中保存该流程需要的一组相关数据。
 struct BarcodeWordState
 {
     BarcodeWordDetectionWorkOutput output;
@@ -38,6 +47,7 @@ struct BarcodeWordState
 
 } // namespace
 
+// 函数说明：PipelineRegistry 构造函数创建组件并初始化其依赖和初始状态。
 PipelineRegistry::PipelineRegistry(
     const std::shared_ptr<IOcrEngine> &ocrEngine,
     const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder)
@@ -46,6 +56,7 @@ PipelineRegistry::PipelineRegistry(
 {
 }
 
+// 函数说明：prepare 函数创建、准备或启动对应流程。
 BarcodeRuntimeReadiness PipelineRegistry::prepare(DetectionMode mode) const
 {
     BarcodeRuntimeReadiness readiness;
@@ -65,6 +76,7 @@ BarcodeRuntimeReadiness PipelineRegistry::prepare(DetectionMode mode) const
     return readiness;
 }
 
+// 函数说明：createTissueWorker 函数创建、准备或启动对应流程。
 std::shared_ptr<DetectionWorker> PipelineRegistry::createTissueWorker(
     const TissueRecipeParameters &parameters,
     const PipelineResultConsumers::TissueConsumer &completionConsumer,
@@ -95,6 +107,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createTissueWorker(
         failureConsumer));
 }
 
+// 函数说明：createOcrWorker 函数创建、准备或启动对应流程。
 std::shared_ptr<DetectionWorker> PipelineRegistry::createOcrWorker(
     const std::string &targetText,
     IOcrEngine *ocrEngine,
@@ -122,6 +135,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createOcrWorker(
         failureConsumer));
 }
 
+// 函数说明：createStampWorker 函数创建、准备或启动对应流程。
 std::shared_ptr<DetectionWorker> PipelineRegistry::createStampWorker(
     const StampConfiguration &configuration,
     const PipelineResultConsumers::StampConsumer &completionConsumer,
@@ -155,6 +169,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createStampWorker(
         failureConsumer));
 }
 
+// 函数说明：createWordWorker 函数创建、准备或启动对应流程。
 std::shared_ptr<DetectionWorker> PipelineRegistry::createWordWorker(
     const std::vector<DetectionModeWorkerProfile> &profiles,
     const PipelineResultConsumers::WordConsumer &completionConsumer,
@@ -218,6 +233,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createWordWorker(
         failureConsumer));
 }
 
+// 函数说明：createBarcodeWordWorker 函数创建、准备或启动对应流程。
 std::shared_ptr<DetectionWorker> PipelineRegistry::createBarcodeWordWorker(
     const std::vector<DetectionModeWorkerProfile> &profiles,
     IBarcodeDecoder *decoder,
@@ -288,6 +304,7 @@ std::shared_ptr<DetectionWorker> PipelineRegistry::createBarcodeWordWorker(
         failureConsumer));
 }
 
+// 函数说明：buildStampConfiguration 函数创建、准备或启动对应流程。
 bool PipelineRegistry::buildStampConfiguration(
     const PreparedRecipe &prepared,
     StampConfiguration *configuration,
@@ -342,6 +359,7 @@ bool PipelineRegistry::buildStampConfiguration(
     return true;
 }
 
+// 函数说明：create 函数创建、准备或启动对应流程。
 PipelineCreationResult PipelineRegistry::create(
     const PipelineRegistryRequest &request,
     const PipelineResultConsumers &consumers,

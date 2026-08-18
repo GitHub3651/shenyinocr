@@ -1,3 +1,7 @@
+// 文件作用：本文件用于读取、解码并验证软件授权信息，为启动流程提供授权判断结果。
+// 主要职责：读取、解码并验证软件授权信息，为启动流程提供授权判断结果。
+// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "system_support/license/license_codec.h"
 
 #include <QCryptographicHash>
@@ -11,11 +15,13 @@
 
 namespace {
 
+// 函数说明：secretKey 函数实现名称所表示的处理步骤。
 QByteArray secretKey()
 {
     return QByteArrayLiteral("AutoOCRproject.license.expire.v1.20260706");
 }
 
+// 函数说明：cryptData 函数实现名称所表示的处理步骤。
 QByteArray cryptData(const QByteArray &data)
 {
     const QByteArray key = QCryptographicHash::hash(
@@ -57,6 +63,7 @@ QMap<QString, QString> readKeyValueFile(const QString &filePath)
     return values;
 }
 
+// 函数说明：decryptPayload 函数实现名称所表示的处理步骤。
 QString decryptPayload(const QString &encryptedText)
 {
     if (encryptedText.trimmed().isEmpty()) {
@@ -71,6 +78,7 @@ QString decryptPayload(const QString &encryptedText)
     return QString::fromUtf8(cryptData(encrypted));
 }
 
+// 函数说明：expiresDateFromPayload 函数实现名称所表示的处理步骤。
 QDate expiresDateFromPayload(const QString &payload)
 {
     const QStringList lines = payload.split(
@@ -87,6 +95,7 @@ QDate expiresDateFromPayload(const QString &payload)
     return QDate();
 }
 
+// 函数说明：encryptedPayloadForDate 函数实现名称所表示的处理步骤。
 QString encryptedPayloadForDate(const QDate &expiresDate)
 {
     QByteArray payload;
@@ -99,11 +108,13 @@ QString encryptedPayloadForDate(const QDate &expiresDate)
 
 } // namespace
 
+// 函数说明：succeeded 函数实现名称所表示的处理步骤。
 bool LicenseReadResult::succeeded() const
 {
     return error == LicenseFileError::None && expiresDate.isValid();
 }
 
+// 函数说明：readFile 函数读取、等待或计算对应的数据。
 LicenseReadResult LicenseCodec::readFile(const QString &filePath)
 {
     LicenseReadResult result;
@@ -124,6 +135,7 @@ LicenseReadResult LicenseCodec::readFile(const QString &filePath)
     return result;
 }
 
+// 函数说明：writeFile 函数保存或发布对应的数据和资源。
 LicenseFileError LicenseCodec::writeFile(const QDate &expiresDate,
                                          const QString &filePath)
 {

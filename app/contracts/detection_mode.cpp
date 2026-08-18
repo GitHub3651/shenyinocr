@@ -1,8 +1,13 @@
+// 文件作用：本文件用于定义五种稳定检测模式及其界面、JSON和字符串转换规则。
+// 主要职责：定义五种稳定检测模式及其界面、JSON和字符串转换规则。
+// 模块位置：合同层；负责稳定枚举、默认值和跨模块轻量数据，不承载运行副作用。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "contracts/detection_mode.h"
 
 const QString BarcodeWordDetectionMode =
     QStringLiteral("barcode_word_detection");
 
+// 函数说明：detectionModeId 函数执行对应事件或业务处理。
 QString detectionModeId(DetectionMode mode)
 {
     switch (mode) {
@@ -15,6 +20,7 @@ QString detectionModeId(DetectionMode mode)
     return QString();
 }
 
+// 函数说明：detectionModeFromId 函数执行对应事件或业务处理。
 bool detectionModeFromId(const QString &id, DetectionMode *mode)
 {
     if (!mode) return false;
@@ -30,6 +36,7 @@ bool detectionModeFromId(const QString &id, DetectionMode *mode)
     return true;
 }
 
+// 函数说明：detectionModeUiId 函数执行对应事件或业务处理。
 QString detectionModeUiId(DetectionMode mode)
 {
     switch (mode) {
@@ -42,6 +49,7 @@ QString detectionModeUiId(DetectionMode mode)
     return QString();
 }
 
+// 函数说明：detectionModeFromUiId 函数执行对应事件或业务处理。
 bool detectionModeFromUiId(const QString &id, DetectionMode *mode)
 {
     if (!mode) return false;
@@ -58,6 +66,7 @@ bool detectionModeFromUiId(const QString &id, DetectionMode *mode)
     return true;
 }
 
+// 函数说明：isWordFamilyMode 函数检查相关状态并返回判断结果。
 bool isWordFamilyMode(const QString &modeId)
 {
     return modeId == QLatin1String("word_detection")

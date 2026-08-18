@@ -1,3 +1,7 @@
+// 文件作用：本文件用于绑定机器设置页面，管理控件映射、校验、脏状态和运行中禁用规则。
+// 主要职责：绑定机器设置页面，管理控件映射、校验、脏状态和运行中禁用规则。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "application/settings_application_service.h"
@@ -13,15 +17,19 @@ class QLabel;
 class QLineEdit;
 class QEvent;
 class QWidget;
+// 组件说明：SettingsEditState 组件封装本文件中与其名称对应的单一职责。
 class SettingsEditState;
 
 namespace Ui {
+// 组件说明：MainWindow 组件负责对应界面区域的显示和用户交互。
 class MainWindow;
 }
 
+// 组件说明：MachineSettingsPage 组件负责对应界面区域的显示和用户交互。
 class MachineSettingsPage : public QObject
 {
 public:
+    // 组件说明：Callbacks 数据结构集中传递该流程需要的只读数据或回调。
     struct Callbacks
     {
         std::function<bool(bool)> saveSettings;
@@ -76,6 +84,7 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+    // 组件说明：HardwareDependency 枚举列出该组件允许使用的稳定状态和选项。
     enum class HardwareDependency
     {
         None,
@@ -84,6 +93,7 @@ private:
         PlcRuntime
     };
 
+    // 组件说明：GlobalSettingBinding 数据结构集中保存该流程需要的一组相关数据。
     struct GlobalSettingBinding
     {
         QString key;
@@ -94,6 +104,7 @@ private:
         HardwareDependency hardwareDependency = HardwareDependency::None;
     };
 
+    // 组件说明：HardwareActionBinding 数据结构集中保存该流程需要的一组相关数据。
     struct HardwareActionBinding
     {
         QWidget *control = nullptr;

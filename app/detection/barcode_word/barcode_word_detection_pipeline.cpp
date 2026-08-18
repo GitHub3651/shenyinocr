@@ -1,3 +1,7 @@
+// 文件作用：本文件用于执行二维码与三期字符组合模式的定位、解码、字符检查和结果生成。
+// 主要职责：执行二维码与三期字符组合模式的定位、解码、字符检查和结果生成。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "barcode_word_detection_pipeline.h"
 
 #include "detection/common/detection_roi_geometry.h"
@@ -5,6 +9,7 @@
 
 #include <chrono>
 
+// 函数说明：detect 函数执行对应事件或业务处理。
 BarcodeWordDetectionResult BarcodeWordDetectionPipeline::detect(
         bool barcodeIsReadable,
         const DateDetectionFunction &detectDate) const
@@ -23,6 +28,7 @@ BarcodeWordDetectionResult BarcodeWordDetectionPipeline::detect(
     return result;
 }
 
+// 函数说明：detect 函数执行对应事件或业务处理。
 BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const QString &targetText,

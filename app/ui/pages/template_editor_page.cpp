@@ -1,3 +1,7 @@
+// 文件作用：本文件用于维护模板制作页面状态，并协调预览、绘图、参数编辑和保存操作。
+// 主要职责：维护模板制作页面状态，并协调预览、绘图、参数编辑和保存操作。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/pages/template_editor_page.h"
 #include "ui/pages/template_editor_support.h"
 
@@ -49,6 +53,7 @@
 
 using namespace TemplateEditorSupport;
 
+// 函数说明：TemplateEditorPage 构造函数创建组件并初始化其依赖和初始状态。
 TemplateEditorPage::TemplateEditorPage(
     const TemplateEditorViewBindings &view,
     TemplateApplicationService *templateService,
@@ -111,6 +116,7 @@ TemplateEditorPage::TemplateEditorPage(
     Qt::QueuedConnection);
 }
 
+// 函数说明：setEditorsEnabled 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setEditorsEnabled(bool enabled)
 {
     if (m_wordTemplateEditComboBox) {
@@ -133,22 +139,26 @@ void TemplateEditorPage::setEditorsEnabled(bool enabled)
     }
 }
 
+// 函数说明：guideFrame 函数实现名称所表示的处理步骤。
 QFrame *TemplateEditorPage::guideFrame() const
 {
     return m_templateGuideFrame;
 }
 
+// 函数说明：manualCharacterCropButton 函数实现名称所表示的处理步骤。
 QPushButton *TemplateEditorPage::manualCharacterCropButton() const
 {
     return m_manualCharacterCropButton;
 }
 
+// 函数说明：showParameterInfo 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showParameterInfo(
     const QString &title, const QString &message)
 {
     QMessageBox::information(dialogParent(), title, message);
 }
 
+// 函数说明：showParameterInfoWithRedWarning 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showParameterInfoWithRedWarning(
     const QString &title,
     const QString &message,
@@ -163,24 +173,28 @@ void TemplateEditorPage::showParameterInfoWithRedWarning(
     box.exec();
 }
 
+// 函数说明：showParameterInfoAsError 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showParameterInfoAsError(
     const QString &title, const QString &message)
 {
     QMessageBox::critical(dialogParent(), title, message);
 }
 
+// 函数说明：showParameterWarning 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showParameterWarning(
     const QString &title, const QString &message)
 {
     QMessageBox::warning(dialogParent(), title, message);
 }
 
+// 函数说明：showParameterCritical 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showParameterCritical(
     const QString &title, const QString &message)
 {
     QMessageBox::critical(dialogParent(), title, message);
 }
 
+// 函数说明：saveSettings 函数保存或发布对应的数据和资源。
 bool TemplateEditorPage::saveSettings(bool showErrorMessage)
 {
     MachineSettings draft = m_settingsService->draft();
@@ -199,6 +213,7 @@ bool TemplateEditorPage::saveSettings(bool showErrorMessage)
     return saved;
 }
 
+// 函数说明：applyRecipeProfileToUi 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyRecipeProfileToUi(
     const RecipeProfile &settings)
 {
@@ -213,31 +228,37 @@ void TemplateEditorPage::applyRecipeProfileToUi(
                 QString::number(settings.imageThresholdPercent));
 }
 
+// 函数说明：dialogParent 函数实现名称所表示的处理步骤。
 QWidget *TemplateEditorPage::dialogParent() const
 {
     return m_view.parentWidget;
 }
 
+// 函数说明：isInspectionBusy 函数检查相关状态并返回判断结果。
 bool TemplateEditorPage::isInspectionBusy() const
 {
     return m_inspectionService->runtimeSnapshot().isInspectionBusy();
 }
 
+// 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。
 bool TemplateEditorPage::isCameraOpen() const
 {
     return m_inspectionService->isCameraOpen();
 }
 
+// 函数说明：templateOperationActive 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::templateOperationActive() const
 {
     return m_captureState != CaptureState::Idle;
 }
 
+// 函数说明：captureState 函数执行对应事件或业务处理。
 TemplateEditorPage::CaptureState TemplateEditorPage::captureState() const
 {
     return m_captureState;
 }
 
+// 函数说明：stopTemplatePreview 函数停止流程、清理状态或释放对应资源。
 bool TemplateEditorPage::stopTemplatePreview()
 {
     if (m_captureState != CaptureState::Previewing) {
@@ -247,6 +268,7 @@ bool TemplateEditorPage::stopTemplatePreview()
     return m_inspectionService->stopTemplatePreview();
 }
 
+// 函数说明：resetTemplateCaptureState 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::resetTemplateCaptureState()
 {
     if (!stopTemplatePreview()) {
@@ -265,6 +287,7 @@ void TemplateEditorPage::resetTemplateCaptureState()
     }
 }
 
+// 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
 bool TemplateEditorPage::startTemplatePreview()
 {
     if (!isCameraOpen()) {
@@ -329,6 +352,7 @@ bool TemplateEditorPage::startTemplatePreview()
     return true;
 }
 
+// 函数说明：freezeTemplatePreview 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::freezeTemplatePreview()
 {
     if (m_captureState != CaptureState::Previewing) {
@@ -374,6 +398,7 @@ bool TemplateEditorPage::freezeTemplatePreview()
     return true;
 }
 
+// 函数说明：handleTemplateCaptureButton 函数执行对应事件或业务处理。
 void TemplateEditorPage::handleTemplateCaptureButton()
 {
     if (isInspectionBusy()) {
@@ -414,6 +439,7 @@ void TemplateEditorPage::handleTemplateCaptureButton()
     startTemplatePreview();
 }
 
+// 函数说明：handlePreviewFrame 函数执行对应事件或业务处理。
 void TemplateEditorPage::handlePreviewFrame(
         quint64 sessionId, const cv::Mat &image)
 {
@@ -431,6 +457,7 @@ void TemplateEditorPage::handlePreviewFrame(
                     "实时取景中，请调整产品位置，确认后点击【拍照并开始框选】。"));
 }
 
+// 函数说明：handlePreviewFailure 函数执行对应事件或业务处理。
 void TemplateEditorPage::handlePreviewFailure(
         quint64 sessionId, const QString &reason)
 {
@@ -452,6 +479,7 @@ void TemplateEditorPage::handlePreviewFailure(
                 QStringLiteral("实时取景失败"), reason);
 }
 
+// 函数说明：selectPublishedRecipeForCurrentMode 函数读取、等待或计算对应的数据。
 void TemplateEditorPage::selectPublishedRecipeForCurrentMode()
 {
     if (isInspectionBusy() || templateOperationActive()) {
@@ -464,6 +492,7 @@ void TemplateEditorPage::selectPublishedRecipeForCurrentMode()
     selectPublishedRecipe();
 }
 
+// 函数说明：saveCurrentTemplate 函数保存或发布对应的数据和资源。
 void TemplateEditorPage::saveCurrentTemplate()
 {
     if (isInspectionBusy()
@@ -781,36 +810,43 @@ void TemplateEditorPage::saveCurrentTemplate()
 }
 
 const std::vector<WordTemplateProfile> &
+// 函数说明：wordTemplateProfiles 函数实现名称所表示的处理步骤。
 TemplateEditorPage::wordTemplateProfiles() const
 {
     return m_templateService->wordProfiles();
 }
 
+// 函数说明：activePreparedRecipe 函数实现名称所表示的处理步骤。
 PreparedRecipeSnapshot TemplateEditorPage::activePreparedRecipe() const
 {
     return m_templateService->activePreparedRecipe();
 }
 
+// 函数说明：setCurrentTemplateNameVisible 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setCurrentTemplateNameVisible(bool visible)
 {
     m_currentTemplateNameVisible = visible;
 }
 
+// 函数说明：barcodeTemplateReadable 函数实现名称所表示的处理步骤。
 bool TemplateEditorPage::barcodeTemplateReadable() const
 {
     return m_barcodeTemplateReadable;
 }
 
+// 函数说明：validatedBarcodeRect 函数校验、转换或恢复对应数据。
 QRect TemplateEditorPage::validatedBarcodeRect() const
 {
     return m_validatedBarcodeRect;
 }
 
+// 函数说明：validatedBarcodeText 函数校验、转换或恢复对应数据。
 QString TemplateEditorPage::validatedBarcodeText() const
 {
     return m_validatedBarcodeText;
 }
 
+// 函数说明：acceptBarcodeTemplateValidation 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::acceptBarcodeTemplateValidation(
     const QRect &barcodeRect,
     const QString &barcodeText)
@@ -820,6 +856,7 @@ void TemplateEditorPage::acceptBarcodeTemplateValidation(
     m_validatedBarcodeText = barcodeText;
 }
 
+// 函数说明：clearBarcodeTemplateValidation 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::clearBarcodeTemplateValidation()
 {
     m_barcodeTemplateReadable = false;
@@ -827,6 +864,7 @@ void TemplateEditorPage::clearBarcodeTemplateValidation()
     m_validatedBarcodeText.clear();
 }
 
+// 函数说明：validateBarcodeTemplateRect 函数校验、转换或恢复对应数据。
 bool TemplateEditorPage::validateBarcodeTemplateRect(
     const QRect &uiBarcodeRect,
     const TemplateBarcodeValidationOptions &options,
@@ -852,6 +890,7 @@ bool TemplateEditorPage::validateBarcodeTemplateRect(
 }
 
 TemplateBarcodeValidationOptions
+// 函数说明：barcodeTemplateValidationOptions 函数实现名称所表示的处理步骤。
 TemplateEditorPage::barcodeTemplateValidationOptions() const
 {
     BarcodeRecipeParameters parameters;

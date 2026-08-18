@@ -1,3 +1,7 @@
+// 文件作用：本文件用于执行字库模板模式的定位、字符分割、模板匹配和结果生成。
+// 主要职责：执行字库模板模式的定位、字符分割、模板匹配和结果生成。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "word_detection_pipeline.h"
 
 #include "detection/common/detection_roi_geometry.h"
@@ -8,6 +12,7 @@
 
 namespace {
 
+// 函数说明：parseTargetUnits 函数校验、转换或恢复对应数据。
 QStringList parseTargetUnits(const QString &targetText)
 {
     QStringList units;
@@ -38,6 +43,7 @@ QStringList parseTargetUnits(const QString &targetText)
 
 } // namespace
 
+// 函数说明：detect 函数执行对应事件或业务处理。
 WordDetectionResult WordDetectionPipeline::detect(
         cv::Mat &dateRoi,
         const QString &targetText,
@@ -60,6 +66,7 @@ WordDetectionResult WordDetectionPipeline::detect(
     return result;
 }
 
+// 函数说明：detect 函数执行对应事件或业务处理。
 WordDetectionWorkOutput WordDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const QString &targetText,
@@ -104,6 +111,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
     return output;
 }
 
+// 函数说明：detectPreparedDateRoi 函数执行对应事件或业务处理。
 WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
         const DetectionWorkItem &item,
         const OrientedDateRoi &oriented,

@@ -1,9 +1,14 @@
+// 文件作用：本文件用于定义整机相机、触发、PLC、存图和界面布局等持久化设置。
+// 主要职责：定义整机相机、触发、PLC、存图和界面布局等持久化设置。
+// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "system_support/settings/machine_settings.h"
 
 #include "contracts/detection_mode.h"
 
 const int MachineSettings::CurrentSchemaVersion;
 
+// 函数说明：MachineSettings 构造函数创建组件并初始化其依赖和初始状态。
 MachineSettings::MachineSettings()
     : schemaVersion(CurrentSchemaVersion),
       detectModeId(QStringLiteral("word_detection")),
@@ -36,6 +41,7 @@ MachineSettings::MachineSettings()
 {
 }
 
+// 函数说明：machineSettingsDetectionModeIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsDetectionModeIds()
 {
     return QStringList()
@@ -46,6 +52,7 @@ QStringList machineSettingsDetectionModeIds()
             << BarcodeWordDetectionMode;
 }
 
+// 函数说明：machineSettingsImageSaveModeIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsImageSaveModeIds()
 {
     return QStringList()
@@ -55,6 +62,7 @@ QStringList machineSettingsImageSaveModeIds()
             << QStringLiteral("save_all");
 }
 
+// 函数说明：machineSettingsImageSaveTypeIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsImageSaveTypeIds()
 {
     return QStringList()
@@ -63,6 +71,7 @@ QStringList machineSettingsImageSaveTypeIds()
             << QStringLiteral("save_raw_only");
 }
 
+// 函数说明：machineSettingsColorChannelIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsColorChannelIds()
 {
     return QStringList()
@@ -72,6 +81,7 @@ QStringList machineSettingsColorChannelIds()
             << QStringLiteral("blue");
 }
 
+// 函数说明：machineSettingsRotationIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsRotationIds()
 {
     return QStringList()
@@ -81,6 +91,7 @@ QStringList machineSettingsRotationIds()
             << QStringLiteral("rotate_180");
 }
 
+// 函数说明：machineSettingsTriggerModeIds 函数实现名称所表示的处理步骤。
 QStringList machineSettingsTriggerModeIds()
 {
     return QStringList()
@@ -88,6 +99,7 @@ QStringList machineSettingsTriggerModeIds()
             << QStringLiteral("trigger_interval");
 }
 
+// 函数说明：defaults 函数实现名称所表示的处理步骤。
 MachineSettings MachineSettings::defaults()
 {
     return MachineSettings();

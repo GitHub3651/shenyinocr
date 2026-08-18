@@ -1,3 +1,7 @@
+// 文件作用：本文件用于提供检测区域裁剪、边界限制和坐标还原的通用几何函数。
+// 主要职责：提供检测区域裁剪、边界限制和坐标还原的通用几何函数。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
@@ -11,12 +15,14 @@
 
 namespace DetectionRoiGeometry {
 
+// 组件说明：BarcodeWordOrientedRois 数据结构集中保存该流程需要的一组相关数据。
 struct BarcodeWordOrientedRois
 {
     OrientedBarcodeRoi barcode;
     OrientedDateRoi date;
 };
 
+// 函数说明：expandAndClampRect 函数实现名称所表示的处理步骤。
 inline cv::Rect expandAndClampRect(
     const cv::Rect &rect,
     int padding,
@@ -36,6 +42,7 @@ inline cv::Rect expandAndClampRect(
     return expanded & cv::Rect(0, 0, imageSize.width, imageSize.height);
 }
 
+// 函数说明：clampPolygonToImage 函数实现名称所表示的处理步骤。
 inline std::vector<cv::Point> clampPolygonToImage(
     const std::vector<cv::Point> &polygon,
     const cv::Size &imageSize)
@@ -57,6 +64,7 @@ inline std::vector<cv::Point> clampPolygonToImage(
     return clamped;
 }
 
+// 函数说明：polygonRoiWithClampedPadding 函数实现名称所表示的处理步骤。
 inline cv::Rect polygonRoiWithClampedPadding(
     const std::vector<cv::Point> &polygon,
     int padding,
@@ -78,6 +86,7 @@ inline cv::Rect polygonRoiWithClampedPadding(
                 imageSize);
 }
 
+// 函数说明：mapAffinePoint 函数校验、转换或恢复对应数据。
 inline cv::Point2f mapAffinePoint(
     const cv::Mat &affine,
     const cv::Point2f &point)
@@ -93,6 +102,7 @@ inline cv::Point2f mapAffinePoint(
             + affine.at<double>(1, 2)));
 }
 
+// 函数说明：mapAffinePolygon 函数校验、转换或恢复对应数据。
 inline std::vector<cv::Point> mapAffinePolygon(
     const std::vector<cv::Point> &polygon,
     const cv::Mat &affine)
@@ -112,6 +122,7 @@ inline std::vector<cv::Point> mapAffinePolygon(
     return mapped;
 }
 
+// 函数说明：prepareOrientedDateRoi 函数创建、准备或启动对应流程。
 inline OrientedDateRoi prepareOrientedDateRoi(
     const cv::Mat &source,
     const DetectionPose &pose,
@@ -180,6 +191,7 @@ inline OrientedDateRoi prepareOrientedDateRoi(
     return oriented;
 }
 
+// 函数说明：prepareBarcodeWordOrientedRois 函数创建、准备或启动对应流程。
 inline BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
     const cv::Mat &source,
     const DetectionPose &pose,
@@ -353,6 +365,7 @@ inline BarcodeWordOrientedRois prepareBarcodeWordOrientedRois(
     return prepared;
 }
 
+// 函数说明：mapCharacterMatchesToOverlay 函数校验、转换或恢复对应数据。
 inline std::vector<DetectionOverlayPolygon> mapCharacterMatchesToOverlay(
     const std::vector<std::tuple<cv::Rect, double, size_t> > &matches,
     const OrientedDateRoi &oriented,

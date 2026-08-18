@@ -1,9 +1,14 @@
+// 文件作用：本文件用于对比主检测结果和影子检测结果，记录差异而不改变正式判定。
+// 主要职责：对比主检测结果和影子检测结果，记录差异而不改变正式判定。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/detection_shadow_comparator.h"
 
 #include <algorithm>
 #include <cmath>
 
 namespace {
+// 函数说明：appendDifference 函数实现名称所表示的处理步骤。
 void appendDifference(
     DetectionShadowComparison *comparison,
     const QString &field)
@@ -13,6 +18,7 @@ void appendDifference(
     }
 }
 
+// 函数说明：coordinateMatches 函数实现名称所表示的处理步骤。
 bool coordinateMatches(int primary, int shadow, int tolerance)
 {
     const long long delta = static_cast<long long>(primary)
@@ -21,6 +27,7 @@ bool coordinateMatches(int primary, int shadow, int tolerance)
     return delta >= -limit && delta <= limit;
 }
 
+// 函数说明：scoreMatches 函数实现名称所表示的处理步骤。
 bool scoreMatches(double primary, double shadow, double tolerance)
 {
     if (std::isnan(primary) || std::isnan(shadow)) {
@@ -32,6 +39,7 @@ bool scoreMatches(double primary, double shadow, double tolerance)
     return std::abs(primary - shadow) <= tolerance;
 }
 
+// 函数说明：polygonField 函数实现名称所表示的处理步骤。
 QString polygonField(int index, const char *suffix)
 {
     return QStringLiteral("overlay[%1].%2")
@@ -40,6 +48,7 @@ QString polygonField(int index, const char *suffix)
 }
 }
 
+// 函数说明：compare 函数实现名称所表示的处理步骤。
 DetectionShadowComparison DetectionShadowComparator::compare(
     const DetectionResult &primary,
     const DetectionResult &shadow,

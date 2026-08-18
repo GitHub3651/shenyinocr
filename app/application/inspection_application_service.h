@@ -1,3 +1,7 @@
+// 文件作用：本文件用于组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
+// 主要职责：组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "application/application_result.h"
@@ -18,14 +22,17 @@ class InspectionRuntime;
 class CameraSession;
 class RecipeStore;
 class SettingsApplicationService;
+// 组件说明：InspectionFaultReason 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionFaultReason;
 
+// 组件说明：StartInspectionCommand 数据结构集中传递该流程需要的只读数据或回调。
 struct StartInspectionCommand
 {
     bool templateOperationActive = false;
     QStringList unappliedChanges;
 };
 
+// 组件说明：StartInspectionResult 数据结构保存一次操作的结果、状态和错误信息。
 struct StartInspectionResult
 {
     InspectionStartIssue issue = InspectionStartIssue::None;
@@ -35,6 +42,7 @@ struct StartInspectionResult
     InspectionAcquisitionDto acquisitionKind =
             InspectionAcquisitionDto::SoftwareTrigger;
 
+    // 函数说明：isAccepted 函数检查相关状态并返回判断结果。
     bool isAccepted() const
     {
         return issue == InspectionStartIssue::None
@@ -42,6 +50,7 @@ struct StartInspectionResult
     }
 };
 
+// 组件说明：StopInspectionIssue 枚举列出该组件允许使用的稳定状态和选项。
 enum class StopInspectionIssue
 {
     None,
@@ -52,11 +61,13 @@ enum class StopInspectionIssue
     RuntimeFault
 };
 
+// 组件说明：StopInspectionCommand 数据结构集中传递该流程需要的只读数据或回调。
 struct StopInspectionCommand
 {
     bool acknowledgeFault = false;
 };
 
+// 组件说明：StopInspectionResult 数据结构保存一次操作的结果、状态和错误信息。
 struct StopInspectionResult
 {
     StopInspectionIssue issue = StopInspectionIssue::None;
@@ -66,12 +77,14 @@ struct StopInspectionResult
     QString reconciliationSummary;
     bool recoveredFault = false;
 
+    // 函数说明：isAccepted 函数检查相关状态并返回判断结果。
     bool isAccepted() const
     {
         return issue == StopInspectionIssue::None;
     }
 };
 
+// 组件说明：OpenCameraResult 数据结构保存一次操作的结果、状态和错误信息。
 struct OpenCameraResult
 {
     OperationResult operation;
@@ -81,6 +94,7 @@ struct OpenCameraResult
     RuntimeSnapshot snapshot;
 };
 
+// 组件说明：PlcConnectionCommand 数据结构集中传递该流程需要的只读数据或回调。
 struct PlcConnectionCommand
 {
     QString address;
@@ -88,6 +102,7 @@ struct PlcConnectionCommand
     int slot = 0;
 };
 
+// 组件说明：PlcRunSettingsCommand 数据结构集中传递该流程需要的只读数据或回调。
 struct PlcRunSettingsCommand
 {
     std::uint16_t rejectTime = 0;
@@ -96,6 +111,7 @@ struct PlcRunSettingsCommand
     std::uint32_t photoDistance = 0;
 };
 
+// 组件说明：InspectionApplicationService 组件封装对应业务职责和生命周期边界。
 class InspectionApplicationService : public QObject
 {
     Q_OBJECT

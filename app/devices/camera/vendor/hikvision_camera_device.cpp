@@ -1,3 +1,7 @@
+// 文件作用：本文件用于封装海康相机SDK，完成枚举、打开、触发、参数设置和帧回调转换。
+// 主要职责：封装海康相机SDK，完成枚举、打开、触发、参数设置和帧回调转换。
+// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "devices/camera/vendor/hikvision_camera_device.h"
 
 #include "MvCameraControl.h"
@@ -16,6 +20,7 @@
 
 namespace {
 
+// 函数说明：settingRange 函数更新或应用对应的配置和状态。
 CameraSettingRange settingRange(const MVCC_FLOATVALUE &value)
 {
     CameraSettingRange range;
@@ -25,6 +30,7 @@ CameraSettingRange settingRange(const MVCC_FLOATVALUE &value)
     return range;
 }
 
+// 函数说明：inRange 函数实现名称所表示的处理步骤。
 bool inRange(float value, const MVCC_FLOATVALUE &range)
 {
     return value >= range.fMin && value <= range.fMax;
@@ -32,13 +38,16 @@ bool inRange(float value, const MVCC_FLOATVALUE &range)
 
 } // namespace
 
+// 组件说明：HikvisionCameraDevice 组件提供对应设备或检测能力的统一实现。
 struct HikvisionCameraDevice::Impl
 {
+    // 函数说明：Impl 构造函数创建组件并初始化其依赖和初始状态。
     Impl()
     {
         std::memset(&devices, 0, sizeof(devices));
     }
 
+    // 函数说明：onImage 函数执行对应事件或业务处理。
     static void __stdcall onImage(
         unsigned char *data,
         MV_FRAME_OUT_INFO_EX *info,
@@ -130,16 +139,19 @@ struct HikvisionCameraDevice::Impl
     std::deque<CameraFrame> frames;
 };
 
+// 函数说明：HikvisionCameraDevice 构造函数创建组件并初始化其依赖和初始状态。
 HikvisionCameraDevice::HikvisionCameraDevice()
     : m_impl(new Impl)
 {
 }
 
+// 函数说明：~HikvisionCameraDevice 析构函数按生命周期要求释放组件持有的资源。
 HikvisionCameraDevice::~HikvisionCameraDevice()
 {
     close();
 }
 
+// 函数说明：enumerate 函数创建、准备或启动对应流程。
 CameraResult HikvisionCameraDevice::enumerate(int *deviceCount)
 {
     std::memset(&m_impl->devices, 0, sizeof(m_impl->devices));
@@ -156,6 +168,7 @@ CameraResult HikvisionCameraDevice::enumerate(int *deviceCount)
             : CameraResult::deviceError(result);
 }
 
+// 函数说明：openFirst 函数创建、准备或启动对应流程。
 CameraResult HikvisionCameraDevice::openFirst()
 {
     if (m_impl->handle) {
@@ -190,6 +203,7 @@ CameraResult HikvisionCameraDevice::openFirst()
     return CameraResult();
 }
 
+// 函数说明：applySettings 函数更新或应用对应的配置和状态。
 CameraResult HikvisionCameraDevice::applySettings(
     const CameraSettings &settings)
 {
@@ -264,6 +278,7 @@ CameraResult HikvisionCameraDevice::applySettings(
     return result;
 }
 
+// 函数说明：setTriggerMode 函数更新或应用对应的配置和状态。
 CameraResult HikvisionCameraDevice::setTriggerMode(
     CameraTriggerMode mode)
 {
@@ -291,6 +306,7 @@ CameraResult HikvisionCameraDevice::setTriggerMode(
     return CameraResult();
 }
 
+// 函数说明：startGrabbing 函数创建、准备或启动对应流程。
 CameraResult HikvisionCameraDevice::startGrabbing()
 {
     if (!m_impl->handle) {
@@ -325,6 +341,7 @@ CameraResult HikvisionCameraDevice::startGrabbing()
     return CameraResult();
 }
 
+// 函数说明：triggerSoftware 函数执行对应事件或业务处理。
 CameraResult HikvisionCameraDevice::triggerSoftware()
 {
     if (!m_impl->handle || !m_impl->grabbing) {
@@ -340,6 +357,7 @@ CameraResult HikvisionCameraDevice::triggerSoftware()
             : CameraResult::deviceError(nativeResult);
 }
 
+// 函数说明：waitNextFrame 函数读取、等待或计算对应的数据。
 CameraFrameResult HikvisionCameraDevice::waitNextFrame(int timeoutMs)
 {
     CameraFrameResult result;
@@ -378,6 +396,7 @@ CameraFrameResult HikvisionCameraDevice::waitNextFrame(int timeoutMs)
     return result;
 }
 
+// 函数说明：interruptWait 函数停止流程、清理状态或释放对应资源。
 void HikvisionCameraDevice::interruptWait()
 {
     std::lock_guard<std::mutex> lock(m_impl->mutex);
@@ -385,6 +404,7 @@ void HikvisionCameraDevice::interruptWait()
     m_impl->condition.notify_all();
 }
 
+// 函数说明：stopGrabbing 函数停止流程、清理状态或释放对应资源。
 CameraResult HikvisionCameraDevice::stopGrabbing()
 {
     interruptWait();
@@ -399,6 +419,7 @@ CameraResult HikvisionCameraDevice::stopGrabbing()
     return CameraResult::deviceError(nativeResult);
 }
 
+// 函数说明：close 函数停止流程、清理状态或释放对应资源。
 CameraResult HikvisionCameraDevice::close()
 {
     interruptWait();

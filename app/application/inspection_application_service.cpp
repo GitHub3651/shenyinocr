@@ -1,3 +1,7 @@
+// 文件作用：本文件用于组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
+// 主要职责：组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/inspection_application_service.h"
 
 #include "contracts/detection_mode.h"
@@ -13,6 +17,7 @@ namespace {
 
 constexpr float kMicrosecondsPerMillisecond = 1000.0f;
 
+// 函数说明：applicationState 函数实现名称所表示的处理步骤。
 ApplicationRuntimeState applicationState(
     InspectionRuntimeState state)
 {
@@ -31,6 +36,7 @@ ApplicationRuntimeState applicationState(
     }
 }
 
+// 函数说明：modeKind 函数实现名称所表示的处理步骤。
 InspectionStartModeKind modeKind(DetectionMode mode)
 {
     switch (mode) {
@@ -47,6 +53,7 @@ InspectionStartModeKind modeKind(DetectionMode mode)
     }
 }
 
+// 函数说明：trackingKind 函数实现名称所表示的处理步骤。
 InspectionTrackingKind trackingKind(DetectionMode mode)
 {
     switch (mode) {
@@ -62,6 +69,7 @@ InspectionTrackingKind trackingKind(DetectionMode mode)
     }
 }
 
+// 函数说明：hasCompleteCharacterTemplates 函数检查相关状态并返回判断结果。
 bool hasCompleteCharacterTemplates(
     const PreparedRecipeProfile &profile)
 {
@@ -87,6 +95,7 @@ bool hasCompleteCharacterTemplates(
     return true;
 }
 
+// 函数说明：profileSnapshotFromPreparedRecipe 函数实现名称所表示的处理步骤。
 InspectionProfileSnapshot profileSnapshotFromPreparedRecipe(
     const PreparedRecipe &prepared)
 {
@@ -117,6 +126,7 @@ InspectionProfileSnapshot profileSnapshotFromPreparedRecipe(
     return InspectionProfileSnapshotBuilder::create(sources);
 }
 
+// 函数说明：resourceInputFor 函数实现名称所表示的处理步骤。
 InspectionStartResourceInput resourceInputFor(
     const PreparedRecipe &prepared,
     DetectionMode mode,
@@ -167,6 +177,7 @@ InspectionStartResourceInput resourceInputFor(
     return input;
 }
 
+// 函数说明：framePreprocessSettings 函数实现名称所表示的处理步骤。
 FramePreprocessSettings framePreprocessSettings(
     const MachineSettings &settings)
 {
@@ -180,6 +191,7 @@ FramePreprocessSettings framePreprocessSettings(
     return output;
 }
 
+// 函数说明：cameraConfiguration 函数实现名称所表示的处理步骤。
 CameraSessionCaptureConfiguration cameraConfiguration(
     const MachineSettings &settings,
     const PreparedRecipeSnapshot &prepared,
@@ -207,6 +219,7 @@ CameraSessionCaptureConfiguration cameraConfiguration(
     return output;
 }
 
+// 函数说明：resultConfiguration 函数实现名称所表示的处理步骤。
 ResultServiceRunConfiguration resultConfiguration(
     const MachineSettings &settings)
 {
@@ -225,6 +238,7 @@ ResultServiceRunConfiguration resultConfiguration(
     return configuration;
 }
 
+// 函数说明：plcRunSettings 函数实现名称所表示的处理步骤。
 PlcRunSettingsCommand plcRunSettings(const MachineSettings &settings)
 {
     PlcRunSettingsCommand output;
@@ -237,6 +251,7 @@ PlcRunSettingsCommand plcRunSettings(const MachineSettings &settings)
     return output;
 }
 
+// 函数说明：startIssueCode 函数创建、准备或启动对应流程。
 QString startIssueCode(InspectionStartIssue issue)
 {
     switch (issue) {
@@ -266,6 +281,7 @@ QString startIssueCode(InspectionStartIssue issue)
     }
 }
 
+// 函数说明：startIssueMessage 函数创建、准备或启动对应流程。
 QString startIssueMessage(InspectionStartIssue issue)
 {
     switch (issue) {
@@ -295,6 +311,7 @@ QString startIssueMessage(InspectionStartIssue issue)
     }
 }
 
+// 函数说明：faultReasonText 函数实现名称所表示的处理步骤。
 QString faultReasonText(InspectionFaultReason reason)
 {
     switch (reason) {
@@ -314,6 +331,7 @@ QString faultReasonText(InspectionFaultReason reason)
     return QString();
 }
 
+// 函数说明：acquisitionDto 函数实现名称所表示的处理步骤。
 InspectionAcquisitionDto acquisitionDto(
         InspectionAcquisitionKind kind)
 {
@@ -322,6 +340,7 @@ InspectionAcquisitionDto acquisitionDto(
             : InspectionAcquisitionDto::SoftwareTrigger;
 }
 
+// 函数说明：cameraParameterDto 函数实现名称所表示的处理步骤。
 CameraParameterResultDto cameraParameterDto(
         const InspectionCameraParameterResult &source)
 {
@@ -335,6 +354,7 @@ CameraParameterResultDto cameraParameterDto(
     return result;
 }
 
+// 函数说明：cameraOpenIssueDto 函数实现名称所表示的处理步骤。
 CameraOpenIssueDto cameraOpenIssueDto(
         InspectionCameraOpenIssue issue)
 {
@@ -353,6 +373,7 @@ CameraOpenIssueDto cameraOpenIssueDto(
     }
 }
 
+// 函数说明：cameraOpenDto 函数实现名称所表示的处理步骤。
 CameraOpenResultDto cameraOpenDto(
         const InspectionCameraOpenResult &source)
 {
@@ -368,6 +389,7 @@ CameraOpenResultDto cameraOpenDto(
     return result;
 }
 
+// 函数说明：cameraRecoveryIssueDto 函数实现名称所表示的处理步骤。
 CameraRecoveryIssueDto cameraRecoveryIssueDto(
         InspectionCameraRecoveryIssue issue)
 {
@@ -384,6 +406,7 @@ CameraRecoveryIssueDto cameraRecoveryIssueDto(
     }
 }
 
+// 函数说明：cameraRecoveryDto 函数实现名称所表示的处理步骤。
 CameraRecoveryResultDto cameraRecoveryDto(
         const InspectionCameraRecoveryResult &source)
 {
@@ -398,6 +421,7 @@ CameraRecoveryResultDto cameraRecoveryDto(
 
 } // namespace
 
+// 函数说明：InspectionApplicationService 构造函数创建组件并初始化其依赖和初始状态。
 InspectionApplicationService::InspectionApplicationService(
     const std::shared_ptr<InspectionRuntime> &runtime,
     const std::shared_ptr<CameraSession> &cameraSession,
@@ -441,11 +465,13 @@ InspectionApplicationService::InspectionApplicationService(
     m_cameraSession->setCallbacks(callbacks);
 }
 
+// 函数说明：~InspectionApplicationService 析构函数按生命周期要求释放组件持有的资源。
 InspectionApplicationService::~InspectionApplicationService()
 {
     m_cameraSession->setCallbacks(CameraSessionCallbacks());
 }
 
+// 函数说明：start 函数创建、准备或启动对应流程。
 StartInspectionResult InspectionApplicationService::start(
     const StartInspectionCommand &command)
 {
@@ -671,6 +697,7 @@ StartInspectionResult InspectionApplicationService::start(
     return result;
 }
 
+// 函数说明：stop 函数停止流程、清理状态或释放对应资源。
 StopInspectionResult InspectionApplicationService::stop(
     const StopInspectionCommand &command)
 {
@@ -778,6 +805,7 @@ StopInspectionResult InspectionApplicationService::stop(
     return result;
 }
 
+// 函数说明：openCamera 函数创建、准备或启动对应流程。
 OpenCameraResult InspectionApplicationService::openCamera(
     const PlcConnectionCommand &plcCommand)
 {
@@ -835,6 +863,7 @@ OpenCameraResult InspectionApplicationService::openCamera(
     return result;
 }
 
+// 函数说明：closeCamera 函数停止流程、清理状态或释放对应资源。
 OperationResult InspectionApplicationService::closeCamera()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
@@ -851,6 +880,7 @@ OperationResult InspectionApplicationService::closeCamera()
     return OperationResult::accepted();
 }
 
+// 函数说明：connectPlc 函数建立或断开对应外部连接。
 OperationResult InspectionApplicationService::connectPlc(
     const PlcConnectionCommand &command)
 {
@@ -865,6 +895,7 @@ OperationResult InspectionApplicationService::connectPlc(
                 result.nativeErrorCode);
 }
 
+// 函数说明：disconnectPlc 函数建立或断开对应外部连接。
 OperationResult InspectionApplicationService::disconnectPlc()
 {
     const PlcOperationResult result = m_runtime->disconnectPlc();
@@ -877,6 +908,7 @@ OperationResult InspectionApplicationService::disconnectPlc()
                 result.nativeErrorCode);
 }
 
+// 函数说明：applyPlcTriggerMode 函数更新或应用对应的配置和状态。
 OperationResult InspectionApplicationService::applyPlcTriggerMode(
     const QString &modeId)
 {
@@ -903,6 +935,7 @@ OperationResult InspectionApplicationService::applyPlcTriggerMode(
                 result.nativeErrorCode);
 }
 
+// 函数说明：applyPlcRunSettings 函数更新或应用对应的配置和状态。
 OperationResult InspectionApplicationService::applyPlcRunSettings(
     const PlcRunSettingsCommand &command)
 {
@@ -948,6 +981,7 @@ OperationResult InspectionApplicationService::applyPlcRunSettings(
                 code, message, result.operation.nativeErrorCode);
 }
 
+// 函数说明：writePlcPhotoDistance 函数保存或发布对应的数据和资源。
 OperationResult InspectionApplicationService::writePlcPhotoDistance(
     std::uint32_t value)
 {
@@ -967,29 +1001,34 @@ OperationResult InspectionApplicationService::writePlcPhotoDistance(
 }
 
 CameraParameterResultDto
+// 函数说明：queryCameraExposureRange 函数读取、等待或计算对应的数据。
 InspectionApplicationService::queryCameraExposureRange()
 {
     return cameraParameterDto(m_cameraSession->queryExposureRange());
 }
 
 CameraParameterResultDto
+// 函数说明：queryCameraGainRange 函数读取、等待或计算对应的数据。
 InspectionApplicationService::queryCameraGainRange()
 {
     return cameraParameterDto(m_cameraSession->queryGainRange());
 }
 
 CameraParameterResultDto
+// 函数说明：applyCameraExposure 函数更新或应用对应的配置和状态。
 InspectionApplicationService::applyCameraExposure(int exposure)
 {
     return cameraParameterDto(m_cameraSession->applyExposure(exposure));
 }
 
 CameraParameterResultDto
+// 函数说明：applyCameraGain 函数更新或应用对应的配置和状态。
 InspectionApplicationService::applyCameraGain(int gain)
 {
     return cameraParameterDto(m_cameraSession->applyGain(gain));
 }
 
+// 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
 bool InspectionApplicationService::startTemplatePreview(
     quint64 sessionId,
     int rotationCode,
@@ -1004,43 +1043,51 @@ bool InspectionApplicationService::startTemplatePreview(
                 sessionId, settings, errorMessage);
 }
 
+// 函数说明：stopTemplatePreview 函数停止流程、清理状态或释放对应资源。
 bool InspectionApplicationService::stopTemplatePreview()
 {
     return m_cameraSession->stopPreview();
 }
 
+// 函数说明：acknowledgeTemplatePreviewFrame 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::acknowledgeTemplatePreviewFrame(
     quint64 sessionId)
 {
     m_cameraSession->acknowledgePreviewFrame(sessionId);
 }
 
+// 函数说明：hasCurrentCameraImage 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::hasCurrentCameraImage() const
 {
     return m_cameraSession->hasCurrentImage();
 }
 
+// 函数说明：currentCameraImageClone 函数读取、等待或计算对应的数据。
 cv::Mat InspectionApplicationService::currentCameraImageClone() const
 {
     return m_cameraSession->currentImageClone();
 }
 
+// 函数说明：replaceCurrentCameraImage 函数更新或应用对应的配置和状态。
 void InspectionApplicationService::replaceCurrentCameraImage(
     const cv::Mat &image)
 {
     m_cameraSession->replaceCurrentImage(image);
 }
 
+// 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::isCameraOpen() const
 {
     return m_cameraOpen && m_cameraSession->isOpen();
 }
 
+// 函数说明：isCapturing 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::isCapturing() const
 {
     return m_cameraSession->isCapturing();
 }
 
+// 函数说明：shutdown 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::shutdown()
 {
     m_runtime->beginStop();
@@ -1058,6 +1105,7 @@ void InspectionApplicationService::shutdown()
     publishSnapshot();
 }
 
+// 函数说明：completeUnexpectedAcquisitionStop 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::completeUnexpectedAcquisitionStop()
 {
     const InspectionRuntimeState state = m_runtime->state();
@@ -1091,6 +1139,7 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     publishSnapshot();
 }
 
+// 函数说明：setUiCallbacks 函数更新或应用对应的配置和状态。
 void InspectionApplicationService::setUiCallbacks(
     const InspectionUiCallbacks &callbacks)
 {
@@ -1112,6 +1161,7 @@ void InspectionApplicationService::setUiCallbacks(
     m_runtime->resultService().setCallbacks(runtimeCallbacks);
 }
 
+// 函数说明：bindView 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::bindView(
     const InspectionViewBindingsDto &bindings)
 {
@@ -1136,6 +1186,7 @@ void InspectionApplicationService::bindView(
     m_runtime->resultService().bindView(runtimeBindings);
 }
 
+// 函数说明：clearUiBindings 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::clearUiBindings()
 {
     m_runtime->resultService().setCallbacks(ResultServiceCallbacks());
@@ -1143,16 +1194,19 @@ void InspectionApplicationService::clearUiBindings()
                 InspectionPresentationViewBindings());
 }
 
+// 函数说明：clearResultView 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::clearResultView()
 {
     m_runtime->resultService().clear();
 }
 
+// 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::clearTransientView()
 {
     m_runtime->resultService().clearTransientView();
 }
 
+// 函数说明：presentPreviewFrame 函数执行对应事件或业务处理。
 void InspectionApplicationService::presentPreviewFrame(
     const cv::Mat &image,
     bool tissueMode,
@@ -1162,6 +1216,7 @@ void InspectionApplicationService::presentPreviewFrame(
                 image, tissueMode, productionRunning);
 }
 
+// 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::resetStatistics()
 {
     m_runtime->resetStatistics();
@@ -1169,17 +1224,20 @@ void InspectionApplicationService::resetStatistics()
                 m_runtime->totalCount(), m_runtime->ngCount());
 }
 
+// 函数说明：resetNgCount 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::resetNgCount()
 {
     m_runtime->resetNgCount();
     m_runtime->resultService().presentNgCount(m_runtime->ngCount());
 }
 
+// 函数说明：clearPendingDelayedNgRequests 函数停止流程、清理状态或释放对应资源。
 void InspectionApplicationService::clearPendingDelayedNgRequests()
 {
     m_runtime->clearPendingDelayedNgRequests();
 }
 
+// 函数说明：checkPlcHealth 函数校验、转换或恢复对应数据。
 void InspectionApplicationService::checkPlcHealth()
 {
     if (!m_runtime->isRunning()
@@ -1193,6 +1251,7 @@ void InspectionApplicationService::checkPlcHealth()
 }
 
 ApplicationFaultSnapshot
+// 函数说明：faultSnapshot 函数实现名称所表示的处理步骤。
 InspectionApplicationService::faultSnapshot() const
 {
     const InspectionFaultSnapshot source = m_runtime->faultSnapshot();
@@ -1209,6 +1268,7 @@ InspectionApplicationService::faultSnapshot() const
     return snapshot;
 }
 
+// 函数说明：enterFault 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::enterFault(
     InspectionFaultReason reason,
     const QString &diagnostic)
@@ -1220,6 +1280,7 @@ void InspectionApplicationService::enterFault(
     emit faultEntered();
 }
 
+// 函数说明：runtimeSnapshot 函数执行对应事件或业务处理。
 RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
 {
     RuntimeSnapshot snapshot;
@@ -1231,6 +1292,7 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
     return snapshot;
 }
 
+// 函数说明：rejectStart 函数实现名称所表示的处理步骤。
 StartInspectionResult InspectionApplicationService::rejectStart(
     InspectionStartIssue issue,
     const QString &code,
@@ -1248,6 +1310,7 @@ StartInspectionResult InspectionApplicationService::rejectStart(
     return result;
 }
 
+// 函数说明：plcFailure 函数实现名称所表示的处理步骤。
 OperationResult InspectionApplicationService::plcFailure(
     const QString &code,
     const QString &userMessage,
@@ -1260,6 +1323,7 @@ OperationResult InspectionApplicationService::plcFailure(
                 .arg(nativeErrorCode));
 }
 
+// 函数说明：publishSnapshot 函数保存或发布对应的数据和资源。
 void InspectionApplicationService::publishSnapshot()
 {
     emit runtimeSnapshotChanged(runtimeSnapshot());

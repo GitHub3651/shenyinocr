@@ -1,3 +1,7 @@
+// 文件作用：本文件用于组织模板新建、预览、编辑、保存、发布和取消等应用用例。
+// 主要职责：组织模板新建、预览、编辑、保存、发布和取消等应用用例。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/template_application_service.h"
 
 #include "devices/barcode/barcode_decoder.h"
@@ -11,6 +15,7 @@
 
 namespace {
 
+// 函数说明：setError 函数更新或应用对应的配置和状态。
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
@@ -18,6 +23,7 @@ void setError(QString *errorMessage, const QString &message)
     }
 }
 
+// 函数说明：barcodeFailureMessage 函数实现名称所表示的处理步骤。
 QString barcodeFailureMessage(const BarcodeReadResult &result)
 {
     switch (result.status) {
@@ -48,6 +54,7 @@ QString barcodeFailureMessage(const BarcodeReadResult &result)
 
 } // namespace
 
+// 函数说明：TemplateApplicationService 构造函数创建组件并初始化其依赖和初始状态。
 TemplateApplicationService::TemplateApplicationService(
         const std::shared_ptr<RecipeStore> &store,
         const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
@@ -62,6 +69,7 @@ TemplateApplicationService::TemplateApplicationService(
     }
 }
 
+// 函数说明：beginNew 函数创建、准备或启动对应流程。
 bool TemplateApplicationService::beginNew(
         const ProductRecipe &recipe,
         QString *errorMessage)
@@ -69,6 +77,7 @@ bool TemplateApplicationService::beginNew(
     return m_session.beginNew(recipe, errorMessage);
 }
 
+// 函数说明：beginEdit 函数创建、准备或启动对应流程。
 bool TemplateApplicationService::beginEdit(
         const QString &recipeId,
         QString *errorMessage)
@@ -76,32 +85,38 @@ bool TemplateApplicationService::beginEdit(
     return m_session.beginEdit(*m_store, recipeId, errorMessage);
 }
 
+// 函数说明：cancel 函数检查相关状态并返回判断结果。
 void TemplateApplicationService::cancel()
 {
     m_session.reset();
 }
 
+// 函数说明：isActive 函数检查相关状态并返回判断结果。
 bool TemplateApplicationService::isActive() const
 {
     return m_session.isActive();
 }
 
+// 函数说明：draft 函数实现名称所表示的处理步骤。
 const ProductRecipe &TemplateApplicationService::draft() const
 {
     return m_session.recipe();
 }
 
+// 函数说明：workspacePath 函数实现名称所表示的处理步骤。
 QString TemplateApplicationService::workspacePath() const
 {
     return m_session.workspacePath();
 }
 
 QMap<QString, QString>
+// 函数说明：assetSourcePaths 函数实现名称所表示的处理步骤。
 TemplateApplicationService::assetSourcePaths() const
 {
     return m_session.assetSourcePaths();
 }
 
+// 函数说明：replaceDraft 函数更新或应用对应的配置和状态。
 bool TemplateApplicationService::replaceDraft(
         const ProductRecipe &recipe,
         const QMap<QString, QString> &assetSourcePaths,
@@ -111,6 +126,7 @@ bool TemplateApplicationService::replaceDraft(
                 recipe, assetSourcePaths, errorMessage);
 }
 
+// 函数说明：updateProfile 函数更新或应用对应的配置和状态。
 bool TemplateApplicationService::updateProfile(
         int profileIndex,
         const RecipeProfile &profile,
@@ -120,6 +136,7 @@ bool TemplateApplicationService::updateProfile(
                 profileIndex, profile, errorMessage);
 }
 
+// 函数说明：publish 函数保存或发布对应的数据和资源。
 bool TemplateApplicationService::publish(
         PreparedRecipeSnapshot *preparedRecipe,
         QString *errorMessage)
@@ -131,6 +148,7 @@ bool TemplateApplicationService::publish(
     return true;
 }
 
+// 函数说明：listRecipes 函数实现名称所表示的处理步骤。
 bool TemplateApplicationService::listRecipes(
         TemplateRecipeCatalog *catalog,
         QString *errorMessage) const
@@ -161,6 +179,7 @@ bool TemplateApplicationService::listRecipes(
     return true;
 }
 
+// 函数说明：loadPreparedRecipe 函数读取、等待或计算对应的数据。
 bool TemplateApplicationService::loadPreparedRecipe(
         const QString &recipeId,
         PreparedRecipeSnapshot *preparedRecipe,
@@ -170,6 +189,7 @@ bool TemplateApplicationService::loadPreparedRecipe(
                 recipeId, preparedRecipe, errorMessage);
 }
 
+// 函数说明：stageInitialProfileAssets 函数实现名称所表示的处理步骤。
 bool TemplateApplicationService::stageInitialProfileAssets(
         const InitialRecipeProfileAssets &assets,
         ProductRecipe *recipe,
@@ -182,6 +202,7 @@ bool TemplateApplicationService::stageInitialProfileAssets(
                 recipe, profile, assetSourcePaths, errorMessage);
 }
 
+// 函数说明：stageCharacterAssets 函数实现名称所表示的处理步骤。
 bool TemplateApplicationService::stageCharacterAssets(
         int profileIndex,
         const QMap<QString, QImage> &characterImages,
@@ -196,6 +217,7 @@ bool TemplateApplicationService::stageCharacterAssets(
                 assetSourcePaths, errorMessage);
 }
 
+// 函数说明：mapDisplayRectToImage 函数校验、转换或恢复对应数据。
 QRect TemplateApplicationService::mapDisplayRectToImage(
         const QRect &displayRect,
         const TemplateDisplayGeometry &geometry) const
@@ -205,6 +227,7 @@ QRect TemplateApplicationService::mapDisplayRectToImage(
 }
 
 TemplateProfileGeometry
+// 函数说明：buildProfileGeometry 函数创建、准备或启动对应流程。
 TemplateApplicationService::buildProfileGeometry(
         const QRect &trackingDisplayRect,
         const QRect &barcodeDisplayRect,
@@ -217,6 +240,7 @@ TemplateApplicationService::buildProfileGeometry(
                 dateDisplayPolygon, includeBarcode, geometry);
 }
 
+// 函数说明：validateBarcodeTemplate 函数校验、转换或恢复对应数据。
 bool TemplateApplicationService::validateBarcodeTemplate(
         const cv::Mat &sourceImage,
         const QRect &sourceRect,
@@ -315,17 +339,20 @@ bool TemplateApplicationService::validateBarcodeTemplate(
     return true;
 }
 
+// 函数说明：modeMemory 函数实现名称所表示的处理步骤。
 const TemplateModeMemory &TemplateApplicationService::modeMemory() const
 {
     return m_modeMemory;
 }
 
+// 函数说明：replacePublishedRecipeIdsByMode 函数更新或应用对应的配置和状态。
 void TemplateApplicationService::replacePublishedRecipeIdsByMode(
         const QMap<QString, QString> &recipeIds)
 {
     m_modeMemory.publishedRecipeIdsByMode() = recipeIds;
 }
 
+// 函数说明：rememberPublishedRecipe 函数实现名称所表示的处理步骤。
 void TemplateApplicationService::rememberPublishedRecipe(
         const QString &modeId,
         const QString &recipeId)
@@ -333,6 +360,7 @@ void TemplateApplicationService::rememberPublishedRecipe(
     m_modeMemory.publishedRecipeIdsByMode().insert(modeId, recipeId);
 }
 
+// 函数说明：forgetPublishedRecipe 函数实现名称所表示的处理步骤。
 void TemplateApplicationService::forgetPublishedRecipe(
         const QString &modeId)
 {
@@ -340,11 +368,13 @@ void TemplateApplicationService::forgetPublishedRecipe(
 }
 
 const PreparedRecipeSnapshot &
+// 函数说明：activePreparedRecipe 函数实现名称所表示的处理步骤。
 TemplateApplicationService::activePreparedRecipe() const
 {
     return m_activePreparedRecipe;
 }
 
+// 函数说明：setActivePreparedRecipe 函数更新或应用对应的配置和状态。
 void TemplateApplicationService::setActivePreparedRecipe(
         const PreparedRecipeSnapshot &preparedRecipe)
 {
@@ -352,22 +382,26 @@ void TemplateApplicationService::setActivePreparedRecipe(
 }
 
 const std::vector<WordTemplateProfile> &
+// 函数说明：wordProfiles 函数实现名称所表示的处理步骤。
 TemplateApplicationService::wordProfiles() const
 {
     return m_wordProfiles;
 }
 
+// 函数说明：clearWordProfiles 函数停止流程、清理状态或释放对应资源。
 void TemplateApplicationService::clearWordProfiles()
 {
     m_wordProfiles.clear();
 }
 
+// 函数说明：replaceWordProfiles 函数更新或应用对应的配置和状态。
 void TemplateApplicationService::replaceWordProfiles(
         const std::vector<WordTemplateProfile> &profiles)
 {
     m_wordProfiles = profiles;
 }
 
+// 函数说明：replaceWordProfile 函数更新或应用对应的配置和状态。
 bool TemplateApplicationService::replaceWordProfile(
         int profileIndex,
         const WordTemplateProfile &profile)

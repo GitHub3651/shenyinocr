@@ -1,3 +1,7 @@
+// 文件作用：本文件用于定义配方资源加载完成后的只读运行数据和校验结果。
+// 主要职责：定义配方资源加载完成后的只读运行数据和校验结果。
+// 模块位置：配方层；负责产品参数、资源和编辑事务，不依赖界面或检测实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "recipes/prepared_recipe.h"
 
 #include <QDir>
@@ -14,6 +18,7 @@
 
 namespace {
 
+// 函数说明：setError 函数更新或应用对应的配置和状态。
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
@@ -25,6 +30,7 @@ void setError(QString *errorMessage, const QString &message)
     }
 }
 
+// 函数说明：readImage 函数读取、等待或计算对应的数据。
 bool readImage(const QString &path,
                int flags,
                cv::Mat *image,
@@ -64,6 +70,7 @@ bool readImage(const QString &path,
     return true;
 }
 
+// 函数说明：finitePolygon 函数实现名称所表示的处理步骤。
 bool finitePolygon(const std::vector<cv::Point2f> &polygon)
 {
     for (const cv::Point2f &point : polygon) {
@@ -74,6 +81,7 @@ bool finitePolygon(const std::vector<cv::Point2f> &polygon)
     return true;
 }
 
+// 函数说明：readCalibration 函数读取、等待或计算对应的数据。
 bool readCalibration(const QString &path,
                      std::vector<cv::Point2f> *stamp,
                      std::vector<cv::Point2f> *date,
@@ -125,6 +133,7 @@ bool readCalibration(const QString &path,
     return true;
 }
 
+// 函数说明：resolvedAssetPath 函数读取、等待或计算对应的数据。
 QString resolvedAssetPath(const ProductRecipe &recipe,
                           const RecipeProfile &profile,
                           const QString &role,
@@ -153,6 +162,7 @@ QString resolvedAssetPath(const ProductRecipe &recipe,
     return path;
 }
 
+// 组件说明：CharacterAsset 数据结构集中保存该流程需要的一组相关数据。
 struct CharacterAsset
 {
     QString fileName;
@@ -161,6 +171,7 @@ struct CharacterAsset
     cv::Mat image;
 };
 
+// 函数说明：characterAssetLess 函数实现名称所表示的处理步骤。
 bool characterAssetLess(const CharacterAsset &left,
                         const CharacterAsset &right)
 {
@@ -170,6 +181,7 @@ bool characterAssetLess(const CharacterAsset &left,
     return folded != 0 ? folded < 0 : left.fileName < right.fileName;
 }
 
+// 函数说明：matchesTarget 函数执行对应事件或业务处理。
 bool matchesTarget(const QString &baseName, const QString &target)
 {
     if (baseName == target) {
@@ -184,6 +196,7 @@ bool matchesTarget(const QString &baseName, const QString &target)
             || suffix.startsWith(QLatin1Char('('));
 }
 
+// 函数说明：prepareCharacters 函数创建、准备或启动对应流程。
 bool prepareCharacters(const ProductRecipe &recipe,
                        const RecipeProfile &profile,
                        const QString &recipeDirectoryPath,
@@ -246,6 +259,7 @@ bool prepareCharacters(const ProductRecipe &recipe,
     return true;
 }
 
+// 函数说明：prepareProfile 函数创建、准备或启动对应流程。
 bool prepareProfile(const ProductRecipe &recipe,
                     const RecipeProfile &profile,
                     const QString &directory,
@@ -362,6 +376,7 @@ bool prepareProfile(const ProductRecipe &recipe,
 
 } // namespace
 
+// 函数说明：preparedRecipeTargetUnits 函数创建、准备或启动对应流程。
 QStringList preparedRecipeTargetUnits(const QString &targetText)
 {
     QStringList units;
@@ -378,6 +393,7 @@ QStringList preparedRecipeTargetUnits(const QString &targetText)
     return units;
 }
 
+// 函数说明：preparedRecipeCharacterAssetMatchesTarget 函数创建、准备或启动对应流程。
 bool preparedRecipeCharacterAssetMatchesTarget(
         const QString &normalizedBaseName,
         const QString &target)
@@ -386,6 +402,7 @@ bool preparedRecipeCharacterAssetMatchesTarget(
                          target.trimmed().toLower());
 }
 
+// 函数说明：prepareRecipe 函数创建、准备或启动对应流程。
 bool prepareRecipe(const ProductRecipe &recipe,
                    const QString &recipeDirectoryPath,
                    PreparedRecipeSnapshot *preparedRecipe,

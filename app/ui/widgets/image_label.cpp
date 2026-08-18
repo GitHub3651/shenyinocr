@@ -1,3 +1,7 @@
+// 文件作用：本文件用于显示检测图像，并处理模板制作时的矩形、多边形和鼠标键盘绘制交互。
+// 主要职责：显示检测图像，并处理模板制作时的矩形、多边形和鼠标键盘绘制交互。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/widgets/image_label.h"
 #include <QPainter>
 #include <QPen>
@@ -5,29 +9,34 @@
 // 🔥 仿照 ui/main_window.cpp，加入这句声明，彻底解决底层发送的中文乱码问题
 #pragma execution_character_set("utf-8")
 
+// 函数说明：ImageLabel 构造函数创建组件并初始化其依赖和初始状态。
 ImageLabel::ImageLabel(QWidget *parent) : QLabel(parent) {
     m_currentStep = STEP_TRACKING;
     setFocusPolicy(Qt::StrongFocus);
 }
 
+// 函数说明：setPixmap 函数更新或应用对应的配置和状态。
 void ImageLabel::setPixmap(const QPixmap &pixmap) {
     m_autoFitPixmapEnabled = false;
     m_autoFitSourcePixmap = QPixmap();
     QLabel::setPixmap(pixmap);
 }
 
+// 函数说明：setAutoFitPixmap 函数更新或应用对应的配置和状态。
 void ImageLabel::setAutoFitPixmap(const QPixmap &pixmap) {
     m_autoFitSourcePixmap = pixmap;
     m_autoFitPixmapEnabled = !pixmap.isNull();
     updateAutoFitPixmap();
 }
 
+// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 void ImageLabel::clear() {
     m_autoFitPixmapEnabled = false;
     m_autoFitSourcePixmap = QPixmap();
     QLabel::clear();
 }
 
+// 函数说明：updateAutoFitPixmap 函数更新或应用对应的配置和状态。
 void ImageLabel::updateAutoFitPixmap() {
     if (!m_autoFitPixmapEnabled || m_autoFitSourcePixmap.isNull()
             || width() <= 0 || height() <= 0) {
@@ -41,15 +50,18 @@ void ImageLabel::updateAutoFitPixmap() {
                     Qt::SmoothTransformation));
 }
 
+// 函数说明：resizeEvent 函数实现名称所表示的处理步骤。
 void ImageLabel::resizeEvent(QResizeEvent *event) {
     QLabel::resizeEvent(event);
     updateAutoFitPixmap();
 }
 
+// 函数说明：isDetectionPolyComplete 函数检查相关状态并返回判断结果。
 bool ImageLabel::isDetectionPolyComplete() const {
     return m_currentStep == STEP_DONE && m_detectionPoly.size() >= 3;
 }
 
+// 函数说明：setTemplateDrawingEnabled 函数更新或应用对应的配置和状态。
 void ImageLabel::setTemplateDrawingEnabled(bool enabled) {
     m_templateDrawingEnabled = enabled;
     if (!m_templateDrawingEnabled) {
@@ -59,10 +71,12 @@ void ImageLabel::setTemplateDrawingEnabled(bool enabled) {
     }
 }
 
+// 函数说明：isTemplateDrawingEnabled 函数检查相关状态并返回判断结果。
 bool ImageLabel::isTemplateDrawingEnabled() const {
     return m_templateDrawingEnabled;
 }
 
+// 函数说明：setBarcodeRegionRequired 函数更新或应用对应的配置和状态。
 void ImageLabel::setBarcodeRegionRequired(bool required) {
     if (m_barcodeRegionRequired == required) {
         return;
@@ -71,6 +85,7 @@ void ImageLabel::setBarcodeRegionRequired(bool required) {
     resetDrawingStep();
 }
 
+// 函数说明：retryBarcodeRegion 函数实现名称所表示的处理步骤。
 void ImageLabel::retryBarcodeRegion() {
     if (!m_barcodeRegionRequired || m_trackingRect.isNull()) {
         resetDrawingStep();
@@ -98,10 +113,12 @@ void ImageLabel::resetDrawingStep() {
     update();
 }
 
+// 函数说明：clearSelection 函数停止流程、清理状态或释放对应资源。
 void ImageLabel::clearSelection() {
     resetDrawingStep();
 }
 
+// 函数说明：mousePressEvent 函数实现名称所表示的处理步骤。
 void ImageLabel::mousePressEvent(QMouseEvent *event) {
     if (!m_templateDrawingEnabled) {
         emit mousePressed(event);
@@ -147,6 +164,7 @@ void ImageLabel::mousePressEvent(QMouseEvent *event) {
     emit mousePressed(event);
 }
 
+// 函数说明：mouseMoveEvent 函数实现名称所表示的处理步骤。
 void ImageLabel::mouseMoveEvent(QMouseEvent *event) {
     if (!m_templateDrawingEnabled) {
         emit mouseMoved(event);
@@ -166,6 +184,7 @@ void ImageLabel::mouseMoveEvent(QMouseEvent *event) {
     emit mouseMoved(event);
 }
 
+// 函数说明：mouseReleaseEvent 函数实现名称所表示的处理步骤。
 void ImageLabel::mouseReleaseEvent(QMouseEvent *event) {
     if (!m_templateDrawingEnabled) {
         emit mouseReleased(event);
@@ -205,6 +224,7 @@ void ImageLabel::mouseReleaseEvent(QMouseEvent *event) {
     emit mouseReleased(event);
 }
 
+// 函数说明：keyPressEvent 函数实现名称所表示的处理步骤。
 void ImageLabel::keyPressEvent(QKeyEvent *event) {
     if (m_templateDrawingEnabled && event->key() == Qt::Key_Escape) {
         resetDrawingStep();
@@ -216,6 +236,7 @@ void ImageLabel::keyPressEvent(QKeyEvent *event) {
     QLabel::keyPressEvent(event);
 }
 
+// 函数说明：paintEvent 函数实现名称所表示的处理步骤。
 void ImageLabel::paintEvent(QPaintEvent *event) {
     QLabel::paintEvent(event);
     QPainter painter(this);

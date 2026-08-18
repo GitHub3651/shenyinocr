@@ -1,3 +1,7 @@
+// 文件作用：本文件用于加载字符模板并完成字符区域匹配、评分和识别结果整理。
+// 主要职责：加载字符模板并完成字符区域匹配、评分和识别结果整理。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "character_template_matcher.h"
 
 #include <QDebug>
@@ -9,6 +13,7 @@
 
 namespace {
 
+// 函数说明：calculateIou 函数实现名称所表示的处理步骤。
 double calculateIou(const cv::Rect &rectA, const cv::Rect &rectB)
 {
     const cv::Rect intersection = rectA & rectB;
@@ -24,6 +29,7 @@ double calculateIou(const cv::Rect &rectA, const cv::Rect &rectB)
 
 } // namespace
 
+// 函数说明：prepare 函数创建、准备或启动对应流程。
 PreparedCharacterTemplates CharacterGlyphMatcher::prepare(
     const std::vector<cv::Mat> &digitTemplates)
 {
@@ -64,6 +70,7 @@ PreparedCharacterTemplates CharacterGlyphMatcher::prepare(
     return prepared;
 }
 
+// 函数说明：match 函数执行对应事件或业务处理。
 CharacterMatchResult CharacterGlyphMatcher::match(
     const cv::Mat &targetImage,
     const PreparedCharacterTemplates &preparedTemplates,

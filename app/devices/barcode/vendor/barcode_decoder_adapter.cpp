@@ -1,3 +1,7 @@
+// 文件作用：本文件用于把二维码供应商接口转换为项目内部统一的二维码解码端口。
+// 主要职责：把二维码供应商接口转换为项目内部统一的二维码解码端口。
+// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "barcode_decoder_adapter.h"
 
 #include <QByteArray>
@@ -20,6 +24,7 @@
 
 namespace {
 
+// 函数说明：elapsedMilliseconds 函数实现名称所表示的处理步骤。
 double elapsedMilliseconds(const QElapsedTimer &timer)
 {
     return static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
@@ -27,6 +32,7 @@ double elapsedMilliseconds(const QElapsedTimer &timer)
 
 } // namespace
 
+// 组件说明：BarcodeDecoderAdapter 数据结构集中保存该流程需要的一组相关数据。
 struct BarcodeDecoderAdapter::Impl
 {
     HMODULE module = nullptr;
@@ -35,11 +41,13 @@ struct BarcodeDecoderAdapter::Impl
     QString error;
 };
 
+// 函数说明：BarcodeDecoderAdapter 构造函数创建组件并初始化其依赖和初始状态。
 BarcodeDecoderAdapter::BarcodeDecoderAdapter()
     : m_impl(new Impl)
 {
 }
 
+// 函数说明：BarcodeDecoderAdapter 构造函数创建组件并初始化其依赖和初始状态。
 BarcodeDecoderAdapter::BarcodeDecoderAdapter(
     const BarcodeDecoderFunctions &functions)
     : m_impl(new Impl)
@@ -47,6 +55,7 @@ BarcodeDecoderAdapter::BarcodeDecoderAdapter(
     m_impl->functions = functions;
 }
 
+// 函数说明：~BarcodeDecoderAdapter 析构函数按生命周期要求释放组件持有的资源。
 BarcodeDecoderAdapter::~BarcodeDecoderAdapter()
 {
     if (m_impl->ownsModule && m_impl->module) {
@@ -55,6 +64,7 @@ BarcodeDecoderAdapter::~BarcodeDecoderAdapter()
     }
 }
 
+// 函数说明：ensureLoaded 函数实现名称所表示的处理步骤。
 bool BarcodeDecoderAdapter::ensureLoaded()
 {
     if (m_impl->functions.getVersion
@@ -125,11 +135,13 @@ bool BarcodeDecoderAdapter::ensureLoaded()
     return true;
 }
 
+// 函数说明：lastError 函数实现名称所表示的处理步骤。
 QString BarcodeDecoderAdapter::lastError() const
 {
     return m_impl->error;
 }
 
+// 函数说明：decodeOnce 函数校验、转换或恢复对应数据。
 BarcodeReadResult BarcodeDecoderAdapter::decodeOnce(
     const cv::Mat &grayRoi,
     unsigned int formatMask,
@@ -235,6 +247,7 @@ BarcodeReadResult BarcodeDecoderAdapter::decodeOnce(
     return result;
 }
 
+// 函数说明：decode 函数校验、转换或恢复对应数据。
 BarcodeReadResult BarcodeDecoderAdapter::decode(
     const cv::Mat &grayRoi,
     const BarcodeDecodeOptions &options,

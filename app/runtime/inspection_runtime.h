@@ -1,3 +1,7 @@
+// 文件作用：本文件用于管理正式检测生命周期、线程、队列、故障状态和结果链的唯一运行实例。
+// 主要职责：管理正式检测生命周期、线程、队列、故障状态和结果链的唯一运行实例。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
@@ -21,6 +25,7 @@
 #include <memory>
 #include <mutex>
 
+// 组件说明：InspectionRuntimeState 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionRuntimeState
 {
     Idle,
@@ -30,6 +35,7 @@ enum class InspectionRuntimeState
     Fault
 };
 
+// 组件说明：InspectionFaultReason 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionFaultReason
 {
     None,
@@ -42,6 +48,7 @@ enum class InspectionFaultReason
 
 Q_DECLARE_METATYPE(InspectionFaultReason)
 
+// 组件说明：InspectionFaultSnapshot 数据结构集中传递该流程需要的只读数据或回调。
 struct InspectionFaultSnapshot
 {
     InspectionFaultReason reason = InspectionFaultReason::None;
@@ -52,6 +59,7 @@ struct InspectionFaultSnapshot
     quint64 postFaultDroppedFrameCount = 0;
     QDateTime occurredAtUtc;
 
+    // 函数说明：isActive 函数检查相关状态并返回判断结果。
     bool isActive() const
     {
         return reason != InspectionFaultReason::None;
@@ -153,6 +161,7 @@ public:
     void clearPendingDelayedNgRequests();
 
 private:
+    // 组件说明：ProductProgress 枚举列出该组件允许使用的稳定状态和选项。
     enum class ProductProgress
     {
         Accepted,

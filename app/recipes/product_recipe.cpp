@@ -1,3 +1,7 @@
+// 文件作用：本文件用于定义产品配方、Profile、ROI和五种模式参数的正式数据模型。
+// 主要职责：定义产品配方、Profile、ROI和五种模式参数的正式数据模型。
+// 模块位置：配方层；负责产品参数、资源和编辑事务，不依赖界面或检测实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "recipes/product_recipe.h"
 
 #include <QDir>
@@ -15,6 +19,7 @@ const int ProductRecipe::CurrentSchemaVersion;
 
 namespace {
 
+// 函数说明：setError 函数更新或应用对应的配置和状态。
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
@@ -25,6 +30,7 @@ void setError(QString *errorMessage, const QString &message)
     }
 }
 
+// 函数说明：isCanonicalRecipeId 函数检查相关状态并返回判断结果。
 bool isCanonicalRecipeId(const QString &recipeId)
 {
     const QString value = recipeId.trimmed();
@@ -33,6 +39,7 @@ bool isCanonicalRecipeId(const QString &recipeId)
             && uuid.toString(QUuid::WithoutBraces) == value.toLower();
 }
 
+// 函数说明：hasOnlyKeys 函数检查相关状态并返回判断结果。
 bool hasOnlyKeys(const QJsonObject &object,
                  const QStringList &allowed,
                  const QString &context,
@@ -49,6 +56,7 @@ bool hasOnlyKeys(const QJsonObject &object,
     return true;
 }
 
+// 函数说明：isValidAssetPath 函数检查相关状态并返回判断结果。
 bool isValidAssetPath(const QString &path)
 {
     if (path.trimmed() != path
@@ -73,6 +81,7 @@ bool isValidAssetPath(const QString &path)
     return QDir::cleanPath(path) == path;
 }
 
+// 函数说明：readString 函数读取、等待或计算对应的数据。
 bool readString(const QJsonObject &json,
                 const char *key,
                 QString *value,
@@ -89,6 +98,7 @@ bool readString(const QJsonObject &json,
     return true;
 }
 
+// 函数说明：readNumber 函数读取、等待或计算对应的数据。
 bool readNumber(const QJsonObject &json,
                 const char *key,
                 double *value,
@@ -105,6 +115,7 @@ bool readNumber(const QJsonObject &json,
     return true;
 }
 
+// 函数说明：readInt 函数读取、等待或计算对应的数据。
 bool readInt(const QJsonObject &json,
              const char *key,
              int *value,
@@ -126,6 +137,7 @@ bool readInt(const QJsonObject &json,
     return true;
 }
 
+// 函数说明：rectFToJson 函数实现名称所表示的处理步骤。
 QJsonObject rectFToJson(const QRectF &rect)
 {
     QJsonObject json;
@@ -136,6 +148,7 @@ QJsonObject rectFToJson(const QRectF &rect)
     return json;
 }
 
+// 函数说明：rectFFromJson 函数实现名称所表示的处理步骤。
 bool rectFFromJson(const QJsonValue &value,
                    QRectF *rect,
                    QString *errorMessage)
@@ -164,6 +177,7 @@ bool rectFFromJson(const QJsonValue &value,
     return true;
 }
 
+// 函数说明：rectToJson 函数实现名称所表示的处理步骤。
 QJsonObject rectToJson(const QRect &rect)
 {
     QJsonObject json;
@@ -174,6 +188,7 @@ QJsonObject rectToJson(const QRect &rect)
     return json;
 }
 
+// 函数说明：rectFromJson 函数实现名称所表示的处理步骤。
 bool rectFromJson(const QJsonValue &value,
                   QRect *rect,
                   QString *errorMessage)
@@ -203,6 +218,7 @@ bool rectFromJson(const QJsonValue &value,
     return true;
 }
 
+// 函数说明：usesCharacters 函数实现名称所表示的处理步骤。
 bool usesCharacters(DetectionMode mode)
 {
     return mode == DetectionMode::Stamp
@@ -210,6 +226,7 @@ bool usesCharacters(DetectionMode mode)
             || mode == DetectionMode::BarcodeWord;
 }
 
+// 函数说明：profileToJson 函数实现名称所表示的处理步骤。
 QJsonObject profileToJson(const RecipeProfile &profile,
                           DetectionMode mode)
 {
@@ -258,6 +275,7 @@ QJsonObject profileToJson(const RecipeProfile &profile,
     return json;
 }
 
+// 函数说明：profileFromJson 函数实现名称所表示的处理步骤。
 bool profileFromJson(const QJsonValue &value,
                      DetectionMode mode,
                      RecipeProfile *profile,
@@ -393,6 +411,7 @@ bool profileFromJson(const QJsonValue &value,
     return true;
 }
 
+// 函数说明：validateProfile 函数校验、转换或恢复对应数据。
 bool validateProfile(const ProductRecipe &recipe,
                      const RecipeProfile &profile,
                      QString *errorMessage)
@@ -507,11 +526,13 @@ bool validateProfile(const ProductRecipe &recipe,
 
 } // namespace
 
+// 函数说明：isTemplateRecipeMode 函数检查相关状态并返回判断结果。
 bool isTemplateRecipeMode(DetectionMode mode)
 {
     return mode != DetectionMode::Tissue;
 }
 
+// 函数说明：requiredTemplateProfileAssetRoles 函数实现名称所表示的处理步骤。
 QStringList requiredTemplateProfileAssetRoles(DetectionMode mode)
 {
     if (!isTemplateRecipeMode(mode)) return QStringList();
@@ -523,6 +544,7 @@ QStringList requiredTemplateProfileAssetRoles(DetectionMode mode)
     return roles;
 }
 
+// 函数说明：createProductRecipe 函数创建、准备或启动对应流程。
 ProductRecipe createProductRecipe(const QString &displayName,
                                   DetectionMode mode)
 {
@@ -533,6 +555,7 @@ ProductRecipe createProductRecipe(const QString &displayName,
     return recipe;
 }
 
+// 函数说明：validateProductRecipe 函数校验、转换或恢复对应数据。
 bool validateProductRecipe(const ProductRecipe &recipe,
                            QString *errorMessage)
 {
@@ -631,6 +654,7 @@ bool validateProductRecipe(const ProductRecipe &recipe,
     return true;
 }
 
+// 函数说明：productRecipeToJson 函数实现名称所表示的处理步骤。
 QJsonObject productRecipeToJson(const ProductRecipe &recipe)
 {
     QJsonObject parameters;
@@ -664,6 +688,7 @@ QJsonObject productRecipeToJson(const ProductRecipe &recipe)
     return json;
 }
 
+// 函数说明：productRecipeFromJson 函数实现名称所表示的处理步骤。
 bool productRecipeFromJson(const QJsonObject &json,
                            ProductRecipe *recipe,
                            QString *errorMessage)
@@ -751,6 +776,7 @@ bool productRecipeFromJson(const QJsonObject &json,
     return true;
 }
 
+// 函数说明：makeProductRecipeSnapshot 函数创建、准备或启动对应流程。
 ProductRecipeSnapshot makeProductRecipeSnapshot(const ProductRecipe &recipe,
                                                 QString *errorMessage)
 {

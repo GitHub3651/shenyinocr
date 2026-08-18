@@ -1,3 +1,7 @@
+// 文件作用：本文件用于管理模板图、字符图和校准文件等配方资源的读取与写入。
+// 主要职责：管理模板图、字符图和校准文件等配方资源的读取与写入。
+// 模块位置：配方层；负责产品参数、资源和编辑事务，不依赖界面或检测实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "recipes/recipe_asset_service.h"
 
 #include <QBuffer>
@@ -9,6 +13,7 @@
 
 namespace {
 
+// 函数说明：setError 函数更新或应用对应的配置和状态。
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
@@ -16,6 +21,7 @@ void setError(QString *errorMessage, const QString &message)
     }
 }
 
+// 函数说明：writeBytes 函数保存或发布对应的数据和资源。
 bool writeBytes(const QString &path,
                 const QByteArray &bytes,
                 QString *errorMessage)
@@ -34,6 +40,7 @@ bool writeBytes(const QString &path,
     return true;
 }
 
+// 函数说明：writeCvImage 函数保存或发布对应的数据和资源。
 bool writeCvImage(const QString &path,
                   const cv::Mat &image,
                   const char *extension,
@@ -61,6 +68,7 @@ bool writeCvImage(const QString &path,
                 errorMessage);
 }
 
+// 函数说明：writeCalibration 函数保存或发布对应的数据和资源。
 bool writeCalibration(const QString &path,
                       const InitialRecipeProfileAssets &assets,
                       QString *errorMessage)
@@ -78,6 +86,7 @@ bool writeCalibration(const QString &path,
                 errorMessage);
 }
 
+// 函数说明：writeQImage 函数保存或发布对应的数据和资源。
 bool writeQImage(const QString &path,
                  const QImage &image,
                  QString *errorMessage)
@@ -94,6 +103,7 @@ bool writeQImage(const QString &path,
     return writeBytes(path, bytes, errorMessage);
 }
 
+// 函数说明：addAsset 函数实现名称所表示的处理步骤。
 void addAsset(ProductRecipe *recipe,
               RecipeProfile *profile,
               QMap<QString, QString> *sources,
@@ -109,6 +119,7 @@ void addAsset(ProductRecipe *recipe,
 
 } // namespace
 
+// 函数说明：stageInitialProfileAssets 函数实现名称所表示的处理步骤。
 bool RecipeAssetService::stageInitialProfileAssets(
         const QString &workspacePath,
         const InitialRecipeProfileAssets &assets,
@@ -190,6 +201,7 @@ bool RecipeAssetService::stageInitialProfileAssets(
     return true;
 }
 
+// 函数说明：stageCharacterAssets 函数实现名称所表示的处理步骤。
 bool RecipeAssetService::stageCharacterAssets(
         const QString &workspacePath,
         int profileIndex,

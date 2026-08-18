@@ -1,3 +1,7 @@
+// 文件作用：本文件用于绑定检测页面控件，集中更新图像、判定、统计、耗时和运行按钮状态。
+// 主要职责：绑定检测页面控件，集中更新图像、判定、统计、耗时和运行按钮状态。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/pages/inspection_page.h"
 
 #include "ui_main_window.h"
@@ -14,6 +18,7 @@
 
 namespace {
 
+// 函数说明：setLabelTextIfChanged 函数更新或应用对应的配置和状态。
 void setLabelTextIfChanged(QLabel *label, const QString &text)
 {
     if (label && label->text() != text) {
@@ -23,6 +28,7 @@ void setLabelTextIfChanged(QLabel *label, const QString &text)
 
 }
 
+// 函数说明：InspectionPage 构造函数创建组件并初始化其依赖和初始状态。
 InspectionPage::InspectionPage(
     QWidget *rootWidget,
     Ui::MainWindow *ui,
@@ -38,6 +44,7 @@ InspectionPage::InspectionPage(
 }
 
 InspectionViewBindingsDto
+// 函数说明：resultViewBindings 函数实现名称所表示的处理步骤。
 InspectionPage::resultViewBindings() const
 {
     InspectionViewBindingsDto bindings;
@@ -116,6 +123,7 @@ InspectionPage::resultViewBindings() const
     return bindings;
 }
 
+// 函数说明：updateOperationState 函数更新或应用对应的配置和状态。
 void InspectionPage::updateOperationState(
     OperationUiState requestedState,
     bool runtimeFaulted)
@@ -222,6 +230,7 @@ void InspectionPage::updateOperationState(
     }
 }
 
+// 函数说明：presentFault 函数执行对应事件或业务处理。
 void InspectionPage::presentFault(
     const ApplicationFaultSnapshot &snapshot,
     bool *alarmPresented)
@@ -248,6 +257,7 @@ void InspectionPage::presentFault(
     }
 }
 
+// 函数说明：confirmFaultRecovery 函数实现名称所表示的处理步骤。
 bool InspectionPage::confirmFaultRecovery(
     const ApplicationFaultSnapshot &snapshot) const
 {
@@ -279,6 +289,7 @@ bool InspectionPage::confirmFaultRecovery(
     return messageBox.exec() == QMessageBox::Yes;
 }
 
+// 函数说明：restoreNormalFaultStyle 函数校验、转换或恢复对应数据。
 void InspectionPage::restoreNormalFaultStyle()
 {
     if (!m_ui) {
@@ -296,6 +307,7 @@ void InspectionPage::restoreNormalFaultStyle()
                     "color: #00ff7f;"));
 }
 
+// 函数说明：showDetectionRoiWarning 函数实现名称所表示的处理步骤。
 void InspectionPage::showDetectionRoiWarning()
 {
     if (m_detectionRoiWarningActive) {
@@ -316,6 +328,7 @@ void InspectionPage::showDetectionRoiWarning()
     }
 }
 
+// 函数说明：clearDetectionRoiWarning 函数停止流程、清理状态或释放对应资源。
 void InspectionPage::clearDetectionRoiWarning(
     const QString &runningStatusText)
 {
@@ -332,6 +345,7 @@ void InspectionPage::clearDetectionRoiWarning(
     }
 }
 
+// 函数说明：warnMissingAnnotatedImage 函数实现名称所表示的处理步骤。
 void InspectionPage::warnMissingAnnotatedImage() const
 {
     QMessageBox::warning(
@@ -342,6 +356,7 @@ void InspectionPage::warnMissingAnnotatedImage() const
                     L"\u672a\u91c7\u96c6\u5230\u56fe\u50cf\uff01"));
 }
 
+// 函数说明：reportImageSaveFailure 函数实现名称所表示的处理步骤。
 void InspectionPage::reportImageSaveFailure(
     quint64 totalFailed,
     const QString &latestError)

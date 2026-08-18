@@ -1,7 +1,12 @@
+// 文件作用：本文件用于把配方Profile准备为检测线程可直接读取的只读运行快照。
+// 主要职责：把配方Profile准备为检测线程可直接读取的只读运行快照。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/inspection_profile_snapshot.h"
 
 namespace {
 
+// 函数说明：cloneImages 函数实现名称所表示的处理步骤。
 std::vector<cv::Mat> cloneImages(
         const std::vector<cv::Mat> &images)
 {
@@ -15,6 +20,7 @@ std::vector<cv::Mat> cloneImages(
 
 } // namespace
 
+// 函数说明：create 函数创建、准备或启动对应流程。
 InspectionProfileSnapshot InspectionProfileSnapshotBuilder::create(
         const std::vector<InspectionProfileSource> &sources)
 {

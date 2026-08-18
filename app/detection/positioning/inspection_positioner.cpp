@@ -1,9 +1,14 @@
+// 文件作用：本文件用于根据当前配方选择定位方式，并输出检测区域对应的位置姿态。
+// 主要职责：根据当前配方选择定位方式，并输出检测区域对应的位置姿态。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "detection/positioning/inspection_positioner.h"
 
 #include "detection/common/profile_pose_selector.h"
 
 #include <chrono>
 
+// 函数说明：configure 函数更新或应用对应的配置和状态。
 bool InspectionPositioner::configure(
     InspectionTrackingKind trackingKind,
     const std::vector<WordTrackingProfile> &profiles,
@@ -42,6 +47,7 @@ bool InspectionPositioner::configure(
     return !m_profiles.empty();
 }
 
+// 函数说明：locate 函数实现名称所表示的处理步骤。
 DetectionPose InspectionPositioner::locate(const cv::Mat &image) const
 {
     if (m_trackingKind == InspectionTrackingKind::WholeFrame
@@ -92,6 +98,7 @@ DetectionPose InspectionPositioner::locate(const cv::Mat &image) const
     return pose;
 }
 
+// 函数说明：trackingKind 函数实现名称所表示的处理步骤。
 InspectionTrackingKind InspectionPositioner::trackingKind() const
 {
     return m_trackingKind;

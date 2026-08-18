@@ -1,7 +1,12 @@
+// 文件作用：本文件用于根据运行状态计算按钮文字、启用状态和可执行操作。
+// 主要职责：根据运行状态计算按钮文字、启用状态和可执行操作。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include <QString>
 
+// 组件说明：OperationUiState 枚举列出该组件允许使用的稳定状态和选项。
 enum class OperationUiState
 {
     CameraClosed = 0,
@@ -13,6 +18,7 @@ enum class OperationUiState
     TemplateFrozen
 };
 
+// 组件说明：OperationUiSnapshot 数据结构集中传递该流程需要的只读数据或回调。
 struct OperationUiSnapshot
 {
     bool enableAllOperations = false;
@@ -29,6 +35,7 @@ struct OperationUiSnapshot
     QString statusText;
 };
 
+// 组件说明：OperationUiPolicy 组件集中描述相关配置、规则和运行参数。
 class OperationUiPolicy
 {
 public:

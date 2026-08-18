@@ -1,3 +1,7 @@
+// 文件作用：本文件用于作为唯一检测结果入口，统一完成去重、统计、PLC、存图和界面呈现。
+// 主要职责：作为唯一检测结果入口，统一完成去重、统计、PLC、存图和界面呈现。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
@@ -16,8 +20,10 @@
 #include <queue>
 #include <vector>
 
+// 组件说明：InspectionRuntime 组件封装对应业务职责和生命周期边界。
 class InspectionRuntime;
 
+// 组件说明：DetectionResultSaveAction 枚举列出该组件允许使用的稳定状态和选项。
 enum class DetectionResultSaveAction
 {
     DoNotSave,
@@ -25,6 +31,7 @@ enum class DetectionResultSaveAction
     SaveNg
 };
 
+// 组件说明：DetectionPlcAction 枚举列出该组件允许使用的稳定状态和选项。
 enum class DetectionPlcAction
 {
     NoRequest,
@@ -32,12 +39,14 @@ enum class DetectionPlcAction
     RequestNg
 };
 
+// 组件说明：ResultSaveLayout 枚举列出该组件允许使用的稳定状态和选项。
 enum class ResultSaveLayout
 {
     AnnotatedAndRaw,
     RawOnly
 };
 
+// 组件说明：ResultSaveOptions 组件集中描述相关配置、规则和运行参数。
 struct ResultSaveOptions
 {
     ResultSaveLayout layout = ResultSaveLayout::AnnotatedAndRaw;
@@ -48,6 +57,7 @@ struct ResultSaveOptions
     bool saveNotEvaluatedAsNg = true;
 };
 
+// 组件说明：ResultServiceRunConfiguration 组件集中描述相关配置、规则和运行参数。
 struct ResultServiceRunConfiguration
 {
     bool plcOutputEnabled = false;
@@ -56,6 +66,7 @@ struct ResultServiceRunConfiguration
     ResultSaveOptions saveOptions;
 };
 
+// 组件说明：ResultServiceCallbacks 数据结构集中传递该流程需要的只读数据或回调。
 struct ResultServiceCallbacks
 {
     std::function<void()> runtimeFaulted;
@@ -66,6 +77,7 @@ struct ResultServiceCallbacks
     std::function<void()> clearDetectionRoiWarning;
 };
 
+// 组件说明：ResultServiceProcessOutcome 数据结构保存一次操作的结果、状态和错误信息。
 struct ResultServiceProcessOutcome
 {
     bool resultRecorded = false;
@@ -125,12 +137,14 @@ public:
     void shutdown();
 
 private:
+    // 组件说明：DelayedNgRequest 数据结构集中传递该流程需要的只读数据或回调。
     struct DelayedNgRequest
     {
         int dueTotalCount = 0;
         ProductKey productKey;
     };
 
+    // 组件说明：ProcessRequest 数据结构集中传递该流程需要的只读数据或回调。
     struct ProcessRequest
     {
         DetectionCompletion completion;

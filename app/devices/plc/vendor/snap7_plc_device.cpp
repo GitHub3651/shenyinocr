@@ -1,3 +1,7 @@
+// 文件作用：本文件用于把Snap7通信包装为项目统一PLC设备端口。
+// 主要职责：把Snap7通信包装为项目统一PLC设备端口。
+// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "snap7_plc_device.h"
 
 #include "devices/plc/vendor/snap7.h"
@@ -6,6 +10,7 @@ namespace {
 
 const int kBackendUnavailable = -1;
 
+// 函数说明：snap7WordLength 函数实现名称所表示的处理步骤。
 int snap7WordLength(PlcDataWidth dataWidth)
 {
     switch (dataWidth) {
@@ -22,12 +27,14 @@ int snap7WordLength(PlcDataWidth dataWidth)
 
 } // namespace
 
+// 组件说明：Snap7PlcDevice 组件提供对应设备或检测能力的统一实现。
 struct Snap7PlcDevice::Impl
 {
     std::unique_ptr<TS7Client> client;
     Snap7PlcFunctions functions;
 };
 
+// 函数说明：Snap7PlcDevice 构造函数创建组件并初始化其依赖和初始状态。
 Snap7PlcDevice::Snap7PlcDevice()
     : m_impl(new Impl)
 {
@@ -61,6 +68,7 @@ Snap7PlcDevice::Snap7PlcDevice()
     };
 }
 
+// 函数说明：Snap7PlcDevice 构造函数创建组件并初始化其依赖和初始状态。
 Snap7PlcDevice::Snap7PlcDevice(const Snap7PlcFunctions &functions)
     : m_impl(new Impl)
 {
@@ -69,6 +77,7 @@ Snap7PlcDevice::Snap7PlcDevice(const Snap7PlcFunctions &functions)
 
 Snap7PlcDevice::~Snap7PlcDevice() = default;
 
+// 函数说明：connectTo 函数建立或断开对应外部连接。
 PlcOperationResult Snap7PlcDevice::connectTo(
     const char *address,
     int rack,
@@ -91,12 +100,14 @@ PlcOperationResult Snap7PlcDevice::disconnect()
     return PlcOperationResult(m_impl->functions.disconnect());
 }
 
+// 函数说明：isConnected 函数检查相关状态并返回判断结果。
 bool Snap7PlcDevice::isConnected()
 {
     return m_impl->functions.isConnected
         && m_impl->functions.isConnected();
 }
 
+// 函数说明：writeDbArea 函数保存或发布对应的数据和资源。
 PlcOperationResult Snap7PlcDevice::writeDbArea(
     int dbNumber,
     int start,

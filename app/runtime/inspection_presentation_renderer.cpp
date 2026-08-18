@@ -1,9 +1,14 @@
+// 文件作用：本文件用于把检测结果、原图和覆盖图形组合成统一的界面呈现数据。
+// 主要职责：把检测结果、原图和覆盖图形组合成统一的界面呈现数据。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/inspection_presentation_renderer.h"
 
 #include <algorithm>
 #include <string>
 
 namespace {
+// 函数说明：polygonTopCenter 函数实现名称所表示的处理步骤。
 cv::Point polygonTopCenter(const std::vector<cv::Point> &polygon)
 {
     if (polygon.empty()) {
@@ -28,6 +33,7 @@ cv::Point polygonTopCenter(const std::vector<cv::Point> &polygon)
         (sorted[0].y + sorted[1].y) / 2);
 }
 
+// 函数说明：drawPolygon 函数实现名称所表示的处理步骤。
 void drawPolygon(
     cv::Mat &image,
     const std::vector<cv::Point> &polygon,
@@ -41,6 +47,7 @@ void drawPolygon(
     cv::polylines(image, polygons, true, color, thickness);
 }
 
+// 函数说明：drawCharacter 函数实现名称所表示的处理步骤。
 void drawCharacter(
     cv::Mat &image,
     const DetectionOverlayPolygon &polygon,
@@ -98,6 +105,7 @@ void drawCharacter(
         textThickness);
 }
 
+// 函数说明：drawTissueRoll 函数实现名称所表示的处理步骤。
 void drawTissueRoll(
     cv::Mat &image,
     const TissueRollPresentation &roll)
@@ -131,6 +139,7 @@ void drawTissueRoll(
         thickness);
 }
 
+// 函数说明：transformPolygonForPose 函数校验、转换或恢复对应数据。
 void transformPolygonForPose(
     DetectionOverlayPolygon *polygon,
     const cv::Point2f &oldCenter,
@@ -154,6 +163,7 @@ void transformPolygonForPose(
 }
 }
 
+// 函数说明：isValid 函数检查相关状态并返回判断结果。
 bool InspectionPresentationViewBindings::isValid() const
 {
     return showImage
@@ -167,23 +177,27 @@ bool InspectionPresentationViewBindings::isValid() const
             && showElapsedText;
 }
 
+// 函数说明：bindView 函数实现名称所表示的处理步骤。
 void InspectionPresentationRenderer::bindView(
     const InspectionPresentationViewBindings &bindings)
 {
     m_viewBindings = bindings;
 }
 
+// 函数说明：hasViewBindings 函数检查相关状态并返回判断结果。
 bool InspectionPresentationRenderer::hasViewBindings() const
 {
     return m_viewBindings.isValid();
 }
 
+// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 void InspectionPresentationRenderer::clear()
 {
     m_state = InspectionPresentationRenderState();
     m_lastPresentedProductKey = ProductKey();
 }
 
+// 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
 void InspectionPresentationRenderer::clearTransientView()
 {
     if (!hasViewBindings()) {
@@ -194,6 +208,7 @@ void InspectionPresentationRenderer::clearTransientView()
     m_viewBindings.showElapsedText(QString());
 }
 
+// 函数说明：present 函数执行对应事件或业务处理。
 bool InspectionPresentationRenderer::present(
     const InspectionPresentation &snapshot)
 {
@@ -220,6 +235,7 @@ bool InspectionPresentationRenderer::present(
     return true;
 }
 
+// 函数说明：presentFrame 函数执行对应事件或业务处理。
 bool InspectionPresentationRenderer::presentFrame(const QImage &image)
 {
     if (!hasViewBindings() || image.isNull()) {
@@ -229,6 +245,7 @@ bool InspectionPresentationRenderer::presentFrame(const QImage &image)
     return true;
 }
 
+// 函数说明：presentTotalAndNgCounts 函数执行对应事件或业务处理。
 void InspectionPresentationRenderer::presentTotalAndNgCounts(
     int totalCount,
     int ngCount)
@@ -240,6 +257,7 @@ void InspectionPresentationRenderer::presentTotalAndNgCounts(
     m_viewBindings.showNgCount(ngCount);
 }
 
+// 函数说明：presentNgCount 函数执行对应事件或业务处理。
 void InspectionPresentationRenderer::presentNgCount(int ngCount)
 {
     if (hasViewBindings()) {
@@ -247,11 +265,13 @@ void InspectionPresentationRenderer::presentNgCount(int ngCount)
     }
 }
 
+// 函数说明：lastPresentedProductKey 函数实现名称所表示的处理步骤。
 const ProductKey &InspectionPresentationRenderer::lastPresentedProductKey() const
 {
     return m_lastPresentedProductKey;
 }
 
+// 函数说明：installDetectionResult 函数实现名称所表示的处理步骤。
 void InspectionPresentationRenderer::installDetectionResult(
     const DetectionResult &result,
     const DetectionPose &pose,
@@ -268,6 +288,7 @@ void InspectionPresentationRenderer::installDetectionResult(
     }
 }
 
+// 函数说明：installTissueRoll 函数实现名称所表示的处理步骤。
 void InspectionPresentationRenderer::installTissueRoll(
     const TissueRollPresentation &roll,
     bool hasTissueRoll)
@@ -279,6 +300,7 @@ void InspectionPresentationRenderer::installTissueRoll(
     }
 }
 
+// 函数说明：updatePose 函数更新或应用对应的配置和状态。
 void InspectionPresentationRenderer::updatePose(
     const DetectionPose &pose)
 {
@@ -302,11 +324,13 @@ void InspectionPresentationRenderer::updatePose(
     m_state.pose = pose;
 }
 
+// 函数说明：state 函数实现名称所表示的处理步骤。
 const InspectionPresentationRenderState &InspectionPresentationRenderer::state() const
 {
     return m_state;
 }
 
+// 函数说明：renderFrame 函数执行对应事件或业务处理。
 QImage InspectionPresentationRenderer::renderFrame(
     const cv::Mat &image,
     bool includeTissueOverlay) const

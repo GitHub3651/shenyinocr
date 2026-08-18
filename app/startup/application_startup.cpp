@@ -1,3 +1,7 @@
+// 文件作用：本文件用于组装设置、配方、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
+// 主要职责：组装设置、配方、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
+// 模块位置：启动层；只负责进程初始化和对象组装，不放置业务规则。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "startup/application_startup.h"
 
 #include "startup/runtime_guard.h"
@@ -43,6 +47,7 @@
 
 namespace {
 
+// 函数说明：showRuntimeGuardExitMessage 函数实现名称所表示的处理步骤。
 void showRuntimeGuardExitMessage(const QString &message)
 {
     QMessageBox messageBox(
@@ -57,6 +62,7 @@ void showRuntimeGuardExitMessage(const QString &message)
     messageBox.exec();
 }
 
+// 函数说明：installQtTranslations 函数实现名称所表示的处理步骤。
 void installQtTranslations(QApplication *application,
                            QTranslator *qtBaseTranslator,
                            QTranslator *qtTranslator)
@@ -83,6 +89,7 @@ void installQtTranslations(QApplication *application,
 
 } // namespace
 
+// 函数说明：run 函数执行对应事件或业务处理。
 int ApplicationStartup::run(int argc, char *argv[])
 {
     QApplication application(argc, argv);

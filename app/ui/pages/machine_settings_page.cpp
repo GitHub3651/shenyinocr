@@ -1,3 +1,7 @@
+// 文件作用：本文件用于绑定机器设置页面，管理控件映射、校验、脏状态和运行中禁用规则。
+// 主要职责：绑定机器设置页面，管理控件映射、校验、脏状态和运行中禁用规则。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/pages/machine_settings_page.h"
 
 #include "system_support/machine_settings_policy.h"
@@ -26,42 +30,49 @@
 
 namespace {
 
+// 函数说明：detectModeIds 函数执行对应事件或业务处理。
 const QStringList &detectModeIds()
 {
     static const QStringList ids = machineSettingsDetectionModeIds();
     return ids;
 }
 
+// 函数说明：imageSaveModeIds 函数实现名称所表示的处理步骤。
 const QStringList &imageSaveModeIds()
 {
     static const QStringList ids = machineSettingsImageSaveModeIds();
     return ids;
 }
 
+// 函数说明：imageSaveTypeIds 函数实现名称所表示的处理步骤。
 const QStringList &imageSaveTypeIds()
 {
     static const QStringList ids = machineSettingsImageSaveTypeIds();
     return ids;
 }
 
+// 函数说明：colorChannelIds 函数实现名称所表示的处理步骤。
 const QStringList &colorChannelIds()
 {
     static const QStringList ids = machineSettingsColorChannelIds();
     return ids;
 }
 
+// 函数说明：rotationIds 函数实现名称所表示的处理步骤。
 const QStringList &rotationIds()
 {
     static const QStringList ids = machineSettingsRotationIds();
     return ids;
 }
 
+// 函数说明：triggerModeIds 函数执行对应事件或业务处理。
 const QStringList &triggerModeIds()
 {
     static const QStringList ids = machineSettingsTriggerModeIds();
     return ids;
 }
 
+// 函数说明：idAt 函数实现名称所表示的处理步骤。
 QString idAt(
     const QStringList &ids,
     int index,
@@ -72,6 +83,7 @@ QString idAt(
             : fallback;
 }
 
+// 函数说明：indexOf 函数实现名称所表示的处理步骤。
 int indexOf(
     const QStringList &ids,
     const QString &id,
@@ -81,6 +93,7 @@ int indexOf(
     return index >= 0 ? index : fallback;
 }
 
+// 函数说明：parseInt 函数校验、转换或恢复对应数据。
 bool parseInt(const QString &text, int *value)
 {
     bool ok = false;
@@ -94,6 +107,7 @@ bool parseInt(const QString &text, int *value)
     return true;
 }
 
+// 函数说明：parseDouble 函数校验、转换或恢复对应数据。
 bool parseDouble(const QString &text, double *value)
 {
     bool ok = false;
@@ -107,6 +121,7 @@ bool parseDouble(const QString &text, double *value)
     return true;
 }
 
+// 函数说明：text 函数实现名称所表示的处理步骤。
 QString text(const wchar_t *value)
 {
     return QString::fromWCharArray(value);
@@ -114,6 +129,7 @@ QString text(const wchar_t *value)
 
 } // namespace
 
+// 函数说明：MachineSettingsPage 构造函数创建组件并初始化其依赖和初始状态。
 MachineSettingsPage::MachineSettingsPage(
     Ui::MainWindow *ui,
     SettingsApplicationService *settingsService,
@@ -137,6 +153,7 @@ MachineSettingsPage::MachineSettingsPage(
 {
 }
 
+// 函数说明：setupBindings 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setupBindings()
 {
     if (!m_ui || !m_editState) {
@@ -225,6 +242,7 @@ void MachineSettingsPage::setupBindings()
     }
 }
 
+// 函数说明：setupNumericInputValidators 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setupNumericInputValidators()
 {
     if (!m_ui) {
@@ -264,6 +282,7 @@ void MachineSettingsPage::setupNumericInputValidators()
     }
 }
 
+// 函数说明：installWheelProtection 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::installWheelProtection(
     QWidget *rootWidget)
 {
@@ -282,6 +301,7 @@ void MachineSettingsPage::installWheelProtection(
     }
 }
 
+// 函数说明：setSoftwareDataDirectoryEditor 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setSoftwareDataDirectoryEditor(
     QLineEdit *editor)
 {
@@ -297,6 +317,7 @@ void MachineSettingsPage::setSoftwareDataDirectoryEditor(
     }
 }
 
+// 函数说明：initialize 函数创建、准备或启动对应流程。
 void MachineSettingsPage::initialize(
     const MachineSettings &settings)
 {
@@ -308,6 +329,7 @@ void MachineSettingsPage::initialize(
     applyToUi(settings);
 }
 
+// 函数说明：save 函数保存或发布对应的数据和资源。
 bool MachineSettingsPage::save(
     bool,
     QString *errorMessage)
@@ -333,6 +355,7 @@ bool MachineSettingsPage::save(
     return saved.isSuccess();
 }
 
+// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 bool MachineSettingsPage::clear(QString *errorMessage)
 {
     const OperationResult cleared = m_settingsService
@@ -354,6 +377,7 @@ bool MachineSettingsPage::clear(QString *errorMessage)
     return true;
 }
 
+// 函数说明：defaultsForHardwareState 函数实现名称所表示的处理步骤。
 MachineSettings MachineSettingsPage::defaultsForHardwareState(
     bool cameraOpen,
     bool plcConnected) const
@@ -366,6 +390,7 @@ MachineSettings MachineSettingsPage::defaultsForHardwareState(
         plcConnected);
 }
 
+// 函数说明：applyToUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::applyToUi(
     const MachineSettings &settings)
 {
@@ -446,6 +471,7 @@ void MachineSettingsPage::applyToUi(
     }
 }
 
+// 函数说明：registerGlobalSetting 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::registerGlobalSetting(
     const QString &key,
     QWidget *editor,
@@ -511,6 +537,7 @@ void MachineSettingsPage::registerGlobalSetting(
     }
 }
 
+// 函数说明：registerHardwareAction 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::registerHardwareAction(
     QWidget *control,
     HardwareDependency dependency)
@@ -524,6 +551,7 @@ void MachineSettingsPage::registerHardwareAction(
     m_hardwareActions.append(binding);
 }
 
+// 函数说明：isDirtyByValue 函数检查相关状态并返回判断结果。
 bool MachineSettingsPage::isDirtyByValue(
     const QString &key) const
 {
@@ -609,6 +637,7 @@ bool MachineSettingsPage::isDirtyByValue(
     return false;
 }
 
+// 函数说明：refreshDirty 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::refreshDirty(const QString &key)
 {
     if (!m_editState || !m_bindings.contains(key)) {
@@ -618,6 +647,7 @@ void MachineSettingsPage::refreshDirty(const QString &key)
     updateDirtyLabel(key);
 }
 
+// 函数说明：refreshDirty 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::refreshDirty(const QStringList &keys)
 {
     for (const QString &key : keys) {
@@ -625,6 +655,7 @@ void MachineSettingsPage::refreshDirty(const QStringList &keys)
     }
 }
 
+// 函数说明：refreshAllDirty 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::refreshAllDirty()
 {
     for (auto it = m_bindings.constBegin();
@@ -633,6 +664,7 @@ void MachineSettingsPage::refreshAllDirty()
     }
 }
 
+// 函数说明：clearDirty 函数停止流程、清理状态或释放对应资源。
 void MachineSettingsPage::clearDirty(const QString &key)
 {
     if (!m_editState || !m_bindings.contains(key)) {
@@ -642,6 +674,7 @@ void MachineSettingsPage::clearDirty(const QString &key)
     updateDirtyLabel(key);
 }
 
+// 函数说明：clearDirty 函数停止流程、清理状态或释放对应资源。
 void MachineSettingsPage::clearDirty(const QStringList &keys)
 {
     for (const QString &key : keys) {
@@ -649,6 +682,7 @@ void MachineSettingsPage::clearDirty(const QStringList &keys)
     }
 }
 
+// 函数说明：clearAllDirty 函数停止流程、清理状态或释放对应资源。
 void MachineSettingsPage::clearAllDirty()
 {
     if (!m_editState) {
@@ -661,6 +695,7 @@ void MachineSettingsPage::clearAllDirty()
     }
 }
 
+// 函数说明：updateDirtyLabel 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateDirtyLabel(const QString &key)
 {
     if (!m_editState) {
@@ -685,6 +720,7 @@ void MachineSettingsPage::updateDirtyLabel(const QString &key)
                    : it.value().originalLabelText);
 }
 
+// 函数说明：updateAppliedFromUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateAppliedFromUi(
     const QString &key)
 {
@@ -749,6 +785,7 @@ void MachineSettingsPage::updateAppliedFromUi(
     }
 }
 
+// 函数说明：updateAppliedFromUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateAppliedFromUi(
     const QStringList &keys)
 {
@@ -757,6 +794,7 @@ void MachineSettingsPage::updateAppliedFromUi(
     }
 }
 
+// 函数说明：syncImmediateSettings 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::syncImmediateSettings()
 {
     updateAppliedFromUi(QStringList()
@@ -775,6 +813,7 @@ void MachineSettingsPage::syncImmediateSettings()
     }
 }
 
+// 函数说明：restoreUnappliedMachineSettings 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restoreUnappliedMachineSettings()
 {
     if (!m_ui || !m_appliedSettings) {
@@ -824,6 +863,7 @@ void MachineSettingsPage::restoreUnappliedMachineSettings()
     refreshAllDirty();
 }
 
+// 函数说明：restoreCameraUiFromApplied 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restoreCameraUiFromApplied()
 {
     if (!m_ui || !m_appliedSettings) {
@@ -845,6 +885,7 @@ void MachineSettingsPage::restoreCameraUiFromApplied()
     refreshDirty(QStringList() << "camera.exposure" << "camera.gain");
 }
 
+// 函数说明：restorePlcUiFromApplied 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restorePlcUiFromApplied()
 {
     if (!m_ui || !m_appliedSettings) {
@@ -890,6 +931,7 @@ void MachineSettingsPage::restorePlcUiFromApplied()
         << "plc.reject_position");
 }
 
+// 函数说明：disabledStyle 函数实现名称所表示的处理步骤。
 QString MachineSettingsPage::disabledStyle(
     QWidget *widget) const
 {
@@ -924,6 +966,7 @@ QString MachineSettingsPage::disabledStyle(
     return QString();
 }
 
+// 函数说明：setHardwareControlEnabled 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setHardwareControlEnabled(
     QWidget *widget,
     bool enabled,
@@ -962,6 +1005,7 @@ void MachineSettingsPage::setHardwareControlEnabled(
     }
 }
 
+// 函数说明：updateHardwareEnabled 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateHardwareEnabled(
     bool cameraOpen,
     bool plcConnected,
@@ -1023,6 +1067,7 @@ void MachineSettingsPage::updateHardwareEnabled(
     }
 }
 
+// 函数说明：setAllEditorsEnabled 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setAllEditorsEnabled(bool enabled)
 {
     for (auto it = m_bindings.constBegin();
@@ -1033,6 +1078,7 @@ void MachineSettingsPage::setAllEditorsEnabled(bool enabled)
     }
 }
 
+// 函数说明：eventFilter 函数实现名称所表示的处理步骤。
 bool MachineSettingsPage::eventFilter(
     QObject *watched,
     QEvent *event)

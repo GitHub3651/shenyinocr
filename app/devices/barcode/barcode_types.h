@@ -1,3 +1,7 @@
+// 文件作用：本文件用于定义二维码识别结果、区域和状态等跨模块公共数据。
+// 主要职责：定义二维码识别结果、区域和状态等跨模块公共数据。
+// 模块位置：设备层；通过统一端口隔离相机、PLC、OCR和二维码供应商实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #ifndef DEVICES_BARCODE_BARCODE_TYPES_H
 #define DEVICES_BARCODE_BARCODE_TYPES_H
 
@@ -18,6 +22,7 @@ constexpr unsigned int TryRotate = 1u << 1;
 constexpr unsigned int TryInvert = 1u << 2;
 }
 
+// 组件说明：BarcodeFormat 枚举列出该组件允许使用的稳定状态和选项。
 enum class BarcodeFormat
 {
     Unknown = 0,
@@ -25,6 +30,7 @@ enum class BarcodeFormat
     QRCode = 2
 };
 
+// 组件说明：BarcodeReadStatus 枚举列出该组件允许使用的稳定状态和选项。
 enum class BarcodeReadStatus
 {
     Success,
@@ -35,6 +41,7 @@ enum class BarcodeReadStatus
     InternalError
 };
 
+// 组件说明：BarcodeDecodeOptions 组件集中描述相关配置、规则和运行参数。
 struct BarcodeDecodeOptions
 {
     unsigned int formatMask =
@@ -47,6 +54,7 @@ struct BarcodeDecodeOptions
             BarcodeParameterDefaults::EnableFallback;
 };
 
+// 组件说明：BarcodeReadResult 数据结构保存一次操作的结果、状态和错误信息。
 struct BarcodeReadResult
 {
     BarcodeReadStatus status = BarcodeReadStatus::NotFound;

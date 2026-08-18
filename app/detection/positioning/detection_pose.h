@@ -1,3 +1,7 @@
+// 文件作用：本文件用于定义定位结果、跟踪类型和坐标变换所需的轻量数据。
+// 主要职责：定义定位结果、跟踪类型和坐标变换所需的轻量数据。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include <QMetaType>
@@ -12,6 +16,7 @@ struct ProductKey {
     QString runId;
     quint64 sequence = 0;
 
+    // 函数说明：isValid 函数检查相关状态并返回判断结果。
     bool isValid() const
     {
         return !runId.trimmed().isEmpty() && sequence > 0;
@@ -62,6 +67,7 @@ struct DetectionCompletion {
     std::shared_ptr<const FrameData> frame;
     DetectionResult result;
 
+    // 函数说明：isValid 函数检查相关状态并返回判断结果。
     bool isValid() const
     {
         return frame
@@ -70,6 +76,7 @@ struct DetectionCompletion {
     }
 };
 
+// 函数说明：makeFrameData 函数创建、准备或启动对应流程。
 inline std::shared_ptr<const FrameData> makeFrameData(
     const ProductKey &productKey,
     quint64 frameNumber,
@@ -105,6 +112,7 @@ struct DetectionWorkItem {
     DetectionPose pose;
     bool hasPose = false;
 
+    // 函数说明：isValid 函数检查相关状态并返回判断结果。
     bool isValid() const
     {
         return frame
@@ -113,6 +121,7 @@ struct DetectionWorkItem {
     }
 };
 
+// 函数说明：makeDetectionWorkItem 函数创建、准备或启动对应流程。
 inline DetectionWorkItem makeDetectionWorkItem(
     const std::shared_ptr<const FrameData> &frame,
     const DetectionPose &pose)
@@ -152,6 +161,7 @@ struct OrientedBarcodeRoi {
     cv::Mat inverseRotationMatrix;
 };
 
+// 函数说明：rotateRelativePoint 函数实现名称所表示的处理步骤。
 inline cv::Point2f rotateRelativePoint(const cv::Point2f& pt, float angleDeg)
 {
     const double rad = angleDeg * CV_PI / 180.0;
@@ -162,6 +172,7 @@ inline cv::Point2f rotateRelativePoint(const cv::Point2f& pt, float angleDeg)
     return cv::Point2f(pt.x * cosv + pt.y * sinv, -pt.x * sinv + pt.y * cosv);
 }
 
+// 函数说明：buildRotatedTrackingPoly 函数创建、准备或启动对应流程。
 inline std::vector<cv::Point> buildRotatedTrackingPoly(const cv::Point2f& center, const cv::Size2f& size, float angleDeg)
 {
     const float halfW = size.width / 2.0f;
@@ -182,6 +193,7 @@ inline std::vector<cv::Point> buildRotatedTrackingPoly(const cv::Point2f& center
     return poly;
 }
 
+// 函数说明：buildRotatedRelativePoly 函数创建、准备或启动对应流程。
 inline std::vector<cv::Point> buildRotatedRelativePoly(
     const cv::Point2f& center,
     const std::vector<cv::Point2f>& relativePoly,
@@ -196,6 +208,7 @@ inline std::vector<cv::Point> buildRotatedRelativePoly(
     return poly;
 }
 
+// 函数说明：buildRotatedDatePoly 函数创建、准备或启动对应流程。
 inline std::vector<cv::Point> buildRotatedDatePoly(
     const cv::Point2f& center,
     const std::vector<cv::Point2f>& relDatePoly,
@@ -204,6 +217,7 @@ inline std::vector<cv::Point> buildRotatedDatePoly(
     return buildRotatedRelativePoly(center, relDatePoly, angleDeg);
 }
 
+// 函数说明：buildDetectionPose 函数创建、准备或启动对应流程。
 inline DetectionPose buildDetectionPose(const cv::Point2f& center,
                                         const cv::Size2f& trackingSize,
                                         const std::vector<cv::Point2f>& relDatePoly,

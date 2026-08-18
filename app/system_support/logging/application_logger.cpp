@@ -1,3 +1,7 @@
+// 文件作用：本文件用于初始化应用日志、控制日志保留策略，并把运行信息稳定写入日志文件。
+// 主要职责：初始化应用日志、控制日志保留策略，并把运行信息稳定写入日志文件。
+// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "system_support/logging/application_logger.h"
 
 #include <QDate>
@@ -20,6 +24,7 @@ QString g_logDirectoryPath;
 QDate g_currentLogDate;
 QMutex g_logMutex;
 
+// 函数说明：cleanupExpiredLogs 函数实现名称所表示的处理步骤。
 void cleanupExpiredLogs()
 {
     QDir logDirectory(g_logDirectoryPath);
@@ -46,6 +51,7 @@ void cleanupExpiredLogs()
     }
 }
 
+// 函数说明：openLogFileForDate 函数创建、准备或启动对应流程。
 bool openLogFileForDate(const QDate &date)
 {
     if (g_logFile.isOpen()) {
@@ -65,6 +71,7 @@ bool openLogFileForDate(const QDate &date)
     return true;
 }
 
+// 函数说明：messageHandler 函数实现名称所表示的处理步骤。
 void messageHandler(QtMsgType type,
                     const QMessageLogContext &context,
                     const QString &message)
@@ -100,6 +107,7 @@ void messageHandler(QtMsgType type,
 
 } // namespace
 
+// 函数说明：install 函数实现名称所表示的处理步骤。
 bool ApplicationLogger::install(const QString &applicationDirectory)
 {
     QMutexLocker locker(&g_logMutex);
@@ -117,6 +125,7 @@ bool ApplicationLogger::install(const QString &applicationDirectory)
     return true;
 }
 
+// 函数说明：appendCrashInformation 函数实现名称所表示的处理步骤。
 void ApplicationLogger::appendCrashInformation(const QString &information)
 {
     if (!g_logFile.isOpen()) {
@@ -127,12 +136,14 @@ void ApplicationLogger::appendCrashInformation(const QString &information)
     g_logFile.flush();
 }
 
+// 函数说明：logDirectoryPath 函数实现名称所表示的处理步骤。
 QString ApplicationLogger::logDirectoryPath()
 {
     QMutexLocker locker(&g_logMutex);
     return g_logDirectoryPath;
 }
 
+// 函数说明：shutdown 函数实现名称所表示的处理步骤。
 void ApplicationLogger::shutdown()
 {
     qInstallMessageHandler(nullptr);

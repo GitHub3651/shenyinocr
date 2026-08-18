@@ -1,3 +1,7 @@
+// 文件作用：本文件用于提供字符模板切分、命名和编辑所需的对话框交互。
+// 主要职责：提供字符模板切分、命名和编辑所需的对话框交互。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/dialogs/character_template_editor_dialog.h"
 
 #include <QGridLayout>
@@ -20,9 +24,11 @@
 
 #pragma execution_character_set("utf-8")
 
+// 组件说明：CharacterTemplateEditorDialog 组件负责对应界面区域的显示和用户交互。
 class CharacterTemplateEditorDialog::CropImageLabel : public QLabel
 {
 public:
+    // 函数说明：CropImageLabel 构造函数创建组件并初始化其依赖和初始状态。
     explicit CropImageLabel(QWidget *parent = nullptr)
         : QLabel(parent)
     {
@@ -32,11 +38,13 @@ public:
         setStyleSheet("QLabel { background-color: #f7f9fc; border: 1px solid #dcdfe6; }");
     }
 
+    // 函数说明：setChangedCallback 函数更新或应用对应的配置和状态。
     void setChangedCallback(const std::function<void()> &callback)
     {
         m_changedCallback = callback;
     }
 
+    // 函数说明：setImage 函数更新或应用对应的配置和状态。
     void setImage(const QImage &image)
     {
         m_image = image;
@@ -44,6 +52,7 @@ public:
         update();
     }
 
+    // 函数说明：setItems 函数更新或应用对应的配置和状态。
     void setItems(const QList<CharacterTemplateEditorDialog::CharacterBox> &items)
     {
         m_items.clear();
@@ -59,6 +68,7 @@ public:
         notifyChanged();
     }
 
+    // 函数说明：items 函数实现名称所表示的处理步骤。
     QList<CharacterTemplateEditorDialog::CharacterBox> items() const
     {
         QList<CharacterTemplateEditorDialog::CharacterBox> normalizedItems;
@@ -72,6 +82,7 @@ public:
         return normalizedItems;
     }
 
+    // 函数说明：previewItems 函数实现名称所表示的处理步骤。
     QList<CharacterTemplateEditorDialog::CharacterBox> previewItems() const
     {
         QList<CharacterTemplateEditorDialog::CharacterBox> normalizedItems = items();
@@ -85,6 +96,7 @@ public:
         return normalizedItems;
     }
 
+    // 函数说明：undoLast 函数实现名称所表示的处理步骤。
     void undoLast()
     {
         if (!m_items.isEmpty()) {
@@ -94,6 +106,7 @@ public:
         }
     }
 
+    // 函数说明：clearRects 函数停止流程、清理状态或释放对应资源。
     void clearRects()
     {
         m_items.clear();
@@ -104,6 +117,7 @@ public:
     }
 
 protected:
+    // 函数说明：paintEvent 函数实现名称所表示的处理步骤。
     void paintEvent(QPaintEvent *event) override
     {
         QLabel::paintEvent(event);
@@ -135,6 +149,7 @@ protected:
         }
     }
 
+    // 函数说明：mousePressEvent 函数实现名称所表示的处理步骤。
     void mousePressEvent(QMouseEvent *event) override
     {
         if (event->button() != Qt::LeftButton || m_image.isNull()) {
@@ -153,6 +168,7 @@ protected:
         update();
     }
 
+    // 函数说明：mouseMoveEvent 函数实现名称所表示的处理步骤。
     void mouseMoveEvent(QMouseEvent *event) override
     {
         if (!m_drawing) {
@@ -168,6 +184,7 @@ protected:
         notifyChanged();
     }
 
+    // 函数说明：mouseReleaseEvent 函数实现名称所表示的处理步骤。
     void mouseReleaseEvent(QMouseEvent *event) override
     {
         if (event->button() != Qt::LeftButton || !m_drawing) {
@@ -189,6 +206,7 @@ protected:
     }
 
 private:
+    // 函数说明：notifyChanged 函数实现名称所表示的处理步骤。
     void notifyChanged()
     {
         if (m_changedCallback) {
@@ -196,6 +214,7 @@ private:
         }
     }
 
+    // 函数说明：imageTargetRect 函数实现名称所表示的处理步骤。
     QRect imageTargetRect() const
     {
         if (m_image.isNull()) {
@@ -209,6 +228,7 @@ private:
         return QRect(QPoint(x, y), scaledSize);
     }
 
+    // 函数说明：widgetToImagePoint 函数实现名称所表示的处理步骤。
     QPoint widgetToImagePoint(const QPoint &widgetPoint) const
     {
         const QRect targetRect = imageTargetRect();
@@ -223,6 +243,7 @@ private:
         return QPoint(imageX, imageY);
     }
 
+    // 函数说明：imageToWidgetRect 函数实现名称所表示的处理步骤。
     QRect imageToWidgetRect(const QRect &imageRect, const QRect &targetRect) const
     {
         const double xRatio = static_cast<double>(targetRect.width()) / m_image.width();
@@ -241,6 +262,7 @@ private:
     QRect m_currentRect;
 };
 
+// 函数说明：CharacterTemplateEditorDialog 构造函数创建组件并初始化其依赖和初始状态。
 CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(const QImage &sourceImage,
                                                          const RecipeProfile &initialProfile,
                                                          QWidget *parent)
@@ -252,11 +274,13 @@ CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(const QImage &sourc
     buildUi();
 }
 
+// 函数说明：savedCount 函数保存或发布对应的数据和资源。
 int CharacterTemplateEditorDialog::savedCount() const
 {
     return m_savedCount;
 }
 
+// 函数说明：resultProfile 函数实现名称所表示的处理步骤。
 RecipeProfile CharacterTemplateEditorDialog::resultProfile() const
 {
     return m_resultProfile;
@@ -267,6 +291,7 @@ QMap<QString, QImage> CharacterTemplateEditorDialog::characterImages() const
     return m_characterImages;
 }
 
+// 函数说明：buildUi 函数创建、准备或启动对应流程。
 void CharacterTemplateEditorDialog::buildUi()
 {
     setWindowTitle(QStringLiteral("\u5206\u5272\u5B57\u7B26\u6A21\u677F"));
@@ -423,6 +448,7 @@ void CharacterTemplateEditorDialog::buildUi()
     mainLayout->addWidget(m_stack);
 }
 
+// 函数说明：rebuildNamePage 函数实现名称所表示的处理步骤。
 void CharacterTemplateEditorDialog::rebuildNamePage()
 {
     QLayoutItem *item = nullptr;
@@ -491,6 +517,7 @@ void CharacterTemplateEditorDialog::rebuildNamePage()
     refreshSaveNamePreviews();
 }
 
+// 函数说明：loadSavedCharacterBoxes 函数读取、等待或计算对应的数据。
 void CharacterTemplateEditorDialog::loadSavedCharacterBoxes()
 {
     m_initialBoxes.clear();
@@ -506,6 +533,7 @@ void CharacterTemplateEditorDialog::loadSavedCharacterBoxes()
     }
 }
 
+// 函数说明：refreshCharacterPreviewList 函数更新或应用对应的配置和状态。
 void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
 {
     if (!m_previewGrid) {
@@ -578,6 +606,7 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
     }
 }
 
+// 函数说明：isSystemTemplateFile 函数检查相关状态并返回判断结果。
 bool CharacterTemplateEditorDialog::isSystemTemplateFile(const QString &fileName) const
 {
     const QString lowerName = fileName.trimmed().toLower();
@@ -586,6 +615,7 @@ bool CharacterTemplateEditorDialog::isSystemTemplateFile(const QString &fileName
             || lowerName == "template_ring.bmp";
 }
 
+// 函数说明：nextAvailableFileName 函数实现名称所表示的处理步骤。
 QString CharacterTemplateEditorDialog::nextAvailableFileName(const QString &baseName,
                                                            const QStringList &reservedFileNames) const
 {
@@ -609,6 +639,7 @@ QString CharacterTemplateEditorDialog::nextAvailableFileName(const QString &base
     }
 }
 
+// 函数说明：refreshSaveNamePreviews 函数更新或应用对应的配置和状态。
 void CharacterTemplateEditorDialog::refreshSaveNamePreviews()
 {
     QStringList reservedFileNames;
@@ -627,6 +658,7 @@ void CharacterTemplateEditorDialog::refreshSaveNamePreviews()
     }
 }
 
+// 函数说明：saveTemplates 函数保存或发布对应的数据和资源。
 bool CharacterTemplateEditorDialog::saveTemplates()
 {
     if (m_sortedBoxes.isEmpty()

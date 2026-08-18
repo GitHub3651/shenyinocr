@@ -1,3 +1,7 @@
+// 文件作用：本文件用于计算纸巾纹理粗糙度并判断卷料表面是否合格。
+// 主要职责：计算纸巾纹理粗糙度并判断卷料表面是否合格。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "detection/tissue/tissue_roll_detector.h"
 
 #include <algorithm>
@@ -8,6 +12,7 @@
 
 namespace {
 
+// 组件说明：OuterGeometry 保存纸巾卷外圆的中心、半径和包围框。
 struct OuterGeometry
 {
     cv::Point2f center;
@@ -15,6 +20,7 @@ struct OuterGeometry
     cv::Rect bbox;
 };
 
+// 组件说明：InnerGeometry 保存纸巾卷内孔的检测位置和有效状态。
 struct InnerGeometry
 {
     cv::Point2f center;
@@ -22,6 +28,7 @@ struct InnerGeometry
     bool found = false;
 };
 
+// 组件说明：OuterRadiusResult 保存外圆半径扫描结果和拒绝原因。
 struct OuterRadiusResult
 {
     bool found = false;
@@ -30,16 +37,19 @@ struct OuterRadiusResult
     std::string rejectReason;
 };
 
+// 函数说明：clampDouble 把浮点数限制在指定上下界内。
 double clampDouble(double value, double low, double high)
 {
     return std::max(low, std::min(value, high));
 }
 
+// 函数说明：clampRect 把矩形限制在图像有效范围内。
 cv::Rect clampRect(const cv::Rect& rect, const cv::Size& bounds)
 {
     return rect & cv::Rect(0, 0, bounds.width, bounds.height);
 }
 
+// 函数说明：circleBbox 根据圆心和半径生成图像范围内的包围框。
 cv::Rect circleBbox(const cv::Point2f& center, float radius, const cv::Size& bounds)
 {
     cv::Rect rect(cvRound(center.x - radius),
@@ -49,6 +59,7 @@ cv::Rect circleBbox(const cv::Point2f& center, float radius, const cv::Size& bou
     return clampRect(rect, bounds);
 }
 
+// 函数说明：ensureBgr 把输入图像统一转换为三通道BGR图像。
 cv::Mat ensureBgr(const cv::Mat& image)
 {
     if (image.empty()) {
@@ -70,6 +81,7 @@ cv::Mat ensureBgr(const cv::Mat& image)
     return image.clone();
 }
 
+// 函数说明：medianFloat 计算浮点数组的中位数。
 float medianFloat(std::vector<float> values)
 {
     if (values.empty()) {
@@ -81,6 +93,7 @@ float medianFloat(std::vector<float> values)
     return values[middle];
 }
 
+// 函数说明：percentileUchar 计算灰度图像像素的指定百分位值。
 double percentileUchar(const cv::Mat& gray, double percent)
 {
     std::vector<uchar> values;
@@ -102,12 +115,14 @@ double percentileUchar(const cv::Mat& gray, double percent)
     return values[index];
 }
 
+// 函数说明：appendThreshold 规范化候选阈值并加入阈值列表。
 void appendThreshold(std::vector<int>& thresholds, double value)
 {
     int threshold = static_cast<int>(std::round(clampDouble(value, 20.0, 140.0)));
     thresholds.push_back(threshold);
 }
 
+// 函数说明：detectInnerCircle 检测纸巾卷内孔并返回内圆几何信息。
 bool detectInnerCircle(const cv::Mat& gray, InnerGeometry& inner, std::string& rejectReason)
 {
     const int h = gray.rows;
@@ -264,6 +279,7 @@ bool detectInnerCircle(const cv::Mat& gray, InnerGeometry& inner, std::string& r
     return true;
 }
 
+// 函数说明：detectOuterRadiusByRadialScan 通过径向扫描估计纸巾卷外圆半径。
 OuterRadiusResult detectOuterRadiusByRadialScan(const cv::Mat& gray,
                                                 const cv::Point2f& center,
                                                 float rInner)
@@ -416,6 +432,7 @@ OuterRadiusResult detectOuterRadiusByRadialScan(const cv::Mat& gray,
     return result;
 }
 
+// 函数说明：buildConcentricRingMask 生成内外圆之间的同心环形掩膜。
 void buildConcentricRingMask(const cv::Size& size,
                              const cv::Point2f& center,
                              float rInner,
@@ -443,6 +460,7 @@ void buildConcentricRingMask(const cv::Size& size,
     }
 }
 
+// 函数说明：percentile 计算浮点数组的指定百分位值。
 double percentile(std::vector<float>& values, double percent)
 {
     if (values.empty()) {
@@ -454,6 +472,7 @@ double percentile(std::vector<float>& values, double percent)
     return values[index];
 }
 
+// 函数说明：computeRoughnessScore 根据环形区域纹理计算粗糙度分数。
 double computeRoughnessScore(const cv::Mat& gray, const cv::Mat& ringMask)
 {
     int validCount = cv::countNonZero(ringMask);
@@ -500,6 +519,7 @@ double computeRoughnessScore(const cv::Mat& gray, const cv::Mat& ringMask)
            + (gradientSum / validCount) * 0.030;
 }
 
+// 函数说明：scaleOuterGeometry 把缩放图上的外圆几何还原到原图坐标。
 OuterGeometry scaleOuterGeometry(const OuterGeometry& geometry,
                                  double scaleX,
                                  double scaleY,
@@ -515,6 +535,7 @@ OuterGeometry scaleOuterGeometry(const OuterGeometry& geometry,
     return scaled;
 }
 
+// 函数说明：scaleInnerGeometry 把缩放图上的内圆几何还原到原图坐标。
 InnerGeometry scaleInnerGeometry(const InnerGeometry& geometry, double scaleX, double scaleY)
 {
     const double radiusScale = (scaleX + scaleY) * 0.5;
@@ -527,6 +548,7 @@ InnerGeometry scaleInnerGeometry(const InnerGeometry& geometry, double scaleX, d
     return scaled;
 }
 
+// 函数说明：baseMessage 生成纸巾检测结果使用的基础诊断信息。
 std::string baseMessage(int imageWidth,
                         int imageHeight,
                         int detectWidth,
@@ -544,12 +566,14 @@ std::string baseMessage(int imageWidth,
 
 } // namespace
 
+// 函数说明：TissueRollDetector 构造函数保存当前纸巾配方参数。
 TissueRollDetector::TissueRollDetector(
         const TissueRecipeParameters &parameters)
     : m_parameters(parameters)
 {
 }
 
+// 函数说明：processImage 完成纸巾卷定位、粗糙度计算和最终判定。
 TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
 {
     TissueRollResult result;
@@ -671,6 +695,7 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
     return result;
 }
 
+// 函数说明：roughnessThreshold 返回当前配方使用的粗糙度阈值。
 double TissueRollDetector::roughnessThreshold() const
 {
     return m_parameters.roughnessThreshold;

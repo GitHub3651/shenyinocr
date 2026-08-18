@@ -1,3 +1,7 @@
+// 文件作用：本文件用于管理相机打开、参数下发、预览、正式采集和停止恢复的完整会话。
+// 主要职责：管理相机打开、参数下发、预览、正式采集和停止恢复的完整会话。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/camera_session.h"
 
 #include "runtime/inspection_runtime.h"
@@ -13,6 +17,7 @@
 
 namespace {
 
+// 函数说明：cameraErrorText 函数实现名称所表示的处理步骤。
 QString cameraErrorText(const QString &operation, int nativeErrorCode)
 {
     return QStringLiteral("%1，错误码：%2")
@@ -20,6 +25,7 @@ QString cameraErrorText(const QString &operation, int nativeErrorCode)
             .arg(nativeErrorCode);
 }
 
+// 函数说明：integerRange 函数实现名称所表示的处理步骤。
 bool integerRange(
     const CameraSettingRange &range,
     int *minimum,
@@ -46,6 +52,7 @@ bool integerRange(
 
 } // namespace
 
+// 函数说明：CameraSession 构造函数创建组件并初始化其依赖和初始状态。
 CameraSession::CameraSession(
     const std::shared_ptr<ICameraDevice> &cameraDevice,
     InspectionRuntime *runtime)
@@ -59,11 +66,13 @@ CameraSession::CameraSession(
     }
 }
 
+// 函数说明：~CameraSession 析构函数按生命周期要求释放组件持有的资源。
 CameraSession::~CameraSession()
 {
     close();
 }
 
+// 函数说明：setCallbacks 函数更新或应用对应的配置和状态。
 void CameraSession::setCallbacks(
     const CameraSessionCallbacks &callbacks)
 {
@@ -71,17 +80,20 @@ void CameraSession::setCallbacks(
     m_callbacks = callbacks;
 }
 
+// 函数说明：isOpen 函数检查相关状态并返回判断结果。
 bool CameraSession::isOpen() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_open;
 }
 
+// 函数说明：isCapturing 函数检查相关状态并返回判断结果。
 bool CameraSession::isCapturing() const
 {
     return m_captureWorker.isRunning();
 }
 
+// 函数说明：openFirst 函数创建、准备或启动对应流程。
 InspectionCameraOpenResult CameraSession::openFirst(
     int savedExposure,
     const PersistAdjustedExposure &persistAdjustedExposure)
@@ -152,6 +164,7 @@ InspectionCameraOpenResult CameraSession::openFirst(
     return output;
 }
 
+// 函数说明：close 函数停止流程、清理状态或释放对应资源。
 void CameraSession::close()
 {
     m_intentionalStop = true;
@@ -164,6 +177,7 @@ void CameraSession::close()
     m_currentImage.release();
 }
 
+// 函数说明：queryExposureRange 函数读取、等待或计算对应的数据。
 InspectionCameraParameterResult CameraSession::queryExposureRange()
 {
     return parameterResult(
@@ -171,6 +185,7 @@ InspectionCameraParameterResult CameraSession::queryExposureRange()
                 true);
 }
 
+// 函数说明：queryGainRange 函数读取、等待或计算对应的数据。
 InspectionCameraParameterResult CameraSession::queryGainRange()
 {
     return parameterResult(
@@ -178,6 +193,7 @@ InspectionCameraParameterResult CameraSession::queryGainRange()
                 false);
 }
 
+// 函数说明：applyExposure 函数更新或应用对应的配置和状态。
 InspectionCameraParameterResult CameraSession::applyExposure(int exposure)
 {
     CameraSettings settings;
@@ -188,6 +204,7 @@ InspectionCameraParameterResult CameraSession::applyExposure(int exposure)
                 true);
 }
 
+// 函数说明：applyGain 函数更新或应用对应的配置和状态。
 InspectionCameraParameterResult CameraSession::applyGain(int gain)
 {
     CameraSettings settings;
@@ -198,6 +215,7 @@ InspectionCameraParameterResult CameraSession::applyGain(int gain)
                 false);
 }
 
+// 函数说明：prepareInspection 函数创建、准备或启动对应流程。
 bool CameraSession::prepareInspection(
     const CameraSessionCaptureConfiguration &configuration,
     QString *errorMessage)
@@ -279,6 +297,7 @@ bool CameraSession::prepareInspection(
     return true;
 }
 
+// 函数说明：startInspection 函数创建、准备或启动对应流程。
 bool CameraSession::startInspection(QString *errorMessage)
 {
     if (errorMessage) {
@@ -314,6 +333,7 @@ bool CameraSession::startInspection(QString *errorMessage)
     return true;
 }
 
+// 函数说明：stopInspection 函数停止流程、清理状态或释放对应资源。
 CameraCaptureStopResult CameraSession::stopInspection()
 {
     CameraCaptureStopResult result;
@@ -326,6 +346,7 @@ CameraCaptureStopResult CameraSession::stopInspection()
     return result;
 }
 
+// 函数说明：restorePreviewReady 函数校验、转换或恢复对应数据。
 InspectionCameraRecoveryResult CameraSession::restorePreviewReady(
     int savedExposure,
     const PersistAdjustedExposure &persistAdjustedExposure)
@@ -387,6 +408,7 @@ InspectionCameraRecoveryResult CameraSession::restorePreviewReady(
     return output;
 }
 
+// 函数说明：startPreview 函数创建、准备或启动对应流程。
 bool CameraSession::startPreview(
     quint64 sessionId,
     const FramePreprocessSettings &settings,
@@ -437,6 +459,7 @@ bool CameraSession::startPreview(
     return true;
 }
 
+// 函数说明：acknowledgePreviewFrame 函数停止流程、清理状态或释放对应资源。
 void CameraSession::acknowledgePreviewFrame(quint64 sessionId)
 {
     if (sessionId == m_previewSessionId) {
@@ -444,6 +467,7 @@ void CameraSession::acknowledgePreviewFrame(quint64 sessionId)
     }
 }
 
+// 函数说明：stopPreview 函数停止流程、清理状态或释放对应资源。
 bool CameraSession::stopPreview()
 {
     m_intentionalStop = true;
@@ -453,24 +477,28 @@ bool CameraSession::stopPreview()
     return !m_captureWorker.isRunning();
 }
 
+// 函数说明：hasCurrentImage 函数检查相关状态并返回判断结果。
 bool CameraSession::hasCurrentImage() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return !m_currentImage.empty();
 }
 
+// 函数说明：currentImageClone 函数读取、等待或计算对应的数据。
 cv::Mat CameraSession::currentImageClone() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_currentImage.clone();
 }
 
+// 函数说明：replaceCurrentImage 函数更新或应用对应的配置和状态。
 void CameraSession::replaceCurrentImage(const cv::Mat &image)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_currentImage = image.clone();
 }
 
+// 函数说明：parameterResult 函数实现名称所表示的处理步骤。
 InspectionCameraParameterResult CameraSession::parameterResult(
     const CameraResult &result,
     bool exposure) const
@@ -502,6 +530,7 @@ InspectionCameraParameterResult CameraSession::parameterResult(
     return output;
 }
 
+// 函数说明：applySavedExposure 函数更新或应用对应的配置和状态。
 InspectionCameraParameterResult CameraSession::applySavedExposure(
     int savedExposure,
     const PersistAdjustedExposure &persistAdjustedExposure,
@@ -540,6 +569,7 @@ InspectionCameraParameterResult CameraSession::applySavedExposure(
     return output;
 }
 
+// 函数说明：handleFrame 函数执行对应事件或业务处理。
 void CameraSession::handleFrame(const CameraFrame &frame)
 {
     cv::Mat image;
@@ -573,6 +603,7 @@ void CameraSession::handleFrame(const CameraFrame &frame)
     submitFrame(image, pose);
 }
 
+// 函数说明：handleCaptureError 函数执行对应事件或业务处理。
 void CameraSession::handleCaptureError(
     CameraFrameStatus status,
     int nativeErrorCode)
@@ -605,6 +636,7 @@ void CameraSession::handleCaptureError(
     }
 }
 
+// 函数说明：handleCaptureStopped 函数执行对应事件或业务处理。
 void CameraSession::handleCaptureStopped()
 {
     const bool preview = m_preview;
@@ -617,6 +649,7 @@ void CameraSession::handleCaptureStopped()
     }
 }
 
+// 函数说明：submitFrame 函数执行对应事件或业务处理。
 void CameraSession::submitFrame(
     const cv::Mat &image,
     const DetectionPose &pose)
@@ -678,6 +711,7 @@ void CameraSession::submitFrame(
     }
 }
 
+// 函数说明：callbacksSnapshot 函数实现名称所表示的处理步骤。
 CameraSessionCallbacks CameraSession::callbacksSnapshot() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);

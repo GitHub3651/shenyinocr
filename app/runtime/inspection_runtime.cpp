@@ -1,3 +1,7 @@
+// 文件作用：本文件用于管理正式检测生命周期、线程、队列、故障状态和结果链的唯一运行实例。
+// 主要职责：管理正式检测生命周期、线程、队列、故障状态和结果链的唯一运行实例。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/inspection_runtime.h"
 
 #include <QDebug>
@@ -5,6 +9,7 @@
 
 #include <stdexcept>
 
+// 函数说明：InspectionRuntime 构造函数创建组件并初始化其依赖和初始状态。
 InspectionRuntime::InspectionRuntime(
     const RunIdFactory &runIdFactory,
     const std::shared_ptr<InspectionPlcController> &plcController,
@@ -19,12 +24,14 @@ InspectionRuntime::InspectionRuntime(
     m_resultService.reset(new ResultService(*this));
 }
 
+// 函数说明：~InspectionRuntime 析构函数按生命周期要求释放组件持有的资源。
 InspectionRuntime::~InspectionRuntime()
 {
     requestDetectionWorkerStop();
     waitForDetectionWorkerStop();
 }
 
+// 函数说明：createRunId 函数创建、准备或启动对应流程。
 QString InspectionRuntime::createRunId() const
 {
     QString runId = m_runIdFactory ? m_runIdFactory().trimmed() : QString();
@@ -36,6 +43,7 @@ QString InspectionRuntime::createRunId() const
     return runId;
 }
 
+// 函数说明：beginStart 函数创建、准备或启动对应流程。
 QString InspectionRuntime::beginStart(
     const MachineSettings &machineSettings,
     const PreparedRecipeSnapshot &preparedRecipe,
@@ -66,6 +74,7 @@ QString InspectionRuntime::beginStart(
     return newRunId;
 }
 
+// 函数说明：commitStart 函数保存或发布对应的数据和资源。
 bool InspectionRuntime::commitStart()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -77,6 +86,7 @@ bool InspectionRuntime::commitStart()
     return true;
 }
 
+// 函数说明：rollbackStart 函数实现名称所表示的处理步骤。
 void InspectionRuntime::rollbackStart()
 {
     {
@@ -91,6 +101,7 @@ void InspectionRuntime::rollbackStart()
     finishStop();
 }
 
+// 函数说明：beginStop 函数创建、准备或启动对应流程。
 bool InspectionRuntime::beginStop()
 {
     bool accepted = false;
@@ -111,11 +122,13 @@ bool InspectionRuntime::beginStop()
     return accepted;
 }
 
+// 函数说明：waitForStop 函数读取、等待或计算对应的数据。
 void InspectionRuntime::waitForStop()
 {
     waitForDetectionWorkerStop();
 }
 
+// 函数说明：finishStop 函数实现名称所表示的处理步骤。
 void InspectionRuntime::finishStop()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -127,6 +140,7 @@ void InspectionRuntime::finishStop()
     }
 }
 
+// 函数说明：enterFault 函数实现名称所表示的处理步骤。
 bool InspectionRuntime::enterFault(
     InspectionFaultReason reason,
     const QString &diagnostic,
@@ -160,6 +174,7 @@ bool InspectionRuntime::enterFault(
     return true;
 }
 
+// 函数说明：reconcileFaultProducts 函数实现名称所表示的处理步骤。
 int InspectionRuntime::reconcileFaultProducts()
 {
     int count = 0;
@@ -177,6 +192,7 @@ int InspectionRuntime::reconcileFaultProducts()
     return count;
 }
 
+// 函数说明：acknowledgeFault 函数停止流程、清理状态或释放对应资源。
 bool InspectionRuntime::acknowledgeFault()
 {
     waitForDetectionWorkerStop();
@@ -192,65 +208,76 @@ bool InspectionRuntime::acknowledgeFault()
     return true;
 }
 
+// 函数说明：state 函数实现名称所表示的处理步骤。
 InspectionRuntimeState InspectionRuntime::state() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_state;
 }
 
+// 函数说明：faultSnapshot 函数实现名称所表示的处理步骤。
 InspectionFaultSnapshot InspectionRuntime::faultSnapshot() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_faultSnapshot;
 }
 
+// 函数说明：isBusy 函数检查相关状态并返回判断结果。
 bool InspectionRuntime::isBusy() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_state != InspectionRuntimeState::Idle;
 }
 
+// 函数说明：isRunning 函数检查相关状态并返回判断结果。
 bool InspectionRuntime::isRunning() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_state == InspectionRuntimeState::Running;
 }
 
+// 函数说明：runId 函数执行对应事件或业务处理。
 QString InspectionRuntime::runId() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_runContext ? m_runContext->runId : QString();
 }
 
+// 函数说明：acceptedProductCount 函数实现名称所表示的处理步骤。
 quint64 InspectionRuntime::acceptedProductCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_acceptedProductSequence;
 }
 
+// 函数说明：completedProductCount 函数实现名称所表示的处理步骤。
 quint64 InspectionRuntime::completedProductCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_completedProductCount;
 }
 
+// 函数说明：unresolvedFaultProductCount 函数实现名称所表示的处理步骤。
 int InspectionRuntime::unresolvedFaultProductCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return static_cast<int>(m_products.size());
 }
 
+// 函数说明：faultUnconfirmedProductCount 函数实现名称所表示的处理步骤。
 int InspectionRuntime::faultUnconfirmedProductCount() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_faultUnconfirmedProductCount;
 }
 
+// 函数说明：isPlcConnected 函数检查相关状态并返回判断结果。
 bool InspectionRuntime::isPlcConnected() const
 {
     return m_plcController && m_plcController->isConnected();
 }
 
+// 函数说明：connectPlc 函数建立或断开对应外部连接。
 PlcOperationResult InspectionRuntime::connectPlc(
     const QString &address,
     int rack,
@@ -261,6 +288,7 @@ PlcOperationResult InspectionRuntime::connectPlc(
             : PlcOperationResult(-1);
 }
 
+// 函数说明：disconnectPlc 函数建立或断开对应外部连接。
 PlcOperationResult InspectionRuntime::disconnectPlc()
 {
     return m_plcController
@@ -268,6 +296,7 @@ PlcOperationResult InspectionRuntime::disconnectPlc()
             : PlcOperationResult(-1);
 }
 
+// 函数说明：writePlcTriggerMode 函数保存或发布对应的数据和资源。
 PlcOperationResult InspectionRuntime::writePlcTriggerMode(int modeIndex)
 {
     return m_plcController
@@ -275,6 +304,7 @@ PlcOperationResult InspectionRuntime::writePlcTriggerMode(int modeIndex)
             : PlcOperationResult(-1);
 }
 
+// 函数说明：applyPlcRunSettings 函数更新或应用对应的配置和状态。
 InspectionPlcRunSettingsResult InspectionRuntime::applyPlcRunSettings(
     const InspectionPlcRunSettings &settings)
 {
@@ -287,6 +317,7 @@ InspectionPlcRunSettingsResult InspectionRuntime::applyPlcRunSettings(
     return result;
 }
 
+// 函数说明：writePlcPhotoDistance 函数保存或发布对应的数据和资源。
 PlcOperationResult InspectionRuntime::writePlcPhotoDistance(
     std::uint32_t photoDistance)
 {
@@ -295,6 +326,7 @@ PlcOperationResult InspectionRuntime::writePlcPhotoDistance(
             : PlcOperationResult(-1);
 }
 
+// 函数说明：writePlcResultValue 函数保存或发布对应的数据和资源。
 PlcOperationResult InspectionRuntime::writePlcResultValue(std::uint8_t value)
 {
     return m_plcController
@@ -302,12 +334,14 @@ PlcOperationResult InspectionRuntime::writePlcResultValue(std::uint8_t value)
             : PlcOperationResult(-1);
 }
 
+// 函数说明：preparePipeline 函数创建、准备或启动对应流程。
 BarcodeRuntimeReadiness InspectionRuntime::preparePipeline(
     DetectionMode mode) const
 {
     return m_pipelineRegistry->prepare(mode);
 }
 
+// 函数说明：startPipeline 函数创建、准备或启动对应流程。
 bool InspectionRuntime::startPipeline(
     const ResultServiceRunConfiguration &resultConfiguration,
     QString *errorMessage)
@@ -369,6 +403,7 @@ bool InspectionRuntime::startPipeline(
     return true;
 }
 
+// 函数说明：acceptFrame 函数实现名称所表示的处理步骤。
 std::shared_ptr<const FrameData> InspectionRuntime::acceptFrame(
     const cv::Mat &image,
     quint64 frameNumber,
@@ -410,6 +445,7 @@ std::shared_ptr<const FrameData> InspectionRuntime::acceptFrame(
     return frame;
 }
 
+// 函数说明：complete 函数实现名称所表示的处理步骤。
 DetectionCompletion InspectionRuntime::complete(
     const std::shared_ptr<const FrameData> &frame,
     const DetectionResult &result)
@@ -449,6 +485,7 @@ DetectionCompletion InspectionRuntime::complete(
     return completion;
 }
 
+// 函数说明：claimResult 函数实现名称所表示的处理步骤。
 bool InspectionRuntime::claimResult(const ProductKey &productKey)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -466,6 +503,7 @@ bool InspectionRuntime::claimResult(const ProductKey &productKey)
     return true;
 }
 
+// 函数说明：requestDetectionWorkerStop 函数实现名称所表示的处理步骤。
 void InspectionRuntime::requestDetectionWorkerStop()
 {
     std::shared_ptr<DetectionWorker> worker;
@@ -480,6 +518,7 @@ void InspectionRuntime::requestDetectionWorkerStop()
     }
 }
 
+// 函数说明：waitForDetectionWorkerStop 函数读取、等待或计算对应的数据。
 void InspectionRuntime::waitForDetectionWorkerStop()
 {
     requestDetectionWorkerStop();
@@ -501,6 +540,7 @@ void InspectionRuntime::waitForDetectionWorkerStop()
     }
 }
 
+// 函数说明：belongsToCurrentRun 函数实现名称所表示的处理步骤。
 bool InspectionRuntime::belongsToCurrentRun(
     const ProductKey &productKey) const
 {
@@ -510,23 +550,27 @@ bool InspectionRuntime::belongsToCurrentRun(
 }
 
 std::shared_ptr<const InspectionRunContext>
+// 函数说明：runContext 函数执行对应事件或业务处理。
 InspectionRuntime::runContext() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_runContext;
 }
 
+// 函数说明：isDetectionWorkerActive 函数检查相关状态并返回判断结果。
 bool InspectionRuntime::isDetectionWorkerActive() const
 {
     return m_detectionWorkerActive.load();
 }
 
+// 函数说明：detectionWorkerQueueCapacity 函数执行对应事件或业务处理。
 std::size_t InspectionRuntime::detectionWorkerQueueCapacity() const
 {
     std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
     return m_detectionWorker ? m_detectionWorker->queueCapacity() : 0;
 }
 
+// 函数说明：submitDetectionFrame 函数执行对应事件或业务处理。
 bool InspectionRuntime::submitDetectionFrame(
     const std::shared_ptr<const FrameData> &frame)
 {
@@ -540,6 +584,7 @@ bool InspectionRuntime::submitDetectionFrame(
             && worker->submit(frame);
 }
 
+// 函数说明：submitDetectionWorkItem 函数执行对应事件或业务处理。
 bool InspectionRuntime::submitDetectionWorkItem(
     const DetectionWorkItem &item)
 {
@@ -553,6 +598,7 @@ bool InspectionRuntime::submitDetectionWorkItem(
             && worker->submit(item);
 }
 
+// 函数说明：trySubmitDetectionFrame 函数实现名称所表示的处理步骤。
 DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionFrame(
     const std::shared_ptr<const FrameData> &frame)
 {
@@ -566,6 +612,7 @@ DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionFrame(
             : worker->trySubmit(frame);
 }
 
+// 函数说明：trySubmitDetectionWorkItem 函数实现名称所表示的处理步骤。
 DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionWorkItem(
     const DetectionWorkItem &item)
 {
@@ -579,72 +626,86 @@ DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionWorkItem(
             : worker->trySubmit(item);
 }
 
+// 函数说明：submitUiCompletion 函数执行对应事件或业务处理。
 bool InspectionRuntime::submitUiCompletion(
     const UiCompletionMailbox::Work &work)
 {
     return m_uiCompletionMailbox.submit(work);
 }
 
+// 函数说明：processOneUiCompletion 函数执行对应事件或业务处理。
 bool InspectionRuntime::processOneUiCompletion()
 {
     return m_uiCompletionMailbox.processOne();
 }
 
+// 函数说明：cancelUiCompletion 函数检查相关状态并返回判断结果。
 void InspectionRuntime::cancelUiCompletion()
 {
     m_uiCompletionMailbox.cancel();
 }
 
+// 函数说明：resultService 函数实现名称所表示的处理步骤。
 ResultService &InspectionRuntime::resultService()
 {
     return *m_resultService;
 }
 
+// 函数说明：resultService 函数实现名称所表示的处理步骤。
 const ResultService &InspectionRuntime::resultService() const
 {
     return *m_resultService;
 }
 
+// 函数说明：statistics 函数实现名称所表示的处理步骤。
 DetectionResultStatistics InspectionRuntime::statistics() const
 {
     return m_resultService->statistics();
 }
 
+// 函数说明：abnormalStatistics 函数实现名称所表示的处理步骤。
 DetectionAbnormalStatistics InspectionRuntime::abnormalStatistics() const
 {
     return m_resultService->abnormalStatistics();
 }
 
+// 函数说明：totalCount 函数校验、转换或恢复对应数据。
 int InspectionRuntime::totalCount() const
 {
     return m_resultService->totalCount();
 }
 
+// 函数说明：ngCount 函数实现名称所表示的处理步骤。
 int InspectionRuntime::ngCount() const
 {
     return m_resultService->ngCount();
 }
 
+// 函数说明：pendingDelayedNgCount 函数实现名称所表示的处理步骤。
 int InspectionRuntime::pendingDelayedNgCount() const
 {
     return m_resultService->pendingDelayedNgCount();
 }
 
+// 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
 void InspectionRuntime::resetStatistics()
 {
     m_resultService->resetStatistics();
 }
 
+// 函数说明：resetAbnormalStatistics 函数停止流程、清理状态或释放对应资源。
 void InspectionRuntime::resetAbnormalStatistics()
 {
     m_resultService->resetAbnormalStatistics();
 }
 
+// 函数说明：resetNgCount 函数停止流程、清理状态或释放对应资源。
 void InspectionRuntime::resetNgCount()
 {
     m_resultService->resetNgCount();
 }
 
+// 函数说明：clearPendingDelayedNgRequests 函数停止流程、清理状态或释放对应资源。
 void InspectionRuntime::clearPendingDelayedNgRequests()
 {
     m_resultService->clearPendingDelayedNgRequests();

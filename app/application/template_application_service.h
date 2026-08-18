@@ -1,3 +1,7 @@
+// 文件作用：本文件用于组织模板新建、预览、编辑、保存、发布和取消等应用用例。
+// 主要职责：组织模板新建、预览、编辑、保存、发布和取消等应用用例。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "application/template_editor_contract.h"
@@ -19,6 +23,7 @@ class RecipeStore;
 // The only application boundary for the complete template editing use case.
 // UI code supplies user intent and immutable images; this service owns the
 // draft/session, recipe catalog access, asset staging and transactional publish.
+// 组件说明：TemplateApplicationService 统一承接模板编辑、资源暂存和配方发布用例。
 class TemplateApplicationService
 {
 public:

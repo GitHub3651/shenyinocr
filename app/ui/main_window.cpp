@@ -1,3 +1,7 @@
+// 文件作用：本文件用于构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
+// 主要职责：构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 /**
  * @file ui/main_window.cpp
  * @brief 工业视觉识别系统主窗口实现文件
@@ -35,6 +39,7 @@
  * @param parent 父窗口指针
  * @details 初始化UI、相机、OCR模型、定时器等核心组件
  */
+// 函数说明：MainWindow 构造函数创建组件并初始化其依赖和初始状态。
 MainWindow::MainWindow(
     const std::shared_ptr<InspectionApplicationService> &inspectionService,
     const std::shared_ptr<SettingsApplicationService> &settingsService,
@@ -238,41 +243,49 @@ MainWindow::MainWindow(
     qDebug() << "MainWindow shell constructed";
 }
 
+// 函数说明：viewForComposition 函数实现名称所表示的处理步骤。
 Ui::MainWindow *MainWindow::viewForComposition() const
 {
     return ui;
 }
 
+// 函数说明：templateAttentionTimerForComposition 函数实现名称所表示的处理步骤。
 QTimer *MainWindow::templateAttentionTimerForComposition() const
 {
     return m_templateCaptureAttentionTimer;
 }
 
+// 函数说明：templateAttentionFlagForComposition 函数实现名称所表示的处理步骤。
 bool *MainWindow::templateAttentionFlagForComposition()
 {
     return &m_templateCaptureAttentionOn;
 }
 
+// 函数说明：settingsEditStateForComposition 函数更新或应用对应的配置和状态。
 SettingsEditState *MainWindow::settingsEditStateForComposition()
 {
     return &m_settingsEditState;
 }
 
+// 函数说明：selectedDirectoryForComposition 函数读取、等待或计算对应的数据。
 QString *MainWindow::selectedDirectoryForComposition()
 {
     return &selectedDir;
 }
 
+// 函数说明：applyingSettingsFlagForComposition 函数更新或应用对应的配置和状态。
 bool *MainWindow::applyingSettingsFlagForComposition()
 {
     return &m_applyingMachineSettings;
 }
 
+// 函数说明：updatingSettingsUiFlagForComposition 函数实现名称所表示的处理步骤。
 bool *MainWindow::updatingSettingsUiFlagForComposition()
 {
     return &m_updatingMachineSettingsUi;
 }
 
+// 函数说明：inspectionPageCallbacks 函数执行对应事件或业务处理。
 InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
 {
     InspectionPage::Callbacks callbacks;
@@ -296,6 +309,7 @@ InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
     return callbacks;
 }
 
+// 函数说明：machineSettingsPageCallbacks 函数实现名称所表示的处理步骤。
 MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
 {
     MachineSettingsPage::Callbacks callbacks;
@@ -329,6 +343,7 @@ MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
     return callbacks;
 }
 
+// 函数说明：templateEditorViewBindings 函数实现名称所表示的处理步骤。
 TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
 {
     TemplateEditorViewBindings view;
@@ -382,6 +397,7 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     return view;
 }
 
+// 函数说明：templateEditorPageCallbacks 函数实现名称所表示的处理步骤。
 TemplateEditorPageCallbacks MainWindow::templateEditorPageCallbacks()
 {
     TemplateEditorPageCallbacks callbacks;
@@ -414,6 +430,7 @@ TemplateEditorPageCallbacks MainWindow::templateEditorPageCallbacks()
     return callbacks;
 }
 
+// 函数说明：attachPages 函数实现名称所表示的处理步骤。
 void MainWindow::attachPages(
     InspectionPage *inspectionPage,
     MachineSettingsPage *machineSettingsPage,
@@ -482,6 +499,7 @@ void MainWindow::attachPages(
  * @brief MainWindow析构函数
  * @details 清理所有资源，关闭相机、停止线程、删除临时文件
  */
+// 函数说明：~MainWindow 析构函数按生命周期要求释放组件持有的资源。
 MainWindow::~MainWindow()
 {
     qDebug() << "MainWindow destructor called";

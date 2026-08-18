@@ -1,3 +1,7 @@
+// 文件作用：本文件用于校验并转换模板跟踪框、二维码框和日期多边形坐标。
+// 主要职责：校验并转换模板跟踪框、二维码框和日期多边形坐标。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include <QPolygon>
@@ -10,6 +14,7 @@
 
 #include <vector>
 
+// 组件说明：TemplateDisplayGeometry 数据结构集中保存该流程需要的一组相关数据。
 struct TemplateDisplayGeometry
 {
     QSize viewSize;
@@ -17,6 +22,7 @@ struct TemplateDisplayGeometry
     QSize sourceImageSize;
 };
 
+// 组件说明：TemplateProfileGeometry 数据结构集中保存该流程需要的一组相关数据。
 struct TemplateProfileGeometry
 {
     bool valid = false;

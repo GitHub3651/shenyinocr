@@ -1,3 +1,7 @@
+// 文件作用：本文件用于实现模板Profile切换、参数应用和批量编辑命令。
+// 主要职责：实现模板Profile切换、参数应用和批量编辑命令。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 /**
  * @file ui/pages/template_editor_profile_commands.cpp
  * @brief 模板Profile目标文本、阈值和字符资源命令。
@@ -54,6 +58,7 @@
 
 using namespace TemplateEditorSupport;
 
+// 函数说明：displayWordTemplateRawImage 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::displayWordTemplateRawImage(
         const WordTemplateProfile &profile)
 {
@@ -77,6 +82,7 @@ void TemplateEditorPage::displayWordTemplateRawImage(
                 .arg(profile.name));
 }
 
+// 函数说明：loadWordDigitTemplatesFromProfile 函数读取、等待或计算对应的数据。
 bool TemplateEditorPage::loadWordDigitTemplatesFromProfile(
         const WordTemplateProfile &profile,
         const QStringList &baseNames,
@@ -132,6 +138,7 @@ bool TemplateEditorPage::loadWordDigitTemplatesFromProfile(
     return true;
 }
 
+// 函数说明：saveWordRecipeProfile 函数保存或发布对应的数据和资源。
 bool TemplateEditorPage::saveWordRecipeProfile(
         int profileIndex,
         const RecipeProfile &settings,
@@ -164,6 +171,7 @@ bool TemplateEditorPage::saveWordRecipeProfile(
                 profileIndex, updated, errorMessage);
 }
 
+// 函数说明：publishWordTemplateRecipeEdit 函数保存或发布对应的数据和资源。
 bool TemplateEditorPage::publishWordTemplateRecipeEdit(
         int profileIndex,
         QString *errorMessage)
@@ -174,6 +182,7 @@ bool TemplateEditorPage::publishWordTemplateRecipeEdit(
                 profileIndexes, errorMessage);
 }
 
+// 函数说明：publishWordTemplateRecipeEdits 函数保存或发布对应的数据和资源。
 bool TemplateEditorPage::publishWordTemplateRecipeEdits(
         const QVector<int> &profileIndexes,
         QString *errorMessage)
@@ -232,6 +241,7 @@ bool TemplateEditorPage::publishWordTemplateRecipeEdits(
     return true;
 }
 
+// 函数说明：applyCurrentTargetText 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyCurrentTargetText()
 {
     if (isInspectionBusy()) {
@@ -369,6 +379,7 @@ void TemplateEditorPage::applyCurrentTargetText()
                 QStringLiteral("当前模式不使用目标字符。"));
 }
 
+// 函数说明：applyBatchTargetText 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyBatchTargetText()
 {
     if (!isWordFamilyMode(currentDetectModeId())) {
@@ -459,6 +470,7 @@ void TemplateEditorPage::applyBatchTargetText()
                     "全部Profile目标字符已事务保存。"));
 }
 
+// 函数说明：applyCurrentImageThreshold 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyCurrentImageThreshold()
 {
     if (isInspectionBusy()) {
@@ -566,6 +578,7 @@ void TemplateEditorPage::applyCurrentImageThreshold()
                 .arg(threshold));
 }
 
+// 函数说明：applyCurrentTissueThreshold 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyCurrentTissueThreshold()
 {
     if (isInspectionBusy()) {
@@ -627,6 +640,7 @@ void TemplateEditorPage::applyCurrentTissueThreshold()
                 QStringLiteral("纸巾粗糙度阈值已事务保存到当前产品配方。"));
 }
 
+// 函数说明：applyBatchImageThreshold 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::applyBatchImageThreshold()
 {
     if (!isWordFamilyMode(currentDetectModeId())) {

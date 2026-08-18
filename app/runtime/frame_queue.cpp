@@ -1,15 +1,22 @@
+// 文件作用：本文件用于提供容量受控的正式帧队列，并支持阻塞提交、取出和协作取消。
+// 主要职责：提供容量受控的正式帧队列，并支持阻塞提交、取出和协作取消。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/frame_queue.h"
 
+// 函数说明：FrameQueue 构造函数创建组件并初始化其依赖和初始状态。
 FrameQueue::FrameQueue(std::size_t capacity)
     : m_capacity(capacity > 0 ? capacity : 1)
 {
 }
 
+// 函数说明：~FrameQueue 析构函数按生命周期要求释放组件持有的资源。
 FrameQueue::~FrameQueue()
 {
     cancel();
 }
 
+// 函数说明：submit 函数执行对应事件或业务处理。
 bool FrameQueue::submit(
     const DetectionWorkItem &item)
 {
@@ -31,6 +38,7 @@ bool FrameQueue::submit(
     return true;
 }
 
+// 函数说明：submit 函数执行对应事件或业务处理。
 bool FrameQueue::submit(
     const std::shared_ptr<const FrameData> &frame)
 {
@@ -39,6 +47,7 @@ bool FrameQueue::submit(
     return submit(item);
 }
 
+// 函数说明：trySubmit 函数实现名称所表示的处理步骤。
 FrameQueueSubmitResult FrameQueue::trySubmit(
     const DetectionWorkItem &item)
 {
@@ -59,6 +68,7 @@ FrameQueueSubmitResult FrameQueue::trySubmit(
     return FrameQueueSubmitResult::Accepted;
 }
 
+// 函数说明：trySubmit 函数实现名称所表示的处理步骤。
 FrameQueueSubmitResult FrameQueue::trySubmit(
     const std::shared_ptr<const FrameData> &frame)
 {
@@ -67,6 +77,7 @@ FrameQueueSubmitResult FrameQueue::trySubmit(
     return trySubmit(item);
 }
 
+// 函数说明：waitAndTake 函数读取、等待或计算对应的数据。
 bool FrameQueue::waitAndTake(
     DetectionWorkItem *item)
 {
@@ -90,6 +101,7 @@ bool FrameQueue::waitAndTake(
     return true;
 }
 
+// 函数说明：waitAndTake 函数读取、等待或计算对应的数据。
 bool FrameQueue::waitAndTake(
     std::shared_ptr<const FrameData> *frame)
 {
@@ -107,6 +119,7 @@ bool FrameQueue::waitAndTake(
     return true;
 }
 
+// 函数说明：cancel 函数检查相关状态并返回判断结果。
 std::size_t FrameQueue::cancel()
 {
     std::deque<DetectionWorkItem> releasedItems;
@@ -120,6 +133,7 @@ std::size_t FrameQueue::cancel()
     return releasedItems.size();
 }
 
+// 函数说明：reopen 函数实现名称所表示的处理步骤。
 bool FrameQueue::reopen()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -130,11 +144,13 @@ bool FrameQueue::reopen()
     return true;
 }
 
+// 函数说明：capacity 函数实现名称所表示的处理步骤。
 std::size_t FrameQueue::capacity() const
 {
     return m_capacity;
 }
 
+// 函数说明：size 函数读取、等待或计算对应的数据。
 std::size_t FrameQueue::size() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);

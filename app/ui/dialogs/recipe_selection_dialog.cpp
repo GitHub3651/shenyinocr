@@ -1,4 +1,8 @@
 ﻿#include "recipe_selection_dialog.h"
+// 文件作用：本文件用于显示已发布配方并让用户按检测模式选择目标配方。
+// 主要职责：显示已发布配方并让用户按检测模式选择目标配方。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 
 #include <QAbstractItemView>
 #include <QDialogButtonBox>
@@ -14,6 +18,7 @@ const int kRecipeIdRole = Qt::UserRole + 1;
 
 } // namespace
 
+// 函数说明：RecipeSelectionDialog 构造函数创建组件并初始化其依赖和初始状态。
 RecipeSelectionDialog::RecipeSelectionDialog(
         const QVector<TemplateRecipeCatalogEntry> &recipes,
         QWidget *parent)
@@ -83,6 +88,7 @@ RecipeSelectionDialog::RecipeSelectionDialog(
     layout->addWidget(m_buttonBox);
 }
 
+// 函数说明：selectedRecipeId 函数读取、等待或计算对应的数据。
 QString RecipeSelectionDialog::selectedRecipeId() const
 {
     const QListWidgetItem *item = m_recipeList

@@ -1,3 +1,7 @@
+// 文件作用：本文件用于维护模板制作页面状态，并协调预览、绘图、参数编辑和保存操作。
+// 主要职责：维护模板制作页面状态，并协调预览、绘图、参数编辑和保存操作。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "application/template_application_service.h"
@@ -28,8 +32,10 @@ class QPushButton;
 class QTextEdit;
 class QToolButton;
 class QVBoxLayout;
+// 组件说明：QWidget 组件封装本文件中与其名称对应的单一职责。
 class QWidget;
 
+// 组件说明：TemplateEditorViewBindings 数据结构集中传递该流程需要的只读数据或回调。
 struct TemplateEditorViewBindings
 {
     QWidget *parentWidget = nullptr;
@@ -78,6 +84,7 @@ struct TemplateEditorViewBindings
     QCheckBox *checkBox_hardwareTriggerEnabled = nullptr;
 };
 
+// 组件说明：TemplateEditorPageCallbacks 数据结构集中传递该流程需要的只读数据或回调。
 struct TemplateEditorPageCallbacks
 {
     std::function<void()> updateOperationUiState;
@@ -90,9 +97,11 @@ struct TemplateEditorPageCallbacks
     std::function<void(const RecipeProfile &)> applyRecipeProfileToUi;
 };
 
+// 组件说明：TemplateEditorPage 组件负责对应界面区域的显示和用户交互。
 class TemplateEditorPage : public QObject
 {
 public:
+    // 组件说明：CaptureState 枚举列出该组件允许使用的稳定状态和选项。
     enum class CaptureState
     {
         Idle,

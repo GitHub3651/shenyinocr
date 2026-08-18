@@ -1,3 +1,7 @@
+// 文件作用：本文件用于执行深度OCR模式的预处理、文字识别、目标比较和结果生成。
+// 主要职责：执行深度OCR模式的预处理、文字识别、目标比较和结果生成。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ocr_detection_pipeline.h"
 #include "detection/common/detection_roi_geometry.h"
 
@@ -7,6 +11,7 @@
 
 namespace {
 
+// 函数说明：isAllowedRecognitionByte 函数检查相关状态并返回判断结果。
 bool isAllowedRecognitionByte(char value)
 {
     const unsigned char byte = static_cast<unsigned char>(value);
@@ -17,6 +22,7 @@ bool isAllowedRecognitionByte(char value)
             || value == ':';
 }
 
+// 函数说明：cleanRecognitionText 函数实现名称所表示的处理步骤。
 std::string cleanRecognitionText(const std::string &text)
 {
     std::string cleaned = text;
@@ -33,6 +39,7 @@ std::string cleanRecognitionText(const std::string &text)
 
 } // namespace
 
+// 函数说明：detect 函数执行对应事件或业务处理。
 OcrDetectionResult OcrDetectionPipeline::detect(
         cv::Mat &croppedImage,
         const std::string &targetText,
@@ -61,6 +68,7 @@ OcrDetectionResult OcrDetectionPipeline::detect(
     return result;
 }
 
+// 函数说明：detect 函数执行对应事件或业务处理。
 DetectionResult OcrDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const std::string &targetText,
@@ -103,6 +111,7 @@ DetectionResult OcrDetectionPipeline::detect(
                 elapsedMs);
 }
 
+// 函数说明：toDetectionResult 函数校验、转换或恢复对应数据。
 DetectionResult OcrDetectionPipeline::toDetectionResult(
         const OcrDetectionResult &ocrResult,
         const DetectionPose &pose,

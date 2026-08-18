@@ -1,6 +1,11 @@
+// 文件作用：本文件用于在启动检测前检查相机、PLC、配方和当前运行状态是否满足条件。
+// 主要职责：在启动检测前检查相机、PLC、配方和当前运行状态是否满足条件。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/inspection_start_preflight.h"
 
 namespace {
+// 函数说明：rejected 函数实现名称所表示的处理步骤。
 InspectionStartPreflightResult rejected(
     InspectionStartIssue issue,
     const QStringList &details = QStringList())
@@ -11,12 +16,14 @@ InspectionStartPreflightResult rejected(
     return result;
 }
 
+// 函数说明：profileName 函数实现名称所表示的处理步骤。
 QString profileName(const InspectionStartProfileReadiness &profile)
 {
     return profile.displayName;
 }
 }
 
+// 函数说明：evaluateAccess 函数实现名称所表示的处理步骤。
 InspectionStartPreflightResult InspectionStartPreflight::evaluateAccess(
     const InspectionStartAccessInput &input)
 {
@@ -39,6 +46,7 @@ InspectionStartPreflightResult InspectionStartPreflight::evaluateAccess(
     return InspectionStartPreflightResult();
 }
 
+// 函数说明：evaluateResources 函数实现名称所表示的处理步骤。
 InspectionStartPreflightResult InspectionStartPreflight::evaluateResources(
     const InspectionStartResourceInput &input)
 {

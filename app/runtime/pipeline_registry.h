@@ -1,3 +1,7 @@
+// 文件作用：本文件用于按稳定检测模式注册并选择唯一检测流水线。
+// 主要职责：按稳定检测模式注册并选择唯一检测流水线。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "devices/barcode/barcode_types.h"
@@ -18,14 +22,17 @@
 #include <vector>
 
 class IBarcodeDecoder;
+// 组件说明：IOcrEngine 组件提供对应设备或检测能力的统一实现。
 class IOcrEngine;
 
+// 组件说明：BarcodeRuntimeReadiness 数据结构集中保存该流程需要的一组相关数据。
 struct BarcodeRuntimeReadiness
 {
     bool ready = true;
     QString errorMessage;
 };
 
+// 组件说明：PipelineRegistryRequest 数据结构集中传递该流程需要的只读数据或回调。
 struct PipelineRegistryRequest
 {
     DetectionMode mode = DetectionMode::Stamp;
@@ -33,6 +40,7 @@ struct PipelineRegistryRequest
     InspectionProfileSnapshot profileSnapshot;
 };
 
+// 组件说明：PipelineResultConsumers 数据结构集中保存该流程需要的一组相关数据。
 struct PipelineResultConsumers
 {
     typedef std::function<void(
@@ -58,6 +66,7 @@ struct PipelineResultConsumers
     BarcodeWordConsumer barcodeWord;
 };
 
+// 组件说明：PipelineCreationResult 数据结构保存一次操作的结果、状态和错误信息。
 struct PipelineCreationResult
 {
     std::shared_ptr<DetectionWorker> worker;
@@ -65,12 +74,14 @@ struct PipelineCreationResult
     QString startFailureMessage;
     QString workerLogName;
 
+    // 函数说明：isAccepted 函数检查相关状态并返回判断结果。
     bool isAccepted() const
     {
         return worker && errorMessage.isEmpty();
     }
 };
 
+// 组件说明：PipelineRegistry 组件封装对应业务职责和生命周期边界。
 class PipelineRegistry
 {
 public:
@@ -86,6 +97,7 @@ public:
             DetectionWorker::FailureConsumer()) const;
 
 private:
+    // 组件说明：StampConfiguration 组件集中描述相关配置、规则和运行参数。
     struct StampConfiguration
     {
         QString targetText;

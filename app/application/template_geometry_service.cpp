@@ -1,3 +1,7 @@
+// 文件作用：本文件用于校验并转换模板跟踪框、二维码框和日期多边形坐标。
+// 主要职责：校验并转换模板跟踪框、二维码框和日期多边形坐标。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/template_geometry_service.h"
 
 #include <QtGlobal>
@@ -6,6 +10,7 @@
 
 namespace {
 
+// 函数说明：validGeometry 函数实现名称所表示的处理步骤。
 bool validGeometry(const TemplateDisplayGeometry &geometry)
 {
     return geometry.viewSize.width() > 0
@@ -16,6 +21,7 @@ bool validGeometry(const TemplateDisplayGeometry &geometry)
             && geometry.sourceImageSize.height() > 0;
 }
 
+// 函数说明：mapDisplayPoint 函数校验、转换或恢复对应数据。
 QPointF mapDisplayPoint(
         const QPoint &point,
         const TemplateDisplayGeometry &geometry)
@@ -36,6 +42,7 @@ QPointF mapDisplayPoint(
                    (point.y() - offsetY) * scaleY);
 }
 
+// 函数说明：mapProfileRect 函数校验、转换或恢复对应数据。
 QRectF mapProfileRect(
         const QRect &displayRect,
         const TemplateDisplayGeometry &geometry)
@@ -56,6 +63,7 @@ QRectF mapProfileRect(
 
 } // namespace
 
+// 函数说明：mapDisplayRectToImage 函数校验、转换或恢复对应数据。
 QRect TemplateGeometryService::mapDisplayRectToImage(
         const QRect &displayRect,
         const TemplateDisplayGeometry &geometry) const
@@ -81,6 +89,7 @@ QRect TemplateGeometryService::mapDisplayRectToImage(
                 QRect(QPoint(0, 0), geometry.sourceImageSize));
 }
 
+// 函数说明：buildProfileGeometry 函数创建、准备或启动对应流程。
 TemplateProfileGeometry TemplateGeometryService::buildProfileGeometry(
         const QRect &trackingDisplayRect,
         const QRect &barcodeDisplayRect,

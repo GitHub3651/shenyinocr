@@ -1,10 +1,15 @@
 ﻿#pragma once
+// 文件作用：本文件用于计算钢印区域的重叠特征，并给出重叠异常判断。
+// 主要职责：计算钢印区域的重叠特征，并给出重叠异常判断。
+// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include <opencv2/opencv.hpp>
 #include <vector>
 
 /**
  * @brief 标定数据结构体（纯数据层）
  */
+// 组件说明：CalibrationData 保存钢印、日期和二维码区域的标定坐标。
 struct CalibrationData {
     // 钢印区域多边形，存储的是相对于“拉环中心”的相对偏移量 (dx, dy)
     std::vector<cv::Point2f> stamp_poly;
@@ -21,6 +26,7 @@ struct CalibrationData {
 /**
  * @brief 检测结果报告结构体
  */
+// 组件说明：DetectResult 保存重叠检测判定、定位数据和最终多边形。
 struct DetectResult {
     bool isOk;               // 最终判定结论：true 为合格(无重叠)，false 为异常(NG，有重叠)
     int overlapPixels;       // 钢印多边形和日期多边形的像素物理重叠数量
@@ -38,6 +44,7 @@ struct DetectResult {
 /**
  * @brief 核心重叠检测算法类 ("发动机")
  */
+// 组件说明：OverlapDetector 负责拉环定位、区域变换和钢印日期重叠判断。
 class OverlapDetector {
 public:
     OverlapDetector();

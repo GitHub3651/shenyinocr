@@ -1,4 +1,8 @@
 ﻿#include "system_support/settings/machine_settings_store.h"
+// 文件作用：本文件用于负责机器设置JSON的读取、校验、事务保存、清空和默认恢复。
+// 主要职责：负责机器设置JSON的读取、校验、事务保存、清空和默认恢复。
+// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 
 #include <QDir>
 #include <QFile>
@@ -16,6 +20,7 @@
 
 namespace {
 
+// 函数说明：clearError 函数停止流程、清理状态或释放对应资源。
 void clearError(MachineSettingsStoreError *error)
 {
     if (error) {
@@ -23,6 +28,7 @@ void clearError(MachineSettingsStoreError *error)
     }
 }
 
+// 函数说明：fail 函数实现名称所表示的处理步骤。
 bool fail(MachineSettingsStoreError *error,
           const QString &code,
           const QString &userMessage,
@@ -36,6 +42,7 @@ bool fail(MachineSettingsStoreError *error,
     return false;
 }
 
+// 函数说明：hasOnlyKeys 函数检查相关状态并返回判断结果。
 bool hasOnlyKeys(const QJsonObject &object,
                  const QStringList &allowed,
                  const QString &context,
@@ -53,6 +60,7 @@ bool hasOnlyKeys(const QJsonObject &object,
     return true;
 }
 
+// 函数说明：readObject 函数读取、等待或计算对应的数据。
 bool readObject(const QJsonObject &parent,
                 const char *key,
                 QJsonObject *value,
@@ -77,6 +85,7 @@ bool readObject(const QJsonObject &parent,
     return true;
 }
 
+// 函数说明：readString 函数读取、等待或计算对应的数据。
 bool readString(const QJsonObject &parent,
                 const char *key,
                 QString *value,
@@ -101,6 +110,7 @@ bool readString(const QJsonObject &parent,
     return true;
 }
 
+// 函数说明：readInt 函数读取、等待或计算对应的数据。
 bool readInt(const QJsonObject &parent,
              const char *key,
              int *value,
@@ -131,6 +141,7 @@ bool readInt(const QJsonObject &parent,
     return true;
 }
 
+// 函数说明：isCanonicalUuid 函数检查相关状态并返回判断结果。
 bool isCanonicalUuid(const QString &value)
 {
     if (value.isEmpty()) {
@@ -142,6 +153,7 @@ bool isCanonicalUuid(const QString &value)
                == value.toLower();
 }
 
+// 函数说明：detectionModeJsonIds 函数执行对应事件或业务处理。
 QStringList detectionModeJsonIds()
 {
     return QStringList()
@@ -152,6 +164,7 @@ QStringList detectionModeJsonIds()
             << QStringLiteral("barcodeWord");
 }
 
+// 函数说明：imageSaveRangeJsonIds 函数实现名称所表示的处理步骤。
 QStringList imageSaveRangeJsonIds()
 {
     return QStringList()
@@ -161,6 +174,7 @@ QStringList imageSaveRangeJsonIds()
             << QStringLiteral("all");
 }
 
+// 函数说明：imageSaveContentJsonIds 函数实现名称所表示的处理步骤。
 QStringList imageSaveContentJsonIds()
 {
     return QStringList()
@@ -169,6 +183,7 @@ QStringList imageSaveContentJsonIds()
             << QStringLiteral("rawOnly");
 }
 
+// 函数说明：rotationJsonIds 函数实现名称所表示的处理步骤。
 QStringList rotationJsonIds()
 {
     return QStringList()
@@ -178,6 +193,7 @@ QStringList rotationJsonIds()
             << QStringLiteral("rotate180");
 }
 
+// 函数说明：triggerModeJsonIds 函数执行对应事件或业务处理。
 QStringList triggerModeJsonIds()
 {
     return QStringList()
@@ -185,6 +201,7 @@ QStringList triggerModeJsonIds()
             << QStringLiteral("intermittent");
 }
 
+// 函数说明：jsonIdForInternalId 函数实现名称所表示的处理步骤。
 QString jsonIdForInternalId(const QString &internalId,
                             const QStringList &internalIds,
                             const QStringList &jsonIds)
@@ -195,6 +212,7 @@ QString jsonIdForInternalId(const QString &internalId,
             : QString();
 }
 
+// 函数说明：internalIdFromJsonId 函数实现名称所表示的处理步骤。
 bool internalIdFromJsonId(const QString &jsonId,
                           const QStringList &jsonIds,
                           const QStringList &internalIds,
@@ -214,6 +232,7 @@ bool internalIdFromJsonId(const QString &jsonId,
     return true;
 }
 
+// 函数说明：validateSettings 函数校验、转换或恢复对应数据。
 bool validateSettings(const MachineSettings &settings,
                       MachineSettingsStoreError *error)
 {
@@ -316,6 +335,7 @@ bool validateSettings(const MachineSettings &settings,
     return true;
 }
 
+// 函数说明：settingsToJson 函数更新或应用对应的配置和状态。
 QJsonObject settingsToJson(const MachineSettings &settings)
 {
     QJsonObject camera;
@@ -436,6 +456,7 @@ QJsonObject settingsToJson(const MachineSettings &settings)
     return root;
 }
 
+// 函数说明：addressFromJson 函数实现名称所表示的处理步骤。
 bool addressFromJson(const QJsonObject &parent,
                      const char *key,
                      int *db,
@@ -451,6 +472,7 @@ bool addressFromJson(const QJsonObject &parent,
             && readInt(value, "byteOffset", offset, error);
 }
 
+// 函数说明：settingsFromJson 函数更新或应用对应的配置和状态。
 bool settingsFromJson(const QJsonObject &root,
                       MachineSettings *settings,
                       MachineSettingsStoreError *error)
@@ -679,6 +701,7 @@ bool settingsFromJson(const QJsonObject &root,
     return true;
 }
 
+// 函数说明：readSettingsFile 函数读取、等待或计算对应的数据。
 bool readSettingsFile(const QString &path,
                       MachineSettings *settings,
                       MachineSettingsStoreError *error)
@@ -712,6 +735,7 @@ bool readSettingsFile(const QString &path,
 
 } // namespace
 
+// 函数说明：MachineSettingsStore 构造函数创建组件并初始化其依赖和初始状态。
 MachineSettingsStore::MachineSettingsStore(
     const QString &applicationDataRoot)
     : m_applicationDataRoot(
@@ -721,11 +745,13 @@ MachineSettingsStore::MachineSettingsStore(
 {
 }
 
+// 函数说明：applicationDataRoot 函数实现名称所表示的处理步骤。
 QString MachineSettingsStore::applicationDataRoot() const
 {
     return m_applicationDataRoot;
 }
 
+// 函数说明：settingsFilePath 函数更新或应用对应的配置和状态。
 QString MachineSettingsStore::settingsFilePath() const
 {
     return m_applicationDataRoot.isEmpty()
@@ -734,6 +760,7 @@ QString MachineSettingsStore::settingsFilePath() const
                 QStringLiteral("settings/app_settings.json"));
 }
 
+// 函数说明：recipesRootPath 函数实现名称所表示的处理步骤。
 QString MachineSettingsStore::recipesRootPath() const
 {
     return m_applicationDataRoot.isEmpty()
@@ -742,6 +769,7 @@ QString MachineSettingsStore::recipesRootPath() const
                 QStringLiteral("recipes"));
 }
 
+// 函数说明：editorWorkspacesRootPath 函数实现名称所表示的处理步骤。
 QString MachineSettingsStore::editorWorkspacesRootPath() const
 {
     return m_applicationDataRoot.isEmpty()
@@ -750,6 +778,7 @@ QString MachineSettingsStore::editorWorkspacesRootPath() const
                 QStringLiteral("editor-workspaces"));
 }
 
+// 函数说明：load 函数读取、等待或计算对应的数据。
 bool MachineSettingsStore::load(
     MachineSettings *settings,
     MachineSettingsLoadStatus *status,
@@ -783,6 +812,7 @@ bool MachineSettingsStore::load(
     return true;
 }
 
+// 函数说明：save 函数保存或发布对应的数据和资源。
 bool MachineSettingsStore::save(
     const MachineSettings &settings,
     MachineSettingsStoreError *error) const
@@ -875,6 +905,7 @@ bool MachineSettingsStore::save(
     return true;
 }
 
+// 函数说明：restoreDefaults 函数校验、转换或恢复对应数据。
 bool MachineSettingsStore::restoreDefaults(
     MachineSettings *settings,
     MachineSettingsStoreError *error) const
@@ -893,6 +924,7 @@ bool MachineSettingsStore::restoreDefaults(
     return true;
 }
 
+// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 bool MachineSettingsStore::clear(
     MachineSettingsStoreError *error) const
 {

@@ -1,3 +1,7 @@
+// 文件作用：本文件用于负责产品配方目录的校验、加载、事务保存和已发布配方枚举。
+// 主要职责：负责产品配方目录的校验、加载、事务保存和已发布配方枚举。
+// 模块位置：配方层；负责产品参数、资源和编辑事务，不依赖界面或检测实现。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "recipe_store.h"
 
 #include <QDir>
@@ -12,6 +16,7 @@
 
 namespace {
 
+// 函数说明：setError 函数更新或应用对应的配置和状态。
 void setError(QString *errorMessage, const QString &message)
 {
     if (errorMessage) {
@@ -22,6 +27,7 @@ void setError(QString *errorMessage, const QString &message)
     }
 }
 
+// 函数说明：isCanonicalRecipeId 函数检查相关状态并返回判断结果。
 bool isCanonicalRecipeId(const QString &recipeId)
 {
     const QString trimmed = recipeId.trimmed();
@@ -30,6 +36,7 @@ bool isCanonicalRecipeId(const QString &recipeId)
             && uuid.toString(QUuid::WithoutBraces) == trimmed.toLower();
 }
 
+// 函数说明：removeDirectoryIfExists 函数停止流程、清理状态或释放对应资源。
 bool removeDirectoryIfExists(const QString &directoryPath,
                              QString *errorMessage)
 {
@@ -53,6 +60,7 @@ bool removeDirectoryIfExists(const QString &directoryPath,
     return true;
 }
 
+// 函数说明：ensureRecipesRoot 函数实现名称所表示的处理步骤。
 bool ensureRecipesRoot(const QString &rootPath, QString *errorMessage)
 {
     if (rootPath.trimmed().isEmpty()) {
@@ -77,6 +85,7 @@ bool ensureRecipesRoot(const QString &rootPath, QString *errorMessage)
     return true;
 }
 
+// 函数说明：writeRecipeJson 函数保存或发布对应的数据和资源。
 bool writeRecipeJson(const QString &directoryPath,
                      const ProductRecipe &recipe,
                      QString *errorMessage)
@@ -104,6 +113,7 @@ bool writeRecipeJson(const QString &directoryPath,
     return true;
 }
 
+// 函数说明：copyRecipeAssets 函数实现名称所表示的处理步骤。
 bool copyRecipeAssets(const QString &directoryPath,
                       const ProductRecipe &recipe,
                       const QMap<QString, QString> &assetSourcePaths,
@@ -162,6 +172,7 @@ bool copyRecipeAssets(const QString &directoryPath,
 
 } // namespace
 
+// 函数说明：RecipeStore 构造函数创建组件并初始化其依赖和初始状态。
 RecipeStore::RecipeStore(const QString &recipesRootPath,
                          const DirectoryRenameFunction &directoryRenameFunction)
     : m_recipesRootPath(recipesRootPath.trimmed().isEmpty()
@@ -171,11 +182,13 @@ RecipeStore::RecipeStore(const QString &recipesRootPath,
 {
 }
 
+// 函数说明：recipesRootPath 函数实现名称所表示的处理步骤。
 QString RecipeStore::recipesRootPath() const
 {
     return m_recipesRootPath;
 }
 
+// 函数说明：recipeDirectoryPath 函数实现名称所表示的处理步骤。
 QString RecipeStore::recipeDirectoryPath(const QString &recipeId) const
 {
     if (m_recipesRootPath.isEmpty() || !isCanonicalRecipeId(recipeId)) {
@@ -184,6 +197,7 @@ QString RecipeStore::recipeDirectoryPath(const QString &recipeId) const
     return QDir(m_recipesRootPath).filePath(recipeId.trimmed().toLower());
 }
 
+// 函数说明：loadRecipe 函数读取、等待或计算对应的数据。
 bool RecipeStore::loadRecipe(const QString &recipeId,
                              ProductRecipe *recipe,
                              QString *errorMessage) const
@@ -225,6 +239,7 @@ bool RecipeStore::loadRecipe(const QString &recipeId,
                                    errorMessage);
 }
 
+// 函数说明：loadPreparedRecipe 函数读取、等待或计算对应的数据。
 bool RecipeStore::loadPreparedRecipe(
         const QString &recipeId,
         PreparedRecipeSnapshot *preparedRecipe,
@@ -248,6 +263,7 @@ bool RecipeStore::loadPreparedRecipe(
                          errorMessage);
 }
 
+// 函数说明：listRecipes 函数实现名称所表示的处理步骤。
 bool RecipeStore::listRecipes(RecipeCatalog *catalog,
                               QString *errorMessage) const
 {
@@ -331,6 +347,7 @@ bool RecipeStore::listRecipes(RecipeCatalog *catalog,
     return true;
 }
 
+// 函数说明：saveRecipe 函数保存或发布对应的数据和资源。
 bool RecipeStore::saveRecipe(
         const ProductRecipe &recipe,
         const QMap<QString, QString> &assetSourcePaths,
@@ -445,6 +462,7 @@ bool RecipeStore::saveRecipe(
     return true;
 }
 
+// 函数说明：renameDirectory 函数实现名称所表示的处理步骤。
 bool RecipeStore::renameDirectory(
         const QString &sourceDirectoryPath,
         const QString &destinationDirectoryPath) const
@@ -456,6 +474,7 @@ bool RecipeStore::renameDirectory(
     return QDir().rename(sourceDirectoryPath, destinationDirectoryPath);
 }
 
+// 函数说明：loadRecipeFromDirectory 函数读取、等待或计算对应的数据。
 bool RecipeStore::loadRecipeFromDirectory(
         const QString &directoryPath,
         const QString &expectedRecipeId,

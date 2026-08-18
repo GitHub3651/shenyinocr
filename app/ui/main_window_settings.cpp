@@ -1,3 +1,7 @@
+// 文件作用：本文件用于实现主窗口中机器设置、PLC参数和软件数据相关的交互槽。
+// 主要职责：实现主窗口中机器设置、PLC参数和软件数据相关的交互槽。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 /**
  * @file ui/main_window_settings.cpp
  * @brief 主窗口设置、配方页面命令与硬件按钮薄协调。
@@ -23,6 +27,7 @@
 #pragma execution_character_set("utf-8")
 
 namespace {
+// 函数说明：parseIntValue 函数校验、转换或恢复对应数据。
 bool parseIntValue(const QString &text, int *value)
 {
     bool ok = false;
@@ -36,6 +41,7 @@ bool parseIntValue(const QString &text, int *value)
     return true;
 }
 
+// 函数说明：isSingleTemplateRecipeMode 函数检查相关状态并返回判断结果。
 bool isSingleTemplateRecipeMode(const QString &modeId)
 {
     DetectionMode mode;
@@ -46,11 +52,13 @@ bool isSingleTemplateRecipeMode(const QString &modeId)
 
 } // namespace
 
+// 函数说明：updateCurrentTemplateName 函数更新或应用对应的配置和状态。
 void MainWindow::updateCurrentTemplateName()
 {
     m_templateEditorPage->updateCurrentTemplateName();
 }
 
+// 函数说明：updateSaveDirButtonText 函数更新或应用对应的配置和状态。
 void MainWindow::updateSaveDirButtonText()
 {
     if (!ui || !ui->lineEdit_imageSavePath || !ui->pushButton_browseImageSavePath) {
@@ -71,6 +79,7 @@ void MainWindow::updateSaveDirButtonText()
     ui->lineEdit_imageSavePath->setToolTip(saveDir);
 }
 
+// 函数说明：updateImageSaveOptionsVisibility 函数更新或应用对应的配置和状态。
 void MainWindow::updateImageSaveOptionsVisibility()
 {
     if (!ui || !ui->comboBox_imageSaveRange) {
@@ -99,6 +108,7 @@ void MainWindow::updateImageSaveOptionsVisibility()
     }
 }
 
+// 函数说明：updateTissueRoughnessUiVisibility 函数更新或应用对应的配置和状态。
 void MainWindow::updateTissueRoughnessUiVisibility()
 {
     if (!ui) {
@@ -111,26 +121,31 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     ui->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
 }
 
+// 函数说明：setupTemplateGuide 函数更新或应用对应的配置和状态。
 void MainWindow::setupTemplateGuide()
 {
     m_templateEditorPage->setupTemplateGuide();
 }
 
+// 函数说明：adjustTemplateGuideHeight 函数更新或应用对应的配置和状态。
 void MainWindow::adjustTemplateGuideHeight()
 {
     m_templateEditorPage->adjustTemplateGuideHeight();
 }
 
+// 函数说明：hideTemplateGuide 函数实现名称所表示的处理步骤。
 void MainWindow::hideTemplateGuide()
 {
     m_templateEditorPage->hideTemplateGuide();
 }
 
+// 函数说明：updateImageDisplayStatusText 函数更新或应用对应的配置和状态。
 void MainWindow::updateImageDisplayStatusText(const QString &body)
 {
     m_templateEditorPage->updateImageDisplayStatusText(body);
 }
 
+// 函数说明：handleTemplateGuideEvent 函数执行对应事件或业务处理。
 void MainWindow::handleTemplateGuideEvent(
         const QString &eventName,
         int pointCount)
@@ -140,11 +155,13 @@ void MainWindow::handleTemplateGuideEvent(
                 pointCount);
 }
 
+// 函数说明：setupManualCharacterCropUi 函数更新或应用对应的配置和状态。
 void MainWindow::setupManualCharacterCropUi()
 {
     m_templateEditorPage->setupManualCharacterCropUi();
 }
 
+// 函数说明：setupSoftwareSettingsPage 函数更新或应用对应的配置和状态。
 void MainWindow::setupSoftwareSettingsPage()
 {
     if (!ui || !ui->lineEdit_softwareDataDirectory || !ui->pushButton_clearSoftwareData
@@ -200,6 +217,7 @@ void MainWindow::setupSoftwareSettingsPage()
             &MainWindow::restoreDefaultMachineSettings);
 }
 
+// 函数说明：clearCurrentSoftwareData 函数停止流程、清理状态或释放对应资源。
 void MainWindow::clearCurrentSoftwareData()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -236,6 +254,7 @@ void MainWindow::clearCurrentSoftwareData()
     showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
 }
 
+// 函数说明：restoreDefaultMachineSettings 函数校验、转换或恢复对应数据。
 void MainWindow::restoreDefaultMachineSettings()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -280,11 +299,13 @@ void MainWindow::restoreDefaultMachineSettings()
         "当前可设置参数已恢复为默认值。带 * 的参数需要点击对应【设置】后才会生效。");
 }
 
+// 函数说明：hasDirtySettings 函数检查相关状态并返回判断结果。
 bool MainWindow::hasDirtySettings() const
 {
     return m_settingsEditState.hasDirtySettings();
 }
 
+// 函数说明：saveSettings 函数保存或发布对应的数据和资源。
 bool MainWindow::saveSettings(bool showErrorMessage)
 {
     QString errorMessage;
@@ -305,6 +326,7 @@ bool MainWindow::saveSettings(bool showErrorMessage)
     return false;
 }
 
+// 函数说明：updateHardwareParameterUiEnabled 函数更新或应用对应的配置和状态。
 void MainWindow::updateHardwareParameterUiEnabled()
 {
     if (!m_machineSettingsPage) {
@@ -322,11 +344,13 @@ void MainWindow::updateHardwareParameterUiEnabled()
                 operationBusy);
 }
 
+// 函数说明：dirtySettingsMessage 函数实现名称所表示的处理步骤。
 QString MainWindow::dirtySettingsMessage() const
 {
     return m_settingsEditState.dirtySettingsMessage();
 }
 
+// 函数说明：restoreUnappliedSettingsFromApplied 函数校验、转换或恢复对应数据。
 void MainWindow::restoreUnappliedSettingsFromApplied()
 {
     if (m_machineSettingsPage) {
@@ -366,26 +390,31 @@ void MainWindow::restoreUnappliedSettingsFromApplied()
     refreshRecipeProfileDirty();
 }
 
+// 函数说明：setupRecipeProfileDirtyTracking 函数更新或应用对应的配置和状态。
 void MainWindow::setupRecipeProfileDirtyTracking()
 {
     m_templateEditorPage->setupRecipeProfileDirtyTracking();
 }
 
+// 函数说明：refreshRecipeProfileDirty 函数更新或应用对应的配置和状态。
 void MainWindow::refreshRecipeProfileDirty()
 {
     m_templateEditorPage->refreshRecipeProfileDirty();
 }
 
+// 函数说明：clearRecipeProfileDirty 函数停止流程、清理状态或释放对应资源。
 void MainWindow::clearRecipeProfileDirty()
 {
     m_templateEditorPage->clearRecipeProfileDirty();
 }
 
+// 函数说明：setupWordTemplateEditorCombo 函数更新或应用对应的配置和状态。
 void MainWindow::setupWordTemplateEditorCombo()
 {
     m_templateEditorPage->setupWordTemplateEditorCombo();
 }
 
+// 函数说明：setupDetectModeChangeTracking 函数更新或应用对应的配置和状态。
 void MainWindow::setupDetectModeChangeTracking()
 {
     connect(ui->comboBox_detectionMode,
@@ -425,26 +454,31 @@ void MainWindow::setupDetectModeChangeTracking()
             });
 }
 
+// 函数说明：clearWordMultiTemplateState 函数停止流程、清理状态或释放对应资源。
 void MainWindow::clearWordMultiTemplateState()
 {
     m_templateEditorPage->clearWordMultiTemplateState();
 }
 
+// 函数说明：clearSingleTemplateRecipeState 函数停止流程、清理状态或释放对应资源。
 void MainWindow::clearSingleTemplateRecipeState()
 {
     m_templateEditorPage->clearSingleTemplateRecipeState();
 }
 
+// 函数说明：detectModeIdForIndex 函数执行对应事件或业务处理。
 QString MainWindow::detectModeIdForIndex(int index) const
 {
     return m_templateEditorPage->detectModeIdForIndex(index);
 }
 
+// 函数说明：currentDetectModeId 函数读取、等待或计算对应的数据。
 QString MainWindow::currentDetectModeId() const
 {
     return m_templateEditorPage->currentDetectModeId();
 }
 
+// 函数说明：restoreTemplatesForMode 函数校验、转换或恢复对应数据。
 void MainWindow::restoreTemplatesForMode(
         const QString &modeId,
         bool showMessage)
@@ -454,17 +488,20 @@ void MainWindow::restoreTemplatesForMode(
                 showMessage);
 }
 
+// 函数说明：refreshWordTemplateEditorCombo 函数更新或应用对应的配置和状态。
 void MainWindow::refreshWordTemplateEditorCombo()
 {
     m_templateEditorPage->refreshWordTemplateEditorCombo();
 }
 
+// 函数说明：currentWordTemplateProfileIndex 函数读取、等待或计算对应的数据。
 int MainWindow::currentWordTemplateProfileIndex() const
 {
     return m_templateEditorPage
             ->currentWordTemplateProfileIndex();
 }
 
+// 函数说明：applyCameraExposureValue 函数更新或应用对应的配置和状态。
 bool MainWindow::applyCameraExposureValue(
     int exposureValue,
     QString *errorMessage)
@@ -486,6 +523,7 @@ bool MainWindow::applyCameraExposureValue(
     return result.success;
 }
 
+// 函数说明：applyCameraExposureFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyCameraExposureFromUi(
     QStringList *errors,
     bool showSuccessMessage)
@@ -511,6 +549,7 @@ bool MainWindow::applyCameraExposureFromUi(
     return true;
 }
 
+// 函数说明：applyCameraGainFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyCameraGainFromUi(
     QStringList *errors,
     bool showSuccessMessage)
@@ -550,6 +589,7 @@ bool MainWindow::applyCameraGainFromUi(
     return true;
 }
 
+// 函数说明：applyPlcTriggerModeFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage)
 {
     PLCmode = ui->comboBox_plcTriggerMode->currentIndex();
@@ -593,6 +633,7 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
     return true;
 }
 
+// 函数说明：applyPlcRunSettingsFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
     if (!m_inspectionApplicationService
@@ -651,6 +692,7 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
  * @brief 曝光确定按钮点击槽函数
  * @details 设置相机曝光值
  */
+// 函数说明：on_pushButton_applyCameraExposure_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyCameraExposure_clicked()
 {
     QStringList errors;
@@ -669,6 +711,7 @@ void MainWindow::on_pushButton_applyCameraExposure_clicked()
  * @brief PLC连接按钮点击槽函数
  * @details 连接到西门子PLC
  */
+// 函数说明：on_pushButton_connectPlc_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_connectPlc_clicked()
 {
     PlcConnectionCommand command;
@@ -696,6 +739,7 @@ void MainWindow::on_pushButton_connectPlc_clicked()
 /**
  * @brief PLC断开按钮点击槽函数
  */
+// 函数说明：on_pushButton_disconnectPlc_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_disconnectPlc_clicked()
 {
     const OperationResult result =
@@ -717,6 +761,7 @@ void MainWindow::on_pushButton_disconnectPlc_clicked()
  * @brief 写入批次时间按钮点击槽函数
  * @details 向PLC DB1.982写入WORD值（批次时间）
  */
+// 函数说明：on_pushButton_applyPlcProcessParameters_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 {
     QStringList errors;
@@ -725,6 +770,7 @@ void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 
 
 
+// 函数说明：on_toolButton_stopInspection_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_toolButton_stopInspection_clicked()
 {
     if (m_inspectionPage) {
@@ -775,20 +821,24 @@ void MainWindow::on_toolButton_stopInspection_clicked()
  * @brief 目标字符确定按钮点击槽函数
  */
 
+// 函数说明：on_pushButton_applyTargetText_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyTargetText_clicked()
 {
     m_templateEditorPage->applyCurrentTargetText();
 }
 
+// 函数说明：on_pushButton_applyBatchTargetText_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyBatchTargetText_clicked()
 {
     m_templateEditorPage->applyBatchTargetText();
 }
 
+// 函数说明：on_pushButton_applyBatchImageThreshold_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyBatchImageThreshold_clicked()
 {
     m_templateEditorPage->applyBatchImageThreshold();
 }
+// 函数说明：applyMachineSettingsToUi 函数更新或应用对应的配置和状态。
 void MainWindow::applyMachineSettingsToUi(
     const MachineSettings &settings)
 {
@@ -801,6 +851,7 @@ void MainWindow::applyMachineSettingsToUi(
     restoreTemplatesForMode(m_currentDetectModeId, false);
 }
 
+// 函数说明：applyRecipeProfileToUi 函数更新或应用对应的配置和状态。
 void MainWindow::applyRecipeProfileToUi(const RecipeProfile &settings)
 {
     QSignalBlocker targetBlocker(ui->textEdit_targetText);
@@ -814,6 +865,7 @@ void MainWindow::applyRecipeProfileToUi(const RecipeProfile &settings)
  * @brief 设置非公共配置初始值
  * @details 公共配置统一由 MachineSettings::defaults() 提供
  */
+// 函数说明：setupNonPersistentDefaults 函数更新或应用对应的配置和状态。
 void MainWindow::setupNonPersistentDefaults()
 {
     ui->lineEdit_imageThreshold->setText(QString::number(
@@ -847,12 +899,14 @@ void MainWindow::on_pushButton_applyCameraGain_clicked()
     }
 }
 
+// 函数说明：on_pushButton_applyTissueRoughnessThreshold_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyTissueRoughnessThreshold_clicked()
 {
     m_templateEditorPage->applyCurrentTissueThreshold();
 }
 
 
+// 函数说明：on_pushButton_applyPhotoDistance_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyPhotoDistance_clicked()
 {
 

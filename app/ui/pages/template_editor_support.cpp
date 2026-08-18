@@ -1,3 +1,7 @@
+// 文件作用：本文件用于提供模板编辑页面共用的图像、坐标和模式转换辅助函数。
+// 主要职责：提供模板编辑页面共用的图像、坐标和模式转换辅助函数。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/pages/template_editor_support.h"
 
 #include "contracts/detection_mode.h"
@@ -13,6 +17,7 @@
 
 namespace TemplateEditorSupport {
 
+// 函数说明：setLabelTextIfChanged 函数更新或应用对应的配置和状态。
 void setLabelTextIfChanged(QLabel *label, const QString &text)
 {
     if (label && label->text() != text) {
@@ -20,6 +25,7 @@ void setLabelTextIfChanged(QLabel *label, const QString &text)
     }
 }
 
+// 函数说明：parseIntValue 函数校验、转换或恢复对应数据。
 bool parseIntValue(const QString &text, int *value)
 {
     bool ok = false;
@@ -33,6 +39,7 @@ bool parseIntValue(const QString &text, int *value)
     return true;
 }
 
+// 函数说明：isSingleTemplateRecipeMode 函数检查相关状态并返回判断结果。
 bool isSingleTemplateRecipeMode(const QString &modeId)
 {
     DetectionMode mode;
@@ -41,6 +48,7 @@ bool isSingleTemplateRecipeMode(const QString &modeId)
                 || mode == DetectionMode::Ocr);
 }
 
+// 函数说明：imageFromBgrMat 函数实现名称所表示的处理步骤。
 QImage imageFromBgrMat(const cv::Mat &image)
 {
     if (image.empty()) return QImage();
@@ -107,6 +115,7 @@ struct QuickROIState {
     bool isDone = false;
 };
 
+// 函数说明：quickMouseCallback 函数实现名称所表示的处理步骤。
 static void quickMouseCallback(int event, int x, int y, int flags, void* userdata) {
     QuickROIState* state = reinterpret_cast<QuickROIState*>(userdata);
 
@@ -131,6 +140,7 @@ static void quickMouseCallback(int event, int x, int y, int flags, void* userdat
     }
 }
 
+// 函数说明：getPolygonROI 函数读取、等待或计算对应的数据。
 std::vector<cv::Point> getPolygonROI(const cv::Mat& img, const std::string& windowTitle) {
     cv::Mat displayImg = img.clone();
     int screenHeightLimit = 800;
@@ -173,6 +183,7 @@ std::vector<cv::Point> getPolygonROI(const cv::Mat& img, const std::string& wind
     return finalPts;
 }
 
+// 函数说明：getQuickRectROI 函数读取、等待或计算对应的数据。
 cv::Rect getQuickRectROI(const cv::Mat& img, const std::string& windowTitle) {
     cv::Mat displayImg = img.clone();
     int screenHeightLimit = 800;

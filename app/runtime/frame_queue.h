@@ -1,3 +1,7 @@
+// 文件作用：本文件用于提供容量受控的正式帧队列，并支持阻塞提交、取出和协作取消。
+// 主要职责：提供容量受控的正式帧队列，并支持阻塞提交、取出和协作取消。
+// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
@@ -8,6 +12,7 @@
 #include <memory>
 #include <mutex>
 
+// 组件说明：FrameQueueSubmitResult 枚举列出该组件允许使用的稳定状态和选项。
 enum class FrameQueueSubmitResult
 {
     Accepted,
@@ -16,6 +21,7 @@ enum class FrameQueueSubmitResult
     Full
 };
 
+// 组件说明：FrameQueue 组件封装本文件中与其名称对应的单一职责。
 class FrameQueue
 {
 public:

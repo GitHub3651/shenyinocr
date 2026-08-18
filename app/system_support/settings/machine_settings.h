@@ -1,3 +1,7 @@
+// 文件作用：本文件用于定义整机相机、触发、PLC、存图和界面布局等持久化设置。
+// 主要职责：定义整机相机、触发、PLC、存图和界面布局等持久化设置。
+// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include <QByteArray>
@@ -5,6 +9,7 @@
 #include <QString>
 #include <QStringList>
 
+// 组件说明：MachineSettings 组件集中描述相关配置、规则和运行参数。
 struct MachineSettings
 {
     static const int CurrentSchemaVersion = 1;

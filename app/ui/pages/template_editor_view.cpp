@@ -1,3 +1,7 @@
+// 文件作用：本文件用于构造模板编辑动态控件，并维护模板制作视图的显示和交互状态。
+// 主要职责：构造模板编辑动态控件，并维护模板制作视图的显示和交互状态。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 /**
  * @file ui/pages/template_editor_view.cpp
  * @brief 模板引导、脏状态和字符资产编辑交互。
@@ -54,6 +58,7 @@
 
 using namespace TemplateEditorSupport;
 
+// 函数说明：updateCurrentTemplateName 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::updateCurrentTemplateName()
 {
     QString templateName = "--";
@@ -68,6 +73,7 @@ void TemplateEditorPage::updateCurrentTemplateName()
 }
 
 
+// 函数说明：setupTemplateGuide 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setupTemplateGuide()
 {
     if (m_templateGuideFrame) {
@@ -115,6 +121,7 @@ void TemplateEditorPage::setupTemplateGuide()
     hideTemplateGuide();
 }
 
+// 函数说明：adjustTemplateGuideHeight 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::adjustTemplateGuideHeight()
 {
     if (!m_templateGuideFrame
@@ -153,6 +160,7 @@ void TemplateEditorPage::adjustTemplateGuideHeight()
     }
 }
 
+// 函数说明：updateTemplateGuideText 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::updateTemplateGuideText(const QString &title, const QString &body)
 {
     if (!m_templateGuideFrame || !m_templateGuideTitleLabel || !m_templateGuideBodyLabel) {
@@ -179,6 +187,7 @@ void TemplateEditorPage::updateTemplateGuideText(const QString &title, const QSt
     });
 }
 
+// 函数说明：hideTemplateGuide 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::hideTemplateGuide()
 {
     if (m_templateGuideFrame) {
@@ -186,6 +195,7 @@ void TemplateEditorPage::hideTemplateGuide()
     }
 }
 
+// 函数说明：updateImageDisplayStatusText 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::updateImageDisplayStatusText(const QString &body)
 {
     if (!m_templateGuideFrame || !m_templateGuideTitleLabel || !m_templateGuideBodyLabel) {
@@ -204,6 +214,7 @@ void TemplateEditorPage::updateImageDisplayStatusText(const QString &body)
     });
 }
 
+// 函数说明：showTemplateGuideForCurrentMode 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showTemplateGuideForCurrentMode()
 {
     const int modeIndex = m_view.comboBox_detectionMode->currentIndex();
@@ -234,6 +245,7 @@ void TemplateEditorPage::showTemplateGuideForCurrentMode()
     hideTemplateGuide();
 }
 
+// 函数说明：handleTemplateGuideEvent 函数执行对应事件或业务处理。
 void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int pointCount)
 {
     if (!imageLabel) {
@@ -391,6 +403,7 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
     }
 }
 
+// 函数说明：setupManualCharacterCropUi 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setupManualCharacterCropUi()
 {
     if (m_manualCharacterCropButton) {
@@ -430,6 +443,7 @@ void TemplateEditorPage::setupManualCharacterCropUi()
 
 
 
+// 函数说明：setupRecipeProfileDirtyTracking 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::setupRecipeProfileDirtyTracking()
 {
     m_templateTargetLabelText = m_view.label_targetText
@@ -467,6 +481,7 @@ void TemplateEditorPage::setupRecipeProfileDirtyTracking()
     }
 }
 
+// 函数说明：refreshTemplateTargetTextDirty 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::refreshTemplateTargetTextDirty()
 {
     bool dirty = false;
@@ -488,6 +503,7 @@ void TemplateEditorPage::refreshTemplateTargetTextDirty()
     updateRecipeProfileDirtyUi();
 }
 
+// 函数说明：refreshTemplateImageThresholdDirty 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::refreshTemplateImageThresholdDirty()
 {
     bool dirty = false;
@@ -520,30 +536,35 @@ void TemplateEditorPage::refreshTemplateImageThresholdDirty()
     updateRecipeProfileDirtyUi();
 }
 
+// 函数说明：refreshRecipeProfileDirty 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::refreshRecipeProfileDirty()
 {
     refreshTemplateTargetTextDirty();
     refreshTemplateImageThresholdDirty();
 }
 
+// 函数说明：clearTemplateTargetTextDirty 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::clearTemplateTargetTextDirty()
 {
     m_settingsEditState->setTemplateTargetDirty(false);
     updateRecipeProfileDirtyUi();
 }
 
+// 函数说明：clearTemplateImageThresholdDirty 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::clearTemplateImageThresholdDirty()
 {
     m_settingsEditState->setTemplateThresholdDirty(false);
     updateRecipeProfileDirtyUi();
 }
 
+// 函数说明：clearRecipeProfileDirty 函数停止流程、清理状态或释放对应资源。
 void TemplateEditorPage::clearRecipeProfileDirty()
 {
     m_settingsEditState->clearTemplateDirty();
     updateRecipeProfileDirtyUi();
 }
 
+// 函数说明：updateRecipeProfileDirtyUi 函数更新或应用对应的配置和状态。
 void TemplateEditorPage::updateRecipeProfileDirtyUi()
 {
     if (m_view.label_targetText) {
@@ -560,6 +581,7 @@ void TemplateEditorPage::updateRecipeProfileDirtyUi()
     }
 }
 
+// 函数说明：showManualCharacterTemplateEditorDialog 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::showManualCharacterTemplateEditorDialog()
 {
     if (!m_templateService->activePreparedRecipe()
@@ -584,6 +606,7 @@ void TemplateEditorPage::showManualCharacterTemplateEditorDialog()
     editActiveRecipeCharacterAssets(profileIndex);
 }
 
+// 函数说明：editActiveRecipeCharacterAssets 函数实现名称所表示的处理步骤。
 void TemplateEditorPage::editActiveRecipeCharacterAssets(
         int profileIndex)
 {
