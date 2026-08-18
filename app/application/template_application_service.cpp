@@ -197,8 +197,8 @@ bool TemplateApplicationService::stageInitialProfileAssets(
         QMap<QString, QString> *assetSourcePaths,
         QString *errorMessage) const
 {
-    return m_assetService.stageInitialProfileAssets(
-                m_session.workspacePath(), assets,
+    return m_session.stageInitialProfileAssets(
+                assets,
                 recipe, profile, assetSourcePaths, errorMessage);
 }
 
@@ -211,8 +211,8 @@ bool TemplateApplicationService::stageCharacterAssets(
         QMap<QString, QString> *assetSourcePaths,
         QString *errorMessage) const
 {
-    return m_assetService.stageCharacterAssets(
-                m_session.workspacePath(), profileIndex,
+    return m_session.stageCharacterAssets(
+                profileIndex,
                 characterImages, recipe, profile,
                 assetSourcePaths, errorMessage);
 }
@@ -323,17 +323,18 @@ bool TemplateApplicationService::validateBarcodeTemplate(
     return true;
 }
 
-// 函数说明：modeMemory 函数实现名称所表示的处理步骤。
-const TemplateModeMemory &TemplateApplicationService::modeMemory() const
+// 函数说明：publishedRecipeIdsByMode 函数返回各检测模式当前发布的配方。
+const QMap<QString, QString> &
+TemplateApplicationService::publishedRecipeIdsByMode() const
 {
-    return m_modeMemory;
+    return m_publishedRecipeIdsByMode;
 }
 
 // 函数说明：replacePublishedRecipeIdsByMode 函数更新或应用对应的配置和状态。
 void TemplateApplicationService::replacePublishedRecipeIdsByMode(
         const QMap<QString, QString> &recipeIds)
 {
-    m_modeMemory.publishedRecipeIdsByMode() = recipeIds;
+    m_publishedRecipeIdsByMode = recipeIds;
 }
 
 // 函数说明：rememberPublishedRecipe 函数实现名称所表示的处理步骤。
@@ -341,14 +342,14 @@ void TemplateApplicationService::rememberPublishedRecipe(
         const QString &modeId,
         const QString &recipeId)
 {
-    m_modeMemory.publishedRecipeIdsByMode().insert(modeId, recipeId);
+    m_publishedRecipeIdsByMode.insert(modeId, recipeId);
 }
 
 // 函数说明：forgetPublishedRecipe 函数实现名称所表示的处理步骤。
 void TemplateApplicationService::forgetPublishedRecipe(
         const QString &modeId)
 {
-    m_modeMemory.publishedRecipeIdsByMode().remove(modeId);
+    m_publishedRecipeIdsByMode.remove(modeId);
 }
 
 const PreparedRecipeSnapshot &

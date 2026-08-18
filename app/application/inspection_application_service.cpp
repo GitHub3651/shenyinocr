@@ -130,13 +130,12 @@ FramePreprocessSettings framePreprocessSettings(
 // 函数说明：cameraConfiguration 函数实现名称所表示的处理步骤。
 CameraSessionCaptureConfiguration cameraConfiguration(
     const MachineSettings &settings,
-    const InspectionRunPlan &runPlan)
+    bool hardwareTriggerEnabled)
 {
     CameraSessionCaptureConfiguration output;
-    output.runPlan = runPlan;
+    output.hardwareTriggerEnabled = hardwareTriggerEnabled;
     output.framePreprocess = framePreprocessSettings(settings);
-    if (runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger) {
+    if (hardwareTriggerEnabled) {
         output.hardwareTriggerDelayMicroseconds =
                 static_cast<float>(settings.cameraDelay)
                 * kMicrosecondsPerMillisecond;
@@ -260,9 +259,9 @@ QString faultReasonText(InspectionFaultReason reason)
 
 // 函数说明：acquisitionDto 函数实现名称所表示的处理步骤。
 InspectionAcquisitionDto acquisitionDto(
-        InspectionAcquisitionKind kind)
+        bool hardwareTriggerEnabled)
 {
-    return kind == InspectionAcquisitionKind::HardwareTrigger
+    return hardwareTriggerEnabled
             ? InspectionAcquisitionDto::HardwareTrigger
             : InspectionAcquisitionDto::SoftwareTrigger;
 }
@@ -467,10 +466,8 @@ StartInspectionResult InspectionApplicationService::start(
                     resourceResult.details);
     }
 
-    const InspectionRunPlan runPlan = InspectionRunConfiguration::createPlan(
-                settings.triggerEnabled);
-    if (runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger) {
+    const bool hardwareTriggerEnabled = settings.triggerEnabled;
+    if (hardwareTriggerEnabled) {
         m_runtime->resetStatistics();
     }
     DetectionProfileSnapshot profileSnapshot;
@@ -511,7 +508,7 @@ StartInspectionResult InspectionApplicationService::start(
     if (!m_cameraSession->prepareInspection(
                 cameraConfiguration(
                     settings,
-                    runPlan),
+                    hardwareTriggerEnabled),
                 &cameraError)) {
         const InspectionCameraRecoveryResult recovery =
                 m_cameraSession->restorePreviewReady(
@@ -610,7 +607,7 @@ StartInspectionResult InspectionApplicationService::start(
     m_activeRecipeId = recipeId;
     publishSnapshot();
     StartInspectionResult result;
-    result.acquisitionKind = acquisitionDto(runPlan.acquisitionKind);
+    result.acquisitionKind = acquisitionDto(hardwareTriggerEnabled);
     result.snapshot = runtimeSnapshot();
     return result;
 }

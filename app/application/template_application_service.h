@@ -7,9 +7,7 @@
 #include "application/template_editor_contract.h"
 #include "application/template_geometry_service.h"
 #include "recipes/prepared_recipe.h"
-#include "recipes/recipe_asset_service.h"
 #include "recipes/recipe_editor_session.h"
-#include "recipes/template_mode_memory.h"
 
 #include <QMap>
 #include <QString>
@@ -87,7 +85,7 @@ public:
         const TemplateBarcodeValidationOptions &options,
         QString *failureReason) const;
 
-    const TemplateModeMemory &modeMemory() const;
+    const QMap<QString, QString> &publishedRecipeIdsByMode() const;
     void replacePublishedRecipeIdsByMode(
         const QMap<QString, QString> &recipeIds);
     void rememberPublishedRecipe(
@@ -109,9 +107,8 @@ private:
     std::shared_ptr<RecipeStore> m_store;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
     RecipeEditorSession m_session;
-    RecipeAssetService m_assetService;
     TemplateGeometryService m_geometryService;
-    TemplateModeMemory m_modeMemory;
+    QMap<QString, QString> m_publishedRecipeIdsByMode;
     PreparedRecipeSnapshot m_activePreparedRecipe;
     std::vector<WordTemplateProfile> m_wordProfiles;
 };

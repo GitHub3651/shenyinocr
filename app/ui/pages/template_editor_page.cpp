@@ -199,7 +199,7 @@ bool TemplateEditorPage::saveSettings(bool showErrorMessage)
 {
     MachineSettings draft = m_settingsService->draft();
     draft.publishedRecipeIdsByMode =
-            m_templateService->modeMemory().publishedRecipeIdsByMode();
+            m_templateService->publishedRecipeIdsByMode();
     m_settingsService->updateDraft(draft);
     if (m_callbacks.saveSettings) {
         return m_callbacks.saveSettings(showErrorMessage);

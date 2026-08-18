@@ -230,8 +230,7 @@ bool CameraSession::prepareInspection(
         return false;
     }
     CameraResult result;
-    if (configuration.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger) {
+    if (configuration.hardwareTriggerEnabled) {
         result = m_cameraDevice->stopGrabbing();
         if (result.isSuccess()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -239,8 +238,7 @@ bool CameraSession::prepareInspection(
     }
     if (result.isSuccess()) {
         result = m_cameraDevice->setTriggerMode(
-                    configuration.runPlan.acquisitionKind
-                    == InspectionAcquisitionKind::HardwareTrigger
+                    configuration.hardwareTriggerEnabled
                     ? CameraTriggerMode::HardwareLine0
                     : CameraTriggerMode::Software);
     }
@@ -249,9 +247,7 @@ bool CameraSession::prepareInspection(
     settings.exposure = static_cast<float>(configuration.exposure);
     settings.updateGain = true;
     settings.gain = static_cast<float>(configuration.gain);
-    settings.updateTriggerDelay =
-            configuration.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger;
+    settings.updateTriggerDelay = configuration.hardwareTriggerEnabled;
     if (settings.updateTriggerDelay) {
         settings.triggerDelayMicroseconds =
                 configuration.hardwareTriggerDelayMicroseconds;
@@ -259,9 +255,7 @@ bool CameraSession::prepareInspection(
     if (result.isSuccess()) {
         result = m_cameraDevice->applySettings(settings);
     }
-    if (result.isSuccess()
-            && configuration.runPlan.acquisitionKind
-               == InspectionAcquisitionKind::HardwareTrigger) {
+    if (result.isSuccess() && configuration.hardwareTriggerEnabled) {
         result = m_cameraDevice->startGrabbing();
         if (result.isSuccess()) {
             CameraSettings debounce;
@@ -309,8 +303,7 @@ bool CameraSession::startInspection(QString *errorMessage)
         handleCaptureError(status, nativeErrorCode);
     };
     callbacks.stopped = [this]() { handleCaptureStopped(); };
-    const CaptureMode mode = m_configuration.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::HardwareTrigger
+    const CaptureMode mode = m_configuration.hardwareTriggerEnabled
             ? CaptureMode::HardwareTrigger
             : CaptureMode::SoftwareTrigger;
     if (!m_captureWorker.start(mode, callbacks)) {
@@ -647,8 +640,7 @@ void CameraSession::submitFrame(
         return;
     }
 
-    if (m_configuration.runPlan.acquisitionKind
-            == InspectionAcquisitionKind::SoftwareTrigger) {
+    if (!m_configuration.hardwareTriggerEnabled) {
         const bool accepted = m_runtime->submitDetectionFrame(frame);
         if (!accepted) {
             qDebug() << "[DETECTION_WORKER] software frame rejected"

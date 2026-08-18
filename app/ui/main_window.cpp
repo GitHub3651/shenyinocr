@@ -376,8 +376,8 @@ MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
     callbacks.syncRecipeHistory = [this](MachineSettings *settings) {
         if (settings) {
             settings->publishedRecipeIdsByMode =
-                    m_templateApplicationService->modeMemory()
-                    .publishedRecipeIdsByMode();
+                    m_templateApplicationService
+                    ->publishedRecipeIdsByMode();
         }
     };
     callbacks.updateImageSaveOptionsVisibility = [this]() {

@@ -1536,3 +1536,20 @@
 - [x] 最终Agent静态门禁通过：`app`仍为164个`.h/.cpp`；主工程168个源码、头、UI、qrc和翻译登记项均存在且无重复；5个模式Descriptor唯一；旧Registry/Profile、五套Consumer/handle/finalize、Runtime具体模式分支、Runtime字符/二维码/模式Profile依赖、CameraSession定位和第二结果信号均为0；UI页面持有`Ui::MainWindow *`为0；人类可读Unicode转义为0；资源、`.pro.user`、`.ui.autosave`和`app.zip`差异均为0；`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试可执行文件或主程序，仓库`tests`继续不存在。
 - [x] 2026-08-18用户确认“S2～S7已经验证成功”；本轮统一门禁通过，87项保留功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。
 - [x] 本轮仅据用户确认关闭S2～S7代码与功能门禁；真实PLC在线读写、机械剔除和现场异常恢复仍保持单列待验，不以无PLC、Fake或一般主程序回归替代现场生产验收。
+
+## S8 Runtime/Recipes认知精简（2026-08-18，已通过用户统一门禁）
+
+- [x] 用户确认S2～S7验证成功并要求继续当前精简；S2～S7已封板为唯一提交`b22ff8d refactor: 完成检测架构精简S2至S7`，提交后工作区干净。
+- [x] 开始基线为`app`自研`.h/.cpp`共164个，其中`runtime`24个、`recipes`12个；本轮目标为157、21、8，不删除资源，不运行qmake、构建、测试可执行文件或主程序。
+- [x] 从设置保存/模式切换/模板新建编辑发布、启动检测、相机配置、软硬触发、DetectionWorker、ResultService和停止恢复重新追踪调用链；实际影响`SYS-007、SYS-010、UI-001..002、SET-003、SET-008..010、TPL-001..016、CAM-003..004、RUN-001..006`共32项，已从`已验证`改为`迁移中`，其余55项保持`已验证`，`MC-001..003`保持`已确认删除`。
+- [x] 删除无独立策略的`InspectionRunConfiguration/InspectionRunPlan/InspectionAcquisitionKind`，由相机会话配置直接保存硬触发布尔值；软硬触发、延时、曝光、增益和统计清零语义保持。
+- [x] 将只由`InspectionRuntime`使用的`InspectionRunContext`隐藏到实现文件，删除公开头文件；不可变运行快照字段和创建时机保持。
+- [x] 删除只包装QMap的`TemplateModeMemory`，由`TemplateApplicationService`直接保存各模式已发布配方ID，UI模式ID继续读取唯一`DetectionModeDescriptor`。
+- [x] 将只服务编辑会话的`RecipeAssetService`并入`RecipeEditorSession`，保持全部资源文件名、编码格式、资产键、相对路径和发布事务不变。
+- [x] README已增加`app/`核心职责树和正式检测唯一阅读路径；当前`recipes`只剩ProductRecipe、PreparedRecipe、RecipeStore、RecipeEditorSession四组职责，Runtime主链保持CameraSession→CaptureWorker→FrameQueue→DetectionWorker→ResultService。
+- [x] 新增面向维护者的`OCRGangYin开发者代码结构与维护指南.md`：按当前S8工作树逐项覆盖主工程登记文件和部署脚本，共163个工程/代码文件；说明五条核心调用链、每个文件职责和修改边界，并给出新增检测模式、线程/队列/内存、设置/配方、vendor、调试和交付指南。机器覆盖核对为163/163，无遗漏；该纯文档补充不改变本轮32项功能状态。
+- [x] 根据用户要求将开发者指南的目录摘要扩展为完整文件树：逐项列出`app/`当前299个项目维护文件，代码、工程配置、UI、翻译、脚本、CSS、ICO、PNG和`.qm`均不省略；机器对照当前文件清单为299/299，遗漏0、误列0。被Git忽略的`AutoOCRproject.pro.user`明确标注为本机Qt Creator个人配置，不计入项目架构，也未修改任何资源文件。
+- [x] 用户随后明确文件树和文件数只展示代码文件；开发者指南已改为仅列当前157个`.h/.cpp`（83个头文件、74个实现文件），工程配置、UI、资源清单、翻译、脚本、CSS、ICO、PNG和`.qm`不再出现在树中，也不计入代码文件数。机器对照当前代码清单为157/157，遗漏0、误列0；实际资源文件未删除、未修改。
+- [x] Agent静态门禁通过：`app`自研`.h/.cpp`为157个，`runtime`21个、`recipes`8个；主qmake共161个源码/头/UI/qrc/翻译登记项，缺失0、重复0；7个已删文件及全部旧类型引用为0；人类可读Unicode转义0；资源差异0；32项迁移中、55项已验证、3项已确认删除；`tests`与`app.zip`均不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试可执行文件或主程序。
+- [x] 2026-08-18用户确认S8统一门禁“验证通过”；32项受影响功能由`迁移中`恢复为`已验证`，正式功能状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。真实PLC在线读写、机械剔除和现场异常恢复继续单列待验，不以本轮一般验证替代现场生产验收。
+- [x] S8提交前最终Agent静态门禁通过：90个正式功能ID唯一且状态为`已验证87/已确认删除3`，其他状态均为0；`app`代码文件157个、`runtime`21个、`recipes`8个；主qmake登记161个源码/头/UI/qrc/翻译项，缺失0、重复0，157个`.h/.cpp`与磁盘代码清单完全一致。7个已删包装文件和旧类型引用、人类可读Unicode转义、资源差异及用户文件差异均为0；开发者指南代码树157/157，`tests`与`app.zip`不存在，`git diff --check`通过。Agent未运行或间接触发qmake、构建、测试程序或主程序；运行门禁结论来自用户确认。

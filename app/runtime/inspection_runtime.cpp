@@ -9,6 +9,33 @@
 
 #include <stdexcept>
 
+// 一次正式运行的不可变快照只属于InspectionRuntime实现，不暴露为公共模块。
+struct InspectionRunContext
+{
+    InspectionRunContext(
+        const QString &runIdValue,
+        const QDateTime &startedAtUtcValue,
+        const MachineSettings &machineSettingsValue,
+        const PreparedRecipeSnapshot &preparedRecipeValue,
+        const DetectionProfileSnapshot &profileSnapshotValue,
+        const FramePreprocessSettings &framePreprocessValue)
+        : runId(runIdValue),
+          startedAtUtc(startedAtUtcValue),
+          machineSettings(machineSettingsValue),
+          preparedRecipe(preparedRecipeValue),
+          profileSnapshot(profileSnapshotValue),
+          framePreprocess(framePreprocessValue)
+    {
+    }
+
+    const QString runId;
+    const QDateTime startedAtUtc;
+    const MachineSettings machineSettings;
+    const PreparedRecipeSnapshot preparedRecipe;
+    const DetectionProfileSnapshot profileSnapshot;
+    const FramePreprocessSettings framePreprocess;
+};
+
 // 函数说明：InspectionRuntime 构造函数创建组件并初始化其依赖和初始状态。
 InspectionRuntime::InspectionRuntime(
     const RunIdFactory &runIdFactory,

@@ -38,8 +38,6 @@ SOURCES += \
     recipes/recipe_store.cpp \
     recipes/prepared_recipe.cpp \
     recipes/recipe_editor_session.cpp \
-    recipes/recipe_asset_service.cpp \
-    recipes/template_mode_memory.cpp \
     ui/dialogs/recipe_selection_dialog.cpp \
     ui/dialogs/character_template_editor_dialog.cpp \
     ui/pages/inspection_page.cpp \
@@ -67,7 +65,6 @@ SOURCES += \
     devices/camera/vendor/hikvision_camera_device.cpp \
     engines/ocr/vendor/paddle_ocr_engine.cpp \
     devices/plc/vendor/snap7_plc_device.cpp \
-    runtime/inspection_run_configuration.cpp \
     runtime/camera_session.cpp \
     runtime/capture_worker.cpp \
     runtime/frame_queue.cpp \
@@ -122,8 +119,6 @@ HEADERS += \
     recipes/recipe_store.h \
     recipes/prepared_recipe.h \
     recipes/recipe_editor_session.h \
-    recipes/recipe_asset_service.h \
-    recipes/template_mode_memory.h \
     ui/dialogs/recipe_selection_dialog.h \
     ui/dialogs/character_template_editor_dialog.h \
     runtime/inspection_presentation.h \
@@ -154,7 +149,6 @@ HEADERS += \
     engines/ocr/vendor/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
     devices/plc/vendor/snap7_plc_device.h \
-    runtime/inspection_run_configuration.h \
     runtime/camera_session.h \
     runtime/capture_worker.h \
     runtime/frame_queue.h \
@@ -164,7 +158,6 @@ HEADERS += \
     application/template_editor_contract.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_plc_controller.h \
-    runtime/inspection_run_context.h \
     runtime/inspection_runtime.h \
     runtime/image_save_service.h \
     detection/common/character_template_matcher.h \

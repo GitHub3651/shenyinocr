@@ -9,7 +9,6 @@
 #include "devices/camera/camera_device.h"
 #include "runtime/capture_worker.h"
 #include "runtime/inspection_runtime.h"
-#include "runtime/inspection_run_configuration.h"
 
 #include <QString>
 
@@ -107,7 +106,7 @@ struct CameraCaptureStopResult
 // 组件说明：CameraSessionCaptureConfiguration 组件集中描述相关配置、规则和运行参数。
 struct CameraSessionCaptureConfiguration
 {
-    InspectionRunPlan runPlan;
+    bool hardwareTriggerEnabled = false;
     FramePreprocessSettings framePreprocess;
     float hardwareTriggerDelayMicroseconds = 0.0f;
     int exposure = 0;

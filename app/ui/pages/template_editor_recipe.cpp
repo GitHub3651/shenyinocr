@@ -350,7 +350,11 @@ void TemplateEditorPage::clearSingleTemplateRecipeState()
 // 函数说明：detectModeIdForIndex 函数执行对应事件或业务处理。
 QString TemplateEditorPage::detectModeIdForIndex(int index) const
 {
-    return TemplateModeMemory::modeIdForIndex(index);
+    const QVector<DetectionModeDescriptor> &descriptors =
+            detectionModeDescriptors();
+    return index >= 0 && index < descriptors.size()
+            ? QLatin1String(descriptors.at(index).uiId)
+            : detectionModeUiId(DetectionMode::Word);
 }
 
 // 函数说明：currentDetectModeId 函数读取、等待或计算对应的数据。
@@ -368,8 +372,8 @@ void TemplateEditorPage::restoreTemplatesForMode(
     clearSingleTemplateRecipeState();
     m_templateService->cancel();
     m_templateService->setActivePreparedRecipe(PreparedRecipeSnapshot());
-    const QString recipeId = m_templateService->modeMemory()
-            .publishedRecipeIdsByMode().value(modeId).trimmed();
+    const QString recipeId = m_templateService
+            ->publishedRecipeIdsByMode().value(modeId).trimmed();
     if (recipeId.isEmpty()) {
         updateCurrentTemplateName();
         return;

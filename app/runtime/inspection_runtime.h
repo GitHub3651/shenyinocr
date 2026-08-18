@@ -5,12 +5,15 @@
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
+#include "detection/common/frame_preprocessor.h"
+#include "detection/detection_profile_snapshot.h"
+#include "recipes/prepared_recipe.h"
 #include "runtime/detection_worker.h"
 #include "runtime/inspection_plc_controller.h"
-#include "runtime/inspection_run_context.h"
 #include "detection/detection_registry.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "runtime/result_service.h"
+#include "system_support/settings/machine_settings.h"
 
 #include <QDateTime>
 #include <QMetaType>
@@ -24,6 +27,8 @@
 #include <map>
 #include <memory>
 #include <mutex>
+
+struct InspectionRunContext;
 
 // 组件说明：InspectionRuntimeState 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionRuntimeState

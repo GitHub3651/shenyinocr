@@ -1,8 +1,8 @@
 # OCRGangYin 架构精简计划
 
-版本：1.7（S2～S7已完成，继续认知精简）
+版本：1.8（S8 Runtime/Recipes认知精简已完成）
 编制日期：2026-08-18
-状态：S1及S2～S7均已通过用户统一门禁；继续执行Runtime/Recipes低风险认知精简
+状态：S1、S2～S7及S8均已通过用户统一门禁；S8进入最终本地提交收口
 适用范围：`app/` 当前新架构中的代码和代码结构
 
 ## 一、结论
@@ -464,6 +464,19 @@ CaptureWorker
 8. 旧Registry/Profile四个Runtime文件已删除并在Detection中替换；代码文件总数仍为164，没有删除或精简任何资源文件。
 9. 合并批次最终静态门禁通过：主工程168个源码、头、UI、qrc和翻译登记项无缺失、无重复；5个模式Descriptor唯一；旧模式装配/结果旁路、Runtime具体模式和算法依赖、CameraSession定位及UI整窗指针均为0；UTF-8转义、资源差异和用户生成文件差异均为0；`git diff --check`通过。
 10. 2026-08-18用户确认S2～S7统一验证成功，87项保留功能恢复为`已验证`；真实PLC、机械剔除和现场恢复仍保持单列待验，不能由本轮验证结果替代。
+
+### 5.5 S8 Runtime/Recipes认知精简（2026-08-18）
+
+S8只删除“包装一层但没有独立策略或生命周期”的代码，不合并采集、检测、队列、Runtime状态机、结果、存图、算法和设备适配器。目标是让维护者按一条主路径阅读，而不是继续增加抽象层。
+
+| 精简点 | 当前问题 | 本轮处理 | 保持不变 |
+|---|---|---|---|
+| Runtime触发配置 | `InspectionRunConfiguration → InspectionRunPlan → InspectionAcquisitionKind`只把一个`bool`转换成枚举 | `CameraSessionCaptureConfiguration`直接保存`hardwareTriggerEnabled`，删除配置`.h/.cpp` | 软/硬触发选择、硬触发延时、曝光、增益、统计清零和相机时序 |
+| Runtime运行上下文 | `InspectionRunContext`只有`InspectionRuntime`实现使用，却单独暴露头文件 | 在`inspection_runtime.cpp`中定义私有实现，头文件只前置声明，删除独立头文件 | 每次运行冻结的runId、开始时间、设置、配方、Profile和预处理快照 |
+| Recipes模式记忆 | `TemplateModeMemory`只包装一个`QMap`和Descriptor索引查询 | `TemplateApplicationService`直接持有并只读公开该Map；UI直接查询唯一模式Descriptor，删除包装`.h/.cpp` | 各模式已发布配方记忆、保存和恢复语义 |
+| Recipes资产暂存 | `RecipeAssetService`只被`RecipeEditorSession`所在用例使用，形成并列对象 | 把资源暂存函数并入`RecipeEditorSession`，删除服务`.h/.cpp` | 工作区路径、文件格式、资产键、相对目录、事务发布和失败行为 |
+
+实际代码文件数已从164降到157：`runtime`从24降到21，`recipes`从12降到8。S8没有修改任何图片、图标、QSS/CSS、翻译、`.qrc`、模型、DLL、配方Schema、资源目录或资源内容。2026-08-18用户确认统一门禁通过，受影响32项功能恢复为`已验证`。
 
 ## 六、暂时保留，不应为了少文件而合并的模块
 

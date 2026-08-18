@@ -14,6 +14,38 @@ OCRGangYin 是神银现场 OCR 检测程序。Qt 主程序位于 `app/`；目录
 - `docs/`：开发约束、历史方案和发布说明。
 - `build/`、`dist/`、`archive/`：本地构建、交付与过渡归档目录，默认不纳入 Git。
 
+## `app/`核心架构
+
+```text
+app/
+├─ startup/          程序入口和对象组装
+├─ ui/               窗口、页面、对话框和纯显示逻辑
+├─ application/      启动检测、设置、模板编辑等用户用例
+├─ contracts/        跨层共享的五种检测模式定义
+├─ recipes/          配方数据、持久化、准备和编辑事务（4组.h/.cpp）
+├─ detection/        五种检测算法、定位、预处理和唯一模式装配
+├─ runtime/          采集/检测线程、队列、运行状态、结果、PLC和存图（21个代码文件）
+├─ devices/          相机、PLC端口和供应商适配器
+├─ engines/          OCR、二维码引擎端口和供应商适配器
+└─ system_support/   设置、日志、授权、崩溃记录和部署
+```
+
+正式检测只需沿下面一条路径阅读：
+
+```text
+MainWindow
+→ InspectionApplicationService（启动预检和用例编排）
+→ CameraSession → CaptureWorker（相机与采集线程）
+→ FrameQueue → DetectionWorker（容量1队列与串行检测线程）
+→ DetectionRegistry → 当前模式Pipeline（五模式装配与算法）
+→ ResultService（每产品唯一结算）
+→ PLC / ImageSaveService / ResultPresentationMailbox → UI
+```
+
+`recipes/`现在只有四组职责：`ProductRecipe`是可保存的数据Schema，`PreparedRecipe`是已校验运行快照，`RecipeStore`负责事务读写，`RecipeEditorSession`负责编辑工作区和资源暂存。`runtime/`不再知道五种具体模式，也不保存配方内部算法字段；它只负责“什么时候采集、检测、结算、停止和进入故障”。
+
+完整的163个工程/代码文件逐项说明、调用链和维护规则见[`docs/development/OCRGangYin开发者代码结构与维护指南.md`](docs/development/OCRGangYin开发者代码结构与维护指南.md)。
+
 ## Qt Creator
 
 请在 Qt Creator 中打开 `app/AutoOCRproject.pro`。构建目录统一使用 `build/qt/<kit>/<configuration>`；不要在命令行执行 qmake 或完整构建。
