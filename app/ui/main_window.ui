@@ -959,9 +959,9 @@ QLabel#label_mainContentSplitterGrip {
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>0</y>
-                <width>586</width>
-                <height>613</height>
+                <y>-327</y>
+                <width>587</width>
+                <height>595</height>
                </rect>
               </property>
               <property name="styleSheet">
@@ -1282,7 +1282,6 @@ padding: 0px;</string>
                       <property name="font">
                        <font>
                         <pointsize>9</pointsize>
-                        <weight>75</weight>
                         <bold>true</bold>
                        </font>
                       </property>
@@ -1416,8 +1415,8 @@ background-color: #ebeef5;
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>586</width>
-                <height>698</height>
+                <width>587</width>
+                <height>662</height>
                </rect>
               </property>
               <property name="styleSheet">
@@ -1477,7 +1476,7 @@ QCheckBox::indicator {
 }</string>
                     </property>
                     <property name="text">
-                     <string>启用触发</string>
+                     <string>开启PLC硬触发</string>
                     </property>
                    </widget>
                   </item>
@@ -1892,8 +1891,8 @@ QCheckBox::indicator {
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>586</width>
-                <height>773</height>
+                <width>587</width>
+                <height>740</height>
                </rect>
               </property>
               <property name="styleSheet">

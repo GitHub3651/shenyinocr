@@ -931,7 +931,7 @@ bool TemplateEditorPage::activatePublishedSingleTemplateRecipe(
             || (detectionMode != DetectionMode::Stamp
                 && detectionMode != DetectionMode::Ocr)) {
         return fail(QStringLiteral(
-                        "已发布单模板配方只用于模板匹配和深度OCR模式。"));
+                        "已发布单模板配方只用于刚印检测和深度OCR模式。"));
     }
 
     PreparedRecipeSnapshot prepared;

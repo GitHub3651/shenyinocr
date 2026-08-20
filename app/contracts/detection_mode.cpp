@@ -9,7 +9,7 @@ namespace {
 const QVector<DetectionModeDescriptor> &descriptors()
 {
     static const QVector<DetectionModeDescriptor> values = {
-        { DetectionMode::Stamp, "stamp", "stamp_detection", "模板匹配",
+        { DetectionMode::Stamp, "stamp", "stamp_detection", "刚印检测",
           "stamp", "无法启动钢印检测工作线程。",
           DetectionTrackingKind::SingleTemplate, true, true, false,
           true, true, false, false, 0 },

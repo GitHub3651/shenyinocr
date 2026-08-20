@@ -226,7 +226,7 @@ void TemplateEditorPage::showTemplateGuideForCurrentMode()
         updateTemplateGuideText(
                     mode == DetectionMode::Ocr
                         ? "深度模型模板制作"
-                        : "模板匹配模板制作",
+                        : "刚印检测模板制作",
                     "请按住鼠标左键拖动，框选定位区域。");
         return;
     }
@@ -276,7 +276,7 @@ void TemplateEditorPage::handleTemplateGuideEvent(const QString &eventName, int 
                ? "字库匹配模板制作"
                : (mode == DetectionMode::Ocr
                   ? "深度模型模板制作"
-                  : "模板匹配模板制作"));
+                  : "刚印检测模板制作"));
     const QString trackingRegionName = "定位区域";
 
     if (barcodeWordMode

@@ -625,7 +625,7 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
                     switch (mode) {
                     case DetectionMode::Stamp:
                         tooltipText =
-                                "制作模板匹配产品模板：\n\n"
+                                "制作刚印检测产品模板：\n\n"
                                 "1. 点击【制作模板】进入实时取景。\n"
                                 "2. 调整产品位置后点击【拍照并开始框选】。\n"
                                 "3. 在冻结图像上框选定位区域和检测区域。\n"
