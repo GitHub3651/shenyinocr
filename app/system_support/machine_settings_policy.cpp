@@ -5,13 +5,13 @@
 #include "system_support/machine_settings_policy.h"
 
 // 函数说明：defaultsForHardwareState 函数实现名称所表示的处理步骤。
-MachineSettings MachineSettingsPolicy::defaultsForHardwareState(
-    const MachineSettings &applied,
-    const MachineSettings &defaults,
+AppSettings MachineSettingsPolicy::defaultsForHardwareState(
+    const AppSettings &applied,
+    const AppSettings &defaults,
     bool cameraOpen,
     bool plcConnected)
 {
-    MachineSettings editable = applied;
+    AppSettings editable = applied;
     editable.detectModeId = defaults.detectModeId;
     editable.imageSaveModeId = defaults.imageSaveModeId;
     editable.imageSaveTypeId = defaults.imageSaveTypeId;
@@ -19,7 +19,6 @@ MachineSettings MachineSettingsPolicy::defaultsForHardwareState(
     editable.colorChannelId = defaults.colorChannelId;
     editable.imageRotationId = defaults.imageRotationId;
     editable.triggerEnabled = defaults.triggerEnabled;
-    editable.publishedRecipeIdsByMode.clear();
     if (cameraOpen) {
         editable.cameraExposure = defaults.cameraExposure;
         editable.cameraGain = defaults.cameraGain;

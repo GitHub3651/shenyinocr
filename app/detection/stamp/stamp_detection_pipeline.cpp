@@ -17,7 +17,7 @@ namespace {
 int countTargetCharacters(const QString &targetText)
 {
     const QRegularExpression expression(
-                R"(([\d[A-Za-z\x{4e00}-\x{9fa5}]\(\d+\))|(\d)|([A-Za-z])|([\x{4e00}-\x{9fa5}]))");
+                R"(([\d[A-Za-z一-龥]\(\d+\))|(\d)|([A-Za-z])|([一-龥]))");
     QRegularExpressionMatchIterator matches =
             expression.globalMatch(targetText);
 

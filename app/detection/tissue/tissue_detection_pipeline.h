@@ -7,14 +7,12 @@
 
 #include "detection/tissue/tissue_roll_detector.h"
 #include "detection/positioning/detection_pose.h"
-#include "recipes/product_recipe.h"
 
 // 组件说明：TissueDetectionPipeline 组件提供对应设备或检测能力的统一实现。
 class TissueDetectionPipeline
 {
 public:
-    explicit TissueDetectionPipeline(
-            const TissueRecipeParameters &parameters);
+    explicit TissueDetectionPipeline(double roughnessThreshold);
 
     TissueRollResult detect(const cv::Mat &image) const;
     static DetectionResult toDetectionResult(

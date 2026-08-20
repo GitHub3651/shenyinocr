@@ -6,14 +6,14 @@
 
 #include "detection/positioning/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
-#include "detection/detection_profile_snapshot.h"
-#include "recipes/prepared_recipe.h"
+#include "detection/detection_template_snapshot.h"
+#include "templates/template_store.h"
 #include "runtime/detection_worker.h"
 #include "runtime/inspection_plc_controller.h"
 #include "detection/detection_registry.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "runtime/result_service.h"
-#include "system_support/settings/machine_settings.h"
+#include "system_support/settings/app_settings.h"
 
 #include <QDateTime>
 #include <QMetaType>
@@ -85,9 +85,11 @@ public:
     ~InspectionRuntime();
 
     QString beginStart(
-        const MachineSettings &machineSettings,
-        const PreparedRecipeSnapshot &preparedRecipe,
-        const DetectionProfileSnapshot &profileSnapshot,
+        const AppSettings &machineSettings,
+        DetectionMode mode,
+        const QVector<PreparedTemplateSnapshot> &preparedTemplates,
+        const DetectionTemplateSnapshot &templateSnapshot,
+        double tissueRoughnessThreshold,
         const FramePreprocessSettings &framePreprocess);
     bool commitStart();
     void rollbackStart();

@@ -4,7 +4,7 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 /**
  * @file ui/main_window_settings.cpp
- * @brief 主窗口设置、配方页面命令与硬件按钮薄协调。
+ * @brief 主窗口设置、模板页面命令与硬件按钮薄协调。
  */
 
 #include "ui/main_window.h"
@@ -39,15 +39,6 @@ bool parseIntValue(const QString &text, int *value)
         *value = parsed;
     }
     return true;
-}
-
-// 函数说明：isSingleTemplateRecipeMode 函数检查相关状态并返回判断结果。
-bool isSingleTemplateRecipeMode(const QString &modeId)
-{
-    DetectionMode mode;
-    return detectionModeFromUiId(modeId, &mode)
-            && (mode == DetectionMode::Stamp
-                || mode == DetectionMode::Ocr);
 }
 
 } // namespace
@@ -116,11 +107,43 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     }
 
     DetectionMode mode = DetectionMode::Word;
-    const bool showTissueThreshold = detectionModeFromUiId(
+    const bool validMode = detectionModeFromUiId(
                 detectModeIdForIndex(
                     ui->comboBox_detectionMode->currentIndex()),
-                &mode)
+                &mode);
+    const DetectionModeDescriptor descriptor =
+            detectionModeDescriptor(mode);
+    const bool usesTemplate = validMode
+            && descriptor.trackingKind != DetectionTrackingKind::WholeFrame;
+    const bool showTissueThreshold = validMode
             && mode == DetectionMode::Tissue;
+    const bool showCharacterSettings = usesTemplate
+            && descriptor.requiresCharacterTemplates;
+    const bool showImageThreshold = usesTemplate
+            && mode != DetectionMode::Ocr;
+    const bool showBatch = usesTemplate
+            && descriptor.trackingKind
+               == DetectionTrackingKind::MultipleTemplates;
+
+    ui->toolButton_selectTemplate->setVisible(usesTemplate);
+    ui->toolButton_createTemplate->setVisible(usesTemplate);
+    ui->pushButton_saveTemplate->setVisible(usesTemplate);
+    ui->groupBox_currentTemplate->setVisible(usesTemplate);
+    ui->label_targetText->setVisible(usesTemplate
+                                     && descriptor.requiresTargetText);
+    ui->textEdit_targetText->setVisible(usesTemplate
+                                        && descriptor.requiresTargetText);
+    ui->pushButton_applyTargetText->setVisible(
+                usesTemplate && descriptor.requiresTargetText);
+    ui->pushButton_applyBatchTargetText->setVisible(
+                showBatch && descriptor.requiresTargetText);
+    ui->label_imageThreshold->setVisible(showImageThreshold);
+    ui->lineEdit_imageThreshold->setVisible(showImageThreshold);
+    ui->pushButton_applyImageThreshold->setVisible(showImageThreshold);
+    ui->pushButton_applyBatchImageThreshold->setVisible(
+                showBatch && showImageThreshold);
+    ui->pushButton_editCharacterTemplates->setVisible(
+                showCharacterSettings);
     ui->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     ui->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     ui->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
@@ -244,9 +267,7 @@ void MainWindow::clearCurrentSoftwareData()
         return;
     }
 
-    m_templateApplicationService->replacePublishedRecipeIdsByMode(
-                m_appliedMachineSettings.publishedRecipeIdsByMode);
-    clearWordMultiTemplateState();
+    clearTemplateState();
     m_templateEditorPage->setCurrentTemplateNameVisible(false);
     updateCurrentTemplateName();
     if (imageLabel) {
@@ -254,7 +275,7 @@ void MainWindow::clearCurrentSoftwareData()
         imageLabel->clearSelection();
     }
     m_machineSettingsPage->clearAllDirty();
-    clearRecipeProfileDirty();
+    clearTemplateDirty();
     updateOperationUiState();
     showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
 }
@@ -278,19 +299,13 @@ void MainWindow::restoreDefaultMachineSettings()
     const bool plcConnected =
             m_inspectionApplicationService
             ->runtimeSnapshot().plcConnected;
-    const MachineSettings editableDefaults =
+    const AppSettings editableDefaults =
             m_machineSettingsPage->defaultsForHardwareState(
                 cameraOpen, plcConnected);
 
     applyMachineSettingsToUi(editableDefaults);
-    clearWordMultiTemplateState();
-    m_templateEditorPage->setCurrentTemplateNameVisible(false);
-    updateCurrentTemplateName();
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearSelection();
-    }
-    clearRecipeProfileDirty();
+    restoreTemplatesForMode(currentDetectModeId(), false);
+    clearTemplateDirty();
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
 
@@ -310,7 +325,7 @@ bool MainWindow::hasDirtySettings() const
     return m_settingsEditState.hasDirtySettings();
 }
 
-// 函数说明：saveSettings 函数保存或发布对应的数据和资源。
+// 函数说明：saveSettings 函数保存对应的数据和资源。
 bool MainWindow::saveSettings(bool showErrorMessage)
 {
     QString errorMessage;
@@ -344,61 +359,28 @@ void MainWindow::restoreUnappliedSettingsFromApplied()
         m_machineSettingsPage->restoreUnappliedMachineSettings();
     }
 
-    const bool oldUpdating = m_updatingMachineSettingsUi;
-    m_updatingMachineSettingsUi = true;
-    const int profileIndex = currentWordTemplateProfileIndex();
-    if (isWordFamilyMode(currentDetectModeId())
-            && profileIndex >= 0
-            && profileIndex < static_cast<int>(
-                m_templateEditorPage->wordTemplateProfiles().size())) {
-        const RecipeProfile &settings =
-                m_templateEditorPage->wordTemplateProfiles()[
-                    static_cast<size_t>(profileIndex)].settings;
-        QSignalBlocker targetTextBlocker(ui->textEdit_targetText);
-        QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
-        ui->textEdit_targetText->setPlainText(settings.targetText);
-        ui->lineEdit_imageThreshold->setText(QString::number(
-            static_cast<int>(settings.imageThresholdPercent)));
-    } else if (isSingleTemplateRecipeMode(currentDetectModeId())
-               && m_templateEditorPage->activePreparedRecipe()
-               && m_templateEditorPage->activePreparedRecipe()->recipe
-               && m_templateEditorPage->activePreparedRecipe()
-                  ->recipe->profiles.size() == 1) {
-        const RecipeProfile settings =
-                m_templateEditorPage->activePreparedRecipe()
-                ->recipe->profiles.first();
-        QSignalBlocker targetTextBlocker(ui->textEdit_targetText);
-        QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
-        ui->textEdit_targetText->setPlainText(settings.targetText);
-        ui->lineEdit_imageThreshold->setText(QString::number(
-            static_cast<int>(settings.imageThresholdPercent)));
-    }
-    m_updatingMachineSettingsUi = oldUpdating;
-    refreshRecipeProfileDirty();
+    restoreTemplatesForMode(currentDetectModeId(), false);
+    refreshTemplateDirty();
 }
 
-// 函数说明：setupRecipeProfileDirtyTracking 函数更新或应用对应的配置和状态。
-void MainWindow::setupRecipeProfileDirtyTracking()
+void MainWindow::setupTemplateDirtyTracking()
 {
-    m_templateEditorPage->setupRecipeProfileDirtyTracking();
+    m_templateEditorPage->setupTemplateDirtyTracking();
 }
 
-// 函数说明：refreshRecipeProfileDirty 函数更新或应用对应的配置和状态。
-void MainWindow::refreshRecipeProfileDirty()
+void MainWindow::refreshTemplateDirty()
 {
-    m_templateEditorPage->refreshRecipeProfileDirty();
+    m_templateEditorPage->refreshTemplateDirty();
 }
 
-// 函数说明：clearRecipeProfileDirty 函数停止流程、清理状态或释放对应资源。
-void MainWindow::clearRecipeProfileDirty()
+void MainWindow::clearTemplateDirty()
 {
-    m_templateEditorPage->clearRecipeProfileDirty();
+    m_templateEditorPage->clearTemplateDirty();
 }
 
-// 函数说明：setupWordTemplateEditorCombo 函数更新或应用对应的配置和状态。
-void MainWindow::setupWordTemplateEditorCombo()
+void MainWindow::setupCurrentTemplateEditor()
 {
-    m_templateEditorPage->setupWordTemplateEditorCombo();
+    m_templateEditorPage->setupCurrentTemplateEditor();
 }
 
 // 函数说明：setupDetectModeChangeTracking 函数更新或应用对应的配置和状态。
@@ -411,7 +393,7 @@ void MainWindow::setupDetectModeChangeTracking()
                 if (m_applyingMachineSettings) {
                     resetTemplateCaptureState();
                     updateTissueRoughnessUiVisibility();
-                    refreshWordTemplateEditorCombo();
+                    refreshCurrentTemplateEditor();
                     return;
                 }
 
@@ -425,31 +407,17 @@ void MainWindow::setupDetectModeChangeTracking()
                 }
                 hideTemplateGuide();
                 if (previousModeId != nextModeId) {
-                    if (isWordFamilyMode(previousModeId)) {
-                        clearWordMultiTemplateState();
-                    } else if (isSingleTemplateRecipeMode(previousModeId)) {
-                        clearSingleTemplateRecipeState();
-                    } else {
-                        refreshWordTemplateEditorCombo();
-                    }
-                } else {
-                    refreshWordTemplateEditorCombo();
+                    clearTemplateState();
                 }
+                refreshCurrentTemplateEditor();
                 restoreTemplatesForMode(m_currentDetectModeId, false);
                 saveSettings();
             });
 }
 
-// 函数说明：clearWordMultiTemplateState 函数停止流程、清理状态或释放对应资源。
-void MainWindow::clearWordMultiTemplateState()
+void MainWindow::clearTemplateState()
 {
-    m_templateEditorPage->clearWordMultiTemplateState();
-}
-
-// 函数说明：clearSingleTemplateRecipeState 函数停止流程、清理状态或释放对应资源。
-void MainWindow::clearSingleTemplateRecipeState()
-{
-    m_templateEditorPage->clearSingleTemplateRecipeState();
+    m_templateEditorPage->clearTemplateState();
 }
 
 // 函数说明：detectModeIdForIndex 函数执行对应事件或业务处理。
@@ -474,17 +442,14 @@ void MainWindow::restoreTemplatesForMode(
                 showMessage);
 }
 
-// 函数说明：refreshWordTemplateEditorCombo 函数更新或应用对应的配置和状态。
-void MainWindow::refreshWordTemplateEditorCombo()
+void MainWindow::refreshCurrentTemplateEditor()
 {
-    m_templateEditorPage->refreshWordTemplateEditorCombo();
+    m_templateEditorPage->refreshCurrentTemplateEditor();
 }
 
-// 函数说明：currentWordTemplateProfileIndex 函数读取、等待或计算对应的数据。
-int MainWindow::currentWordTemplateProfileIndex() const
+int MainWindow::currentTemplateIndex() const
 {
-    return m_templateEditorPage
-            ->currentWordTemplateProfileIndex();
+    return m_templateEditorPage->currentTemplateIndex();
 }
 
 // 函数说明：applyCameraExposureValue 函数更新或应用对应的配置和状态。
@@ -574,7 +539,7 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
         return false;
     }
 
-    const QString modeId = machineSettingsTriggerModeIds()
+    const QString modeId = appSettingsTriggerModeIds()
             .value(PLCmode);
     const OperationResult result =
             m_inspectionApplicationService
@@ -792,10 +757,8 @@ void MainWindow::on_pushButton_applyBatchImageThreshold_clicked()
 }
 // 函数说明：applyMachineSettingsToUi 函数更新或应用对应的配置和状态。
 void MainWindow::applyMachineSettingsToUi(
-    const MachineSettings &settings)
+    const AppSettings &settings)
 {
-    m_templateApplicationService->replacePublishedRecipeIdsByMode(
-                settings.publishedRecipeIdsByMode);
     if (m_machineSettingsPage) {
         m_machineSettingsPage->applyToUi(settings);
     }
@@ -803,29 +766,29 @@ void MainWindow::applyMachineSettingsToUi(
     restoreTemplatesForMode(m_currentDetectModeId, false);
 }
 
-// 函数说明：applyRecipeProfileToUi 函数更新或应用对应的配置和状态。
-void MainWindow::applyRecipeProfileToUi(const RecipeProfile &settings)
+void MainWindow::applyTemplateSettingsToUi(
+        const TemplateSettings &settings)
 {
     QSignalBlocker targetBlocker(ui->textEdit_targetText);
     QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
     ui->textEdit_targetText->setPlainText(settings.targetText);
     ui->lineEdit_imageThreshold->setText(QString::number(static_cast<int>(settings.imageThresholdPercent)));
-    refreshRecipeProfileDirty();
+    refreshTemplateDirty();
 }
 
 /**
  * @brief 设置非公共配置初始值
- * @details 公共配置统一由 MachineSettings::defaults() 提供
+ * @details 公共配置统一由 AppSettings::defaults() 提供
  */
 // 函数说明：setupNonPersistentDefaults 函数更新或应用对应的配置和状态。
 void MainWindow::setupNonPersistentDefaults()
 {
     ui->lineEdit_imageThreshold->setText(QString::number(
-        RecipeProfile::DefaultImageThresholdPercent));
+        TemplateSettings::DefaultImageThresholdPercent));
     ui->textEdit_targetText->setPlainText("");
     ui->lineEdit_tissueRoughnessThreshold->setText(
         QString::number(
-            TissueRecipeParameters().roughnessThreshold,
+            6.0,
             'f', 3));
 }
 

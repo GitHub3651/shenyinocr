@@ -15,24 +15,30 @@ struct InspectionRunContext
     InspectionRunContext(
         const QString &runIdValue,
         const QDateTime &startedAtUtcValue,
-        const MachineSettings &machineSettingsValue,
-        const PreparedRecipeSnapshot &preparedRecipeValue,
-        const DetectionProfileSnapshot &profileSnapshotValue,
+        const AppSettings &machineSettingsValue,
+        DetectionMode modeValue,
+        const QVector<PreparedTemplateSnapshot> &preparedTemplatesValue,
+        const DetectionTemplateSnapshot &templateSnapshotValue,
+        double tissueRoughnessThresholdValue,
         const FramePreprocessSettings &framePreprocessValue)
         : runId(runIdValue),
           startedAtUtc(startedAtUtcValue),
           machineSettings(machineSettingsValue),
-          preparedRecipe(preparedRecipeValue),
-          profileSnapshot(profileSnapshotValue),
+          mode(modeValue),
+          preparedTemplates(preparedTemplatesValue),
+          templateSnapshot(templateSnapshotValue),
+          tissueRoughnessThreshold(tissueRoughnessThresholdValue),
           framePreprocess(framePreprocessValue)
     {
     }
 
     const QString runId;
     const QDateTime startedAtUtc;
-    const MachineSettings machineSettings;
-    const PreparedRecipeSnapshot preparedRecipe;
-    const DetectionProfileSnapshot profileSnapshot;
+    const AppSettings machineSettings;
+    const DetectionMode mode;
+    const QVector<PreparedTemplateSnapshot> preparedTemplates;
+    const DetectionTemplateSnapshot templateSnapshot;
+    const double tissueRoughnessThreshold;
     const FramePreprocessSettings framePreprocess;
 };
 
@@ -72,15 +78,17 @@ QString InspectionRuntime::createRunId() const
 
 // 函数说明：beginStart 函数创建、准备或启动对应流程。
 QString InspectionRuntime::beginStart(
-    const MachineSettings &machineSettings,
-    const PreparedRecipeSnapshot &preparedRecipe,
-    const DetectionProfileSnapshot &profileSnapshot,
+    const AppSettings &machineSettings,
+    DetectionMode mode,
+    const QVector<PreparedTemplateSnapshot> &preparedTemplates,
+    const DetectionTemplateSnapshot &templateSnapshot,
+    double tissueRoughnessThreshold,
     const FramePreprocessSettings &framePreprocess)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Idle
-            || !preparedRecipe
-            || !preparedRecipe->recipe) {
+            || (mode != DetectionMode::Tissue
+                && preparedTemplates.isEmpty())) {
         return QString();
     }
 
@@ -90,8 +98,10 @@ QString InspectionRuntime::beginStart(
         newRunId,
         QDateTime::currentDateTimeUtc(),
         machineSettings,
-        preparedRecipe,
-        profileSnapshot,
+        mode,
+        preparedTemplates,
+        templateSnapshot,
+        tissueRoughnessThreshold,
         framePreprocess));
     m_acceptedProductSequence = 0;
     m_completedProductCount = 0;
@@ -363,17 +373,17 @@ bool InspectionRuntime::startDetection(
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_state != InspectionRuntimeState::Starting
-                || !m_runContext
-                || !m_runContext->preparedRecipe
-                || !m_runContext->preparedRecipe->recipe) {
+                || !m_runContext) {
             if (errorMessage) {
                 *errorMessage = QStringLiteral("检测运行时未处于启动状态。");
             }
             return false;
         }
-        request.mode = m_runContext->preparedRecipe->recipe->detectionMode;
-        request.preparedRecipe = m_runContext->preparedRecipe;
-        request.profileSnapshot = m_runContext->profileSnapshot;
+        request.mode = m_runContext->mode;
+        request.preparedTemplates = m_runContext->preparedTemplates;
+        request.templateSnapshot = m_runContext->templateSnapshot;
+        request.tissueRoughnessThreshold =
+                m_runContext->tissueRoughnessThreshold;
         request.framePreprocess = m_runContext->framePreprocess;
     }
 

@@ -34,24 +34,18 @@ SOURCES += \
     application/settings_application_service.cpp \
     application/template_application_service.cpp \
     application/template_geometry_service.cpp \
-    recipes/product_recipe.cpp \
-    recipes/recipe_store.cpp \
-    recipes/prepared_recipe.cpp \
-    recipes/recipe_editor_session.cpp \
-    ui/dialogs/recipe_selection_dialog.cpp \
+    templates/template_store.cpp \
+    ui/dialogs/template_selection_dialog.cpp \
     ui/dialogs/character_template_editor_dialog.cpp \
     ui/pages/inspection_page.cpp \
     ui/pages/machine_settings_page.cpp \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
     ui/pages/template_editor_page.cpp \
-    ui/pages/template_editor_view.cpp \
-    ui/pages/template_editor_recipe.cpp \
-    ui/pages/template_editor_profile_commands.cpp \
     ui/pages/template_editor_support.cpp \
     system_support/machine_settings_policy.cpp \
-    system_support/settings/machine_settings.cpp \
-    system_support/settings/machine_settings_store.cpp \
+    system_support/settings/app_settings.cpp \
+    system_support/settings/app_settings_store.cpp \
     system_support/license/license_codec.cpp \
     system_support/logging/application_logger.cpp \
     system_support/crash/windows_crash_stack.cpp \
@@ -70,7 +64,7 @@ SOURCES += \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
     detection/detection_registry.cpp \
-    detection/detection_profile_snapshot.cpp \
+    detection/detection_template_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_plc_controller.cpp \
     runtime/inspection_runtime.cpp \
@@ -78,7 +72,7 @@ SOURCES += \
     runtime/image_save_service.cpp \
     detection/common/character_template_matcher.cpp \
     detection/common/frame_preprocessor.cpp \
-    detection/common/profile_pose_selector.cpp \
+    detection/common/template_pose_selector.cpp \
     detection/positioning/inspection_positioner.cpp \
     detection/positioning/tracking_pose_matcher.cpp \
     detection/ocr/ocr_detection_pipeline.cpp \
@@ -115,11 +109,8 @@ HEADERS += \
     application/template_application_service.h \
     application/template_geometry_service.h \
     contracts/barcode_parameter_defaults.h \
-    recipes/product_recipe.h \
-    recipes/recipe_store.h \
-    recipes/prepared_recipe.h \
-    recipes/recipe_editor_session.h \
-    ui/dialogs/recipe_selection_dialog.h \
+    templates/template_store.h \
+    ui/dialogs/template_selection_dialog.h \
     ui/dialogs/character_template_editor_dialog.h \
     runtime/inspection_presentation.h \
     runtime/result_service.h \
@@ -130,8 +121,8 @@ HEADERS += \
     ui/pages/template_editor_page.h \
     ui/pages/template_editor_support.h \
     system_support/machine_settings_policy.h \
-    system_support/settings/machine_settings.h \
-    system_support/settings/machine_settings_store.h \
+    system_support/settings/app_settings.h \
+    system_support/settings/app_settings_store.h \
     system_support/license/license_codec.h \
     system_support/logging/application_logger.h \
     system_support/crash/windows_crash_stack.h \
@@ -154,7 +145,7 @@ HEADERS += \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
     detection/detection_registry.h \
-    detection/detection_profile_snapshot.h \
+    detection/detection_template_snapshot.h \
     application/template_editor_contract.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_plc_controller.h \
@@ -163,7 +154,7 @@ HEADERS += \
     detection/common/character_template_matcher.h \
     detection/common/detection_roi_geometry.h \
     detection/common/frame_preprocessor.h \
-    detection/common/profile_pose_selector.h \
+    detection/common/template_pose_selector.h \
     detection/positioning/inspection_positioner.h \
     detection/positioning/tracking_pose_matcher.h \
     detection/ocr/ocr_detection_pipeline.h \

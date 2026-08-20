@@ -7,8 +7,8 @@
 
 // 函数说明：TissueDetectionPipeline 构造函数创建组件并初始化其依赖和初始状态。
 TissueDetectionPipeline::TissueDetectionPipeline(
-        const TissueRecipeParameters &parameters)
-    : m_detector(parameters)
+        double roughnessThreshold)
+    : m_detector(roughnessThreshold)
 {
 }
 

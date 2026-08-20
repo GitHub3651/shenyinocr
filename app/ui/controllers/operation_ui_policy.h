@@ -39,8 +39,8 @@ struct OperationUiSnapshot
     Access cameraSettings;
     Access plcConnection;
     Access plcRuntime;
-    Access recipeSelection;
-    Access recipeEditing;
+    Access templateSelection;
+    Access templateEditing;
     Access statisticsReset;
     Access rejectQueueReset;
     QString startDetectionText;

@@ -20,7 +20,7 @@
 
 #include "application/inspection_application_service.h"
 #include "application/settings_application_service.h"
-#include "application/template_editor_contract.h"
+#include "templates/template_store.h"
 #include "ui/controllers/operation_ui_policy.h"
 #include "ui/controllers/settings_edit_state.h"
 #include "ui/pages/inspection_page.h"
@@ -107,7 +107,7 @@ private slots:
 
     void on_pushButton_applyImageThreshold_clicked();
     void on_pushButton_saveTemplate_clicked();
-    void on_toolButton_selectRecipe_clicked();
+    void on_toolButton_selectTemplate_clicked();
     void on_pushButton_browseImageSavePath_clicked();
     void on_pushButton_applyPlcProcessParameters_clicked();
     void on_pushButton_applyImageRotation_clicked();
@@ -143,9 +143,9 @@ private:
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
-    void setupRecipeProfileDirtyTracking();
-    void refreshRecipeProfileDirty();
-    void clearRecipeProfileDirty();
+    void setupTemplateDirtyTracking();
+    void refreshTemplateDirty();
+    void clearTemplateDirty();
     void updateCurrentTemplateName();
     void updateSaveDirButtonText();
     void updateImageSaveOptionsVisibility();
@@ -167,7 +167,7 @@ private:
     OperationUiState operationUiState() const;
     bool isCameraOpen() const;
     bool isInspectionBusy() const;
-    const MachineSettings &machineSettings() const;
+    const AppSettings &machineSettings() const;
     void presentStartFailure(const StartInspectionResult &result);
     void finishInspectionStopUi(const StopInspectionResult &result);
     void presentInspectionFault();
@@ -182,7 +182,7 @@ private:
             m_inspectionApplicationService;
     std::shared_ptr<SettingsApplicationService>
             m_settingsApplicationService;
-    MachineSettings &m_appliedMachineSettings;
+    AppSettings &m_appliedMachineSettings;
     std::shared_ptr<TemplateApplicationService>
             m_templateApplicationService;
     QString m_currentDetectModeId;
@@ -207,18 +207,17 @@ private:
     QString selectedDir;
 
     bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
-    void setupWordTemplateEditorCombo();
+    void setupCurrentTemplateEditor();
     void setupDetectModeChangeTracking();
-    void clearWordMultiTemplateState();
-    void clearSingleTemplateRecipeState();
-    void refreshWordTemplateEditorCombo();
-    int currentWordTemplateProfileIndex() const;
+    void clearTemplateState();
+    void refreshCurrentTemplateEditor();
+    int currentTemplateIndex() const;
     void clearBarcodeTemplateValidation();
 
     // ========== 设置相关函数 ==========
     bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
-    void applyMachineSettingsToUi(const MachineSettings &settings);
-    void applyRecipeProfileToUi(const RecipeProfile &settings);
+    void applyMachineSettingsToUi(const AppSettings &settings);
+    void applyTemplateSettingsToUi(const TemplateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
     void initStyle();  // 声明后才能在 cpp 中实现和调用
 };

@@ -22,14 +22,14 @@ enum class DetectionTrackingKind
 {
     WholeFrame,
     SingleTemplate,
-    MultipleProfiles
+    MultipleTemplates
 };
 
 // 检测模式的唯一元数据。各层只查询这个描述，不再维护第二套模式分类。
 struct DetectionModeDescriptor
 {
     DetectionMode mode;
-    const char *recipeId;
+    const char *modeId;
     const char *uiId;
     const char *displayName;
     const char *workerLogName;

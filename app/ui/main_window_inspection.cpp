@@ -132,7 +132,7 @@ void MainWindow::presentStartFailure(
     case InspectionStartIssue::PlcDisconnected:
         showParameterWarning("提示", result.error.userMessage);
         break;
-    case InspectionStartIssue::PreparedRecipeMissing:
+    case InspectionStartIssue::TemplateMissing:
         QMessageBox::warning(
                     this,
                     QStringLiteral("启动资源预检失败"),
@@ -142,31 +142,31 @@ void MainWindow::presentStartFailure(
                       + QStringLiteral("\n\n")
                       + result.error.diagnostic);
         break;
-    case InspectionStartIssue::WordProfilesMissing:
+    case InspectionStartIssue::TemplatesMissing:
         QMessageBox::warning(
                     this, "提示", result.error.userMessage);
         break;
-    case InspectionStartIssue::BarcodeResourcesInvalid:
+    case InspectionStartIssue::TemplateResourcesInvalid:
         QMessageBox::warning(
                     this,
                     "二维码+三期模板预检失败",
                     QString("以下问题必须处理后才能启动检测：\n\n%1")
                     .arg(result.details.join("\n")));
         break;
-    case InspectionStartIssue::ProductTemplateIncomplete:
+    case InspectionStartIssue::TemplateIncomplete:
         QMessageBox::warning(
                     this,
                     "操作规范",
-                    QString("缺少可用产品模板，无法启动检测。\n\n"
+                    QString("当前模板无法启动检测。\n\n"
                             "具体原因：\n%1\n\n"
-                            "请重新创建配方，或从【已发布配方】加载完整的新格式配方。")
+                            "请编辑该模板，或重新选择一个完整模板。")
                     .arg(result.details.join("\n")));
         break;
-    case InspectionStartIssue::WordProfilesIncomplete:
+    case InspectionStartIssue::TemplatesIncomplete:
         QMessageBox::warning(
                     this,
                     "提示",
-                    QString("以下产品模板还没有确认目标字符，不能启动检测：\n%1")
+                    QString("当前选择中没有可用模板：\n%1")
                     .arg(result.details.join("\n")));
         break;
     case InspectionStartIssue::DirtySettingsConfirmationRequired:
@@ -324,7 +324,7 @@ bool MainWindow::isInspectionBusy() const
 }
 
 // 函数说明：machineSettings 函数实现名称所表示的处理步骤。
-const MachineSettings &MainWindow::machineSettings() const
+const AppSettings &MainWindow::machineSettings() const
 {
     return m_settingsApplicationService->current();
 }
@@ -353,8 +353,8 @@ void MainWindow::updateOperationUiState()
     }
 
     applyWidgetAccess(
-                ui->toolButton_selectRecipe,
-                snapshot.recipeSelection);
+                ui->toolButton_selectTemplate,
+                snapshot.templateSelection);
     applyWidgetAccess(
                 ui->pushButton_browseImageSavePath,
                 snapshot.generalSettings);
@@ -506,9 +506,9 @@ void MainWindow::on_pushButton_saveTemplate_clicked()
 }
 
 // 先定义一个保存参数到指定文件夹的函数（可放在MainWindow类中）
-void MainWindow::on_toolButton_selectRecipe_clicked()
+void MainWindow::on_toolButton_selectTemplate_clicked()
 {
-    m_templateEditorPage->selectPublishedRecipeForCurrentMode();
+    m_templateEditorPage->selectTemplatesForCurrentMode();
 }
 
 /**
@@ -722,7 +722,7 @@ void MainWindow::on_toolButton_startInspection_clicked()
 {
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
-    refreshRecipeProfileDirty();
+    refreshTemplateDirty();
     updateCurrentTemplateName();
 
     StartInspectionCommand command;
@@ -754,6 +754,12 @@ void MainWindow::on_toolButton_startInspection_clicked()
         presentStartFailure(result);
         updateOperationUiState();
         return;
+    }
+    if (!result.details.isEmpty()) {
+        QMessageBox::warning(
+                    this,
+                    QStringLiteral("部分模板已跳过"),
+                    result.details.join(QStringLiteral("\n")));
     }
     DetectionMode activeMode = DetectionMode::Stamp;
     detectionModeFromUiId(

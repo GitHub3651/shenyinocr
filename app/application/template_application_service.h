@@ -1,79 +1,70 @@
-// 文件作用：本文件用于组织模板新建、预览、编辑、保存、发布和取消等应用用例。
-// 主要职责：组织模板新建、预览、编辑、保存、发布和取消等应用用例。
-// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
+// 文件作用：组织单模板编辑、资源准备和统一安全保存用例。
 #pragma once
 
 #include "application/template_editor_contract.h"
 #include "application/template_geometry_service.h"
-#include "recipes/prepared_recipe.h"
-#include "recipes/recipe_editor_session.h"
+#include "templates/template_store.h"
 
+#include <QImage>
 #include <QMap>
 #include <QString>
 
+#include <functional>
 #include <memory>
-#include <vector>
 
 class IBarcodeDecoder;
-class RecipeStore;
 
-// The only application boundary for the complete template editing use case.
-// UI code supplies user intent and immutable images; this service owns the
-// draft/session, recipe catalog access, asset staging and transactional publish.
-// 组件说明：TemplateApplicationService 统一承接模板编辑、资源暂存和配方发布用例。
 class TemplateApplicationService
 {
 public:
     TemplateApplicationService(
-        const std::shared_ptr<RecipeStore> &store,
-        const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder,
-        const QString &editorWorkspacesRootPath);
+        const std::shared_ptr<TemplateStore> &store,
+        const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder);
 
-    bool beginNew(const ProductRecipe &recipe,
+    bool beginNew(DetectionMode mode,
                   QString *errorMessage = nullptr);
-    bool beginEdit(const QString &recipeId,
+    bool beginEdit(const QString &directoryPath,
+                   DetectionMode expectedMode,
                    QString *errorMessage = nullptr);
     void cancel();
     bool isActive() const;
-    const ProductRecipe &draft() const;
-    QString workspacePath() const;
-    QMap<QString, QString> assetSourcePaths() const;
-    bool replaceDraft(
-        const ProductRecipe &recipe,
-        const QMap<QString, QString> &assetSourcePaths,
-        QString *errorMessage = nullptr);
-    bool updateProfile(int profileIndex,
-                       const RecipeProfile &profile,
-                       QString *errorMessage = nullptr);
-    bool publish(PreparedRecipeSnapshot *preparedRecipe,
-                 QString *errorMessage = nullptr);
+    const EditableTemplate &draft() const;
+    bool replaceDraft(const EditableTemplate &value,
+                      QString *errorMessage = nullptr);
+    bool save(const QString &directoryPath,
+              bool preserveExistingContents,
+              PreparedTemplateSnapshot *preparedTemplate,
+              QString *errorMessage = nullptr);
 
-    bool listRecipes(TemplateRecipeCatalog *catalog,
-                     QString *errorMessage = nullptr) const;
-    bool loadPreparedRecipe(
-        const QString &recipeId,
-        PreparedRecipeSnapshot *preparedRecipe,
+    TemplateSummary readSummary(
+        const QString &directoryPath,
+        DetectionMode expectedMode,
+        TemplateStoreError *error = nullptr) const;
+    bool loadPreparedTemplate(
+        const QString &directoryPath,
+        DetectionMode expectedMode,
+        PreparedTemplateSnapshot *preparedTemplate,
         QString *errorMessage = nullptr) const;
+    bool updateTemplates(
+        const QStringList &directoryPaths,
+        DetectionMode expectedMode,
+        const std::function<void(TemplateSettings *)> &update,
+        QString *resultMessage = nullptr);
 
-    bool stageInitialProfileAssets(
-        const InitialRecipeProfileAssets &assets,
-        ProductRecipe *recipe,
-        RecipeProfile *profile,
-        QMap<QString, QString> *assetSourcePaths,
+    bool stageInitialAssets(
+        const InitialTemplateAssets &assets,
+        TemplateSettings *settings,
+        EditableTemplate *value,
         QString *errorMessage = nullptr) const;
     bool stageCharacterAssets(
-        int profileIndex,
         const QMap<QString, QImage> &characterImages,
-        ProductRecipe *recipe,
-        RecipeProfile *profile,
-        QMap<QString, QString> *assetSourcePaths,
+        EditableTemplate *value,
         QString *errorMessage = nullptr) const;
 
     QRect mapDisplayRectToImage(
         const QRect &displayRect,
         const TemplateDisplayGeometry &geometry) const;
-    TemplateProfileGeometry buildProfileGeometry(
+    TemplateGeometryResult buildGeometry(
         const QRect &trackingDisplayRect,
         const QRect &barcodeDisplayRect,
         const QPolygon &dateDisplayPolygon,
@@ -85,30 +76,19 @@ public:
         const TemplateBarcodeValidationOptions &options,
         QString *failureReason) const;
 
-    const QMap<QString, QString> &publishedRecipeIdsByMode() const;
-    void replacePublishedRecipeIdsByMode(
-        const QMap<QString, QString> &recipeIds);
-    void rememberPublishedRecipe(
-        const QString &modeId,
-        const QString &recipeId);
-    void forgetPublishedRecipe(const QString &modeId);
-    const PreparedRecipeSnapshot &activePreparedRecipe() const;
-    void setActivePreparedRecipe(
-        const PreparedRecipeSnapshot &preparedRecipe);
-    const std::vector<WordTemplateProfile> &wordProfiles() const;
-    void clearWordProfiles();
-    void replaceWordProfiles(
-        const std::vector<WordTemplateProfile> &profiles);
-    bool replaceWordProfile(
-        int profileIndex,
-        const WordTemplateProfile &profile);
+    QString currentDirectoryPath() const;
+    PreparedTemplateSnapshot activePreparedTemplate() const;
+    void setActivePreparedTemplate(
+        const PreparedTemplateSnapshot &preparedTemplate);
 
 private:
-    std::shared_ptr<RecipeStore> m_store;
+    static QString storeErrorMessage(const TemplateStoreError &error);
+
+    std::shared_ptr<TemplateStore> m_store;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
-    RecipeEditorSession m_session;
     TemplateGeometryService m_geometryService;
-    QMap<QString, QString> m_publishedRecipeIdsByMode;
-    PreparedRecipeSnapshot m_activePreparedRecipe;
-    std::vector<WordTemplateProfile> m_wordProfiles;
+    QString m_currentDirectoryPath;
+    EditableTemplate m_draft;
+    PreparedTemplateSnapshot m_activePreparedTemplate;
+    bool m_active = false;
 };

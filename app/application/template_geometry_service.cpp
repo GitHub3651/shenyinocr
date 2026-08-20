@@ -1,6 +1,6 @@
 // 文件作用：本文件用于校验并转换模板跟踪框、二维码框和日期多边形坐标。
 // 主要职责：校验并转换模板跟踪框、二维码框和日期多边形坐标。
-// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/template_geometry_service.h"
 
@@ -42,8 +42,7 @@ QPointF mapDisplayPoint(
                    (point.y() - offsetY) * scaleY);
 }
 
-// 函数说明：mapProfileRect 函数校验、转换或恢复对应数据。
-QRectF mapProfileRect(
+QRectF mapTemplateRect(
         const QRect &displayRect,
         const TemplateDisplayGeometry &geometry)
 {
@@ -89,22 +88,22 @@ QRect TemplateGeometryService::mapDisplayRectToImage(
                 QRect(QPoint(0, 0), geometry.sourceImageSize));
 }
 
-// 函数说明：buildProfileGeometry 函数创建、准备或启动对应流程。
-TemplateProfileGeometry TemplateGeometryService::buildProfileGeometry(
+// 函数说明：buildGeometry 函数创建、准备或启动对应流程。
+TemplateGeometryResult TemplateGeometryService::buildGeometry(
         const QRect &trackingDisplayRect,
         const QRect &barcodeDisplayRect,
         const QPolygon &dateDisplayPolygon,
         bool includeBarcode,
         const TemplateDisplayGeometry &geometry) const
 {
-    TemplateProfileGeometry result;
+    TemplateGeometryResult result;
     if (!validGeometry(geometry)) {
         result.errorMessage = QStringLiteral(
                     "模板显示尺寸或原图尺寸无效。");
         return result;
     }
 
-    const QRectF trackingPhysical = mapProfileRect(
+    const QRectF trackingPhysical = mapTemplateRect(
                 trackingDisplayRect, geometry);
     const cv::Rect tracking(
                 cvRound(trackingPhysical.x()),
@@ -113,12 +112,12 @@ TemplateProfileGeometry TemplateGeometryService::buildProfileGeometry(
                 cvRound(trackingPhysical.height()));
     if (tracking.width <= 5 || tracking.height <= 5) {
         result.errorMessage = QStringLiteral(
-                    "定位区域转换后无效，配方未保存。");
+                    "定位区域转换后无效，模板未保存。");
         return result;
     }
     if (dateDisplayPolygon.size() < 3) {
         result.errorMessage = QStringLiteral(
-                    "喷码检测区域点数不足，配方未保存。");
+                    "喷码检测区域点数不足，模板未保存。");
         return result;
     }
 
@@ -135,11 +134,11 @@ TemplateProfileGeometry TemplateGeometryService::buildProfileGeometry(
     }
 
     if (includeBarcode) {
-        const QRectF barcode = mapProfileRect(
+        const QRectF barcode = mapTemplateRect(
                     barcodeDisplayRect, geometry);
         if (barcode.width() <= 5.0 || barcode.height() <= 5.0) {
             result.errorMessage = QStringLiteral(
-                        "二维码区域转换后无效，配方未保存。");
+                        "二维码区域转换后无效，模板未保存。");
             return result;
         }
         const QPointF corners[] = {

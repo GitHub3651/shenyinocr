@@ -130,7 +130,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="toolButton_selectRecipe">
+          <widget class="QToolButton" name="toolButton_selectTemplate">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
              <horstretch>0</horstretch>
@@ -860,7 +860,7 @@ QLabel#label_mainContentSplitterGrip {
            </widget>
           </item>
           <item row="3" column="0">
-           <widget class="QGroupBox" name="groupBox_currentRecipe">
+           <widget class="QGroupBox" name="groupBox_currentTemplate">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -887,7 +887,7 @@ QLabel#label_mainContentSplitterGrip {
               <number>0</number>
              </property>
              <item>
-              <widget class="QLineEdit" name="lineEdit_currentRecipeName">
+              <widget class="QLineEdit" name="lineEdit_currentTemplateName">
                <property name="minimumSize">
                 <size>
                  <width>0</width>
@@ -939,7 +939,7 @@ QLabel#label_mainContentSplitterGrip {
            <height>20</height>
           </size>
          </property>
-         <widget class="QWidget" name="tab_recipeSettings">
+         <widget class="QWidget" name="tab_detectionSettings">
           <attribute name="title">
            <string> 参数设定 </string>
           </attribute>
@@ -948,14 +948,14 @@ QLabel#label_mainContentSplitterGrip {
             <number>10</number>
            </property>
            <item>
-            <widget class="QScrollArea" name="scrollArea_recipeSettings">
+            <widget class="QScrollArea" name="scrollArea_detectionSettings">
              <property name="styleSheet">
               <string notr="true">border:none; background:transparent;</string>
              </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
-             <widget class="QWidget" name="widget_recipeSettingsScrollContent">
+             <widget class="QWidget" name="widget_detectionSettingsScrollContent">
               <property name="geometry">
                <rect>
                 <x>0</x>
@@ -967,9 +967,9 @@ QLabel#label_mainContentSplitterGrip {
               <property name="styleSheet">
                <string notr="true">background:white;</string>
               </property>
-              <layout class="QGridLayout" name="gridLayout_recipeSettings">
+              <layout class="QGridLayout" name="gridLayout_detectionSettings">
                <item row="0" column="0">
-                <layout class="QVBoxLayout" name="verticalLayout_recipeSettings">
+                <layout class="QVBoxLayout" name="verticalLayout_detectionSettings">
                  <property name="spacing">
                   <number>12</number>
                  </property>
@@ -986,7 +986,7 @@ QLabel#label_mainContentSplitterGrip {
                   <number>0</number>
                  </property>
                  <item>
-                  <widget class="QGroupBox" name="groupBox_currentRecipeSettings">
+                  <widget class="QGroupBox" name="groupBox_currentTemplateSettings">
                    <property name="styleSheet">
                     <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
                    </property>
@@ -1377,7 +1377,7 @@ background-color: #ebeef5;
                   </layout>
                  </item>
                  <item>
-                  <spacer name="verticalSpacer_recipeSettingsBottom">
+                  <spacer name="verticalSpacer_detectionSettingsBottom">
                    <property name="orientation">
                     <enum>Qt::Vertical</enum>
                    </property>

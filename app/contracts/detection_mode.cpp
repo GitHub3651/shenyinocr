@@ -15,9 +15,9 @@ const QVector<DetectionModeDescriptor> &descriptors()
           true, true, false, false, 0 },
         { DetectionMode::Word, "word", "word_detection", "字库匹配",
           "word", "无法启动字库检测工作线程。",
-          DetectionTrackingKind::MultipleProfiles, true, true, false,
+          DetectionTrackingKind::MultipleTemplates, true, true, false,
           true, false, false, false, 0 },
-        { DetectionMode::Ocr, "ocr", "ocr_detection", "深度模型",
+        { DetectionMode::Ocr, "ocr", "ocr_detection", "深度 OCR",
           "OCR", "无法启动深度OCR检测工作线程。",
           DetectionTrackingKind::SingleTemplate, true, false, false,
           false, false, true, true, 0 },
@@ -27,7 +27,7 @@ const QVector<DetectionModeDescriptor> &descriptors()
           false, false, false, true, 0 },
         { DetectionMode::BarcodeWord, "barcodeWord", "barcode_word_detection",
           "二维码+三期", "barcode-word", "无法启动二维码+三期检测工作线程。",
-          DetectionTrackingKind::MultipleProfiles,
+          DetectionTrackingKind::MultipleTemplates,
           true, true, true, true, false, false, false, 2 }
     };
     return values;
@@ -54,7 +54,7 @@ const DetectionModeDescriptor *detectionModeDescriptorFromId(
     const QString &modeId)
 {
     for (const DetectionModeDescriptor &descriptor : descriptors()) {
-        if (modeId == QLatin1String(descriptor.recipeId)) {
+        if (modeId == QLatin1String(descriptor.modeId)) {
             return &descriptor;
         }
     }
@@ -75,7 +75,7 @@ const DetectionModeDescriptor *detectionModeDescriptorFromUiId(
 // 函数说明：detectionModeId 函数执行对应事件或业务处理。
 QString detectionModeId(DetectionMode mode)
 {
-    return QLatin1String(detectionModeDescriptor(mode).recipeId);
+    return QLatin1String(detectionModeDescriptor(mode).modeId);
 }
 
 // 函数说明：detectionModeFromId 函数执行对应事件或业务处理。
@@ -115,5 +115,5 @@ bool isWordFamilyMode(const QString &modeId)
             detectionModeDescriptorFromUiId(modeId);
     return descriptor
             && descriptor->trackingKind
-               == DetectionTrackingKind::MultipleProfiles;
+               == DetectionTrackingKind::MultipleTemplates;
 }

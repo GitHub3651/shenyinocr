@@ -1,6 +1,6 @@
-// 文件作用：本文件用于组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
-// 主要职责：组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
-// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 文件作用：本文件用于组织相机、PLC、检测运行和模板启动等用户用例，并向界面返回结构化结果。
+// 主要职责：组织相机、PLC、检测运行和模板启动等用户用例，并向界面返回结构化结果。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
@@ -20,7 +20,7 @@
 
 class InspectionRuntime;
 class CameraSession;
-class RecipeStore;
+class TemplateStore;
 class SettingsApplicationService;
 // 组件说明：InspectionFaultReason 枚举列出该组件允许使用的稳定状态和选项。
 enum class InspectionFaultReason;
@@ -119,7 +119,7 @@ public:
         const std::shared_ptr<InspectionRuntime> &runtime,
         const std::shared_ptr<CameraSession> &cameraSession,
         const std::shared_ptr<SettingsApplicationService> &settings,
-        const std::shared_ptr<RecipeStore> &recipes,
+        const std::shared_ptr<TemplateStore> &templates,
         QObject *parent = nullptr);
     ~InspectionApplicationService() override;
 
@@ -195,6 +195,6 @@ private:
     std::shared_ptr<InspectionRuntime> m_runtime;
     std::shared_ptr<CameraSession> m_cameraSession;
     std::shared_ptr<SettingsApplicationService> m_settings;
-    std::shared_ptr<RecipeStore> m_recipes;
-    QString m_activeRecipeId;
+    std::shared_ptr<TemplateStore> m_templates;
+    QStringList m_activeTemplatePaths;
 };

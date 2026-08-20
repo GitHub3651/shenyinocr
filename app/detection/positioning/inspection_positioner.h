@@ -1,5 +1,5 @@
-// 文件作用：本文件用于根据当前配方选择定位方式，并输出检测区域对应的位置姿态。
-// 主要职责：根据当前配方选择定位方式，并输出检测区域对应的位置姿态。
+// 文件作用：本文件用于根据当前模板选择定位方式，并输出检测区域对应的位置姿态。
+// 主要职责：根据当前模板选择定位方式，并输出检测区域对应的位置姿态。
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
@@ -18,17 +18,17 @@ class InspectionPositioner
 public:
     bool configure(
         DetectionTrackingKind trackingKind,
-        const std::vector<WordTrackingProfile> &profiles,
+        const std::vector<WordTrackingTemplate> &templates,
         const std::vector<cv::Point2f> &singleDatePolygon,
         const cv::Mat &singleTrackingTemplate);
     DetectionPose locate(const cv::Mat &image) const;
 
 private:
-    // 组件说明：ProfileState 数据结构集中保存该流程需要的一组相关数据。
-    struct ProfileState
+    // 每个状态对应一个已经严格加载的外部模板。
+    struct TemplateState
     {
         QString name;
-        int profileIndex = -1;
+        int templateIndex = -1;
         std::vector<cv::Point2f> barcodePolygon;
         std::vector<cv::Point2f> datePolygon;
         TrackingPoseMatcher matcher;
@@ -38,5 +38,5 @@ private:
             DetectionTrackingKind::WholeFrame;
     std::vector<cv::Point2f> m_singleDatePolygon;
     TrackingPoseMatcher m_singleMatcher;
-    std::vector<ProfileState> m_profiles;
+    std::vector<TemplateState> m_templates;
 };

@@ -4,15 +4,15 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include "system_support/settings/machine_settings.h"
+#include "system_support/settings/app_settings.h"
 
 // 组件说明：MachineSettingsPolicy 组件集中描述相关配置、规则和运行参数。
 class MachineSettingsPolicy
 {
 public:
-    static MachineSettings defaultsForHardwareState(
-        const MachineSettings &applied,
-        const MachineSettings &defaults,
+    static AppSettings defaultsForHardwareState(
+        const AppSettings &applied,
+        const AppSettings &defaults,
         bool cameraOpen,
         bool plcConnected);
 };

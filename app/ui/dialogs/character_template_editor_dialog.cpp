@@ -264,26 +264,25 @@ private:
 
 // 函数说明：CharacterTemplateEditorDialog 构造函数创建组件并初始化其依赖和初始状态。
 CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(const QImage &sourceImage,
-                                                         const RecipeProfile &initialProfile,
+                                                         const TemplateSettings &initialSettings,
                                                          QWidget *parent)
     : QDialog(parent),
       m_sourceImage(sourceImage),
-      m_resultProfile(initialProfile)
+      m_resultSettings(initialSettings)
 {
     loadSavedCharacterBoxes();
     buildUi();
 }
 
-// 函数说明：savedCount 函数保存或发布对应的数据和资源。
+// 函数说明：savedCount 函数返回已保存数量。
 int CharacterTemplateEditorDialog::savedCount() const
 {
     return m_savedCount;
 }
 
-// 函数说明：resultProfile 函数实现名称所表示的处理步骤。
-RecipeProfile CharacterTemplateEditorDialog::resultProfile() const
+TemplateSettings CharacterTemplateEditorDialog::resultSettings() const
 {
-    return m_resultProfile;
+    return m_resultSettings;
 }
 
 QMap<QString, QImage> CharacterTemplateEditorDialog::characterImages() const
@@ -523,7 +522,7 @@ void CharacterTemplateEditorDialog::loadSavedCharacterBoxes()
     m_initialBoxes.clear();
 
     const QRect imageBounds(0, 0, m_sourceImage.width(), m_sourceImage.height());
-    for (const RecipeCharacterBox &savedBox : m_resultProfile.characterBoxes) {
+    for (const TemplateCharacterBox &savedBox : m_resultSettings.characterBoxes) {
         CharacterBox item;
         item.name = savedBox.name;
         item.rect = savedBox.rect.normalized().intersected(imageBounds);
@@ -658,7 +657,7 @@ void CharacterTemplateEditorDialog::refreshSaveNamePreviews()
     }
 }
 
-// 函数说明：saveTemplates 函数保存或发布对应的数据和资源。
+// 函数说明：saveTemplates 函数保存对应的字符模板。
 bool CharacterTemplateEditorDialog::saveTemplates()
 {
     if (m_sortedBoxes.isEmpty()
@@ -697,8 +696,8 @@ bool CharacterTemplateEditorDialog::saveTemplates()
         }
     }
 
-    m_resultProfile.characterBoxes.clear();
-    m_resultProfile.characterSourceSize = m_sourceImage.size();
+    m_resultSettings.characterBoxes.clear();
+    m_resultSettings.characterSourceSize = m_sourceImage.size();
     m_characterImages.clear();
     QStringList reservedFileNames;
     for (int index = 0; index < m_sortedBoxes.size(); ++index) {
@@ -713,10 +712,10 @@ bool CharacterTemplateEditorDialog::saveTemplates()
             return false;
         }
         m_sortedBoxes[index].name = name;
-        RecipeCharacterBox box;
+        TemplateCharacterBox box;
         box.name = name;
         box.rect = rect;
-        m_resultProfile.characterBoxes.append(box);
+        m_resultSettings.characterBoxes.append(box);
         m_characterImages.insert(fileName, m_sourceImage.copy(rect));
     }
 

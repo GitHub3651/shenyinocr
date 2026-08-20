@@ -1,5 +1,5 @@
-// 文件作用：本文件用于组装设置、配方、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
-// 主要职责：组装设置、配方、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
+// 文件作用：本文件用于组装设置、模板、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
+// 主要职责：组装设置、模板、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
 // 模块位置：启动层；只负责进程初始化和对象组装，不放置业务规则。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "startup/application_startup.h"
@@ -20,8 +20,8 @@
 #include "runtime/inspection_plc_controller.h"
 #include "runtime/inspection_runtime.h"
 #include "runtime/camera_session.h"
-#include "recipes/recipe_store.h"
-#include "system_support/settings/machine_settings_store.h"
+#include "templates/template_store.h"
+#include "system_support/settings/app_settings_store.h"
 #include "ui/main_window.h"
 #include "ui/pages/inspection_page.h"
 #include "ui/pages/machine_settings_page.h"
@@ -163,15 +163,43 @@ int ApplicationStartup::run(int argc, char *argv[])
                         QStringLiteral("无法确定当前用户的应用数据目录。"));
             return -1;
         }
-        const std::shared_ptr<MachineSettingsStore> settingsStore(
-                    new MachineSettingsStore(applicationDataRoot));
-        MachineSettings startupSettings;
-        MachineSettingsLoadStatus settingsStatus =
-                MachineSettingsLoadStatus::FirstRun;
-        MachineSettingsStoreError settingsError;
+        const std::shared_ptr<AppSettingsStore> settingsStore(
+                    new AppSettingsStore(applicationDataRoot));
+        AppSettings startupSettings;
+        AppSettingsLoadStatus settingsStatus =
+                AppSettingsLoadStatus::FirstRun;
+        AppSettingsStoreError settingsError;
         if (!settingsStore->load(&startupSettings,
                                  &settingsStatus,
                                  &settingsError)) {
+            if (settingsError.code
+                    == QLatin1String("SETTINGS_RESET_REQUIRED")) {
+                const QMessageBox::StandardButton choice =
+                        QMessageBox::question(
+                            nullptr,
+                            QStringLiteral("旧设置需要清空"),
+                            settingsError.userMessage
+                            + QStringLiteral("\n\n清空后将使用默认设置，是否继续？"),
+                            QMessageBox::Yes | QMessageBox::No,
+                            QMessageBox::No);
+                if (choice == QMessageBox::Yes) {
+                    startupSettings = AppSettings::defaults();
+                    if (settingsStore->save(startupSettings,
+                                            &settingsError)) {
+                        settingsStatus = AppSettingsLoadStatus::Loaded;
+                    } else {
+                        QMessageBox::critical(
+                                    nullptr,
+                                    QStringLiteral("设置清空失败"),
+                                    settingsError.userMessage
+                                    + QStringLiteral("\n\n")
+                                    + settingsError.code);
+                        return -1;
+                    }
+                } else {
+                    return -1;
+                }
+            } else {
             QMessageBox::critical(
                         nullptr,
                         QStringLiteral("设置文件损坏"),
@@ -179,9 +207,10 @@ int ApplicationStartup::run(int argc, char *argv[])
                         + QStringLiteral("\n\n")
                         + settingsError.code);
             return -1;
+            }
         }
-        const std::shared_ptr<RecipeStore> recipeStore(
-                    new RecipeStore(settingsStore->recipesRootPath()));
+        const std::shared_ptr<TemplateStore> templateStore(
+                    new TemplateStore);
         const std::shared_ptr<SettingsApplicationService> settingsService(
                     new SettingsApplicationService(
                         settingsStore, startupSettings));
@@ -230,13 +259,12 @@ int ApplicationStartup::run(int argc, char *argv[])
                         runtime,
                         cameraSession,
                         settingsService,
-                        recipeStore));
+                        templateStore));
         const std::shared_ptr<TemplateApplicationService>
                 templateService(
                     new TemplateApplicationService(
-                        recipeStore,
-                         barcodeDecoder,
-                         settingsService->editorWorkspacesRootPath()));
+                        templateStore,
+                        barcodeDecoder));
         std::unique_ptr<InspectionPage> inspectionPage;
         std::unique_ptr<MachineSettingsPage> machineSettingsPage;
         std::unique_ptr<TemplateEditorPage> templateEditorPage;
@@ -263,7 +291,6 @@ int ApplicationStartup::run(int argc, char *argv[])
                     templateService.get(),
                     inspectionService.get(),
                     settingsService.get(),
-                    machineSettingsPage.get(),
                     window.settingsEditStateForComposition(),
                     window.templateEditorPageCallbacks()));
         window.attachPages(

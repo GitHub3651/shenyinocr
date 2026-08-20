@@ -1,16 +1,17 @@
-// 文件作用：本文件用于组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
-// 主要职责：组织相机、PLC、检测运行和配方启动等用户用例，并向界面返回结构化结果。
-// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、配方和设置。
+// 文件作用：本文件用于组织相机、PLC、检测运行和模板启动等用户用例，并向界面返回结构化结果。
+// 主要职责：组织相机、PLC、检测运行和模板启动等用户用例，并向界面返回结构化结果。
+// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/inspection_application_service.h"
 
 #include "contracts/detection_mode.h"
 #include "application/settings_application_service.h"
-#include "recipes/recipe_store.h"
+#include "templates/template_store.h"
 #include "runtime/camera_session.h"
 #include "runtime/inspection_runtime.h"
 
 #include <QDateTime>
+#include <QFileInfo>
 #include <QVector>
 
 namespace {
@@ -36,91 +37,14 @@ ApplicationRuntimeState applicationState(
     }
 }
 
-// 函数说明：hasCompleteCharacterTemplates 函数检查相关状态并返回判断结果。
-bool hasCompleteCharacterTemplates(
-    const PreparedRecipeProfile &profile)
-{
-    const int targetCount = preparedRecipeTargetUnits(
-                profile.definition.targetText).size();
-    if (targetCount <= 0
-            || profile.characterTemplates.empty()
-            || profile.characterTemplates.size()
-               != profile.characterTemplateTargetIndexes.size()) {
-        return false;
-    }
-    QVector<bool> found(targetCount, false);
-    for (const int index : profile.characterTemplateTargetIndexes) {
-        if (index >= 0 && index < targetCount) {
-            found[index] = true;
-        }
-    }
-    for (const bool value : found) {
-        if (!value) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// 函数说明：resourceInputFor 函数实现名称所表示的处理步骤。
-InspectionStartResourceInput resourceInputFor(
-    const PreparedRecipe &prepared,
-    DetectionMode mode,
-    const DetectionRuntimeReadiness &detectionReadiness)
-{
-    InspectionStartResourceInput input;
-    input.mode = mode;
-    const DetectionModeDescriptor &descriptor = detectionModeDescriptor(mode);
-    input.preparedRecipeReady = static_cast<bool>(prepared.recipe);
-    if (prepared.profiles.isEmpty()) {
-        return input;
-    }
-
-    const PreparedRecipeProfile &first = prepared.profiles.first();
-    input.trackingTemplateReady = !first.trackingTemplate.empty();
-    input.dateRegionReady = first.datePolygon.size() >= 3;
-    input.targetTextRequired = descriptor.requiresTargetText;
-    input.targetTextReady =
-            !first.definition.targetText.trimmed().isEmpty();
-    input.characterTemplatesRequired =
-            descriptor.requiresCharacterTemplates;
-    input.characterTemplatesReady =
-            hasCompleteCharacterTemplates(first);
-    input.barcodeDecoderReady = detectionReadiness.ready;
-    input.barcodeDecoderError = detectionReadiness.errorMessage;
-
-    if (descriptor.trackingKind
-            == DetectionTrackingKind::MultipleProfiles) {
-        for (const PreparedRecipeProfile &profile : prepared.profiles) {
-            InspectionStartProfileReadiness readiness;
-            readiness.displayName = profile.definition.name;
-            readiness.trackingTemplateReady =
-                    !profile.trackingTemplate.empty();
-            readiness.calibrationReady =
-                    profile.datePolygon.size() >= 3;
-            readiness.barcodeRegionReady =
-                    !descriptor.requiresBarcodeDecoder
-                    || profile.barcodePolygon.size() == 4;
-            readiness.dateRegionReady =
-                    profile.datePolygon.size() >= 3;
-            readiness.targetTextReady =
-                    !profile.definition.targetText.trimmed().isEmpty();
-            readiness.characterTemplatesReady =
-                    hasCompleteCharacterTemplates(profile);
-            input.profiles.push_back(readiness);
-        }
-    }
-    return input;
-}
-
 // 函数说明：framePreprocessSettings 函数实现名称所表示的处理步骤。
 FramePreprocessSettings framePreprocessSettings(
-    const MachineSettings &settings)
+    const AppSettings &settings)
 {
     FramePreprocessSettings output;
-    const int rotation = machineSettingsRotationIds().indexOf(
+    const int rotation = appSettingsRotationIds().indexOf(
                 settings.imageRotationId);
-    const int channel = machineSettingsColorChannelIds().indexOf(
+    const int channel = appSettingsColorChannelIds().indexOf(
                 settings.colorChannelId);
     output.rotation = static_cast<FrameRotation>(rotation);
     output.colorChannel = static_cast<FrameColorChannel>(channel);
@@ -129,7 +53,7 @@ FramePreprocessSettings framePreprocessSettings(
 
 // 函数说明：cameraConfiguration 函数实现名称所表示的处理步骤。
 CameraSessionCaptureConfiguration cameraConfiguration(
-    const MachineSettings &settings,
+    const AppSettings &settings,
     bool hardwareTriggerEnabled)
 {
     CameraSessionCaptureConfiguration output;
@@ -147,11 +71,11 @@ CameraSessionCaptureConfiguration cameraConfiguration(
 
 // 函数说明：resultConfiguration 函数实现名称所表示的处理步骤。
 ResultServiceRunConfiguration resultConfiguration(
-    const MachineSettings &settings)
+    const AppSettings &settings)
 {
     ResultServiceRunConfiguration configuration;
     configuration.imageSaveModeIndex =
-            machineSettingsImageSaveModeIds().indexOf(
+            appSettingsImageSaveModeIds().indexOf(
                 settings.imageSaveModeId);
     configuration.plcOutputEnabled = settings.triggerEnabled;
     configuration.delayedNgOffset = settings.rejectPosition;
@@ -159,13 +83,13 @@ ResultServiceRunConfiguration resultConfiguration(
     configuration.saveOptions.format = QStringLiteral("jpg");
     configuration.saveOptions.quality = settings.imageJpegQuality;
     configuration.saveOptions.imageContentModeIndex =
-            machineSettingsImageSaveTypeIds().indexOf(
+            appSettingsImageSaveTypeIds().indexOf(
                 settings.imageSaveTypeId);
     return configuration;
 }
 
 // 函数说明：plcRunSettings 函数实现名称所表示的处理步骤。
-PlcRunSettingsCommand plcRunSettings(const MachineSettings &settings)
+PlcRunSettingsCommand plcRunSettings(const AppSettings &settings)
 {
     PlcRunSettingsCommand output;
     output.rejectTime = static_cast<std::uint16_t>(settings.rejectTime);
@@ -191,16 +115,16 @@ QString startIssueCode(InspectionStartIssue issue)
         return QStringLiteral("INSPECTION_UNAPPLIED_CHANGES");
     case InspectionStartIssue::PlcDisconnected:
         return QStringLiteral("INSPECTION_PLC_DISCONNECTED");
-    case InspectionStartIssue::PreparedRecipeMissing:
-        return QStringLiteral("INSPECTION_RECIPE_NOT_PREPARED");
-    case InspectionStartIssue::WordProfilesMissing:
-        return QStringLiteral("INSPECTION_PROFILE_MISSING");
-    case InspectionStartIssue::BarcodeResourcesInvalid:
-        return QStringLiteral("INSPECTION_BARCODE_RESOURCE_INVALID");
-    case InspectionStartIssue::ProductTemplateIncomplete:
-        return QStringLiteral("INSPECTION_PRODUCT_TEMPLATE_INCOMPLETE");
-    case InspectionStartIssue::WordProfilesIncomplete:
-        return QStringLiteral("INSPECTION_PROFILE_INCOMPLETE");
+    case InspectionStartIssue::TemplateMissing:
+        return QStringLiteral("INSPECTION_TEMPLATE_MISSING");
+    case InspectionStartIssue::TemplatesMissing:
+        return QStringLiteral("INSPECTION_TEMPLATES_MISSING");
+    case InspectionStartIssue::TemplateResourcesInvalid:
+        return QStringLiteral("INSPECTION_TEMPLATE_RESOURCE_INVALID");
+    case InspectionStartIssue::TemplateIncomplete:
+        return QStringLiteral("INSPECTION_TEMPLATE_INCOMPLETE");
+    case InspectionStartIssue::TemplatesIncomplete:
+        return QStringLiteral("INSPECTION_TEMPLATES_INCOMPLETE");
     case InspectionStartIssue::None:
     default:
         return QString();
@@ -221,16 +145,16 @@ QString startIssueMessage(InspectionStartIssue issue)
         return QStringLiteral("存在尚未应用的参数修改。");
     case InspectionStartIssue::PlcDisconnected:
         return QStringLiteral("已启用 PLC 触发，但 PLC 未连接，请先连接 PLC。");
-    case InspectionStartIssue::PreparedRecipeMissing:
-        return QStringLiteral("当前模式没有已完整准备的产品配方，请先创建或加载新格式配方。");
-    case InspectionStartIssue::WordProfilesMissing:
-        return QStringLiteral("当前配方没有可用的Profile，请重新创建或加载产品配方。");
-    case InspectionStartIssue::BarcodeResourcesInvalid:
+    case InspectionStartIssue::TemplateMissing:
+        return QStringLiteral("当前模式没有选择可用模板，请先选择模板。");
+    case InspectionStartIssue::TemplatesMissing:
+        return QStringLiteral("当前模式没有任何可用模板。");
+    case InspectionStartIssue::TemplateResourcesInvalid:
         return QStringLiteral("二维码+三期模板资源预检失败。");
-    case InspectionStartIssue::ProductTemplateIncomplete:
-        return QStringLiteral("缺少可用产品模板，无法启动检测。");
-    case InspectionStartIssue::WordProfilesIncomplete:
-        return QStringLiteral("部分产品模板还没有确认目标字符，不能启动检测。");
+    case InspectionStartIssue::TemplateIncomplete:
+        return QStringLiteral("模板尚未制作完整，无法启动检测。");
+    case InspectionStartIssue::TemplatesIncomplete:
+        return QStringLiteral("当前选择中没有制作完整的模板。");
     case InspectionStartIssue::None:
     default:
         return QString();
@@ -352,13 +276,13 @@ InspectionApplicationService::InspectionApplicationService(
     const std::shared_ptr<InspectionRuntime> &runtime,
     const std::shared_ptr<CameraSession> &cameraSession,
     const std::shared_ptr<SettingsApplicationService> &settings,
-    const std::shared_ptr<RecipeStore> &recipes,
+    const std::shared_ptr<TemplateStore> &templates,
     QObject *parent)
     : QObject(parent),
       m_runtime(runtime),
       m_cameraSession(cameraSession),
       m_settings(settings),
-      m_recipes(recipes)
+      m_templates(templates)
 {
     qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
     qRegisterMetaType<InspectionFaultReason>(
@@ -395,7 +319,7 @@ InspectionApplicationService::~InspectionApplicationService()
 StartInspectionResult InspectionApplicationService::start(
     const StartInspectionCommand &command)
 {
-    const MachineSettings settings = m_settings->current();
+    const AppSettings settings = m_settings->current();
     InspectionStartAccessInput access;
     access.runtimeBusy = m_runtime->isBusy();
     access.templateOperationActive = !access.runtimeBusy
@@ -420,43 +344,74 @@ StartInspectionResult InspectionApplicationService::start(
     if (!detectionModeFromUiId(
                 settings.detectModeId, &detectionMode)) {
         return rejectStart(
-                    InspectionStartIssue::PreparedRecipeMissing,
+                    InspectionStartIssue::TemplateMissing,
                     QStringLiteral("INSPECTION_DETECTION_MODE_INVALID"),
-                    QStringLiteral("机器设置中的检测模式无效。"));
+                    QStringLiteral("应用设置中的检测模式无效。"));
     }
-    const QString recipeId = settings.publishedRecipeIdsByMode
-            .value(settings.detectModeId).trimmed();
-    if (recipeId.isEmpty()) {
+    const QStringList selectedPaths =
+            settings.detectionSchemes.templatePaths(detectionMode);
+    if (detectionMode != DetectionMode::Tissue
+            && selectedPaths.isEmpty()) {
         return rejectStart(
-                    InspectionStartIssue::PreparedRecipeMissing,
+                    InspectionStartIssue::TemplateMissing,
                     startIssueCode(
-                        InspectionStartIssue::PreparedRecipeMissing),
+                        InspectionStartIssue::TemplateMissing),
                     startIssueMessage(
-                        InspectionStartIssue::PreparedRecipeMissing));
+                        InspectionStartIssue::TemplateMissing));
     }
 
-    PreparedRecipeSnapshot prepared;
-    QString recipeError;
-    if (!m_recipes
-            || !m_recipes->loadPreparedRecipe(
-                recipeId, &prepared, &recipeError)
-            || !prepared
-            || !prepared->recipe
-            || prepared->recipe->detectionMode != detectionMode) {
+    QVector<PreparedTemplateSnapshot> preparedTemplates;
+    QStringList templateWarnings;
+    for (const QString &path : selectedPaths) {
+        PreparedTemplateSnapshot prepared;
+        TemplateStoreError templateError;
+        if (m_templates
+                && m_templates->loadPrepared(
+                    path, detectionMode, &prepared, &templateError)
+                && prepared) {
+            preparedTemplates.append(prepared);
+            continue;
+        }
+        const QString reason = templateError.userMessage.isEmpty()
+                ? QStringLiteral("未知模板错误")
+                : templateError.userMessage;
+        const QString warning = QStringLiteral(
+                    "模板“%1”状态异常：\n%2\n%3")
+                .arg(QFileInfo(path).fileName(),
+                     path, reason);
+        if (detectionMode == DetectionMode::Stamp
+                || detectionMode == DetectionMode::Ocr) {
+            return rejectStart(
+                        InspectionStartIssue::TemplateIncomplete,
+                        templateError.code.isEmpty()
+                        ? QStringLiteral("TEMPLATE_LOAD_FAILED")
+                        : templateError.code,
+                        warning,
+                        QStringList() << warning,
+                        templateError.diagnostic);
+        }
+        templateWarnings.append(
+                    QStringLiteral("%1\n已跳过加载该模板。")
+                    .arg(warning));
+    }
+    if (detectionMode != DetectionMode::Tissue
+            && preparedTemplates.isEmpty()) {
         return rejectStart(
-                    InspectionStartIssue::PreparedRecipeMissing,
-                    QStringLiteral("INSPECTION_RECIPE_PREPARE_FAILED"),
-                    QStringLiteral("当前产品配方无效或与检测模式不匹配。"),
-                    QStringList(),
-                    recipeError);
+                    InspectionStartIssue::TemplatesIncomplete,
+                    QStringLiteral("INSPECTION_NO_VALID_TEMPLATE"),
+                    QStringLiteral("当前选择中没有可用模板。"),
+                    templateWarnings);
     }
 
     DetectionRuntimeReadiness detectionReadiness;
     if (detectionModeDescriptor(detectionMode).requiresBarcodeDecoder) {
         detectionReadiness = m_runtime->prepareDetection(detectionMode);
     }
-    const InspectionStartResourceInput resourceInput =
-            resourceInputFor(*prepared, detectionMode, detectionReadiness);
+    InspectionStartResourceInput resourceInput;
+    resourceInput.mode = detectionMode;
+    resourceInput.preparedTemplateCount = preparedTemplates.size();
+    resourceInput.barcodeDecoderReady = detectionReadiness.ready;
+    resourceInput.barcodeDecoderError = detectionReadiness.errorMessage;
     const InspectionStartPreflightResult resourceResult =
             InspectionStartPreflight::evaluateResources(resourceInput);
     if (!resourceResult.isAccepted()) {
@@ -471,20 +426,23 @@ StartInspectionResult InspectionApplicationService::start(
     if (hardwareTriggerEnabled) {
         m_runtime->resetStatistics();
     }
-    DetectionProfileSnapshot profileSnapshot;
+    DetectionTemplateSnapshot templateSnapshot;
     if (detectionModeDescriptor(detectionMode).trackingKind
-            == DetectionTrackingKind::MultipleProfiles) {
-        profileSnapshot = DetectionProfileSnapshotBuilder::create(*prepared);
-        if (!profileSnapshot.isValid()) {
+            == DetectionTrackingKind::MultipleTemplates) {
+        templateSnapshot = DetectionTemplateSnapshotBuilder::create(
+                    preparedTemplates);
+        if (!templateSnapshot.isValid()) {
             return rejectStart(
-                        InspectionStartIssue::WordProfilesMissing,
-                        QStringLiteral("INSPECTION_PROFILE_SNAPSHOT_INVALID"),
-                        QStringLiteral("没有可用的字库定位配置。"));
+                        InspectionStartIssue::TemplatesMissing,
+                        QStringLiteral("INSPECTION_TEMPLATE_SNAPSHOT_INVALID"),
+                        QStringLiteral("没有可用的多模板定位配置。"));
         }
     }
 
     const QString runId = m_runtime->beginStart(
-                settings, prepared, profileSnapshot,
+                settings, detectionMode, preparedTemplates,
+                templateSnapshot,
+                settings.detectionSchemes.tissueRoughnessThreshold,
                 framePreprocessSettings(settings));
     if (runId.isEmpty()) {
         return rejectStart(
@@ -496,7 +454,7 @@ StartInspectionResult InspectionApplicationService::start(
 
     const CameraSession::PersistAdjustedExposure persistExposure =
             [this](int adjustedExposure, QString *errorMessage) {
-        MachineSettings adjusted = m_settings->current();
+        AppSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
         m_settings->updateDraft(adjusted);
         const OperationResult saved = m_settings->applyDraft();
@@ -595,9 +553,15 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringLiteral("运行状态提交失败。"));
     }
 
-    m_activeRecipeId = recipeId;
+    m_activeTemplatePaths.clear();
+    for (const PreparedTemplateSnapshot &prepared : preparedTemplates) {
+        if (prepared) {
+            m_activeTemplatePaths.append(prepared->directoryPath);
+        }
+    }
     publishSnapshot();
     StartInspectionResult result;
+    result.details = templateWarnings;
     result.acquisitionKind = acquisitionDto(hardwareTriggerEnabled);
     result.snapshot = runtimeSnapshot();
     return result;
@@ -641,10 +605,10 @@ StopInspectionResult InspectionApplicationService::stop(
         return result;
     }
 
-    const MachineSettings settings = m_settings->current();
+    const AppSettings settings = m_settings->current();
     const CameraSession::PersistAdjustedExposure persistExposure =
             [this](int adjustedExposure, QString *errorMessage) {
-        MachineSettings adjusted = m_settings->current();
+        AppSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
         m_settings->updateDraft(adjusted);
         const OperationResult saved = m_settings->applyDraft();
@@ -694,7 +658,7 @@ StopInspectionResult InspectionApplicationService::stop(
         }
     }
 
-    m_activeRecipeId.clear();
+    m_activeTemplatePaths.clear();
     if (result.cameraRecovery.issue
             == CameraRecoveryIssueDto::ExposureRejected) {
         result.issue = StopInspectionIssue::CameraRecoveryFailed;
@@ -730,7 +694,7 @@ OpenCameraResult InspectionApplicationService::openCamera(
         return result;
     }
 
-    const MachineSettings settings = m_settings->current();
+    const AppSettings settings = m_settings->current();
     const PlcOperationResult plc = m_runtime->connectPlc(
                 plcCommand.address,
                 plcCommand.rack,
@@ -740,7 +704,7 @@ OpenCameraResult InspectionApplicationService::openCamera(
 
     const CameraSession::PersistAdjustedExposure persistExposure =
             [this](int adjustedExposure, QString *errorMessage) {
-        MachineSettings adjusted = m_settings->current();
+        AppSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
         m_settings->updateDraft(adjusted);
         const OperationResult saved = m_settings->applyDraft();
@@ -857,7 +821,7 @@ InspectionApplicationService::applyPlcTriggerModeToDevice(
                     QStringLiteral("PLC_NOT_CONNECTED"),
                     QStringLiteral("PLC未连接！"));
     }
-    const int modeIndex = machineSettingsTriggerModeIds().indexOf(modeId);
+    const int modeIndex = appSettingsTriggerModeIds().indexOf(modeId);
     if (modeIndex < 0) {
         return OperationResult::rejected(
                     QStringLiteral("PLC_TRIGGER_MODE_INVALID"),
@@ -1109,7 +1073,7 @@ void InspectionApplicationService::shutdown()
         m_runtime->disconnectPlc();
     }
     m_runtime->finishStop();
-    m_activeRecipeId.clear();
+    m_activeTemplatePaths.clear();
     publishSnapshot();
 }
 
@@ -1125,10 +1089,10 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     m_cameraSession->stopInspection();
     m_runtime->waitForStop();
     if (m_cameraSession->isOpen()) {
-        const MachineSettings settings = m_settings->current();
+        const AppSettings settings = m_settings->current();
         const CameraSession::PersistAdjustedExposure persistExposure =
                 [this](int adjustedExposure, QString *errorMessage) {
-            MachineSettings adjusted = m_settings->current();
+            AppSettings adjusted = m_settings->current();
             adjusted.cameraExposure = adjustedExposure;
             m_settings->updateDraft(adjusted);
             const OperationResult saved = m_settings->applyDraft();
@@ -1141,7 +1105,7 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
                     settings.cameraExposure, persistExposure);
     }
     m_runtime->finishStop();
-    m_activeRecipeId.clear();
+    m_activeTemplatePaths.clear();
     publishSnapshot();
 }
 
@@ -1313,7 +1277,7 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
     snapshot.cameraOpen = m_cameraSession->isOpen();
     snapshot.plcConnected = m_runtime->isPlcConnected();
     snapshot.runId = m_runtime->runId();
-    snapshot.recipeId = m_activeRecipeId;
+    snapshot.activeTemplatePaths = m_activeTemplatePaths;
     return snapshot;
 }
 

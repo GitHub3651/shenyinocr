@@ -119,7 +119,7 @@ struct DetectionPose {
     cv::Point2f anchorCenter = cv::Point2f(0.0f, 0.0f);
     float angleDeg = 0.0f;
     float score = 0.0f;
-    int wordTemplateProfileIndex = -1;
+    int wordTemplateIndex = -1;
     double trackingElapsedMs = 0.0;
 };
 
@@ -151,9 +151,9 @@ inline DetectionWorkItem makeDetectionWorkItem(
     return item;
 }
 
-struct WordTrackingProfile {
+struct WordTrackingTemplate {
     QString name;
-    int profileIndex = -1;
+    int templateIndex = -1;
     cv::Mat trackingTemplate;
     std::vector<cv::Point2f> barcodePoly;
     std::vector<cv::Point2f> datePoly;

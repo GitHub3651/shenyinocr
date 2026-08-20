@@ -100,8 +100,8 @@ OperationUiSnapshot OperationUiPolicy::create(
     snapshot.plcRuntime = access(
                 idle && context.plcConnected,
                 !idle ? busyReason : QStringLiteral("请先连接 PLC。"));
-    snapshot.recipeSelection = access(idle, busyReason);
-    snapshot.recipeEditing = access(idle, busyReason);
+    snapshot.templateSelection = access(idle, busyReason);
+    snapshot.templateEditing = access(idle, busyReason);
     snapshot.statisticsReset = access(idle, busyReason);
     snapshot.rejectQueueReset = access(idle, busyReason);
     snapshot.startDetectionText =

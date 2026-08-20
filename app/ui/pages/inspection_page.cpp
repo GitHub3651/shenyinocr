@@ -119,8 +119,8 @@ InspectionPage::resultViewBindings() const
         }
     };
     bindings.showTemplateName = [this](const QString &text) {
-        if (m_view.label_runtimeStatus && m_view.lineEdit_currentRecipeName) {
-            m_view.lineEdit_currentRecipeName->setText(text);
+        if (m_view.label_runtimeStatus && m_view.lineEdit_currentTemplateName) {
+            m_view.lineEdit_currentTemplateName->setText(text);
         }
     };
     bindings.showTotalCount = [this](int count) {

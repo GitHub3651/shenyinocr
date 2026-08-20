@@ -25,7 +25,7 @@ struct InspectionPageViewBindings
     QLabel *label_recognitionText = nullptr;
     QLabel *label_runtimeStatus = nullptr;
     QLabel *label_verdictResult = nullptr;
-    QLineEdit *lineEdit_currentRecipeName = nullptr;
+    QLineEdit *lineEdit_currentTemplateName = nullptr;
     QLineEdit *lineEdit_detectionDuration = nullptr;
     QLineEdit *lineEdit_ngCount = nullptr;
     QLineEdit *lineEdit_passRate = nullptr;

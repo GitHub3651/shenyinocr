@@ -39,8 +39,7 @@ bool parseIntValue(const QString &text, int *value)
     return true;
 }
 
-// 函数说明：isSingleTemplateRecipeMode 函数检查相关状态并返回判断结果。
-bool isSingleTemplateRecipeMode(const QString &modeId)
+bool isSingleTemplateMode(const QString &modeId)
 {
     const DetectionModeDescriptor *descriptor =
             detectionModeDescriptorFromUiId(modeId);
@@ -79,7 +78,7 @@ struct PolygonUIState {
 // ==========================================
 // 钢印多边形描点功能 (点击画点，按回车键完成)
 // ==========================================
-static void polyMouseCallback(int event, int x, int y, int flags, void* userdata) {
+static void polyMouseCallback(int event, int x, int y, int, void* userdata) {
     PolygonUIState* state = reinterpret_cast<PolygonUIState*>(userdata);
     if (event == cv::EVENT_LBUTTONDOWN) {
         state->points.push_back(cv::Point(x, y));
@@ -117,7 +116,7 @@ struct QuickROIState {
 };
 
 // 函数说明：quickMouseCallback 函数实现名称所表示的处理步骤。
-static void quickMouseCallback(int event, int x, int y, int flags, void* userdata) {
+static void quickMouseCallback(int event, int x, int y, int, void* userdata) {
     QuickROIState* state = reinterpret_cast<QuickROIState*>(userdata);
 
     if (event == cv::EVENT_LBUTTONDOWN) {

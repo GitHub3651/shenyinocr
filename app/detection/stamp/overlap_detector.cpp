@@ -142,13 +142,13 @@ OverlapDetector::OverlapDetector() {}
 
 // 函数说明：init 函数创建、准备或启动对应流程。
 bool OverlapDetector::init(const cv::Mat& ringTemplate,
-                           const CalibrationData& calibration) {
+                           const StampRegionData& regions) {
     try {
         if (ringTemplate.empty()
                 || ringTemplate.cols < 10
                 || ringTemplate.rows < 10
-                || calibration.stamp_poly.size() < 3
-                || calibration.date_poly.size() < 3) {
+                || regions.stamp_poly.size() < 3
+                || regions.date_poly.size() < 3) {
             return false;
         }
 
@@ -157,7 +157,7 @@ bool OverlapDetector::init(const cv::Mat& ringTemplate,
         } else {
             cv::cvtColor(ringTemplate, templateRing, cv::COLOR_BGR2GRAY);
         }
-        calibData = calibration;
+        regionData = regions;
 
         preRotatedRings.clear();
         preRotatedAngles.clear();
@@ -358,7 +358,7 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
 
             cv::Mat M_rot = cv::getRotationMatrix2D(cv::Point2f(0, 0), res.angleRing, 1.0);
 
-            for (const auto& spt : calibData.stamp_poly) {
+            for (const auto& spt : regionData.stamp_poly) {
                 double rot_dx = M_rot.at<double>(0, 0) * spt.x + M_rot.at<double>(0, 1) * spt.y;
                 double rot_dy = M_rot.at<double>(1, 0) * spt.x + M_rot.at<double>(1, 1) * spt.y;
                 res.finalStampPoly.push_back(cv::Point(static_cast<int>(center_x + rot_dx), static_cast<int>(center_y + rot_dy)));

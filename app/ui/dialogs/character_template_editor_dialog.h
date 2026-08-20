@@ -13,7 +13,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "application/template_editor_contract.h"
+#include "templates/template_store.h"
 
 class QLabel;
 class QLineEdit;
@@ -24,17 +24,17 @@ class QVBoxLayout;
 class QGridLayout;
 
 // Pure UI dialog: returns boxes, names and cropped images. It never writes
-// recipe files, settings or formal assets.
+// template files, settings or formal assets.
 class CharacterTemplateEditorDialog : public QDialog
 {
 public:
     explicit CharacterTemplateEditorDialog(
         const QImage &sourceImage,
-        const RecipeProfile &initialProfile,
+        const TemplateSettings &initialSettings,
         QWidget *parent = nullptr);
 
     int savedCount() const;
-    RecipeProfile resultProfile() const;
+    TemplateSettings resultSettings() const;
     QMap<QString, QImage> characterImages() const;
 
 private:
@@ -59,7 +59,7 @@ private:
     bool saveTemplates();
 
     QImage m_sourceImage;
-    RecipeProfile m_resultProfile;
+    TemplateSettings m_resultSettings;
     QMap<QString, QImage> m_characterImages;
     QList<CharacterBox> m_initialBoxes;
     CropImageLabel *m_cropLabel = nullptr;

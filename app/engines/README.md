@@ -130,7 +130,7 @@ OcrDetectionPipeline
 
 - 产品 OK/NG、目标文字比较、统计、PLC 和存图。
 - CameraSession、Runtime 状态机和 QWidget。
-- ProductRecipe 的持久化和 UI 模式逻辑。
+- 模板持久化和 UI 模式逻辑。
 - Pipeline 直接 include `vendor` 头或动态加载 DLL。
 
 ## 维护红线

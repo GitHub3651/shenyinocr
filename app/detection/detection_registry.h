@@ -2,10 +2,10 @@
 #pragma once
 
 #include "contracts/detection_mode.h"
-#include "detection/detection_profile_snapshot.h"
+#include "detection/detection_template_snapshot.h"
 #include "detection/positioning/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
-#include "recipes/prepared_recipe.h"
+#include "templates/template_store.h"
 
 #include <QString>
 
@@ -24,8 +24,9 @@ struct DetectionRuntimeReadiness
 struct DetectionRegistryRequest
 {
     DetectionMode mode = DetectionMode::Stamp;
-    PreparedRecipeSnapshot preparedRecipe;
-    DetectionProfileSnapshot profileSnapshot;
+    QVector<PreparedTemplateSnapshot> preparedTemplates;
+    DetectionTemplateSnapshot templateSnapshot;
+    double tissueRoughnessThreshold = 6.0;
     FramePreprocessSettings framePreprocess;
 };
 

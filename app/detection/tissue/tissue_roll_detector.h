@@ -9,8 +9,6 @@
 #include <opencv2/opencv.hpp>
 #include <string>
 
-#include "recipes/product_recipe.h"
-
 // 组件说明：TissueRollItem 数据结构集中保存该流程需要的一组相关数据。
 struct TissueRollItem
 {
@@ -45,14 +43,13 @@ Q_DECLARE_METATYPE(TissueRollResult)
 class TissueRollDetector
 {
 public:
-    explicit TissueRollDetector(
-            const TissueRecipeParameters &parameters);
+    explicit TissueRollDetector(double roughnessThreshold);
 
     TissueRollResult processImage(const cv::Mat& image) const;
     double roughnessThreshold() const;
 
 private:
-    TissueRecipeParameters m_parameters;
+    double m_roughnessThreshold = 6.0;
 };
 
 #endif // DETECTION_TISSUE_TISSUE_ROLL_DETECTOR_H

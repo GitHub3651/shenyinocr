@@ -238,7 +238,7 @@ InspectionPageViewBindings MainWindow::inspectionPageViewBindings() const
     view.label_recognitionText = ui->label_recognitionText;
     view.label_runtimeStatus = ui->label_runtimeStatus;
     view.label_verdictResult = ui->label_verdictResult;
-    view.lineEdit_currentRecipeName = ui->lineEdit_currentRecipeName;
+    view.lineEdit_currentTemplateName = ui->lineEdit_currentTemplateName;
     view.lineEdit_detectionDuration = ui->lineEdit_detectionDuration;
     view.lineEdit_ngCount = ui->lineEdit_ngCount;
     view.lineEdit_passRate = ui->lineEdit_passRate;
@@ -358,13 +358,6 @@ MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
     callbacks.saveSettings = [this](bool showErrorMessage) {
         return saveSettings(showErrorMessage);
     };
-    callbacks.syncRecipeHistory = [this](MachineSettings *settings) {
-        if (settings) {
-            settings->publishedRecipeIdsByMode =
-                    m_templateApplicationService
-                    ->publishedRecipeIdsByMode();
-        }
-    };
     callbacks.updateImageSaveOptionsVisibility = [this]() {
         updateImageSaveOptionsVisibility();
     };
@@ -387,52 +380,25 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
 {
     TemplateEditorViewBindings view;
     view.parentWidget = const_cast<MainWindow *>(this);
-    view.eventFilterTarget = const_cast<MainWindow *>(this);
     view.imageLabel_templateCanvas = imageLabel;
     view.textEdit_targetText = ui->textEdit_targetText;
     view.lineEdit_imageThreshold = ui->lineEdit_imageThreshold;
     view.lineEdit_tissueRoughnessThreshold =
             ui->lineEdit_tissueRoughnessThreshold;
     view.comboBox_imageRotation = ui->comboBox_imageRotation;
-    view.comboBox_plcTriggerMode = ui->comboBox_plcTriggerMode;
     view.comboBox_detectionMode = ui->comboBox_detectionMode;
     view.comboBox_colorChannel = ui->comboBox_colorChannel;
-    view.lineEdit_currentRecipeName = ui->lineEdit_currentRecipeName;
+    view.lineEdit_currentTemplateName = ui->lineEdit_currentTemplateName;
     view.label_runtimeStatus = ui->label_runtimeStatus;
-    view.label_targetText = ui->label_targetText;
-    view.label_imageThreshold = ui->label_imageThreshold;
-    view.label_rejectDistance = ui->label_rejectDistance;
-    view.label_photoDistance = ui->label_photoDistance;
-    view.label_rejectTime = ui->label_rejectTime;
-    view.label_hardwareTriggerDelay = ui->label_hardwareTriggerDelay;
-    view.label_photoTime = ui->label_photoTime;
-    view.label_cameraGain = ui->label_cameraGain;
-    view.label_rejectPosition = ui->label_rejectPosition;
-    view.label_imageRotation = ui->label_imageRotation;
-    view.imageLabel_inspectionDisplay = ui->imageLabel_inspection;
     view.groupBox_imageDisplay = ui->groupBox_imageDisplay;
     view.verticalLayout_imageDisplay = ui->verticalLayout_imageDisplay;
     view.pushButton_editCharacterTemplates = ui->pushButton_editCharacterTemplates;
     view.pushButton_applyTargetText = ui->pushButton_applyTargetText;
     view.pushButton_applyBatchTargetText = ui->pushButton_applyBatchTargetText;
     view.pushButton_applyBatchImageThreshold = ui->pushButton_applyBatchImageThreshold;
-    view.pushButton_applyPhotoDistance = ui->pushButton_applyPhotoDistance;
     view.pushButton_applyImageThreshold = ui->pushButton_applyImageThreshold;
-    view.pushButton_applyColorChannel = ui->pushButton_applyColorChannel;
-    view.pushButton_applyPlcProcessParameters = ui->pushButton_applyPlcProcessParameters;
-    view.pushButton_applyImageRotation = ui->pushButton_applyImageRotation;
-    view.pushButton_resetRejectQueue = ui->pushButton_resetRejectQueue;
-    view.pushButton_applyCameraGain = ui->pushButton_applyCameraGain;
-    view.pushButton_applyCameraExposure = ui->pushButton_applyCameraExposure;
     view.pushButton_applyTissueRoughnessThreshold =
             ui->pushButton_applyTissueRoughnessThreshold;
-    view.pushButton_applyPlcTriggerMode = ui->pushButton_applyPlcTriggerMode;
-    view.pushButton_connectPlc = ui->pushButton_connectPlc;
-    view.pushButton_disconnectPlc = ui->pushButton_disconnectPlc;
-    view.pushButton_browseImageSavePath =
-            ui->pushButton_browseImageSavePath;
-    view.toolButton_createTemplate = ui->toolButton_createTemplate;
-    view.checkBox_hardwareTriggerEnabled = ui->checkBox_hardwareTriggerEnabled;
     return view;
 }
 
@@ -443,28 +409,13 @@ TemplateEditorPageCallbacks MainWindow::templateEditorPageCallbacks()
     callbacks.updateOperationUiState = [this]() {
         updateOperationUiState();
     };
-    callbacks.updateTissueVisibility = [this]() {
-        updateTissueRoughnessUiVisibility();
-    };
-    callbacks.clearTransientView = [this]() {
-        m_inspectionApplicationService->clearTransientView();
-    };
     callbacks.displayPreviewFrame = [this](const cv::Mat &image) {
         cv::Mat displayImage = image.clone();
         slot_displayAndDetect(&displayImage);
     };
-    callbacks.isApplyingSettings = [this]() {
-        return m_applyingMachineSettings;
-    };
-    callbacks.isUpdatingSettingsUi = [this]() {
-        return m_updatingMachineSettingsUi;
-    };
-    callbacks.saveSettings = [this](bool showErrorMessage) {
-        return saveSettings(showErrorMessage);
-    };
-    callbacks.applyRecipeProfileToUi = [this](
-            const RecipeProfile &profile) {
-        applyRecipeProfileToUi(profile);
+    callbacks.applyTemplateSettingsToUi = [this](
+            const TemplateSettings &settings) {
+        applyTemplateSettingsToUi(settings);
     };
     return callbacks;
 }
@@ -490,8 +441,8 @@ void MainWindow::attachPages(
                    << resetResult.error.code;
     }
     ui->textEdit_targetText->setWordWrapMode(QTextOption::WordWrap);
-    setupRecipeProfileDirtyTracking();
-    setupWordTemplateEditorCombo();
+    setupTemplateDirtyTracking();
+    setupCurrentTemplateEditor();
     setupTemplateGuide();
     setupManualCharacterCropUi();
     setupSoftwareSettingsPage();
@@ -504,13 +455,11 @@ void MainWindow::attachPages(
     m_machineSettingsPage->setupBindings();
     m_machineSettingsPage->initialize(
                 m_settingsApplicationService->current());
-    m_templateApplicationService->replacePublishedRecipeIdsByMode(
-                m_appliedMachineSettings.publishedRecipeIdsByMode);
     m_currentDetectModeId = currentDetectModeId();
     restoreTemplatesForMode(m_currentDetectModeId, false);
     setupDetectModeChangeTracking();
     m_machineSettingsPage->clearAllDirty();
-    clearRecipeProfileDirty();
+    clearTemplateDirty();
     updateOperationUiState();
     updateCurrentTemplateName();
 

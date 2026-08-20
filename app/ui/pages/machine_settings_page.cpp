@@ -34,42 +34,42 @@ namespace {
 // 函数说明：detectModeIds 函数执行对应事件或业务处理。
 const QStringList &detectModeIds()
 {
-    static const QStringList ids = machineSettingsDetectionModeIds();
+    static const QStringList ids = appSettingsDetectionModeIds();
     return ids;
 }
 
 // 函数说明：imageSaveModeIds 函数实现名称所表示的处理步骤。
 const QStringList &imageSaveModeIds()
 {
-    static const QStringList ids = machineSettingsImageSaveModeIds();
+    static const QStringList ids = appSettingsImageSaveModeIds();
     return ids;
 }
 
 // 函数说明：imageSaveTypeIds 函数实现名称所表示的处理步骤。
 const QStringList &imageSaveTypeIds()
 {
-    static const QStringList ids = machineSettingsImageSaveTypeIds();
+    static const QStringList ids = appSettingsImageSaveTypeIds();
     return ids;
 }
 
 // 函数说明：colorChannelIds 函数实现名称所表示的处理步骤。
 const QStringList &colorChannelIds()
 {
-    static const QStringList ids = machineSettingsColorChannelIds();
+    static const QStringList ids = appSettingsColorChannelIds();
     return ids;
 }
 
 // 函数说明：rotationIds 函数实现名称所表示的处理步骤。
 const QStringList &rotationIds()
 {
-    static const QStringList ids = machineSettingsRotationIds();
+    static const QStringList ids = appSettingsRotationIds();
     return ids;
 }
 
 // 函数说明：triggerModeIds 函数执行对应事件或业务处理。
 const QStringList &triggerModeIds()
 {
-    static const QStringList ids = machineSettingsTriggerModeIds();
+    static const QStringList ids = appSettingsTriggerModeIds();
     return ids;
 }
 
@@ -331,7 +331,7 @@ void MachineSettingsPage::setSoftwareDataDirectoryEditor(
 
 // 函数说明：initialize 函数创建、准备或启动对应流程。
 void MachineSettingsPage::initialize(
-    const MachineSettings &settings)
+    const AppSettings &settings)
 {
     if (!m_appliedSettings) {
         return;
@@ -341,7 +341,7 @@ void MachineSettingsPage::initialize(
     applyToUi(settings);
 }
 
-// 函数说明：save 函数保存或发布对应的数据和资源。
+// 函数说明：save 函数保存对应的数据和资源。
 bool MachineSettingsPage::save(
     bool,
     QString *errorMessage)
@@ -390,11 +390,11 @@ bool MachineSettingsPage::clear(QString *errorMessage)
 }
 
 // 函数说明：defaultsForHardwareState 函数实现名称所表示的处理步骤。
-MachineSettings MachineSettingsPage::defaultsForHardwareState(
+AppSettings MachineSettingsPage::defaultsForHardwareState(
     bool cameraOpen,
     bool plcConnected) const
 {
-    const MachineSettings defaults = MachineSettings::defaults();
+    const AppSettings defaults = AppSettings::defaults();
     return MachineSettingsPolicy::defaultsForHardwareState(
         m_appliedSettings ? *m_appliedSettings : defaults,
         defaults,
@@ -404,7 +404,7 @@ MachineSettings MachineSettingsPage::defaultsForHardwareState(
 
 // 函数说明：applyToUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::applyToUi(
-    const MachineSettings &settings)
+    const AppSettings &settings)
 {
     if (!m_view.comboBox_detectionMode) {
         return;
@@ -756,10 +756,6 @@ void MachineSettingsPage::updateAppliedFromUi(
         m_appliedSettings->imageSavePath = *m_selectedDirectory;
     } else if (key == "trigger.enabled") {
         m_appliedSettings->triggerEnabled = m_view.checkBox_hardwareTriggerEnabled->isChecked();
-    } else if (key == "recipe.history") {
-        if (m_callbacks.syncRecipeHistory) {
-            m_callbacks.syncRecipeHistory(m_appliedSettings);
-        }
     } else if (key == "camera.exposure") {
         m_appliedSettings->cameraExposure = m_view.spinBox_cameraExposure->value();
     } else if (key == "camera.gain") {
@@ -818,7 +814,7 @@ void MachineSettingsPage::syncImmediateSettings()
         << "plc.ip"
         << "plc.rack"
         << "plc.slot"
-        << "recipe.history");
+        );
     if (m_view.comboBox_detectionMode && m_view.splitter_mainContent && m_appliedSettings) {
         m_appliedSettings->rightPanelSplitterState =
             m_view.splitter_mainContent->saveState();

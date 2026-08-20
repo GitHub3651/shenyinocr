@@ -84,7 +84,6 @@ public:
     struct Callbacks
     {
         std::function<bool(bool)> saveSettings;
-        std::function<void(MachineSettings *)> syncRecipeHistory;
         std::function<void()> updateImageSaveOptionsVisibility;
         std::function<void()> updateSaveDirectoryText;
         std::function<void()> updateTissueVisibility;
@@ -106,13 +105,13 @@ public:
     void installWheelProtection(QWidget *rootWidget);
     void setSoftwareDataDirectoryEditor(QLineEdit *editor);
 
-    void initialize(const MachineSettings &settings);
+    void initialize(const AppSettings &settings);
     bool save(bool showErrorMessage, QString *errorMessage);
     bool clear(QString *errorMessage);
-    MachineSettings defaultsForHardwareState(
+    AppSettings defaultsForHardwareState(
         bool cameraOpen,
         bool plcConnected) const;
-    void applyToUi(const MachineSettings &settings);
+    void applyToUi(const AppSettings &settings);
 
     void updateAppliedFromUi(const QString &key);
     void updateAppliedFromUi(const QStringList &keys);
@@ -179,7 +178,7 @@ private:
         bool showDisabledReason);
 
     MachineSettingsPageViewBindings m_view;
-    MachineSettings *m_appliedSettings = nullptr;
+    AppSettings *m_appliedSettings = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;
     SettingsEditState *m_editState = nullptr;
     QString *m_selectedDirectory = nullptr;

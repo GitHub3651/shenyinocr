@@ -566,10 +566,10 @@ std::string baseMessage(int imageWidth,
 
 } // namespace
 
-// 函数说明：TissueRollDetector 构造函数保存当前纸巾配方参数。
+// 函数说明：TissueRollDetector 构造函数保存当前纸巾检测参数。
 TissueRollDetector::TissueRollDetector(
-        const TissueRecipeParameters &parameters)
-    : m_parameters(parameters)
+        double roughnessThreshold)
+    : m_roughnessThreshold(roughnessThreshold)
 {
 }
 
@@ -609,7 +609,7 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
                                            result.imageHeight,
                                            workBgr.cols,
                                            workBgr.rows,
-                                           m_parameters.roughnessThreshold);
+                                           m_roughnessThreshold);
 
     InnerGeometry innerSmall;
     std::string rejectReason;
@@ -648,7 +648,7 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
 
     const double roughnessScore = computeRoughnessScore(grayRoi, ringMaskRoi);
     const bool roughnessNg =
-            roughnessScore >= m_parameters.roughnessThreshold;
+            roughnessScore >= m_roughnessThreshold;
     const bool rollOk = !roughnessNg;
 
     OuterGeometry outer = scaleOuterGeometry(outerSmall, scaleX, scaleY, bgr.size());
@@ -695,8 +695,8 @@ TissueRollResult TissueRollDetector::processImage(const cv::Mat& image) const
     return result;
 }
 
-// 函数说明：roughnessThreshold 返回当前配方使用的粗糙度阈值。
+// 函数说明：roughnessThreshold 返回当前检测方案使用的粗糙度阈值。
 double TissueRollDetector::roughnessThreshold() const
 {
-    return m_parameters.roughnessThreshold;
+    return m_roughnessThreshold;
 }

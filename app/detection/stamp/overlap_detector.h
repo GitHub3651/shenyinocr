@@ -7,10 +7,10 @@
 #include <vector>
 
 /**
- * @brief 标定数据结构体（纯数据层）
+ * @brief 钢印区域数据结构体（纯数据层）
  */
-// 组件说明：CalibrationData 保存钢印、日期和二维码区域的标定坐标。
-struct CalibrationData {
+// 组件说明：StampRegionData 保存钢印、日期和二维码区域坐标。
+struct StampRegionData {
     // 钢印区域多边形，存储的是相对于“拉环中心”的相对偏移量 (dx, dy)
     std::vector<cv::Point2f> stamp_poly;
 
@@ -49,24 +49,24 @@ class OverlapDetector {
 public:
     OverlapDetector();
 
-    // 运行时只接受 PreparedRecipe 已解码的快照资产。
+    // 运行时只接受 PreparedTemplate 已解码的快照资产。
     bool init(const cv::Mat& ringTemplate,
-              const CalibrationData& calibration);
+              const StampRegionData& regions);
 
     /**
      * @brief 执行核心视觉检测、匹配及碰撞判断
      * @param bgrImage 输入待检测的三通道彩色原图或灰度图
-     * @param datePoly PreparedRecipe 快照中的生产日期多边形
+     * @param datePoly PreparedTemplate 快照中的生产日期多边形
      * @return DetectResult 返回结果包体
      */
     DetectResult processImage(const cv::Mat& bgrImage, const std::vector<cv::Point>& datePoly);
 
     // 获取生产日期的相对多边形坐标
-    std::vector<cv::Point2f> getDatePoly() const { return calibData.date_poly; }
+    std::vector<cv::Point2f> getDatePoly() const { return regionData.date_poly; }
 
 private:
     cv::Mat templateRing;
-    CalibrationData calibData;
+    StampRegionData regionData;
 
     // ================= 核心加速数据结构 =================
     // 缓存预计算好的旋转拉环模板及其对应角度（原尺寸，用于精配确认）
