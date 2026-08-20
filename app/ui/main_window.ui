@@ -115,7 +115,7 @@
             <string>打开相机</string>
            </property>
            <property name="icon">
-            <iconset resource="../image/image.qrc">
+            <iconset resource="../resource/image.qrc">
              <normaloff>:/Img_Icon_camera3.ico</normaloff>:/Img_Icon_camera3.ico</iconset>
            </property>
            <property name="iconSize">
@@ -147,7 +147,7 @@
             <string>选择模板</string>
            </property>
            <property name="icon">
-            <iconset resource="../image/image.qrc">
+            <iconset resource="../resource/image.qrc">
              <normaloff>:/3.png</normaloff>:/3.png</iconset>
            </property>
            <property name="iconSize">
@@ -179,7 +179,7 @@
             <string>启动识别</string>
            </property>
            <property name="icon">
-            <iconset resource="../image/image.qrc">
+            <iconset resource="../resource/image.qrc">
              <normaloff>:/13.png</normaloff>:/13.png</iconset>
            </property>
            <property name="iconSize">
@@ -211,7 +211,7 @@
             <string>制作模板</string>
            </property>
            <property name="icon">
-            <iconset resource="../image/image.qrc">
+            <iconset resource="../resource/image.qrc">
              <normaloff>:/11.png</normaloff>:/11.png</iconset>
            </property>
            <property name="iconSize">
@@ -243,7 +243,7 @@
             <string>停止识别</string>
            </property>
            <property name="icon">
-            <iconset resource="../image/image.qrc">
+            <iconset resource="../resource/image.qrc">
              <normaloff>:/close.png</normaloff>:/close.png</iconset>
            </property>
            <property name="iconSize">
@@ -275,7 +275,7 @@
             <string>关闭相机</string>
            </property>
            <property name="icon">
-            <iconset resource="../image/image.qrc">
+            <iconset resource="../resource/image.qrc">
              <normaloff>:/1.png</normaloff>:/1.png</iconset>
            </property>
            <property name="iconSize">
@@ -2333,7 +2333,7 @@ QCheckBox::indicator {
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="../image/image.qrc"/>
+  <include location="../resource/image.qrc"/>
  </resources>
  <connections/>
 </ui>

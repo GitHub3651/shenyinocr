@@ -184,7 +184,7 @@ FORMS += \
     ui/main_window.ui
 
 RESOURCES += \
-    image/image.qrc
+    resource/image.qrc
 
 
 TRANSLATIONS += Translate_EN.ts \
