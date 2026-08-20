@@ -8,7 +8,6 @@
 #include "contracts/detection_mode.h"
 #include "ui/controllers/settings_edit_state.h"
 
-#include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDesktopServices>
@@ -939,80 +938,6 @@ void MachineSettingsPage::restorePlcUiFromApplied()
         << "plc.reject_position");
 }
 
-// 函数说明：disabledStyle 函数实现名称所表示的处理步骤。
-QString MachineSettingsPage::disabledStyle(
-    QWidget *widget) const
-{
-    if (qobject_cast<QPushButton *>(widget)) {
-        return "QPushButton {background-color:#f5f7fa;color:#a8abb2;"
-               "border:1px solid #e4e7ed;border-radius:4px;}"
-               "QPushButton:hover,QPushButton:pressed {"
-               "background-color:#f5f7fa;}";
-    }
-    if (qobject_cast<QComboBox *>(widget)) {
-        return "QComboBox {background-color:#f5f7fa;color:#a8abb2;"
-               "border:1px solid #e4e7ed;border-radius:4px;}"
-               "QComboBox::drop-down {background-color:#eef0f3;"
-               "border-left:1px solid #e4e7ed;}";
-    }
-    if (qobject_cast<QAbstractSpinBox *>(widget)) {
-        return "QAbstractSpinBox {background-color:#f5f7fa;color:#a8abb2;"
-               "border:1px solid #e4e7ed;border-radius:4px;}"
-               "QAbstractSpinBox::up-button,QAbstractSpinBox::down-button {"
-               "background-color:#eef0f3;}";
-    }
-    if (qobject_cast<QLineEdit *>(widget)) {
-        return "QLineEdit {background-color:#f5f7fa;color:#a8abb2;"
-               "border:1px solid #e4e7ed;border-radius:4px;"
-               "padding:5px 10px;}";
-    }
-    if (qobject_cast<QLabel *>(widget)) {
-        return "QLabel {background-color:#f5f7fa;color:#a8abb2;"
-               "border:1px solid #e4e7ed;border-radius:4px;"
-               "padding:5px 10px;}";
-    }
-    return QString();
-}
-
-// 函数说明：setHardwareControlEnabled 函数更新或应用对应的配置和状态。
-void MachineSettingsPage::setHardwareControlEnabled(
-    QWidget *widget,
-    bool enabled,
-    const QString &disabledReason,
-    bool showDisabledReason)
-{
-    if (!widget) {
-        return;
-    }
-    static const char styleProperty[] = "_hardwareOriginalStyleSheet";
-    static const char toolTipProperty[] = "_hardwareOriginalToolTip";
-    if (!widget->property(styleProperty).isValid()) {
-        widget->setProperty(styleProperty, widget->styleSheet());
-    }
-    if (!widget->property(toolTipProperty).isValid()) {
-        widget->setProperty(toolTipProperty, widget->toolTip());
-    }
-    const QString originalStyle = widget->property(styleProperty).toString();
-    const QString originalToolTip = widget->property(toolTipProperty).toString();
-    const bool label = qobject_cast<QLabel *>(widget) != nullptr;
-    widget->setEnabled(label ? true : enabled);
-    if (enabled) {
-        widget->setStyleSheet(originalStyle);
-        widget->setToolTip(originalToolTip);
-        widget->unsetCursor();
-        return;
-    }
-    const QString style = disabledStyle(widget);
-    widget->setStyleSheet(style.isEmpty() ? originalStyle : style);
-    widget->setToolTip(showDisabledReason
-                       ? disabledReason : originalToolTip);
-    if (showDisabledReason) {
-        widget->setCursor(Qt::ForbiddenCursor);
-    } else {
-        widget->unsetCursor();
-    }
-}
-
 // 函数说明：applyOperationState 根据统一权限快照更新设置页控件。
 void MachineSettingsPage::applyOperationState(
     const OperationUiSnapshot &snapshot)
@@ -1041,25 +966,13 @@ void MachineSettingsPage::applyOperationState(
          it != m_bindings.constEnd(); ++it) {
         const OperationUiSnapshot::Access access =
                 accessFor(it.value().hardwareDependency);
-        setHardwareControlEnabled(
-                    it.value().editor,
-                    access.enabled,
-                    access.disabledReason,
-                    true);
-        setHardwareControlEnabled(
-                    it.value().label,
-                    access.enabled,
-                    access.disabledReason,
-                    false);
+        applyOperationUiAccess(it.value().editor, access);
+        applyOperationUiAccess(it.value().label, access, false);
     }
     for (const HardwareActionBinding &binding : m_hardwareActions) {
         const OperationUiSnapshot::Access access =
                 accessFor(binding.hardwareDependency);
-        setHardwareControlEnabled(
-                    binding.control,
-                    access.enabled,
-                    access.disabledReason,
-                    true);
+        applyOperationUiAccess(binding.control, access);
     }
 }
 

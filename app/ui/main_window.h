@@ -124,9 +124,6 @@ private slots:
 
     void on_pushButton_applyTissueRoughnessThreshold_clicked();
 
-protected:
-    bool eventFilter(QObject *watched, QEvent *event) override;
-
 private:
     void showParameterInfo(const QString &title, const QString &message);
     void showParameterInfoWithRedWarning(const QString &title,

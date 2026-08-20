@@ -170,13 +170,6 @@ private:
     void syncImmediateSettings();
     void restoreCameraUiFromApplied();
     void restorePlcUiFromApplied();
-    QString disabledStyle(QWidget *widget) const;
-    void setHardwareControlEnabled(
-        QWidget *widget,
-        bool enabled,
-        const QString &disabledReason,
-        bool showDisabledReason);
-
     MachineSettingsPageViewBindings m_view;
     AppSettings *m_appliedSettings = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;

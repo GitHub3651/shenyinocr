@@ -1,5 +1,5 @@
-// 文件作用：本文件用于把运行时故障快照转换为界面可显示的状态文字和样式。
-// 主要职责：把运行时故障快照转换为界面可显示的状态文字和样式。
+// 文件作用：本文件用于把运行时故障快照转换为界面可显示的故障文字。
+// 主要职责：把运行时故障快照转换为状态、结果和操作员提示文字。
 // 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
@@ -14,8 +14,6 @@ struct InspectionFaultPresentation
     QString statusText;
     QString resultText;
     QString operatorMessage;
-    QString statusStyleSheet;
-    QString resultStyleSheet;
 
     bool isValid() const;
 };

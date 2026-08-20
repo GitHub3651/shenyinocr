@@ -25,7 +25,9 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QSignalBlocker>
+#include <QSizePolicy>
 #include <QTextEdit>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -37,22 +39,44 @@ using namespace TemplateEditorSupport;
 
 namespace {
 
-void applyWidgetAccess(QWidget *widget,
-                       const OperationUiSnapshot::Access &access)
-{
-    if (!widget) {
-        return;
-    }
-    widget->setEnabled(access.enabled);
-    if (!access.enabled) {
-        widget->setToolTip(access.disabledReason);
-    }
-}
-
 bool isMultiTemplateMode(DetectionMode mode)
 {
     return detectionModeDescriptor(mode).trackingKind
             == DetectionTrackingKind::MultipleTemplates;
+}
+
+QString templateGuideTitle(DetectionMode mode)
+{
+    switch (mode) {
+    case DetectionMode::Stamp:
+        return QStringLiteral("刚印检测模板制作");
+    case DetectionMode::Word:
+        return QStringLiteral("字库匹配模板制作");
+    case DetectionMode::Ocr:
+        return QStringLiteral("深度 OCR 模板制作");
+    case DetectionMode::BarcodeWord:
+        return QStringLiteral("二维码+三期模板制作");
+    case DetectionMode::Tissue:
+        return QStringLiteral("纸巾检测");
+    }
+    return QStringLiteral("模板制作");
+}
+
+QString templateGuideDetectionRegionName(DetectionMode mode)
+{
+    switch (mode) {
+    case DetectionMode::Stamp:
+        return QStringLiteral("刚印检测区域");
+    case DetectionMode::Word:
+        return QStringLiteral("文字检测区域");
+    case DetectionMode::Ocr:
+        return QStringLiteral("OCR 检测区域");
+    case DetectionMode::BarcodeWord:
+        return QStringLiteral("日期检测区域");
+    case DetectionMode::Tissue:
+        break;
+    }
+    return QStringLiteral("检测区域");
 }
 
 }
@@ -113,28 +137,28 @@ void TemplateEditorPage::applyOperationState(
         editAccess.disabledReason = QStringLiteral(
                     "当前模板状态异常，请移除或重新选择模板。");
     }
-    applyWidgetAccess(m_currentTemplateEditComboBox,
-                      snapshot.templateEditing);
-    applyWidgetAccess(m_removeCurrentTemplateButton,
-                      snapshot.templateEditing);
-    applyWidgetAccess(m_manualCharacterCropButton,
-                      editAccess);
-    applyWidgetAccess(m_view.textEdit_targetText,
-                      editAccess);
-    applyWidgetAccess(m_view.lineEdit_imageThreshold,
-                      editAccess);
-    applyWidgetAccess(m_view.lineEdit_tissueRoughnessThreshold,
-                      snapshot.templateEditing);
-    applyWidgetAccess(m_view.pushButton_applyTargetText,
-                      editAccess);
-    applyWidgetAccess(m_view.pushButton_applyBatchTargetText,
-                      editAccess);
-    applyWidgetAccess(m_view.pushButton_applyImageThreshold,
-                      editAccess);
-    applyWidgetAccess(m_view.pushButton_applyBatchImageThreshold,
-                      editAccess);
-    applyWidgetAccess(m_view.pushButton_applyTissueRoughnessThreshold,
-                      snapshot.templateEditing);
+    applyOperationUiAccess(m_currentTemplateEditComboBox,
+                           snapshot.templateEditing);
+    applyOperationUiAccess(m_removeCurrentTemplateButton,
+                           snapshot.templateEditing);
+    applyOperationUiAccess(m_manualCharacterCropButton,
+                           editAccess);
+    applyOperationUiAccess(m_view.textEdit_targetText,
+                           editAccess);
+    applyOperationUiAccess(m_view.lineEdit_imageThreshold,
+                           editAccess);
+    applyOperationUiAccess(m_view.lineEdit_tissueRoughnessThreshold,
+                           snapshot.templateEditing);
+    applyOperationUiAccess(m_view.pushButton_applyTargetText,
+                           editAccess);
+    applyOperationUiAccess(m_view.pushButton_applyBatchTargetText,
+                           editAccess);
+    applyOperationUiAccess(m_view.pushButton_applyImageThreshold,
+                           editAccess);
+    applyOperationUiAccess(m_view.pushButton_applyBatchImageThreshold,
+                           editAccess);
+    applyOperationUiAccess(m_view.pushButton_applyTissueRoughnessThreshold,
+                           snapshot.templateEditing);
 }
 
 QFrame *TemplateEditorPage::guideFrame() const
@@ -331,6 +355,8 @@ void TemplateEditorPage::setupCurrentTemplateEditor()
     m_currentTemplateEditLabel = new QLabel(
                 QStringLiteral("当前编辑模板："),
                 m_currentTemplateEditWidget);
+    m_currentTemplateEditLabel->setObjectName(
+                QStringLiteral("label_currentEditTemplate"));
     m_currentTemplateEditComboBox = new QComboBox(
                 m_currentTemplateEditWidget);
     m_currentTemplateEditComboBox->setObjectName(
@@ -342,6 +368,15 @@ void TemplateEditorPage::setupCurrentTemplateEditor()
                 QStringLiteral("toolButton_removeCurrentTemplate"));
     m_removeCurrentTemplateButton->setToolTip(
                 QStringLiteral("从当前检测方案移除模板，不会删除模板文件夹。"));
+    if (m_view.label_targetText) {
+        m_currentTemplateEditLabel->ensurePolished();
+        m_view.label_targetText->ensurePolished();
+        const int sharedLabelWidth = qMax(
+                    m_currentTemplateEditLabel->sizeHint().width(),
+                    m_view.label_targetText->sizeHint().width());
+        m_currentTemplateEditLabel->setFixedWidth(sharedLabelWidth);
+        m_view.label_targetText->setFixedWidth(sharedLabelWidth);
+    }
     layout->addWidget(m_currentTemplateEditLabel);
     layout->addWidget(m_currentTemplateEditComboBox, 1);
     layout->addWidget(m_removeCurrentTemplateButton);
@@ -1037,20 +1072,35 @@ void TemplateEditorPage::setupTemplateGuide()
         return;
     }
     m_templateGuideFrame = new QFrame(m_view.groupBox_imageDisplay);
-    QVBoxLayout *layout = new QVBoxLayout(m_templateGuideFrame);
+    m_templateGuideFrame->setObjectName(
+                QStringLiteral("frame_templateGuide"));
+    m_templateGuideFrame->setSizePolicy(
+                QSizePolicy::Maximum, QSizePolicy::Maximum);
+
+    QHBoxLayout *layout = new QHBoxLayout(m_templateGuideFrame);
     m_templateGuideTitleLabel = new QLabel(
                 QStringLiteral("模板制作向导"), m_templateGuideFrame);
+    m_templateGuideTitleLabel->setObjectName(
+                QStringLiteral("label_templateGuideTitle"));
     m_templateGuideBodyLabel = new QLabel(m_templateGuideFrame);
-    m_templateGuideBodyLabel->setWordWrap(true);
+    m_templateGuideBodyLabel->setObjectName(
+                QStringLiteral("label_templateGuideBody"));
     layout->addWidget(m_templateGuideTitleLabel);
     layout->addWidget(m_templateGuideBodyLabel);
-    m_view.verticalLayout_imageDisplay->addWidget(m_templateGuideFrame);
+    m_view.verticalLayout_imageDisplay->insertWidget(
+                0,
+                m_templateGuideFrame,
+                0,
+                Qt::AlignLeft | Qt::AlignTop);
+    m_view.verticalLayout_imageDisplay->setStretch(0, 0);
+    m_view.verticalLayout_imageDisplay->setStretch(1, 1);
     m_templateGuideFrame->hide();
 }
 
 void TemplateEditorPage::adjustTemplateGuideHeight()
 {
     if (m_templateGuideFrame) {
+        m_templateGuideFrame->updateGeometry();
         m_templateGuideFrame->adjustSize();
     }
 }
@@ -1058,9 +1108,19 @@ void TemplateEditorPage::adjustTemplateGuideHeight()
 void TemplateEditorPage::updateTemplateGuideText(
         const QString &title, const QString &body)
 {
-    if (m_templateGuideTitleLabel) m_templateGuideTitleLabel->setText(title);
-    if (m_templateGuideBodyLabel) m_templateGuideBodyLabel->setText(body);
-    if (m_templateGuideFrame) m_templateGuideFrame->show();
+    if (!m_templateGuideFrame || !m_templateGuideTitleLabel
+            || !m_templateGuideBodyLabel) {
+        return;
+    }
+    m_templateGuideTitleLabel->setText(
+                QStringLiteral("【%1】").arg(title.trimmed()));
+    QString guideText = body.trimmed();
+    if (!guideText.contains(QStringLiteral("Esc"))) {
+        guideText.append(QStringLiteral("  按 Esc 清空框线并重新开始。"));
+    }
+    m_templateGuideBodyLabel->setText(guideText);
+    m_templateGuideFrame->show();
+    adjustTemplateGuideHeight();
 }
 
 void TemplateEditorPage::hideTemplateGuide()
@@ -1073,25 +1133,198 @@ void TemplateEditorPage::updateImageDisplayStatusText(const QString &body)
     if (m_view.label_runtimeStatus && !body.isEmpty()) {
         m_view.label_runtimeStatus->setText(body);
     }
+    DetectionMode mode = DetectionMode::Stamp;
+    if (!body.trimmed().isEmpty()
+            && detectionModeFromUiId(currentDetectModeId(), &mode)
+            && mode != DetectionMode::Tissue
+            && m_templateGuideFrame
+            && m_templateGuideTitleLabel
+            && m_templateGuideBodyLabel) {
+        m_templateGuideTitleLabel->setText(
+                    QStringLiteral("【%1】")
+                    .arg(templateGuideTitle(mode)));
+        m_templateGuideBodyLabel->setText(body.trimmed());
+        m_templateGuideFrame->show();
+        adjustTemplateGuideHeight();
+    }
 }
 
 void TemplateEditorPage::showTemplateGuideForCurrentMode()
 {
     DetectionMode mode = DetectionMode::Stamp;
-    detectionModeFromUiId(currentDetectModeId(), &mode);
+    if (!detectionModeFromUiId(currentDetectModeId(), &mode)
+            || mode == DetectionMode::Tissue) {
+        hideTemplateGuide();
+        return;
+    }
+    const bool barcodeWord = mode == DetectionMode::BarcodeWord;
     updateTemplateGuideText(
-                QStringLiteral("模板制作向导"),
-                mode == DetectionMode::BarcodeWord
-                ? QStringLiteral("依次框选定位区域、二维码区域和日期检测区域。")
-                : QStringLiteral("依次框选定位区域和日期检测区域。"));
+                templateGuideTitle(mode),
+                barcodeWord
+                ? QStringLiteral(
+                      "【步骤1/3】按住鼠标左键拖动，框选稳定且不会变化的定位锚点。")
+                : QStringLiteral(
+                      "【步骤1/2】按住鼠标左键拖动，框选定位区域；下一步将框选%1。")
+                  .arg(templateGuideDetectionRegionName(mode)));
 }
 
 void TemplateEditorPage::handleTemplateGuideEvent(
         const QString &eventName, int pointCount)
 {
-    Q_UNUSED(eventName)
-    Q_UNUSED(pointCount)
-    showTemplateGuideForCurrentMode();
+    DetectionMode mode = DetectionMode::Stamp;
+    if (!detectionModeFromUiId(currentDetectModeId(), &mode)
+            || mode == DetectionMode::Tissue) {
+        hideTemplateGuide();
+        return;
+    }
+
+    const bool barcodeWord = mode == DetectionMode::BarcodeWord;
+    const QString title = templateGuideTitle(mode);
+    const QString detectionRegion =
+            templateGuideDetectionRegionName(mode);
+    const bool guideVisible =
+            m_templateGuideFrame && m_templateGuideFrame->isVisible();
+
+    if (barcodeWord
+            && (eventName == QLatin1String("tracking_started")
+                || eventName == QLatin1String("barcode_started")
+                || eventName == QLatin1String("barcode_too_small")
+                || eventName == QLatin1String("template_reset"))) {
+        clearBarcodeTemplateValidation();
+    }
+
+    if (barcodeWord && eventName == QLatin1String("barcode_done")) {
+        const QRect barcodeRect = imageLabel->getBarcodeRect().normalized();
+        QString failureReason;
+        if (!validateBarcodeTemplateRect(
+                barcodeRect,
+                barcodeTemplateValidationOptions(),
+                &failureReason)) {
+            clearBarcodeTemplateValidation();
+            imageLabel->retryBarcodeRegion();
+            if (guideVisible) {
+                updateTemplateGuideText(
+                            title,
+                            QStringLiteral(
+                                "【步骤2/3】二维码扫描失败，定位锚点已保留，请重新完整框选二维码区域。"));
+            }
+            QTimer::singleShot(0, this, [this, failureReason]() {
+                showWarning(
+                            QStringLiteral("二维码扫描失败"),
+                            failureReason.trimmed().isEmpty()
+                            ? QStringLiteral(
+                                  "二维码区域无法解码，请重新完整框选，四周保留少量背景，不要包含日期区域。")
+                            : failureReason
+                              + QStringLiteral(
+                                  "\n\n请重新完整框选二维码区域，四周保留少量背景，不要包含日期区域。"));
+            });
+            return;
+        }
+
+        acceptBarcodeTemplateValidation(barcodeRect);
+        if (guideVisible) {
+            updateTemplateGuideText(
+                        title,
+                        QStringLiteral(
+                            "【步骤3/3】二维码扫描成功。用鼠标左键依次点击日期检测区域边缘，右键闭合。"));
+        }
+        return;
+    }
+
+    if (!guideVisible) {
+        return;
+    }
+
+    if (eventName == QLatin1String("tracking_started")) {
+        updateTemplateGuideText(
+                    title,
+                    barcodeWord
+                    ? QStringLiteral(
+                          "【步骤1/3】松开鼠标左键，完成定位锚点。")
+                    : QStringLiteral(
+                          "【步骤1/2】松开鼠标左键，完成定位区域。"));
+    } else if (eventName == QLatin1String("template_reset")) {
+        updateTemplateGuideText(
+                    title,
+                    barcodeWord
+                    ? QStringLiteral(
+                          "【步骤1/3】已清空当前框线，请重新框选稳定定位锚点。")
+                    : QStringLiteral(
+                          "【步骤1/2】已清空当前框线，请重新框选定位区域。"));
+    } else if (eventName == QLatin1String("tracking_too_small")) {
+        updateTemplateGuideText(
+                    title,
+                    barcodeWord
+                    ? QStringLiteral(
+                          "【步骤1/3】定位锚点太小，请重新框选更大的稳定定位锚点。")
+                    : QStringLiteral(
+                          "【步骤1/2】定位区域太小，请重新框选更大的定位区域。"));
+    } else if (eventName == QLatin1String("tracking_done")) {
+        updateTemplateGuideText(
+                    title,
+                    barcodeWord
+                    ? QStringLiteral(
+                          "【步骤2/3】按住鼠标左键拖动，完整框选二维码区域，四周保留少量背景。")
+                    : QStringLiteral(
+                          "【步骤2/2】用鼠标左键依次点击%1边缘，右键闭合。")
+                      .arg(detectionRegion));
+    } else if (eventName == QLatin1String("barcode_started")) {
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral(
+                        "【步骤2/3】松开鼠标左键后，程序将立即验证二维码是否可读。"));
+    } else if (eventName == QLatin1String("barcode_too_small")) {
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral(
+                        "【步骤2/3】二维码区域太小，请重新框选完整二维码区域。"));
+    } else if (eventName == QLatin1String("poly_point_added")) {
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral("【步骤%1/%1】已选择%2个点，继续点击%3边缘或右键闭合。")
+                    .arg(barcodeWord ? 3 : 2)
+                    .arg(pointCount)
+                    .arg(detectionRegion));
+    } else if (eventName == QLatin1String("poly_too_few")) {
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral("【步骤%1/%1】至少需要3个点，当前%2个，请继续点击%3边缘。")
+                    .arg(barcodeWord ? 3 : 2)
+                    .arg(pointCount)
+                    .arg(detectionRegion));
+    } else if (eventName == QLatin1String("poly_done")) {
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral("【步骤%1/%1】%2已完成，请点击【保存模板】。")
+                    .arg(barcodeWord ? 3 : 2)
+                    .arg(detectionRegion));
+
+        const DetectionMode completedMode = mode;
+        QTimer::singleShot(0, this, [this, completedMode]() {
+            if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
+                return;
+            }
+            QMessageBox saveMessageBox(dialogParent());
+            saveMessageBox.setIcon(QMessageBox::Question);
+            saveMessageBox.setWindowTitle(QStringLiteral("保存模板"));
+            saveMessageBox.setText(
+                        completedMode == DetectionMode::BarcodeWord
+                        ? QStringLiteral(
+                              "定位锚点、二维码区域和日期检测区域均已完成。\n\n是否立即保存当前模板？")
+                        : QStringLiteral("定位区域和%1均已完成。\n\n是否立即保存当前模板？")
+                          .arg(templateGuideDetectionRegionName(
+                                   completedMode)));
+            QPushButton *saveButton = saveMessageBox.addButton(
+                        QStringLiteral("保存"), QMessageBox::AcceptRole);
+            saveMessageBox.addButton(
+                        QStringLiteral("取消"), QMessageBox::RejectRole);
+            saveMessageBox.setDefaultButton(saveButton);
+            saveMessageBox.exec();
+            if (saveMessageBox.clickedButton() == saveButton) {
+                saveCurrentTemplate();
+            }
+        });
+    }
 }
 
 void TemplateEditorPage::setupManualCharacterCropUi()

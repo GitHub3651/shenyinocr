@@ -28,6 +28,7 @@ struct TemplateEditorViewBindings
 {
     QWidget *parentWidget = nullptr;
     ImageLabel *imageLabel_templateCanvas = nullptr;
+    QLabel *label_targetText = nullptr;
     QTextEdit *textEdit_targetText = nullptr;
     QLineEdit *lineEdit_imageThreshold = nullptr;
     QLineEdit *lineEdit_tissueRoughnessThreshold = nullptr;

@@ -13,11 +13,6 @@
   <property name="windowTitle">
    <string>智能视觉检测系统</string>
   </property>
-  <property name="styleSheet">
-   <string notr="true">QWidget#MainWindow { background-color: #f5f7fa; }
-/* 全局字体加粗 */
-* { font-weight: bold; }</string>
-  </property>
   <layout class="QHBoxLayout" name="horizontalLayout_mainWindow">
    <property name="spacing">
     <number>15</number>
@@ -339,9 +334,6 @@
              <height>16777215</height>
             </size>
            </property>
-           <property name="styleSheet">
-            <string notr="true">background-color: #e3e6eb; color: #aab0b7; font-size: 24px; font-weight: bold;</string>
-           </property>
            <property name="text">
             <string/>
            </property>
@@ -391,38 +383,6 @@
       </property>
       <item>
        <widget class="QSplitter" name="splitter_mainContent">
-        <property name="styleSheet">
-         <string notr="true">QSplitter#splitter_mainContent::handle:vertical {
-    border: none;
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 rgba(255, 255, 255, 0),
-        stop: 0.47 rgba(255, 255, 255, 0),
-        stop: 0.48 #cbd5df,
-        stop: 0.52 #cbd5df,
-        stop: 0.53 rgba(255, 255, 255, 0),
-        stop: 1 rgba(255, 255, 255, 0));
-}
-QSplitter#splitter_mainContent::handle:vertical:hover,
-QSplitter#splitter_mainContent::handle:vertical:pressed {
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 rgba(255, 255, 255, 0),
-        stop: 0.47 rgba(255, 255, 255, 0),
-        stop: 0.48 #409eff,
-        stop: 0.52 #409eff,
-        stop: 0.53 rgba(255, 255, 255, 0),
-        stop: 1 rgba(255, 255, 255, 0));
-}
-QLabel#label_mainContentSplitterGrip {
-    color: #526b80;
-    background: #f4f7fa;
-    border: 1px solid #aebdca;
-    border-radius: 11px;
-    font-size: 12px;
-    font-weight: 600;
-}</string>
-        </property>
         <property name="orientation">
          <enum>Qt::Vertical</enum>
         </property>
@@ -450,9 +410,6 @@ QLabel#label_mainContentSplitterGrip {
                 <height>100</height>
                </size>
               </property>
-              <property name="styleSheet">
-               <string notr="true">border:none;</string>
-              </property>
               <property name="title">
                <string>运行状态</string>
               </property>
@@ -477,14 +434,14 @@ QLabel#label_mainContentSplitterGrip {
                    <height>60</height>
                   </size>
                  </property>
-                 <property name="styleSheet">
-                  <string notr="true">background-color: #eef1f6; color: #606266; font-size: 28px; border-radius: 6px; font-weight: bold;</string>
-                 </property>
                  <property name="text">
                   <string>停止</string>
                  </property>
                  <property name="alignment">
                   <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="uiState" stdset="0">
+                  <string>idle</string>
                  </property>
                 </widget>
                </item>
@@ -498,9 +455,6 @@ QLabel#label_mainContentSplitterGrip {
                 <width>0</width>
                 <height>100</height>
                </size>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">border:none;</string>
               </property>
               <property name="title">
                <string>判定结果</string>
@@ -526,14 +480,14 @@ QLabel#label_mainContentSplitterGrip {
                    <height>60</height>
                   </size>
                  </property>
-                 <property name="styleSheet">
-                  <string notr="true">background-color: #eef1f6; font-size: 16px; border-radius: 6px; font-weight: 900;</string>
-                 </property>
                  <property name="text">
                   <string>--</string>
                  </property>
                  <property name="alignment">
                   <set>Qt::AlignCenter</set>
+                 </property>
+                 <property name="verdict" stdset="0">
+                  <string>idle</string>
                  </property>
                 </widget>
                </item>
@@ -544,10 +498,6 @@ QLabel#label_mainContentSplitterGrip {
           </item>
           <item row="2" column="0">
            <widget class="QGroupBox" name="groupBox_productionStatistics">
-            <property name="styleSheet">
-             <string notr="true">QGroupBox { border: none; background: transparent; margin-top: 20px; } QGroupBox::title {font-size: 14px; }
-</string>
-            </property>
             <property name="title">
              <string>生产统计</string>
             </property>
@@ -565,9 +515,6 @@ QLabel#label_mainContentSplitterGrip {
                  <width>100000</width>
                  <height>100</height>
                 </size>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">border:none;</string>
                </property>
                <property name="title">
                 <string>识别总数</string>
@@ -592,9 +539,6 @@ QLabel#label_mainContentSplitterGrip {
                     <width>0</width>
                     <height>50</height>
                    </size>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">background: #f0f9eb; color: #67c23a; font-weight: bold; border:none; font-size: 20px;</string>
                   </property>
                   <property name="text">
                    <string>0</string>
@@ -624,6 +568,9 @@ QLabel#label_mainContentSplitterGrip {
                   <property name="text">
                    <string>清零</string>
                   </property>
+                  <property name="uiRole" stdset="0">
+                   <string>danger</string>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -642,9 +589,6 @@ QLabel#label_mainContentSplitterGrip {
                  <width>100000</width>
                  <height>100</height>
                 </size>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">border:none;</string>
                </property>
                <property name="title">
                 <string>不合格数 (NG)</string>
@@ -669,9 +613,6 @@ QLabel#label_mainContentSplitterGrip {
                     <width>0</width>
                     <height>50</height>
                    </size>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">background: #fef0f0; color: #f56c6c; font-weight: bold; border:none; font-size: 20px;</string>
                   </property>
                   <property name="text">
                    <string>0</string>
@@ -701,6 +642,9 @@ QLabel#label_mainContentSplitterGrip {
                   <property name="text">
                    <string>清零</string>
                   </property>
+                  <property name="uiRole" stdset="0">
+                   <string>danger</string>
+                  </property>
                  </widget>
                 </item>
                </layout>
@@ -719,9 +663,6 @@ QLabel#label_mainContentSplitterGrip {
                  <width>100000</width>
                  <height>100</height>
                 </size>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">border:none;</string>
                </property>
                <property name="title">
                 <string>耗时 (ms)</string>
@@ -746,9 +687,6 @@ QLabel#label_mainContentSplitterGrip {
                     <width>0</width>
                     <height>50</height>
                    </size>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">background: #f4f4f5; color: #409eff; font-weight: bold; border:none; font-size: 20px;</string>
                   </property>
                   <property name="text">
                    <string>0</string>
@@ -778,9 +716,6 @@ QLabel#label_mainContentSplitterGrip {
                  <height>100</height>
                 </size>
                </property>
-               <property name="styleSheet">
-                <string notr="true">border:none;</string>
-               </property>
                <property name="title">
                 <string>合格率 (%)</string>
                </property>
@@ -804,9 +739,6 @@ QLabel#label_mainContentSplitterGrip {
                     <width>0</width>
                     <height>50</height>
                    </size>
-                  </property>
-                  <property name="styleSheet">
-                   <string notr="true">background: #f4f4f5; color: #303133; font-weight: bold; border:none; font-size: 20px;</string>
                   </property>
                   <property name="text">
                    <string>0.00</string>
@@ -833,18 +765,12 @@ QLabel#label_mainContentSplitterGrip {
               <height>90</height>
              </size>
             </property>
-            <property name="styleSheet">
-             <string notr="true">border:none; border-top: 1px solid #ebeef5; margin-top: 10px; padding-top: 5px;</string>
-            </property>
             <property name="title">
              <string>识别内容</string>
             </property>
             <layout class="QVBoxLayout">
              <item>
               <widget class="QLabel" name="label_recognitionText">
-               <property name="styleSheet">
-                <string notr="true">color: #409eff; font-size: 20px; font-weight: bold;</string>
-               </property>
                <property name="text">
                 <string/>
                </property>
@@ -866,9 +792,6 @@ QLabel#label_mainContentSplitterGrip {
               <width>0</width>
               <height>72</height>
              </size>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">border:none; border-top: 1px solid #ebeef5; margin-top: 8px; padding-top: 4px;</string>
             </property>
             <property name="title">
              <string>当前使用产品模板文件夹名称</string>
@@ -894,9 +817,6 @@ QLabel#label_mainContentSplitterGrip {
                  <height>40</height>
                 </size>
                </property>
-               <property name="styleSheet">
-                <string notr="true">background: #ecf5ff; color: #0078D7; font-weight: bold; border:none; font-size: 18px;</string>
-               </property>
                <property name="text">
                 <string>--</string>
                </property>
@@ -919,11 +839,11 @@ QLabel#label_mainContentSplitterGrip {
               <height>40</height>
              </size>
             </property>
-            <property name="styleSheet">
-             <string notr="true">QPushButton { color: rgb(255, 0, 0); }</string>
-            </property>
             <property name="text">
              <string>剔除复位</string>
+            </property>
+            <property name="uiRole" stdset="0">
+             <string>danger</string>
             </property>
            </widget>
           </item>
@@ -931,7 +851,7 @@ QLabel#label_mainContentSplitterGrip {
         </widget>
         <widget class="QTabWidget" name="tabWidget_settings">
          <property name="currentIndex">
-          <number>0</number>
+          <number>2</number>
          </property>
          <property name="iconSize">
           <size>
@@ -949,9 +869,6 @@ QLabel#label_mainContentSplitterGrip {
            </property>
            <item>
             <widget class="QScrollArea" name="scrollArea_detectionSettings">
-             <property name="styleSheet">
-              <string notr="true">border:none; background:transparent;</string>
-             </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
@@ -959,13 +876,10 @@ QLabel#label_mainContentSplitterGrip {
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>-327</y>
-                <width>587</width>
-                <height>595</height>
+                <y>0</y>
+                <width>585</width>
+                <height>591</height>
                </rect>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">background:white;</string>
               </property>
               <layout class="QGridLayout" name="gridLayout_detectionSettings">
                <item row="0" column="0">
@@ -987,9 +901,6 @@ QLabel#label_mainContentSplitterGrip {
                  </property>
                  <item>
                   <widget class="QGroupBox" name="groupBox_currentTemplateSettings">
-                   <property name="styleSheet">
-                    <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                   </property>
                    <property name="title">
                     <string>当前产品模板设置</string>
                    </property>
@@ -1035,21 +946,6 @@ QLabel#label_mainContentSplitterGrip {
                           <height>50</height>
                          </size>
                         </property>
-                        <property name="styleSheet">
-                         <string notr="true">QPushButton {
-background-color: #ffffff;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;
-}
-QPushButton:hover {
-background-color: #f2f6fc;
-}
-QPushButton:pressed {
-background-color: #ebeef5;
-}</string>
-                        </property>
                         <property name="text">
                          <string>确认字符</string>
                         </property>
@@ -1063,21 +959,6 @@ background-color: #ebeef5;
                           <height>50</height>
                          </size>
                         </property>
-                        <property name="styleSheet">
-                         <string notr="true">QPushButton {
-background-color: #ffffff;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;
-}
-QPushButton:hover {
-background-color: #f2f6fc;
-}
-QPushButton:pressed {
-background-color: #ebeef5;
-}</string>
-                        </property>
                         <property name="text">
                          <string>批量确认字符</string>
                         </property>
@@ -1087,13 +968,6 @@ background-color: #ebeef5;
                     </item>
                     <item row="1" column="0">
                      <widget class="QLabel" name="label_targetText">
-                      <property name="styleSheet">
-                       <string notr="true">background-color: transparent;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;</string>
-                      </property>
                       <property name="text">
                        <string>目标字符内容:</string>
                       </property>
@@ -1119,30 +993,10 @@ padding: 5px 10px;</string>
                         <height>100</height>
                        </size>
                       </property>
-                      <property name="styleSheet">
-                       <string notr="true">QTextEdit {
-font: 16pt &quot;黑体&quot;;
-background-color: transparent;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;
-}
-QTextEdit:disabled {
-color: #a8abb2;
-}</string>
-                      </property>
                      </widget>
                     </item>
                     <item row="3" column="0">
                      <widget class="QLabel" name="label_imageThreshold">
-                      <property name="styleSheet">
-                       <string notr="true">background-color: transparent;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;</string>
-                      </property>
                       <property name="text">
                        <string>图像合格阈值:</string>
                       </property>
@@ -1155,18 +1009,6 @@ padding: 5px 10px;</string>
                         <width>0</width>
                         <height>50</height>
                        </size>
-                      </property>
-                      <property name="styleSheet">
-                       <string notr="true">QLineEdit {
-background-color: transparent;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;
-}
-QLineEdit:disabled {
-color: #a8abb2;
-}</string>
                       </property>
                       <property name="text">
                        <string>80</string>
@@ -1186,13 +1028,6 @@ color: #a8abb2;
                         <width>40</width>
                         <height>16777215</height>
                        </size>
-                      </property>
-                      <property name="styleSheet">
-                       <string notr="true">background-color: transparent;
-border: none;
-color: #333333;
-font: 14pt &quot;黑体&quot;;
-padding: 0px;</string>
                       </property>
                       <property name="text">
                        <string>%</string>
@@ -1264,9 +1099,6 @@ padding: 0px;</string>
                  </item>
                  <item>
                   <widget class="QGroupBox" name="groupBox_templateCreation">
-                   <property name="styleSheet">
-                    <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                   </property>
                    <property name="title">
                     <string>模板制作</string>
                    </property>
@@ -1279,28 +1111,11 @@ padding: 0px;</string>
                         <height>0</height>
                        </size>
                       </property>
-                      <property name="font">
-                       <font>
-                        <pointsize>9</pointsize>
-                        <bold>true</bold>
-                       </font>
-                      </property>
-                      <property name="styleSheet">
-                       <string notr="true">QPushButton {
-    background-color: #0078D7; /* 醒目的蓝色 */
-    color: white;              /* 白色文字 */
-    border-radius: 4px;        /* 圆角边缘 */
-    border: 1px solid #005A9E;
-}
-QPushButton:hover {
-    background-color: #1084D0; /* 鼠标悬停时稍微变亮 */
-}
-QPushButton:pressed {
-    background-color: #005A9E; /* 按下时变暗 */
-}</string>
-                      </property>
                       <property name="text">
                        <string>保存模板</string>
+                      </property>
+                      <property name="uiRole" stdset="0">
+                       <string>primary</string>
                       </property>
                      </widget>
                     </item>
@@ -1314,13 +1129,6 @@ QPushButton:pressed {
                    </property>
                    <item row="0" column="0">
                     <widget class="QLabel" name="label_photoDistance">
-                     <property name="styleSheet">
-                      <string notr="true">background-color: #ffffff;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;</string>
-                     </property>
                      <property name="text">
                       <string>拍照距离(mm):</string>
                      </property>
@@ -1334,13 +1142,6 @@ padding: 5px 10px;</string>
                        <height>50</height>
                       </size>
                      </property>
-                     <property name="styleSheet">
-                      <string notr="true">background-color: #ffffff;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;</string>
-                     </property>
                      <property name="text">
                       <string>50</string>
                      </property>
@@ -1353,21 +1154,6 @@ padding: 5px 10px;</string>
                        <width>0</width>
                        <height>50</height>
                       </size>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">QPushButton {
-background-color: #ffffff;
-border: 1px solid #ebeef5;
-border-radius: 4px;
-color: #333333;
-padding: 5px 10px;
-}
-QPushButton:hover {
-background-color: #f2f6fc;
-}
-QPushButton:pressed {
-background-color: #ebeef5;
-}</string>
                      </property>
                      <property name="text">
                       <string>确认</string>
@@ -1404,9 +1190,6 @@ background-color: #ebeef5;
           <layout class="QVBoxLayout">
            <item>
             <widget class="QScrollArea" name="scrollArea_imageSettings">
-             <property name="styleSheet">
-              <string notr="true">border:none; background:transparent;</string>
-             </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
@@ -1415,25 +1198,25 @@ background-color: #ebeef5;
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>587</width>
-                <height>662</height>
+                <width>585</width>
+                <height>665</height>
                </rect>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">background:white;</string>
               </property>
               <layout class="QGridLayout" name="gridLayout_imageSettings">
                <item row="0" column="0">
                 <widget class="QGroupBox" name="groupBox_detectionMode">
-                 <property name="styleSheet">
-                  <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                 </property>
                  <property name="title">
                   <string>识别模式设置</string>
                  </property>
                  <layout class="QFormLayout" name="formLayout_detectionMode">
                   <item row="0" column="0">
                    <widget class="QLabel" name="label_detectionMode">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>50</height>
+                     </size>
+                    </property>
                     <property name="text">
                      <string>识别模式:</string>
                     </property>
@@ -1457,24 +1240,6 @@ background-color: #ebeef5;
                       <height>50</height>
                      </size>
                     </property>
-                    <property name="styleSheet">
-                     <string notr="true">QCheckBox {
-    background-color: transparent;
-    border: 1px solid #ebeef5;
-    border-radius: 4px;
-    color: #333333;
-    font-weight: bold;
-    padding: 6px 12px;
-    spacing: 10px;
-}
-QCheckBox:hover {
-    background-color: #f2f6fc;
-}
-QCheckBox::indicator {
-    width: 24px;
-    height: 24px;
-}</string>
-                    </property>
                     <property name="text">
                      <string>开启PLC硬触发</string>
                     </property>
@@ -1485,15 +1250,18 @@ QCheckBox::indicator {
                </item>
                <item row="2" column="0">
                 <widget class="QGroupBox" name="groupBox_imageSaving">
-                 <property name="styleSheet">
-                  <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                 </property>
                  <property name="title">
                   <string>图像保存</string>
                  </property>
                  <layout class="QFormLayout" name="formLayout_imageSaving">
                   <item row="0" column="0">
                    <widget class="QLabel" name="label_imageSaveRange">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>50</height>
+                     </size>
+                    </property>
                     <property name="text">
                      <string>图像保存:</string>
                     </property>
@@ -1624,9 +1392,6 @@ QCheckBox::indicator {
                </item>
                <item row="3" column="0">
                 <widget class="QGroupBox" name="groupBox_imageAcquisitionAndProcessing">
-                 <property name="styleSheet">
-                  <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                 </property>
                  <property name="title">
                   <string>图像采集与处理</string>
                  </property>
@@ -1880,9 +1645,6 @@ QCheckBox::indicator {
           <layout class="QVBoxLayout">
            <item>
             <widget class="QScrollArea" name="scrollArea_plcSettings">
-             <property name="styleSheet">
-              <string notr="true">border:none; background:transparent;</string>
-             </property>
              <property name="widgetResizable">
               <bool>true</bool>
              </property>
@@ -1891,12 +1653,9 @@ QCheckBox::indicator {
                <rect>
                 <x>0</x>
                 <y>0</y>
-                <width>587</width>
-                <height>740</height>
+                <width>585</width>
+                <height>686</height>
                </rect>
-              </property>
-              <property name="styleSheet">
-               <string notr="true">background:white;</string>
               </property>
               <layout class="QVBoxLayout">
                <property name="spacing">
@@ -1907,9 +1666,6 @@ QCheckBox::indicator {
                </property>
                <item>
                 <widget class="QFrame" name="frame_plcTriggerMode">
-                 <property name="styleSheet">
-                  <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                 </property>
                  <property name="frameShape">
                   <enum>QFrame::StyledPanel</enum>
                  </property>
@@ -1923,6 +1679,12 @@ QCheckBox::indicator {
                   </item>
                   <item>
                    <widget class="QComboBox" name="comboBox_plcTriggerMode">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
                     <property name="minimumSize">
                      <size>
                       <width>0</width>
@@ -1959,9 +1721,6 @@ QCheckBox::indicator {
                </item>
                <item>
                 <widget class="QFrame" name="frame_plcConnection">
-                 <property name="styleSheet">
-                  <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                 </property>
                  <property name="frameShape">
                   <enum>QFrame::StyledPanel</enum>
                  </property>
@@ -1971,9 +1730,6 @@ QCheckBox::indicator {
                   </property>
                   <item row="0" column="0" colspan="2">
                    <widget class="QLabel" name="label_plcConnectionSection">
-                    <property name="styleSheet">
-                     <string>font-weight: bold;</string>
-                    </property>
                     <property name="text">
                      <string>PLC 连接配置</string>
                     </property>
@@ -2078,9 +1834,6 @@ QCheckBox::indicator {
                </item>
                <item>
                 <widget class="QFrame" name="frame_plcProcessParameters">
-                 <property name="styleSheet">
-                  <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-                 </property>
                  <property name="frameShape">
                   <enum>QFrame::StyledPanel</enum>
                  </property>
@@ -2167,9 +1920,6 @@ QCheckBox::indicator {
                   </item>
                   <item row="0" column="0">
                    <widget class="QLabel" name="label_plcProcessParametersSection">
-                    <property name="styleSheet">
-                     <string>font-weight: bold;</string>
-                    </property>
                     <property name="text">
                      <string>PLC参数</string>
                     </property>
@@ -2239,9 +1989,6 @@ QCheckBox::indicator {
            </property>
            <item>
             <widget class="QGroupBox" name="groupBox_softwareData">
-             <property name="styleSheet">
-              <string notr="true">background: #fbfbfc; border: 1px solid #ebeef5; border-radius: 4px; padding: 5px;</string>
-             </property>
              <property name="title">
               <string>软件数据</string>
              </property>
@@ -2282,6 +2029,9 @@ QCheckBox::indicator {
                 </property>
                 <property name="text">
                  <string>清空当前软件数据</string>
+                </property>
+                <property name="uiRole" stdset="0">
+                 <string>danger</string>
                 </property>
                </widget>
               </item>

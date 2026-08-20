@@ -172,13 +172,15 @@ MainWindow::MainWindow(
         }
 
         if (ui && ui->toolButton_createTemplate) {
+            const bool previewing = operationUiState()
+                    == OperationState::TemplatePreviewing;
             ui->toolButton_createTemplate->setProperty(
-                        "templateCaptureActive",
-                        operationUiState()
-                        == OperationState::TemplatePreviewing);
-            ui->toolButton_createTemplate->setProperty(
-                        "templateCaptureAttention",
-                        m_templateCaptureAttentionOn);
+                        "uiState",
+                        previewing
+                        ? (m_templateCaptureAttentionOn
+                           ? QStringLiteral("attention")
+                           : QStringLiteral("preview"))
+                        : QString());
             ui->toolButton_createTemplate->style()->unpolish(
                         ui->toolButton_createTemplate);
             ui->toolButton_createTemplate->style()->polish(
@@ -381,6 +383,7 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     TemplateEditorViewBindings view;
     view.parentWidget = const_cast<MainWindow *>(this);
     view.imageLabel_templateCanvas = imageLabel;
+    view.label_targetText = ui->label_targetText;
     view.textEdit_targetText = ui->textEdit_targetText;
     view.lineEdit_imageThreshold = ui->lineEdit_imageThreshold;
     view.lineEdit_tissueRoughnessThreshold =

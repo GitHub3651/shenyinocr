@@ -17,30 +17,10 @@
 #include <QStyle>
 #include <QTimer>
 #include <QToolButton>
+#include <QVariant>
 #include <QWidget>
 
 namespace {
-
-void applyButtonAccess(
-    QAbstractButton *button,
-    const OperationUiSnapshot::Access &access)
-{
-    if (!button) {
-        return;
-    }
-    static const char originalToolTipProperty[] =
-            "_operationOriginalToolTip";
-    if (!button->property(originalToolTipProperty).isValid()) {
-        button->setProperty(
-                    originalToolTipProperty,
-                    button->toolTip());
-    }
-    button->setEnabled(access.enabled);
-    button->setToolTip(
-                access.enabled
-                ? button->property(originalToolTipProperty).toString()
-                : access.disabledReason);
-}
 
 // 函数说明：setLabelTextIfChanged 函数更新或应用对应的配置和状态。
 void setLabelTextIfChanged(QLabel *label, const QString &text)
@@ -48,6 +28,42 @@ void setLabelTextIfChanged(QLabel *label, const QString &text)
     if (label && label->text() != text) {
         label->setText(text);
     }
+}
+
+void setStyleProperty(
+    QWidget *widget,
+    const char *name,
+    const QVariant &value)
+{
+    if (!widget || widget->property(name) == value) {
+        return;
+    }
+    widget->setProperty(name, value);
+    if (widget->style()) {
+        widget->style()->unpolish(widget);
+        widget->style()->polish(widget);
+    }
+    widget->update();
+}
+
+QString runtimeUiState(OperationUiState state)
+{
+    switch (state) {
+    case OperationUiState::CameraClosed:
+        return QStringLiteral("idle");
+    case OperationUiState::CameraReady:
+        return QStringLiteral("ready");
+    case OperationUiState::Detecting:
+        return QStringLiteral("running");
+    case OperationUiState::Stopping:
+        return QStringLiteral("stopping");
+    case OperationUiState::Fault:
+        return QStringLiteral("fault");
+    case OperationUiState::TemplatePreviewing:
+    case OperationUiState::TemplateFrozen:
+        return QStringLiteral("warning");
+    }
+    return QStringLiteral("idle");
 }
 
 } // namespace
@@ -65,6 +81,10 @@ InspectionPage::InspectionPage(
       m_templateAttentionOn(templateAttentionOn),
       m_callbacks(callbacks)
 {
+    if (m_view.toolButton_createTemplate) {
+        m_view.toolButton_createTemplate->setToolTip(
+                    QStringLiteral("进入当前检测模式的模板制作流程。"));
+    }
 }
 
 InspectionViewBindingsDto
@@ -93,19 +113,13 @@ InspectionPage::resultViewBindings() const
         if (!m_view.label_runtimeStatus || !m_view.label_verdictResult) {
             return;
         }
-        const QString color =
-                style == InspectionVerdictStyleDto::Correct
-                ? QStringLiteral("#00ff7f")
-                : QStringLiteral("#ff0000");
         m_view.label_verdictResult->setTextFormat(Qt::PlainText);
-        m_view.label_verdictResult->setStyleSheet(
-                    QStringLiteral(
-                        "background-color: #eef1f6; "
-                        "border-radius: 6px; "
-                        "font-size: 36px; "
-                        "font-weight: 900; "
-                        "color: %1;")
-                    .arg(color));
+        setStyleProperty(
+                    m_view.label_verdictResult,
+                    "verdict",
+                    style == InspectionVerdictStyleDto::Correct
+                    ? QStringLiteral("ok")
+                    : QStringLiteral("ng"));
         m_view.label_verdictResult->setWordWrap(true);
     };
     bindings.showVerdictText = [this](const QString &text) {
@@ -159,18 +173,31 @@ void InspectionPage::applyOperationState(
     m_view.toolButton_startInspection->setText(operationUi.startDetectionText);
     m_view.toolButton_stopInspection->setText(operationUi.stopText);
     m_view.toolButton_createTemplate->setText(operationUi.templateCaptureText);
-    applyButtonAccess(m_view.toolButton_openCamera, operationUi.openCamera);
-    applyButtonAccess(
+    applyOperationUiAccess(m_view.toolButton_openCamera, operationUi.openCamera);
+    applyOperationUiAccess(
                 m_view.toolButton_startInspection,
                 operationUi.startDetection);
-    applyButtonAccess(m_view.toolButton_stopInspection, operationUi.stop);
-    applyButtonAccess(m_view.toolButton_closeCamera, operationUi.closeCamera);
-    applyButtonAccess(
+    applyOperationUiAccess(m_view.toolButton_stopInspection, operationUi.stop);
+    applyOperationUiAccess(m_view.toolButton_closeCamera, operationUi.closeCamera);
+    applyOperationUiAccess(
                 m_view.toolButton_createTemplate,
                 operationUi.templateCapture);
-    applyButtonAccess(m_view.pushButton_saveTemplate, operationUi.saveTemplate);
+    applyOperationUiAccess(
+                m_view.pushButton_saveTemplate,
+                operationUi.saveTemplate);
     if (!operationUi.statusText.isEmpty()) {
         m_view.label_runtimeStatus->setText(operationUi.statusText);
+    }
+    const bool keepDetectionWarning =
+            requestedState == OperationUiState::Detecting
+            && m_view.label_runtimeStatus->property("uiState").toString()
+               == QStringLiteral("warning")
+            && operationUi.statusText.isEmpty();
+    if (!keepDetectionWarning) {
+        setStyleProperty(
+                    m_view.label_runtimeStatus,
+                    "uiState",
+                    runtimeUiState(requestedState));
     }
 
     if (m_templateAttentionTimer && m_view.toolButton_createTemplate) {
@@ -179,13 +206,10 @@ void InspectionPage::applyOperationState(
                 if (m_templateAttentionOn) {
                     *m_templateAttentionOn = true;
                 }
-                m_view.toolButton_createTemplate->setProperty(
-                            "templateCaptureActive", true);
-                m_view.toolButton_createTemplate->setProperty(
-                            "templateCaptureAttention", true);
-                m_view.toolButton_createTemplate->style()->unpolish(m_view.toolButton_createTemplate);
-                m_view.toolButton_createTemplate->style()->polish(m_view.toolButton_createTemplate);
-                m_view.toolButton_createTemplate->update();
+                setStyleProperty(
+                            m_view.toolButton_createTemplate,
+                            "uiState",
+                            QStringLiteral("attention"));
                 m_templateAttentionTimer->start();
             }
         } else {
@@ -194,19 +218,18 @@ void InspectionPage::applyOperationState(
                     && *m_templateAttentionOn;
             if (attentionOn
                     || m_view.toolButton_createTemplate->property(
-                        "templateCaptureActive").toBool()
+                        "uiState").toString()
+                       == QStringLiteral("preview")
                     || m_view.toolButton_createTemplate->property(
-                        "templateCaptureAttention").toBool()) {
+                        "uiState").toString()
+                       == QStringLiteral("attention")) {
                 if (m_templateAttentionOn) {
                     *m_templateAttentionOn = false;
                 }
-                m_view.toolButton_createTemplate->setProperty(
-                            "templateCaptureActive", false);
-                m_view.toolButton_createTemplate->setProperty(
-                            "templateCaptureAttention", false);
-                m_view.toolButton_createTemplate->style()->unpolish(m_view.toolButton_createTemplate);
-                m_view.toolButton_createTemplate->style()->polish(m_view.toolButton_createTemplate);
-                m_view.toolButton_createTemplate->update();
+                setStyleProperty(
+                            m_view.toolButton_createTemplate,
+                            "uiState",
+                            QString());
             }
         }
     }
@@ -224,12 +247,16 @@ void InspectionPage::presentFault(
         return;
     }
     m_view.label_runtimeStatus->setText(presentation.statusText);
-    m_view.label_runtimeStatus->setStyleSheet(
-                presentation.statusStyleSheet);
+    setStyleProperty(
+                m_view.label_runtimeStatus,
+                "uiState",
+                QStringLiteral("fault"));
     m_view.label_verdictResult->setTextFormat(Qt::PlainText);
     m_view.label_verdictResult->setText(presentation.resultText);
-    m_view.label_verdictResult->setStyleSheet(
-                presentation.resultStyleSheet);
+    setStyleProperty(
+                m_view.label_verdictResult,
+                "verdict",
+                QStringLiteral("fault"));
 
     if (alarmPresented && !*alarmPresented) {
         *alarmPresented = true;
@@ -278,16 +305,14 @@ void InspectionPage::restoreNormalFaultStyle()
     if (!m_view.label_runtimeStatus) {
         return;
     }
-    m_view.label_runtimeStatus->setStyleSheet(
-                QStringLiteral(
-                    "QLabel{color:#2ecc71; font-weight:bold;}"));
-    m_view.label_verdictResult->setStyleSheet(
-                QStringLiteral(
-                    "background-color: #eef1f6; "
-                    "border-radius: 6px; "
-                    "font-size: 36px; "
-                    "font-weight: 900; "
-                    "color: #00ff7f;"));
+    setStyleProperty(
+                m_view.label_runtimeStatus,
+                "uiState",
+                QStringLiteral("ready"));
+    setStyleProperty(
+                m_view.label_verdictResult,
+                "verdict",
+                QStringLiteral("idle"));
 }
 
 // 函数说明：showDetectionRoiWarning 函数实现名称所表示的处理步骤。
@@ -302,12 +327,13 @@ void InspectionPage::showDetectionRoiWarning()
                 L"请点击【停止识别】，"
                 L"然后重新选择或制作模板。");
     qWarning().noquote() << "[DETECTION_ROI]" << warningText;
-    if (m_view.label_runtimeStatus && m_view.label_runtimeStatus) {
+    if (m_view.label_runtimeStatus) {
         m_view.label_runtimeStatus->setWordWrap(true);
         m_view.label_runtimeStatus->setText(warningText);
-        m_view.label_runtimeStatus->setStyleSheet(
-                    QStringLiteral(
-                        "QLabel{color:#d90000;font-weight:900;}"));
+        setStyleProperty(
+                    m_view.label_runtimeStatus,
+                    "uiState",
+                    QStringLiteral("warning"));
     }
 }
 
@@ -319,12 +345,12 @@ void InspectionPage::clearDetectionRoiWarning(
         return;
     }
     m_detectionRoiWarningActive = false;
-    if (m_view.label_runtimeStatus && m_view.label_runtimeStatus
-            && !runningStatusText.isEmpty()) {
+    if (m_view.label_runtimeStatus && !runningStatusText.isEmpty()) {
         m_view.label_runtimeStatus->setText(runningStatusText);
-        m_view.label_runtimeStatus->setStyleSheet(
-                    QStringLiteral(
-                        "QLabel{color:#20b455;font-weight:bold;}"));
+        setStyleProperty(
+                    m_view.label_runtimeStatus,
+                    "uiState",
+                    QStringLiteral("running"));
     }
 }
 
@@ -362,12 +388,13 @@ void InspectionPage::reportImageSaveFailure(
                     .arg(m_latestImageSaveError);
         }
         qWarning().noquote() << "[IMAGE_SAVE]" << warningText;
-        if (m_view.label_runtimeStatus && m_view.label_runtimeStatus) {
+        if (m_view.label_runtimeStatus) {
             m_view.label_runtimeStatus->setWordWrap(true);
             m_view.label_runtimeStatus->setText(warningText);
-            m_view.label_runtimeStatus->setStyleSheet(
-                        QStringLiteral(
-                            "QLabel{color:#d90000;font-weight:900;}"));
+            setStyleProperty(
+                        m_view.label_runtimeStatus,
+                        "uiState",
+                        QStringLiteral("warning"));
         }
     });
 }

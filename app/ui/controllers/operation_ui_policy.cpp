@@ -4,6 +4,9 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "operation_ui_policy.h"
 
+#include <QVariant>
+#include <QWidget>
+
 // 函数说明：create 函数创建、准备或启动对应流程。
 namespace {
 
@@ -39,6 +42,31 @@ QString operationBusyReason(OperationUiState state)
 }
 
 } // namespace
+
+void applyOperationUiAccess(
+    QWidget *widget,
+    const OperationUiSnapshot::Access &access,
+    bool showDisabledReason)
+{
+    if (!widget) {
+        return;
+    }
+    static const char originalToolTipProperty[] =
+            "_operationOriginalToolTip";
+    if (!widget->property(originalToolTipProperty).isValid()) {
+        widget->setProperty(originalToolTipProperty, widget->toolTip());
+    }
+
+    widget->setEnabled(access.enabled);
+    const QString originalToolTip =
+            widget->property(originalToolTipProperty).toString();
+    const bool showReason = !access.enabled
+            && showDisabledReason
+            && !access.disabledReason.isEmpty();
+    widget->setToolTip(showReason
+                       ? access.disabledReason
+                       : originalToolTip);
+}
 
 OperationUiSnapshot OperationUiPolicy::create(
     const OperationUiContext &context)

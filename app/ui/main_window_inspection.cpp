@@ -26,14 +26,9 @@
 #include <QComboBox>
 #include <QSignalBlocker>
 #include <QSpinBox>
-#include <QToolTip>
-#include <QCursor>
 #include <QTextEdit>
-#include <QEvent>
 #include <QCloseEvent>
 #include <QApplication>
-#include <QColor>
-#include <QPalette>
 #include <QDebug>
 
 #include <limits>
@@ -41,31 +36,6 @@
 #include <opencv2/highgui.hpp>
 
 #pragma execution_character_set("utf-8")
-
-namespace {
-
-void applyWidgetAccess(
-    QWidget *widget,
-    const OperationUiSnapshot::Access &access)
-{
-    if (!widget) {
-        return;
-    }
-    static const char originalToolTipProperty[] =
-            "_operationOriginalToolTip";
-    if (!widget->property(originalToolTipProperty).isValid()) {
-        widget->setProperty(
-                    originalToolTipProperty,
-                    widget->toolTip());
-    }
-    widget->setEnabled(access.enabled);
-    widget->setToolTip(
-                access.enabled
-                ? widget->property(originalToolTipProperty).toString()
-                : access.disabledReason);
-}
-
-} // namespace
 
 // 函数说明：presentInspectionFault 函数执行对应事件或业务处理。
 void MainWindow::presentInspectionFault()
@@ -352,31 +322,31 @@ void MainWindow::updateOperationUiState()
         m_templateEditorPage->applyOperationState(snapshot);
     }
 
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->toolButton_selectTemplate,
                 snapshot.templateSelection);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_browseImageSavePath,
                 snapshot.generalSettings);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_applyImageRotation,
                 snapshot.generalSettings);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_applyColorChannel,
                 snapshot.generalSettings);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_clearSoftwareData,
                 snapshot.generalSettings);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_restoreDefaultSettings,
                 snapshot.generalSettings);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_resetTotalCount,
                 snapshot.statisticsReset);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_resetNgCount,
                 snapshot.statisticsReset);
-    applyWidgetAccess(
+    applyOperationUiAccess(
                 ui->pushButton_resetRejectQueue,
                 snapshot.rejectQueueReset);
 }
@@ -428,9 +398,7 @@ void MainWindow::showParameterInfoWithRedWarning(const QString &title,
                            this);
     messageBox.setTextFormat(Qt::RichText);
     messageBox.setText(
-                QString("<div>%1</div>"
-                        "<div style=\"margin-top:12px;color:#c00000;"
-                        "font-weight:700;\">%2</div>")
+                QString("<div>%1</div><p><strong>%2</strong></p>")
                 .arg(infoHtml)
                 .arg(warningHtml));
     messageBox.exec();
@@ -574,117 +542,6 @@ void MainWindow::on_pushButton_applyImageRotation_clicked()
 
 
 
-// 函数说明：eventFilter 函数实现名称所表示的处理步骤。
-bool MainWindow::eventFilter(QObject *watched, QEvent *event)
-{
-    if (watched == m_templateEditorPage->guideFrame()
-            && event->type() == QEvent::Resize) {
-        QTimer::singleShot(0, this, [this]() {
-            adjustTemplateGuideHeight();
-        });
-        return false;
-    }
-
-        if (watched == ui->pushButton_applyTargetText
-            || watched == ui->pushButton_applyBatchTargetText
-            || watched == ui->pushButton_applyBatchImageThreshold
-            || watched == ui->checkBox_hardwareTriggerEnabled
-            || watched == ui->pushButton_browseImageSavePath
-            || watched == ui->pushButton_applyColorChannel
-            || watched == ui->pushButton_resetRejectQueue
-            || watched == ui->label_imageThreshold
-            || watched == ui->label_imageRotation
-            || watched == ui->label_cameraGain
-            || watched == ui->label_photoTime
-            || watched == ui->label_hardwareTriggerDelay
-            || watched == ui->label_rejectDistance
-            || watched == ui->label_rejectTime
-            || watched == ui->label_rejectPosition
-            || watched == ui->label_photoDistance
-            || watched == ui->comboBox_plcTriggerMode
-            || watched == m_templateEditorPage->manualCharacterCropButton()
-            || watched == ui->toolButton_createTemplate) {
-        QWidget *button = qobject_cast<QWidget *>(watched);
-        if (!button) {
-            return QWidget::eventFilter(watched, event);
-        }
-
-        if (event->type() == QEvent::Enter) {
-            QTimer::singleShot(500, this, [this, button, watched]() {
-                if (!button->underMouse()) {
-                    return;
-                }
-
-                QString tooltipText;
-                if (!button->isEnabled()) {
-                    tooltipText = button->toolTip();
-                } else if (watched == ui->toolButton_createTemplate) {
-                    DetectionMode mode = DetectionMode::Word;
-                    detectionModeFromUiId(detectModeIdForIndex(
-                        ui->comboBox_detectionMode->currentIndex()), &mode);
-                    switch (mode) {
-                    case DetectionMode::Stamp:
-                        tooltipText =
-                                "制作刚印检测产品模板：\n\n"
-                                "1. 点击【制作模板】进入实时取景。\n"
-                                "2. 调整产品位置后点击【拍照并开始框选】。\n"
-                                "3. 在冻结图像上框选定位区域和检测区域。\n"
-                                "4. 点击【保存模板】保存产品模板。";
-                        break;
-                    case DetectionMode::Word:
-                        tooltipText =
-                                "制作字库产品模板步骤：\n\n"
-                                "1. 点击【制作模板】进入实时取景。\n"
-                                "2. 调整产品位置后点击【拍照并开始框选】。\n"
-                                "3. 按住鼠标左键框选定位区域。\n"
-                                "4. 用鼠标左键点击喷码区域边缘，右键闭合。\n"
-                                "5. 点击【保存模板】保存产品模板。";
-                        break;
-                    case DetectionMode::Ocr:
-                        tooltipText =
-                                "点击后进入实时取景，再次点击可冻结当前画面。\n\n"
-                                "深度模型模式通常不需要制作传统产品模板。";
-                        break;
-                    case DetectionMode::Tissue:
-                        tooltipText =
-                                "点击后进入实时取景，再次点击可冻结当前画面。\n\n"
-                                "纸巾检测通常不需要制作产品模板。";
-                        break;
-                    case DetectionMode::BarcodeWord:
-                        tooltipText =
-                                "制作二维码+三期产品模板步骤：\n\n"
-                                "1. 点击【制作模板】进入实时取景。\n"
-                                "2. 调整产品位置后点击【拍照并开始框选】。\n"
-                                "3. 框选稳定且不会变化的定位锚点。\n"
-                                "4. 框选二维码区域并等待扫描验证。\n"
-                                "5. 用鼠标左键点击日期区域边缘，右键闭合。\n"
-                                "6. 点击【保存模板】保存产品模板。";
-                        break;
-                    }
-                } else {
-                    tooltipText = button->toolTip();
-                }
-
-                if (!tooltipText.isEmpty()) {
-                    QToolTip::showText(QCursor::pos(), tooltipText, button);
-                }
-            });
-            return false;
-        }
-
-        if (event->type() == QEvent::Leave) {
-            QToolTip::hideText();
-            return false;
-        }
-
-        if (event->type() == QEvent::ToolTip) {
-            return true;
-        }
-    }
-
-    return QWidget::eventFilter(watched, event);
-}
-
 //关闭相机按钮
 void MainWindow::on_toolButton_closeCamera_clicked()
 {
@@ -713,7 +570,6 @@ void MainWindow::on_toolButton_closeCamera_clicked()
         m_inspectionPage->clearDetectionRoiWarning(QString());
     }
     ui->label_runtimeStatus->setText("相机已关闭");
-    ui->label_runtimeStatus->setStyleSheet("QLabel{color:#e74c3c; font-weight:bold;}");
     updateOperationUiState();
 }
 
@@ -863,7 +719,6 @@ void MainWindow::on_toolButton_openCamera_clicked()
     m_machineSettingsPage->refreshDirty("camera.exposure");
 
     ui->label_runtimeStatus->setText("相机已打开");
-    ui->label_runtimeStatus->setStyleSheet("QLabel{color:#2ecc71; font-weight:bold;}");
     updateOperationUiState();
     const QString openMessage = openResult.adjustmentMessage.isEmpty()
             ? QString("相机打开成功！")
@@ -895,42 +750,17 @@ void MainWindow::on_pushButton_resetRejectQueue_clicked()
 
 //加载UI样式表模板
 void MainWindow::initStyle()
-    {
-        QFile file(":/qss/1.css");// 淡蓝色风格
-        if(file.open(QFile::ReadOnly)){
-            QString qss = QLatin1String(file.readAll());
-            qss +=
-                    "\nQGroupBox#groupBox_mainControls QToolButton:disabled {"
-                    "background-color: #f2f3f5;"
-                    "color: #a8abb2;"
-                    "border-color: #dcdfe6;"
-                    "}"
-                    "QPushButton:disabled {"
-                    "background-color: #f2f3f5;"
-                    "color: #a8abb2;"
-                    "border-color: #dcdfe6;"
-                    "}"
-                    "QComboBox:disabled,"
-                    "QLineEdit:disabled,"
-                    "QTextEdit:disabled,"
-                    "QPlainTextEdit:disabled,"
-                    "QSpinBox:disabled,"
-                    "QDoubleSpinBox:disabled,"
-                    "QDateEdit:disabled,"
-                    "QTimeEdit:disabled {"
-                    "color: #a8abb2;"
-                    "}";
-
-            // 提取主色调用于设置系统调色板
-            QString paletteColor = qss.mid(20,7);// 获取QSS中定义的主色
-            qApp->setPalette(QPalette(QColor(paletteColor)));
-
-            // 应用样式表（qApp 是全局应用程序对象，作用于所有控件）
-            qApp->setStyleSheet(qss);
-
-            file.close();
-        }
+{
+    QFile file(QStringLiteral(":/qss/app_theme.qss"));
+    if (!file.open(QFile::ReadOnly)) {
+        qWarning().noquote()
+                << QStringLiteral("[UI_STYLE] 无法读取正式样式资源：:/qss/app_theme.qss");
+        return;
     }
+
+    const QString qss = QString::fromUtf8(file.readAll());
+    qApp->setStyleSheet(qss);
+}
 
 
 

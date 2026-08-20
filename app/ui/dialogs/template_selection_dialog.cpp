@@ -5,7 +5,6 @@
 #include "application/template_application_service.h"
 
 #include <QAbstractItemView>
-#include <QBrush>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -15,8 +14,10 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QStyle>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QVariant>
 #include <QVBoxLayout>
 
 namespace {
@@ -42,6 +43,7 @@ TemplateSelectionDialog::TemplateSelectionDialog(
       m_templateService(templateService),
       m_settingsService(settingsService)
 {
+    setObjectName(QStringLiteral("templateSelectionDialog"));
     setWindowTitle(QStringLiteral("选择模板"));
     setModal(true);
     resize(860, 460);
@@ -51,10 +53,12 @@ TemplateSelectionDialog::TemplateSelectionDialog(
                 ? QStringLiteral("已应用模板会显示勾选。可以取消、增加或调整多个模板的顺序。")
                 : QStringLiteral("已应用模板会显示勾选。当前模式最多应用一个模板。"),
                 this);
+    description->setObjectName(QStringLiteral("label_templateSelectionDescription"));
     description->setWordWrap(true);
     layout->addWidget(description);
 
     m_tree = new QTreeWidget(this);
+    m_tree->setObjectName(QStringLiteral("treeWidget_templateSelection"));
     m_tree->setColumnCount(5);
     m_tree->setHeaderLabels(QStringList()
                             << QStringLiteral("选择")
@@ -81,10 +85,13 @@ TemplateSelectionDialog::TemplateSelectionDialog(
     QHBoxLayout *actions = new QHBoxLayout;
     QPushButton *addButton = new QPushButton(
                 QStringLiteral("增加模板文件夹"), this);
+    addButton->setObjectName(QStringLiteral("pushButton_addTemplateFolder"));
     QPushButton *upButton = new QPushButton(
                 QStringLiteral("上移"), this);
+    upButton->setObjectName(QStringLiteral("pushButton_moveTemplateUp"));
     QPushButton *downButton = new QPushButton(
                 QStringLiteral("下移"), this);
+    downButton->setObjectName(QStringLiteral("pushButton_moveTemplateDown"));
     actions->addWidget(addButton);
     actions->addWidget(upButton);
     actions->addWidget(downButton);
@@ -101,6 +108,8 @@ TemplateSelectionDialog::TemplateSelectionDialog(
                 QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     buttons->button(QDialogButtonBox::Ok)->setText(
                 QStringLiteral("确认应用"));
+    buttons->button(QDialogButtonBox::Ok)->setProperty(
+                "uiRole", QStringLiteral("primary"));
     buttons->button(QDialogButtonBox::Cancel)->setText(
                 QStringLiteral("取消"));
     connect(buttons, &QDialogButtonBox::accepted,
@@ -179,7 +188,9 @@ void TemplateSelectionDialog::addPath(
                      : error.userMessage));
     item->setToolTip(3, normalized);
     if (!summary.valid) {
-        item->setForeground(4, QBrush(Qt::red));
+        item->setIcon(
+                    4,
+                    style()->standardIcon(QStyle::SP_MessageBoxWarning));
     }
     m_updating = true;
     item->setCheckState(0, checked ? Qt::Checked : Qt::Unchecked);

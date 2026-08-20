@@ -16,13 +16,32 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QTimer>
+#include <QVariant>
 #include <QVBoxLayout>
 
 #include <algorithm>
 #include <functional>
 
 #pragma execution_character_set("utf-8")
+
+namespace {
+
+void setInputError(QLineEdit *edit, bool hasError)
+{
+    if (!edit || edit->property("hasError").toBool() == hasError) {
+        return;
+    }
+    edit->setProperty("hasError", hasError);
+    if (edit->style()) {
+        edit->style()->unpolish(edit);
+        edit->style()->polish(edit);
+    }
+    edit->update();
+}
+
+} // namespace
 
 // 组件说明：CharacterTemplateEditorDialog 组件负责对应界面区域的显示和用户交互。
 class CharacterTemplateEditorDialog::CropImageLabel : public QLabel
@@ -35,7 +54,7 @@ public:
         setMouseTracking(true);
         setMinimumSize(760, 260);
         setAlignment(Qt::AlignCenter);
-        setStyleSheet("QLabel { background-color: #f7f9fc; border: 1px solid #dcdfe6; }");
+        setObjectName(QStringLiteral("label_characterCropCanvas"));
     }
 
     // 函数说明：setChangedCallback 函数更新或应用对应的配置和状态。
@@ -293,6 +312,7 @@ QMap<QString, QImage> CharacterTemplateEditorDialog::characterImages() const
 // 函数说明：buildUi 函数创建、准备或启动对应流程。
 void CharacterTemplateEditorDialog::buildUi()
 {
+    setObjectName(QStringLiteral("characterTemplateEditorDialog"));
     setWindowTitle(QStringLiteral("分割字符模板"));
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     resize(920, 760);
@@ -316,8 +336,8 @@ void CharacterTemplateEditorDialog::buildUi()
     contentLayout->addLayout(rightLayout);
 
     QLabel *drawHint = new QLabel(QStringLiteral("在喷码区域图像上按住鼠标左键拖拽，逐个框选字符。\n字符框选顺序不限，系统会在命名前自动按位置排序。"), m_drawPage);
+    drawHint->setObjectName(QStringLiteral("label_characterDrawHint"));
     drawHint->setWordWrap(true);
-    drawHint->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
     leftLayout->addWidget(drawHint);
 
     m_cropLabel = new CropImageLabel(m_drawPage);
@@ -331,20 +351,20 @@ void CharacterTemplateEditorDialog::buildUi()
     QImage sampleImage(":/sample1.png");
     if (!sampleImage.isNull()) {
         QLabel *sampleTitle = new QLabel(QStringLiteral("结果示意图："), m_drawPage);
-        sampleTitle->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
+        sampleTitle->setObjectName(QStringLiteral("label_characterSampleTitle"));
         leftLayout->addWidget(sampleTitle);
 
         QLabel *sampleLabel = new QLabel(m_drawPage);
+        sampleLabel->setObjectName(QStringLiteral("label_characterSample"));
         sampleLabel->setAlignment(Qt::AlignCenter);
         sampleLabel->setMinimumHeight(120);
         sampleLabel->setMaximumHeight(160);
-        sampleLabel->setStyleSheet("QLabel { background-color: #ffffff; border: 1px solid #dcdfe6; }");
         sampleLabel->setPixmap(QPixmap::fromImage(sampleImage).scaled(640, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         leftLayout->addWidget(sampleLabel);
     }
 
     QLabel *existingTitle = new QLabel(QStringLiteral("字符模板预览："), m_drawPage);
-    existingTitle->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
+    existingTitle->setObjectName(QStringLiteral("label_characterExistingTitle"));
     rightLayout->addWidget(existingTitle);
 
     m_previewScrollArea = new QScrollArea(m_drawPage);
@@ -407,8 +427,8 @@ void CharacterTemplateEditorDialog::buildUi()
     namePageLayout->setSpacing(8);
 
     QLabel *nameHint = new QLabel(QStringLiteral("请为每个字符图片填写字符名称。例如字符 1 只填写 1，重复名称会自动生成 1(1)、1(2)。"), m_namePage);
+    nameHint->setObjectName(QStringLiteral("label_characterNameHint"));
     nameHint->setWordWrap(true);
-    nameHint->setStyleSheet("QLabel { color: #333333; font-weight: bold; }");
     namePageLayout->addWidget(nameHint);
 
     QScrollArea *scrollArea = new QScrollArea(m_namePage);
@@ -423,6 +443,7 @@ void CharacterTemplateEditorDialog::buildUi()
     QHBoxLayout *nameButtonLayout = new QHBoxLayout();
     QPushButton *backButton = new QPushButton(QStringLiteral("返回框选"), m_namePage);
     QPushButton *saveButton = new QPushButton(QStringLiteral("保存字符模板"), m_namePage);
+    saveButton->setProperty("uiRole", QStringLiteral("primary"));
     QPushButton *cancelNameButton = new QPushButton(QStringLiteral("取消"), m_namePage);
     nameButtonLayout->addWidget(backButton);
     nameButtonLayout->addStretch();
@@ -476,17 +497,18 @@ void CharacterTemplateEditorDialog::rebuildNamePage()
         indexLabel->setAlignment(Qt::AlignCenter);
 
         QLabel *previewLabel = new QLabel(rowWidget);
+        previewLabel->setObjectName(QStringLiteral("label_characterPreviewImage"));
         previewLabel->setFixedSize(90, 54);
         previewLabel->setAlignment(Qt::AlignCenter);
-        previewLabel->setStyleSheet("QLabel { border: 1px solid #dcdfe6; background-color: #ffffff; }");
         previewLabel->setPixmap(QPixmap::fromImage(preview).scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 
         QLineEdit *nameEdit = new QLineEdit(rowWidget);
+        nameEdit->setObjectName(QStringLiteral("lineEdit_characterName"));
         nameEdit->setPlaceholderText(QStringLiteral("请输入字符名称"));
         nameEdit->setText(m_sortedBoxes.at(i).name.trimmed());
 
         QLabel *errorLabel = new QLabel(QStringLiteral("字符名称不能为空"), rowWidget);
-        errorLabel->setStyleSheet("QLabel { color: #d93025; }");
+        errorLabel->setObjectName(QStringLiteral("label_characterNameError"));
         errorLabel->hide();
 
         rowLayout->addWidget(indexLabel);
@@ -495,14 +517,14 @@ void CharacterTemplateEditorDialog::rebuildNamePage()
         rowLayout->addWidget(errorLabel);
 
         QLabel *saveNameLabel = new QLabel(rowWidget);
+        saveNameLabel->setObjectName(QStringLiteral("label_characterSaveName"));
         saveNameLabel->setMinimumWidth(170);
-        saveNameLabel->setStyleSheet("QLabel { color: #606266; }");
         rowLayout->addWidget(saveNameLabel);
 
         connect(nameEdit, &QLineEdit::textChanged, this, [this, nameEdit, errorLabel]() {
             const bool empty = nameEdit->text().trimmed().isEmpty();
             errorLabel->setVisible(empty);
-            nameEdit->setStyleSheet(empty ? "QLineEdit { border: 1px solid #d93025; }" : "");
+            setInputError(nameEdit, empty);
             refreshSaveNamePreviews();
         });
 
@@ -550,8 +572,8 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
     const QList<CharacterBox> boxes = m_cropLabel ? m_cropLabel->previewItems() : m_initialBoxes;
     if (boxes.isEmpty()) {
         QLabel *emptyLabel = new QLabel(QStringLiteral("当前还没有字符框，请在左侧框选字符。"));
+        emptyLabel->setObjectName(QStringLiteral("label_characterPreviewEmpty"));
         emptyLabel->setWordWrap(true);
-        emptyLabel->setStyleSheet("QLabel { color: #909399; }");
         m_previewGrid->addWidget(emptyLabel, 0, 0);
         return;
     }
@@ -568,9 +590,9 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
         itemLayout->setSpacing(4);
 
         QLabel *previewLabel = new QLabel(itemWidget);
+        previewLabel->setObjectName(QStringLiteral("label_characterPreviewImage"));
         previewLabel->setFixedSize(92, 56);
         previewLabel->setAlignment(Qt::AlignCenter);
-        previewLabel->setStyleSheet("QLabel { background-color: #ffffff; border: 1px solid #dcdfe6; }");
         if (rect.width() > 0 && rect.height() > 0) {
             const QImage previewImage = m_sourceImage.copy(rect);
             previewLabel->setPixmap(QPixmap::fromImage(previewImage).scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
@@ -585,11 +607,10 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
         }
 
         QLabel *fileNameLabel = new QLabel(displayText, itemWidget);
+        fileNameLabel->setObjectName(QStringLiteral("label_characterPreviewFileName"));
         fileNameLabel->setFixedHeight(54);
         fileNameLabel->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
         fileNameLabel->setToolTip(displayText);
-        fileNameLabel->setStyleSheet("QLabel { color: #333333; }");
-
         itemLayout->addWidget(previewLabel, 0, Qt::AlignHCenter);
         itemLayout->addWidget(fileNameLabel);
         m_previewGrid->addWidget(itemWidget, i / columns, i % columns, Qt::AlignTop | Qt::AlignHCenter);
@@ -680,10 +701,7 @@ bool CharacterTemplateEditorDialog::saveTemplates()
                 || name.contains(invalidFileNameChars)
                 || name == QLatin1String(".")
                 || name == QLatin1String("..");
-        edit->setStyleSheet(
-                    invalid
-                    ? QStringLiteral("QLineEdit { border: 1px solid #d93025; }")
-                    : QString());
+        setInputError(edit, invalid);
         if (errorLabel) {
             errorLabel->setVisible(invalid);
         }

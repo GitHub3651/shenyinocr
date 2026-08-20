@@ -105,7 +105,7 @@
         <file>qss/lightgray.css</file>
         <file>qss/silvery.css</file>
         <file>qss/lightbluepro.css</file>
-        <file>qss/1.css</file>
+        <file>qss/app_theme.qss</file>
     </qresource>
     <qresource prefix="/logo"/>
 </RCC>

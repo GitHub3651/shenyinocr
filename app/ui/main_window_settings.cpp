@@ -129,6 +129,8 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     ui->toolButton_createTemplate->setVisible(usesTemplate);
     ui->pushButton_saveTemplate->setVisible(usesTemplate);
     ui->groupBox_currentTemplate->setVisible(usesTemplate);
+    ui->groupBox_currentTemplateSettings->setVisible(usesTemplate);
+    ui->groupBox_templateCreation->setVisible(usesTemplate);
     ui->label_targetText->setVisible(usesTemplate
                                      && descriptor.requiresTargetText);
     ui->textEdit_targetText->setVisible(usesTemplate
@@ -139,6 +141,7 @@ void MainWindow::updateTissueRoughnessUiVisibility()
                 showBatch && descriptor.requiresTargetText);
     ui->label_imageThreshold->setVisible(showImageThreshold);
     ui->lineEdit_imageThreshold->setVisible(showImageThreshold);
+    ui->label_imageThresholdUnit->setVisible(showImageThreshold);
     ui->pushButton_applyImageThreshold->setVisible(showImageThreshold);
     ui->pushButton_applyBatchImageThreshold->setVisible(
                 showBatch && showImageThreshold);
@@ -210,16 +213,6 @@ void MainWindow::setupSoftwareSettingsPage()
                     m_softwareDataDirLineEdit);
     }
 
-    ui->pushButton_clearSoftwareData->setStyleSheet(
-                "QPushButton {"
-                "background-color: transparent;"
-                "border: 1px solid #ebeef5;"
-                "border-radius: 4px;"
-                "color: #d93025;"
-                "padding: 5px 10px;"
-                "}"
-                "QPushButton:hover { background-color: #fff2f0; }"
-                "QPushButton:pressed { background-color: #fde2e0; }");
     ui->pushButton_clearSoftwareData->setToolTip(
                 "只清除当前 Windows 用户的软件公共界面设置，不删除产品模板、识别图片、授权文件或日志。");
     connect(ui->pushButton_clearSoftwareData,
@@ -227,16 +220,6 @@ void MainWindow::setupSoftwareSettingsPage()
             this,
             &MainWindow::clearCurrentSoftwareData);
 
-    ui->pushButton_restoreDefaultSettings->setStyleSheet(
-                "QPushButton {"
-                "background-color: transparent;"
-                "border: 1px solid #ebeef5;"
-                "border-radius: 4px;"
-                "color: #333333;"
-                "padding: 5px 10px;"
-                "}"
-                "QPushButton:hover { background-color: #f2f6fc; }"
-                "QPushButton:pressed { background-color: #ebeef5; }");
     ui->pushButton_restoreDefaultSettings->setToolTip(
                 "将软件公共界面设置恢复为默认值，不删除产品模板、识别图片、授权文件或日志。");
     connect(ui->pushButton_restoreDefaultSettings,

@@ -6,6 +6,8 @@
 
 #include <QString>
 
+class QWidget;
+
 // 组件说明：OperationUiState 枚举列出该组件允许使用的稳定状态和选项。
 enum class OperationUiState
 {
@@ -63,3 +65,9 @@ class OperationUiPolicy
 public:
     static OperationUiSnapshot create(const OperationUiContext &context);
 };
+
+// 将统一权限快照应用到控件；禁用时显示原因，重新启用时恢复控件原提示。
+void applyOperationUiAccess(
+    QWidget *widget,
+    const OperationUiSnapshot::Access &access,
+    bool showDisabledReason = true);

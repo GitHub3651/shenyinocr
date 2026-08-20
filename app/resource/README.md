@@ -20,7 +20,8 @@ resource/
 ├─ Translate_CN.qm           已编译中文翻译资源
 ├─ Translate_EN.qm           已编译英文翻译资源
 ├─ qss/
-│  ├─ 1.css、black.css、blue.css、brown.css 等主题
+│  ├─ app_theme.qss          唯一正式应用样式
+│  ├─ black.css、blue.css、brown.css 等未启用历史主题
 │  ├─ blacksoft.css / blacksoft/...
 │  ├─ flatgray.css / flatgray/...
 │  ├─ lightblue.css / lightblue/...
@@ -55,7 +56,9 @@ resource/
 
 ### 2. QSS 主题
 
-`qss/*.css` 定义 Qt Widgets 的颜色、边框、间距和状态样式。部分主题有同名子目录，里面的图片用于：
+`qss/app_theme.qss`是程序唯一加载的正式样式，资源路径为`:/qss/app_theme.qss`。其余`qss/*.css`是未启用的历史主题，本轮按“资源不精简”约定继续保留，但生产代码不得扫描、回退或切换到这些文件。
+
+部分历史主题有同名子目录，里面的图片用于：
 
 - 滚动条和菜单箭头；
 - TreeView 分支展开/收起；
@@ -76,8 +79,10 @@ CSS 文件和同名图片目录是一组资源，不能只替换其中一边。
 
 ```text
 ApplicationStartup
-├─ 加载翻译 .qm
-└─ 加载/应用 QSS
+└─ 加载翻译 .qm
+
+MainWindow::initStyle()
+└─ 加载并应用唯一正式 QSS
 
 main_window.ui 与 UI 代码
 └─ 使用 qrc 中的图标和图片
@@ -105,8 +110,9 @@ Detection、Runtime、Templates 不应依赖本目录。检测用模板和产品
 2. 新增或替换文件，保持文件名大小写稳定。
 3. 同步修改 `image.qrc`。
 4. 核对 QSS 中的 `url(...)` 路径。
-5. 由用户执行 Run qmake、Rebuild，并检查 Debug/Release 显示。
-6. 若是翻译，修改 `.ts` 源并通过 Qt 翻译工具生成 `.qm`。
+5. 正式应用样式只修改`app_theme.qss`；不要在业务C++或`.ui`中复制完整样式。
+6. 由用户执行 Run qmake、Rebuild，并检查 Debug/Release 显示。
+7. 若是翻译，修改 `.ts` 源并通过 Qt 翻译工具生成 `.qm`。
 
 ## 删除资源前的红线
 

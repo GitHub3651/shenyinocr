@@ -1,8 +1,8 @@
 # OCRGangYin UI 统一样式重构方案
 
-版本：1.2（精简定稿）  
+版本：1.17（目标字符大字体版）
 方案日期：2026-08-20  
-状态：资源目录重命名已完成；其余 UI 样式重构待实施  
+状态：S1～S3代码与静态门禁已完成；待用户统一验证
 适用范围：`app/ui`、`app/resource`、当前正式应用样式表及其资源登记  
 
 ## 一、结论
@@ -32,6 +32,28 @@ C++ 运行时 setStyleSheet()
 ```
 
 普通控件不再单独编写样式；只有确实需要强调或具有特殊业务语义的控件声明一个简单属性。任何控件仍可通过对象名选择器获得独立样式，但独立样式也必须集中写在正式 QSS 中。
+
+### 1.1 本轮实施结果
+
+- 实施基线：`8b9ef7f`（`image → resource`目录改名已单独完成）。
+- `app/resource/qss/1.css`已正式改名为`app_theme.qss`，`.qrc`和加载代码只保留新入口。
+- `main_window.ui`原有50个`styleSheet`属性和最后1个控件字体覆盖已全部删除。
+- 业务UI C++中的`setStyleSheet()`、样式保存/恢复、故障样式DTO和状态颜色字符串已删除；只保留`qApp->setStyleSheet(qss)`唯一应用入口。
+- 静态按钮只使用`primary/danger`；运行视觉只使用`uiState/verdict/hasError`。
+- 模板制作按钮原来的两组布尔样式属性已合并为一个`uiState`。
+- 当前模板、运行状态、判定结果和四个统计值使用统一可见边框；`label_recognitionText`按用户确认保持背景透明、无边框，由外层“识别内容”分组框提供区域边界。
+- 深度OCR继续隐藏其算法不使用的图像阈值和字符模板操作；阈值标题、输入框、单位和按钮使用同一个显隐条件，避免仅残留`%`单位并撑开空白布局。
+- 纸巾检测作为无模板模式，完整隐藏“当前产品模板设置”和“模板制作”两个分组框，不保留只有标题和空白边框的空容器。
+- “当前编辑模板”和“目标字符内容”标签共用正式QSS规则；两者按当前字体和样式计算内容宽度并采用较大值，使输入区域起点对齐且不依赖硬编码宽度。
+- 所有普通控件的启用和禁用只调用`setEnabled()`并由Qt保留控件自身的默认鼠标光标；机器设置页不再设置`ForbiddenCursor`、`IBeamCursor`或调用`unsetCursor()`，禁用视觉统一由QSS提供，禁用原因继续由工具提示提供。
+- 识别总数和不合格数的两个清零按钮保留`danger`语义，并在正式QSS中通过对象名统一使用红色实底、白色文字及完整的悬停、按下、禁用状态；其他危险按钮继续使用红色描边样式。
+- 运行状态和判定结果继承全局`QGroupBox`标题预留高度；识别总数、不合格数、耗时和合格率四个固定高度统计卡片统一使用`24px`紧凑标题预留，避免标题遮挡内容，也避免标题与数值框距离过大。
+- `textEdit_targetText`在正式QSS中使用`40px`字体，其他输入控件继续继承全局`16px`字体，不在`.ui`或C++中增加字体覆盖。
+- 按用户最终确认恢复`8b9ef7f`的字体习惯：正式主题全局使用16px粗体；不在`.ui`中恢复局部通配符样式。
+- 模板制作向导改为位于图像上方的紧凑横向提示栏，长宽按标题和说明文字自适应，不参与图像区域剩余空间分配；提示栏背景透明、无边框。
+- 恢复阶段8中被错误简化的模板制作向导：刚印、字库和深度OCR分别使用对应标题及两步提示，二维码+三期使用三步提示和即时二维码校验；区域过小、当前点数、闭合完成、Esc重置和保存询问均恢复。所有视觉属性只在`app_theme.qss`维护，C++不包含向导颜色、字体、背景或边框样式。
+- 自定义图像控件中的ROI、框选框和多边形颜色继续由`QPainter`绘制；它们表达检测区域，不属于控件QSS，不迁移到主题文件。
+- 10项静态门禁已通过；Agent未运行qmake、编译、测试或主程序，运行结果等待用户一次性验证。
 
 ## 二、重构范围与边界
 
@@ -159,7 +181,7 @@ QWidget QPushButton {
 * { font-weight: bold; }
 ```
 
-它会让按钮、普通说明、单位、输入框和标题全部加粗，削弱视觉层级。
+它会让按钮、普通说明、单位、输入框和标题全部加粗。原问题不在于粗体本身，而在于该规则散落于`main_window.ui`并覆盖全局主题。用户最终决定保留全局粗体，因此实施时把规则集中迁移到唯一正式`app_theme.qss`，不恢复`.ui`局部样式。
 
 当前蓝色、边框色和状态色也未冻结。例如主色同时出现 `#0078D7`、`#1976D2`、`#409EFF`、`#1677D2`，边框同时出现 `#303133`、`#C0C4CC`、`#DCDFe6`、`#E4E7ED`、`#EBEEF5`。
 
@@ -289,16 +311,16 @@ QSS不支持原生CSS变量，第一版不增加字符串模板或变量替换�
 
 ```text
 字体族：Microsoft YaHei、Segoe UI、sans-serif
-正文：16px，Normal
-按钮：16px，SemiBold/Bold
-次级说明：14px，Normal
+正文：16px，Bold
+按钮：16px，Bold
+次级说明：14px，Bold
 卡片标题：16px，Bold
 运行状态：24px，Bold
 判定结果：36～40px，Heavy
 统计数值：20px，Bold
 ```
 
-删除根控件的全局 `* { font-weight: bold; }`。只在标题、按钮、状态和关键数值上明确加粗。
+删除根控件局部的`* { font-weight: bold; }`，在唯一正式`app_theme.qss`的`QWidget`基础规则中统一设置`font-weight: bold`；状态、判定结果和关键数值继续使用更大的字号或更高字重。
 
 ## 六、控件类型默认样式
 
@@ -431,8 +453,8 @@ QPushButton[uiRole="danger"]:hover {
 | `pushButton_saveTemplate` | `primary` |
 | `pushButton_clearSoftwareData` | `danger` |
 | `pushButton_restoreDefaultSettings` | 默认 |
-| `pushButton_resetTotalCount` | `danger` |
-| `pushButton_resetNgCount` | `danger` |
+| `pushButton_resetTotalCount` | `danger`，正式QSS对象名覆盖为红色实底 |
+| `pushButton_resetNgCount` | `danger`，正式QSS对象名覆盖为红色实底 |
 | `pushButton_resetRejectQueue` | `danger` |
 | 当前编辑模板的“移除模板” | 默认，文字和提示继续明确“只移除引用” |
 | 左侧六个主操作 `QToolButton` | 不设置角色，继续由父容器统一选择器管理 |
@@ -653,7 +675,9 @@ m_removeCurrentTemplateButton->setObjectName(
 | `app/image/` → `app/resource/` | 改名程序内置资源物理目录；保留Qt运行时资源前缀和`image.qrc`文件名 |
 | `app/resource/qss/1.css` → `app/resource/qss/app_theme.qss` | 改名并建立唯一正式样式；旧路径不保留兼容入口 |
 | `app/resource/image.qrc` | 删除`qss/1.css`登记并唯一登记`qss/app_theme.qss` |
+| `app/resource/README.md` | 明确唯一正式QSS与未启用历史主题边界 |
 | `app/ui/main_window.ui` | 删除普通控件内嵌样式，增加少量动态角色属性 |
+| `app/ui/main_window.cpp` | 模板取景按钮的两组样式布尔属性合并为`uiState` |
 | `app/ui/main_window_inspection.cpp` | `initStyle()`改读`:/qss/app_theme.qss`和UTF-8；删除QSS拼接、调色板固定偏移和状态样式字符串 |
 | `app/ui/main_window_settings.cpp` | 清空/恢复按钮改用角色属性 |
 | `app/ui/pages/inspection_page.cpp` | 运行状态和判定改用状态属性 |
@@ -661,6 +685,7 @@ m_removeCurrentTemplateButton->setObjectName(
 | `app/ui/pages/template_editor_page.cpp` | 动态模板控件声明角色，不写局部样式 |
 | `app/ui/dialogs/template_selection_dialog.cpp` | 动态控件接入统一样式 |
 | `app/ui/dialogs/character_template_editor_dialog.cpp` | 错误、提示、预览改用属性选择器 |
+| `app/ui/presenters/inspection_fault_presenter.h/.cpp` | 故障Presenter只返回文字，不再传递QSS字符串 |
 | `app/ui/README.md` | 写入样式维护规则和角色清单 |
 
 ### 12.2 不需要新增的文件
@@ -675,7 +700,7 @@ m_removeCurrentTemplateButton->setObjectName(
 
 按用户要求，`app/image → app/resource`物理目录重命名先行完成。其余内容仍固定为一次UI样式重构、一次用户统一验证，不建立六个独立阶段、中间提交或长期过渡状态；内部只按以下三步连续完成。
 
-### 阶段 S1：建立唯一正式样式
+### 阶段 S1：建立唯一正式样式（已完成）
 
 #### 工作
 
@@ -692,12 +717,12 @@ m_removeCurrentTemplateButton->setObjectName(
 - QSS资源路径唯一、文件存在、UTF-8有效。
 - 不存在隐藏主题扫描或回退。
 
-### 阶段 S2：清理局部样式并接入统一规则
+### 阶段 S2：清理局部样式并接入统一规则（已完成）
 
 #### 工作
 
 1. 删除`main_window.ui`中普通按钮、输入框、卡片、滚动区和标签的重复完整样式。
-2. 删除根控件全局字体加粗。
+2. 删除根控件局部字体通配符，把全局16px粗体集中迁移到正式`app_theme.qss`。
 3. 仅给保存模板等主要动作设置`uiRole=primary`，给清空、清零等危险动作设置`uiRole=danger`。
 4. 运行状态改用`uiState`，判定改用`verdict`，输入错误改用`hasError=true`。
 5. 设置控件和关联标签统一使用`setEnabled()`与`:disabled`，删除`disabledStyle()`和原样式保存/恢复。
@@ -711,7 +736,7 @@ m_removeCurrentTemplateButton->setObjectName(
 - 动态控件、Designer静态控件和自定义对话框使用同一视觉语言。
 - `OperationUiPolicy`、`setEnabled()`、tooltip和全部业务槽保持原行为。
 
-### 阶段 S3：静态门禁、文档与用户统一验证
+### 阶段 S3：静态门禁与文档已完成，等待用户统一验证
 
 #### 工作
 
@@ -821,8 +846,8 @@ m_removeCurrentTemplateButton->setObjectName(
 1. `app/image`物理目录及生产引用为零；`app/resource`是唯一程序内置资源目录；`app_theme.qss`存在并在`.qrc`中唯一登记，`1.css`正式路径和生产引用均为零。
 2. 应用只加载`:/qss/app_theme.qss`，不存在扫描多个历史CSS、兼容别名或自动主题回退。
 3. QSS使用`QString::fromUtf8()`读取；`qss.mid(20, 7)`等固定偏移颜色解析为零。
-4. `main_window.ui`中的普通控件没有完整内嵌QSS；根控件全局字体加粗和9份重复卡片样式为零；两个示例按钮走同一默认规则。
-5. 除全局`qApp->setStyleSheet(qss)`外，业务C++中的颜色值、边框QSS和完整`setStyleSheet()`为零，单控件例外只在正式QSS末尾。
+4. `main_window.ui`中的普通控件没有完整内嵌QSS；根控件局部字体通配符和9份重复卡片样式为零；全局16px粗体只在正式`app_theme.qss`定义一次；两个示例按钮走同一默认规则。
+5. 除全局`qApp->setStyleSheet(qss)`外，控件样式相关C++中的颜色值、边框QSS和完整`setStyleSheet()`为零，单控件例外只在正式QSS末尾；`QPainter`绘制的ROI、框选框和检测多边形颜色不属于控件皮肤，保持原语义。
 6. `uiRole`只允许`primary`和`danger`；`secondary/mainAction/preview/hint/errorText`等扩展角色为零。
 7. 运行动态属性只使用`uiState/verdict/hasError`；`validationState/uiDisabled`为零。
 8. `MachineSettingsPage::disabledStyle()`及原样式保存/恢复逻辑删除，禁用视觉来自`:disabled`，`OperationUiPolicy`、`setEnabled()`和禁用原因保持。
