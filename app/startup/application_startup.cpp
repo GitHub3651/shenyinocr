@@ -23,9 +23,6 @@
 #include "templates/template_store.h"
 #include "system_support/settings/app_settings_store.h"
 #include "ui/main_window.h"
-#include "ui/pages/inspection_page.h"
-#include "ui/pages/machine_settings_page.h"
-#include "ui/pages/template_editor_page.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -265,38 +262,10 @@ int ApplicationStartup::run(int argc, char *argv[])
                     new TemplateApplicationService(
                         templateStore,
                         barcodeDecoder));
-        std::unique_ptr<InspectionPage> inspectionPage;
-        std::unique_ptr<MachineSettingsPage> machineSettingsPage;
-        std::unique_ptr<TemplateEditorPage> templateEditorPage;
         MainWindow window(
                     inspectionService,
                     settingsService,
                     templateService);
-        inspectionPage.reset(new InspectionPage(
-                    &window,
-                    window.inspectionPageViewBindings(),
-                    window.templateAttentionTimerForComposition(),
-                    window.templateAttentionFlagForComposition(),
-                    window.inspectionPageCallbacks()));
-        machineSettingsPage.reset(new MachineSettingsPage(
-                    window.machineSettingsPageViewBindings(),
-                    settingsService.get(),
-                    window.settingsEditStateForComposition(),
-                    window.selectedDirectoryForComposition(),
-                    window.applyingSettingsFlagForComposition(),
-                    window.updatingSettingsUiFlagForComposition(),
-                    window.machineSettingsPageCallbacks()));
-        templateEditorPage.reset(new TemplateEditorPage(
-                    window.templateEditorViewBindings(),
-                    templateService.get(),
-                    inspectionService.get(),
-                    settingsService.get(),
-                    window.settingsEditStateForComposition(),
-                    window.templateEditorPageCallbacks()));
-        window.attachPages(
-                    inspectionPage.get(),
-                    machineSettingsPage.get(),
-                    templateEditorPage.get());
         window.showMaximized();
         result = application.exec();
     }

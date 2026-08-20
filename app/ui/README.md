@@ -7,7 +7,7 @@
 ```text
 ui/
 ├─ main_window.ui
-├─ main_window.h/.cpp                    组合根、绑定和薄转发
+├─ main_window.h/.cpp                    主窗口内部组合、跨页面协调和生命周期
 ├─ main_window_inspection.cpp            检测/相机/PLC槽和操作状态
 ├─ main_window_settings.cpp              设置、模式显隐和参数应用
 ├─ pages/
@@ -46,6 +46,21 @@ ui/
 
 单模板模式最多一项；多模板模式可排序多项；纸巾模式隐藏选择、名称、新建、保存、字符和 ROI 制作控件，只显示粗糙度阈值。
 
+## 页面所有权与调用流
+
+```text
+application_startup
+  └─ 创建 MainWindow（只传入三个应用服务）
+       ├─ setupUi()
+       ├─ 内部创建 InspectionPage
+       ├─ 内部创建 MachineSettingsPage
+       └─ 内部创建 TemplateEditorPage
+```
+
+Startup 不知道 Page、ViewBindings、控件地址、页面状态地址或 UI 回调。ViewBindings 只在 MainWindow 内部构造，用于限制每个 Page 可访问的控件范围。MainWindow 析构时先销毁三个 Page，再释放 `Ui::MainWindow`。
+
+页面自有按钮直接连接到对应 Page；MainWindow 只保留相机、检测、PLC、模式切换、故障和退出等跨页面或应用级协调。固定的“当前编辑模板”行和模板制作向导定义在 `main_window.ui`，C++ 只更新内容、可见性和运行状态。
+
 ## 操作状态
 
 `OperationUiPolicy` 根据 `CameraClosed/CameraReady/Detecting/Stopping/Fault/TemplatePreviewing/TemplateFrozen` 统一计算权限。UI 禁用用于明确状态展示；真正影响设备和生产运行的操作仍由 Application/Runtime 检查。
@@ -72,6 +87,10 @@ C++只设置状态属性，并在属性变化后执行`unpolish/polish/update`�
 ## 维护规则
 
 - `.ui` 对象名、自动槽声明和实现必须同步。
+- Startup 只能创建应用级服务和 MainWindow，不能重新创建或回挂三个 Page。
+- Page 自有按钮优先在 Page 内直接连接，不在 MainWindow 增加一行转发槽。
+- 固定布局放在 `main_window.ui`；只把定时器、Splitter Handle 装饰和数量真正动态的项目留在 C++。
+- 不新增 PageManager、UiManager、MainWindowBuilder、UiCompositionRoot 或事件总线。
 - 当前编辑模板是临时 UI 状态，不写入设置。
 - 无效已选路径要保留显示并允许移除，不能静默切换或删除。
 - 新增页面行为优先放现有页面对象；不要把 MainWindow 再拆成大量一函数文件。

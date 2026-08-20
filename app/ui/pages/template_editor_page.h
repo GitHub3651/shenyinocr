@@ -21,7 +21,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QTextEdit;
-class QVBoxLayout;
+class QToolButton;
 class QWidget;
 
 struct TemplateEditorViewBindings
@@ -37,21 +37,27 @@ struct TemplateEditorViewBindings
     QComboBox *comboBox_colorChannel = nullptr;
     QLineEdit *lineEdit_currentTemplateName = nullptr;
     QLabel *label_runtimeStatus = nullptr;
-    QGroupBox *groupBox_imageDisplay = nullptr;
-    QVBoxLayout *verticalLayout_imageDisplay = nullptr;
     QPushButton *pushButton_editCharacterTemplates = nullptr;
     QPushButton *pushButton_applyTargetText = nullptr;
     QPushButton *pushButton_applyBatchTargetText = nullptr;
     QPushButton *pushButton_applyBatchImageThreshold = nullptr;
     QPushButton *pushButton_applyImageThreshold = nullptr;
     QPushButton *pushButton_applyTissueRoughnessThreshold = nullptr;
+    QPushButton *pushButton_saveTemplate = nullptr;
+    QToolButton *toolButton_selectTemplate = nullptr;
+    QWidget *widget_currentTemplateEditor = nullptr;
+    QLabel *label_currentEditTemplate = nullptr;
+    QComboBox *comboBox_currentEditTemplate = nullptr;
+    QPushButton *pushButton_removeCurrentTemplate = nullptr;
+    QFrame *frame_templateGuide = nullptr;
+    QLabel *label_templateGuideTitle = nullptr;
+    QLabel *label_templateGuideBody = nullptr;
 };
 
 struct TemplateEditorPageCallbacks
 {
     std::function<void()> updateOperationUiState;
     std::function<void(const cv::Mat &)> displayPreviewFrame;
-    std::function<void(const TemplateSettings &)> applyTemplateSettingsToUi;
 };
 
 class TemplateEditorPage : public QObject
@@ -69,8 +75,6 @@ public:
         QObject *parent = nullptr);
 
     void applyOperationState(const OperationUiSnapshot &snapshot);
-    QFrame *guideFrame() const;
-    QPushButton *manualCharacterCropButton() const;
     bool templateOperationActive() const;
     CaptureState captureState() const;
     bool startTemplatePreview();
@@ -92,8 +96,6 @@ public:
     void acceptBarcodeTemplateValidation(const QRect &barcodeRect);
 
     void updateCurrentTemplateName();
-    void setupTemplateGuide();
-    void adjustTemplateGuideHeight();
     void updateTemplateGuideText(const QString &title,
                                  const QString &body);
     void hideTemplateGuide();
@@ -101,16 +103,12 @@ public:
     void showTemplateGuideForCurrentMode();
     void handleTemplateGuideEvent(const QString &eventName,
                                   int pointCount);
-    void setupManualCharacterCropUi();
-
-    void setupTemplateDirtyTracking();
     void refreshTemplateDirty();
     void clearTemplateDirty();
     void showManualCharacterTemplateEditorDialog();
 
     void selectTemplatesForCurrentMode();
     void saveCurrentTemplate();
-    void setupCurrentTemplateEditor();
     void clearTemplateState();
     QString detectModeIdForIndex(int index) const;
     QString currentDetectModeId() const;
@@ -136,6 +134,12 @@ private:
     void showWarning(const QString &title, const QString &message);
     void showCritical(const QString &title, const QString &message);
     void applyTemplateSettingsToUi(const TemplateSettings &settings);
+    void setupCurrentTemplateEditor();
+    void setupTemplateGuide();
+    void adjustTemplateGuideHeight();
+    void setupManualCharacterCropUi();
+    void setupTemplateDirtyTracking();
+    void connectPageActions();
     QStringList currentModeTemplatePaths() const;
     bool saveCurrentDraft(bool showSuccessMessage);
     bool loadTemplateAtIndex(int index, bool showMessage);

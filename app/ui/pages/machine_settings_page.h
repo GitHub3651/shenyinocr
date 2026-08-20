@@ -94,9 +94,6 @@ public:
         const MachineSettingsPageViewBindings &view,
         SettingsApplicationService *settingsService,
         SettingsEditState *editState,
-        QString *selectedDirectory,
-        bool *applyingSettings,
-        bool *updatingSettingsUi,
         const Callbacks &callbacks,
         QObject *parent = nullptr);
 
@@ -174,9 +171,8 @@ private:
     AppSettings *m_appliedSettings = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;
     SettingsEditState *m_editState = nullptr;
-    QString *m_selectedDirectory = nullptr;
-    bool *m_applyingSettings = nullptr;
-    bool *m_updatingSettingsUi = nullptr;
+    bool m_applyingSettings = false;
+    bool m_updatingSettingsUi = false;
     Callbacks m_callbacks;
     QMap<QString, GlobalSettingBinding> m_bindings;
     QList<HardwareActionBinding> m_hardwareActions;

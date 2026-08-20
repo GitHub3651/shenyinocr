@@ -39,7 +39,6 @@
  * @param parent 父窗口指针
  * @details 初始化UI、相机、OCR模型、定时器等核心组件
  */
-// 函数说明：MainWindow 构造函数创建组件并初始化其依赖和初始状态。
 MainWindow::MainWindow(
     const std::shared_ptr<InspectionApplicationService> &inspectionService,
     const std::shared_ptr<SettingsApplicationService> &settingsService,
@@ -216,7 +215,6 @@ MainWindow::MainWindow(
         if (operationUiState() == OperationState::Detecting) {
             m_inspectionApplicationService
                     ->completeUnexpectedAcquisitionStop();
-            m_barcodeWordRunActive = false;
             ui->label_runtimeStatus->setText("识别线程已停止");
             updateOperationUiState();
         }
@@ -230,6 +228,7 @@ MainWindow::MainWindow(
     },
     Qt::QueuedConnection);
 
+    initializePages();
     qDebug() << "MainWindow shell constructed";
 }
 
@@ -307,53 +306,17 @@ MainWindow::machineSettingsPageViewBindings() const
     return view;
 }
 
-// 函数说明：templateAttentionTimerForComposition 函数实现名称所表示的处理步骤。
-QTimer *MainWindow::templateAttentionTimerForComposition() const
-{
-    return m_templateCaptureAttentionTimer;
-}
-
-// 函数说明：templateAttentionFlagForComposition 函数实现名称所表示的处理步骤。
-bool *MainWindow::templateAttentionFlagForComposition()
-{
-    return &m_templateCaptureAttentionOn;
-}
-
-// 函数说明：settingsEditStateForComposition 函数更新或应用对应的配置和状态。
-SettingsEditState *MainWindow::settingsEditStateForComposition()
-{
-    return &m_settingsEditState;
-}
-
-// 函数说明：selectedDirectoryForComposition 函数读取、等待或计算对应的数据。
-QString *MainWindow::selectedDirectoryForComposition()
-{
-    return &selectedDir;
-}
-
-// 函数说明：applyingSettingsFlagForComposition 函数更新或应用对应的配置和状态。
-bool *MainWindow::applyingSettingsFlagForComposition()
-{
-    return &m_applyingMachineSettings;
-}
-
-// 函数说明：updatingSettingsUiFlagForComposition 函数实现名称所表示的处理步骤。
-bool *MainWindow::updatingSettingsUiFlagForComposition()
-{
-    return &m_updatingMachineSettingsUi;
-}
-
-// 函数说明：inspectionPageCallbacks 函数执行对应事件或业务处理。
 InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
 {
     InspectionPage::Callbacks callbacks;
     callbacks.updateImageDisplayStatus = [this](const QString &text) {
-        updateImageDisplayStatusText(text);
+        if (m_templateEditorPage) {
+            m_templateEditorPage->updateImageDisplayStatusText(text);
+        }
     };
     return callbacks;
 }
 
-// 函数说明：machineSettingsPageCallbacks 函数实现名称所表示的处理步骤。
 MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
 {
     MachineSettingsPage::Callbacks callbacks;
@@ -377,7 +340,6 @@ MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
     return callbacks;
 }
 
-// 函数说明：templateEditorViewBindings 函数实现名称所表示的处理步骤。
 TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
 {
     TemplateEditorViewBindings view;
@@ -393,8 +355,6 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     view.comboBox_colorChannel = ui->comboBox_colorChannel;
     view.lineEdit_currentTemplateName = ui->lineEdit_currentTemplateName;
     view.label_runtimeStatus = ui->label_runtimeStatus;
-    view.groupBox_imageDisplay = ui->groupBox_imageDisplay;
-    view.verticalLayout_imageDisplay = ui->verticalLayout_imageDisplay;
     view.pushButton_editCharacterTemplates = ui->pushButton_editCharacterTemplates;
     view.pushButton_applyTargetText = ui->pushButton_applyTargetText;
     view.pushButton_applyBatchTargetText = ui->pushButton_applyBatchTargetText;
@@ -402,10 +362,19 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     view.pushButton_applyImageThreshold = ui->pushButton_applyImageThreshold;
     view.pushButton_applyTissueRoughnessThreshold =
             ui->pushButton_applyTissueRoughnessThreshold;
+    view.pushButton_saveTemplate = ui->pushButton_saveTemplate;
+    view.toolButton_selectTemplate = ui->toolButton_selectTemplate;
+    view.widget_currentTemplateEditor = ui->widget_currentTemplateEditor;
+    view.label_currentEditTemplate = ui->label_currentEditTemplate;
+    view.comboBox_currentEditTemplate = ui->comboBox_currentEditTemplate;
+    view.pushButton_removeCurrentTemplate =
+            ui->toolButton_removeCurrentTemplate;
+    view.frame_templateGuide = ui->frame_templateGuide;
+    view.label_templateGuideTitle = ui->label_templateGuideTitle;
+    view.label_templateGuideBody = ui->label_templateGuideBody;
     return view;
 }
 
-// 函数说明：templateEditorPageCallbacks 函数实现名称所表示的处理步骤。
 TemplateEditorPageCallbacks MainWindow::templateEditorPageCallbacks()
 {
     TemplateEditorPageCallbacks callbacks;
@@ -416,25 +385,29 @@ TemplateEditorPageCallbacks MainWindow::templateEditorPageCallbacks()
         cv::Mat displayImage = image.clone();
         slot_displayAndDetect(&displayImage);
     };
-    callbacks.applyTemplateSettingsToUi = [this](
-            const TemplateSettings &settings) {
-        applyTemplateSettingsToUi(settings);
-    };
     return callbacks;
 }
 
-// 函数说明：attachPages 函数实现名称所表示的处理步骤。
-void MainWindow::attachPages(
-    InspectionPage *inspectionPage,
-    MachineSettingsPage *machineSettingsPage,
-    TemplateEditorPage *templateEditorPage)
+void MainWindow::initializePages()
 {
-    if (!inspectionPage || !machineSettingsPage || !templateEditorPage) {
-        qFatal("MainWindow requires all pages");
-    }
-    m_inspectionPage = inspectionPage;
-    m_machineSettingsPage = machineSettingsPage;
-    m_templateEditorPage = templateEditorPage;
+    m_inspectionPage.reset(new InspectionPage(
+                this,
+                inspectionPageViewBindings(),
+                m_templateCaptureAttentionTimer,
+                &m_templateCaptureAttentionOn,
+                inspectionPageCallbacks()));
+    m_machineSettingsPage.reset(new MachineSettingsPage(
+                machineSettingsPageViewBindings(),
+                m_settingsApplicationService.get(),
+                &m_settingsEditState,
+                machineSettingsPageCallbacks()));
+    m_templateEditorPage.reset(new TemplateEditorPage(
+                templateEditorViewBindings(),
+                m_templateApplicationService.get(),
+                m_inspectionApplicationService.get(),
+                m_settingsApplicationService.get(),
+                &m_settingsEditState,
+                templateEditorPageCallbacks()));
     m_inspectionApplicationService->bindView(
                 m_inspectionPage->resultViewBindings());
     const OperationResult resetResult =
@@ -444,27 +417,25 @@ void MainWindow::attachPages(
                    << resetResult.error.code;
     }
     ui->textEdit_targetText->setWordWrapMode(QTextOption::WordWrap);
-    setupTemplateDirtyTracking();
-    setupCurrentTemplateEditor();
-    setupTemplateGuide();
-    setupManualCharacterCropUi();
     setupSoftwareSettingsPage();
     m_machineSettingsPage->installWheelProtection(this);
     connect(imageLabel, &ImageLabel::signal_templateGuideEvent,
-            this, &MainWindow::handleTemplateGuideEvent);
+            m_templateEditorPage.get(),
+            &TemplateEditorPage::handleTemplateGuideEvent);
 
     m_machineSettingsPage->setupNumericInputValidators();
     setupNonPersistentDefaults();
     m_machineSettingsPage->setupBindings();
     m_machineSettingsPage->initialize(
                 m_settingsApplicationService->current());
-    m_currentDetectModeId = currentDetectModeId();
-    restoreTemplatesForMode(m_currentDetectModeId, false);
+    m_currentDetectModeId = m_templateEditorPage->currentDetectModeId();
+    m_templateEditorPage->restoreTemplatesForMode(
+                m_currentDetectModeId, false);
     setupDetectModeChangeTracking();
     m_machineSettingsPage->clearAllDirty();
-    clearTemplateDirty();
+    m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
-    updateCurrentTemplateName();
+    m_templateEditorPage->updateCurrentTemplateName();
 
     QTimer::singleShot(1000, this, [this]() {
         const QString targetIp = ui->lineEdit_plcIpAddress->text();
@@ -501,7 +472,6 @@ void MainWindow::attachPages(
  * @brief MainWindow析构函数
  * @details 清理所有资源，关闭相机、停止线程、删除临时文件
  */
-// 函数说明：~MainWindow 析构函数按生命周期要求释放组件持有的资源。
 MainWindow::~MainWindow()
 {
     qDebug() << "MainWindow destructor called";
@@ -513,6 +483,9 @@ MainWindow::~MainWindow()
     try {
         cv::destroyAllWindows();
     } catch (...) {}
+    m_templateEditorPage.reset();
+    m_machineSettingsPage.reset();
+    m_inspectionPage.reset();
     delete ui;
     ui = nullptr;
 

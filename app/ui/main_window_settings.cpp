@@ -27,7 +27,6 @@
 #pragma execution_character_set("utf-8")
 
 namespace {
-// 函数说明：parseIntValue 函数校验、转换或恢复对应数据。
 bool parseIntValue(const QString &text, int *value)
 {
     bool ok = false;
@@ -43,20 +42,13 @@ bool parseIntValue(const QString &text, int *value)
 
 } // namespace
 
-// 函数说明：updateCurrentTemplateName 函数更新或应用对应的配置和状态。
-void MainWindow::updateCurrentTemplateName()
-{
-    m_templateEditorPage->updateCurrentTemplateName();
-}
-
-// 函数说明：updateSaveDirButtonText 函数更新或应用对应的配置和状态。
 void MainWindow::updateSaveDirButtonText()
 {
     if (!ui || !ui->lineEdit_imageSavePath || !ui->pushButton_browseImageSavePath) {
         return;
     }
 
-    const QString saveDir = selectedDir.trimmed();
+    const QString saveDir = ui->lineEdit_imageSavePath->text().trimmed();
     ui->pushButton_browseImageSavePath->setText("浏览");
     ui->pushButton_browseImageSavePath->setToolTip("点击选择图像保存路径");
 
@@ -70,7 +62,6 @@ void MainWindow::updateSaveDirButtonText()
     ui->lineEdit_imageSavePath->setToolTip(saveDir);
 }
 
-// 函数说明：updateImageSaveOptionsVisibility 函数更新或应用对应的配置和状态。
 void MainWindow::updateImageSaveOptionsVisibility()
 {
     if (!ui || !ui->comboBox_imageSaveRange) {
@@ -99,7 +90,6 @@ void MainWindow::updateImageSaveOptionsVisibility()
     }
 }
 
-// 函数说明：updateTissueRoughnessUiVisibility 函数更新或应用对应的配置和状态。
 void MainWindow::updateTissueRoughnessUiVisibility()
 {
     if (!ui) {
@@ -108,7 +98,7 @@ void MainWindow::updateTissueRoughnessUiVisibility()
 
     DetectionMode mode = DetectionMode::Word;
     const bool validMode = detectionModeFromUiId(
-                detectModeIdForIndex(
+                m_templateEditorPage->detectModeIdForIndex(
                     ui->comboBox_detectionMode->currentIndex()),
                 &mode);
     const DetectionModeDescriptor descriptor =
@@ -152,47 +142,6 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     ui->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
 }
 
-// 函数说明：setupTemplateGuide 函数更新或应用对应的配置和状态。
-void MainWindow::setupTemplateGuide()
-{
-    m_templateEditorPage->setupTemplateGuide();
-}
-
-// 函数说明：adjustTemplateGuideHeight 函数更新或应用对应的配置和状态。
-void MainWindow::adjustTemplateGuideHeight()
-{
-    m_templateEditorPage->adjustTemplateGuideHeight();
-}
-
-// 函数说明：hideTemplateGuide 函数实现名称所表示的处理步骤。
-void MainWindow::hideTemplateGuide()
-{
-    m_templateEditorPage->hideTemplateGuide();
-}
-
-// 函数说明：updateImageDisplayStatusText 函数更新或应用对应的配置和状态。
-void MainWindow::updateImageDisplayStatusText(const QString &body)
-{
-    m_templateEditorPage->updateImageDisplayStatusText(body);
-}
-
-// 函数说明：handleTemplateGuideEvent 函数执行对应事件或业务处理。
-void MainWindow::handleTemplateGuideEvent(
-        const QString &eventName,
-        int pointCount)
-{
-    m_templateEditorPage->handleTemplateGuideEvent(
-                eventName,
-                pointCount);
-}
-
-// 函数说明：setupManualCharacterCropUi 函数更新或应用对应的配置和状态。
-void MainWindow::setupManualCharacterCropUi()
-{
-    m_templateEditorPage->setupManualCharacterCropUi();
-}
-
-// 函数说明：setupSoftwareSettingsPage 函数更新或应用对应的配置和状态。
 void MainWindow::setupSoftwareSettingsPage()
 {
     if (!ui || !ui->lineEdit_softwareDataDirectory || !ui->pushButton_clearSoftwareData
@@ -228,7 +177,6 @@ void MainWindow::setupSoftwareSettingsPage()
             &MainWindow::restoreDefaultMachineSettings);
 }
 
-// 函数说明：clearCurrentSoftwareData 函数停止流程、清理状态或释放对应资源。
 void MainWindow::clearCurrentSoftwareData()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -250,20 +198,19 @@ void MainWindow::clearCurrentSoftwareData()
         return;
     }
 
-    clearTemplateState();
+    m_templateEditorPage->clearTemplateState();
     m_templateEditorPage->setCurrentTemplateNameVisible(false);
-    updateCurrentTemplateName();
+    m_templateEditorPage->updateCurrentTemplateName();
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearSelection();
     }
     m_machineSettingsPage->clearAllDirty();
-    clearTemplateDirty();
+    m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
     showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
 }
 
-// 函数说明：restoreDefaultMachineSettings 函数校验、转换或恢复对应数据。
 void MainWindow::restoreDefaultMachineSettings()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -287,8 +234,9 @@ void MainWindow::restoreDefaultMachineSettings()
                 cameraOpen, plcConnected);
 
     applyMachineSettingsToUi(editableDefaults);
-    restoreTemplatesForMode(currentDetectModeId(), false);
-    clearTemplateDirty();
+    m_templateEditorPage->restoreTemplatesForMode(
+                m_templateEditorPage->currentDetectModeId(), false);
+    m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
 
@@ -302,13 +250,11 @@ void MainWindow::restoreDefaultMachineSettings()
         "当前可设置参数已恢复为默认值。带 * 的参数需要点击对应【设置】后才会生效。");
 }
 
-// 函数说明：hasDirtySettings 函数检查相关状态并返回判断结果。
 bool MainWindow::hasDirtySettings() const
 {
     return m_settingsEditState.hasDirtySettings();
 }
 
-// 函数说明：saveSettings 函数保存对应的数据和资源。
 bool MainWindow::saveSettings(bool showErrorMessage)
 {
     QString errorMessage;
@@ -329,113 +275,48 @@ bool MainWindow::saveSettings(bool showErrorMessage)
     return false;
 }
 
-// 函数说明：dirtySettingsMessage 函数实现名称所表示的处理步骤。
 QString MainWindow::dirtySettingsMessage() const
 {
     return m_settingsEditState.dirtySettingsMessage();
 }
 
-// 函数说明：restoreUnappliedSettingsFromApplied 函数校验、转换或恢复对应数据。
 void MainWindow::restoreUnappliedSettingsFromApplied()
 {
     if (m_machineSettingsPage) {
         m_machineSettingsPage->restoreUnappliedMachineSettings();
     }
 
-    restoreTemplatesForMode(currentDetectModeId(), false);
-    refreshTemplateDirty();
-}
-
-void MainWindow::setupTemplateDirtyTracking()
-{
-    m_templateEditorPage->setupTemplateDirtyTracking();
-}
-
-void MainWindow::refreshTemplateDirty()
-{
+    m_templateEditorPage->restoreTemplatesForMode(
+                m_templateEditorPage->currentDetectModeId(), false);
     m_templateEditorPage->refreshTemplateDirty();
 }
 
-void MainWindow::clearTemplateDirty()
-{
-    m_templateEditorPage->clearTemplateDirty();
-}
-
-void MainWindow::setupCurrentTemplateEditor()
-{
-    m_templateEditorPage->setupCurrentTemplateEditor();
-}
-
-// 函数说明：setupDetectModeChangeTracking 函数更新或应用对应的配置和状态。
 void MainWindow::setupDetectModeChangeTracking()
 {
     connect(ui->comboBox_detectionMode,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
             [this](int index) {
-                if (m_applyingMachineSettings) {
-                    resetTemplateCaptureState();
-                    updateTissueRoughnessUiVisibility();
-                    refreshCurrentTemplateEditor();
-                    return;
-                }
-
                 const QString previousModeId = m_currentDetectModeId;
-                const QString nextModeId = detectModeIdForIndex(index);
+                const QString nextModeId =
+                        m_templateEditorPage->detectModeIdForIndex(index);
                 resetTemplateCaptureState();
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
                 if (imageLabel) {
                     imageLabel->setTemplateDrawingEnabled(false);
                 }
-                hideTemplateGuide();
+                m_templateEditorPage->hideTemplateGuide();
                 if (previousModeId != nextModeId) {
-                    clearTemplateState();
+                    m_templateEditorPage->clearTemplateState();
                 }
-                refreshCurrentTemplateEditor();
-                restoreTemplatesForMode(m_currentDetectModeId, false);
+                m_templateEditorPage->refreshCurrentTemplateEditor();
+                m_templateEditorPage->restoreTemplatesForMode(
+                            m_currentDetectModeId, false);
                 saveSettings();
             });
 }
 
-void MainWindow::clearTemplateState()
-{
-    m_templateEditorPage->clearTemplateState();
-}
-
-// 函数说明：detectModeIdForIndex 函数执行对应事件或业务处理。
-QString MainWindow::detectModeIdForIndex(int index) const
-{
-    return m_templateEditorPage->detectModeIdForIndex(index);
-}
-
-// 函数说明：currentDetectModeId 函数读取、等待或计算对应的数据。
-QString MainWindow::currentDetectModeId() const
-{
-    return m_templateEditorPage->currentDetectModeId();
-}
-
-// 函数说明：restoreTemplatesForMode 函数校验、转换或恢复对应数据。
-void MainWindow::restoreTemplatesForMode(
-        const QString &modeId,
-        bool showMessage)
-{
-    m_templateEditorPage->restoreTemplatesForMode(
-                modeId,
-                showMessage);
-}
-
-void MainWindow::refreshCurrentTemplateEditor()
-{
-    m_templateEditorPage->refreshCurrentTemplateEditor();
-}
-
-int MainWindow::currentTemplateIndex() const
-{
-    return m_templateEditorPage->currentTemplateIndex();
-}
-
-// 函数说明：applyCameraExposureValue 函数更新或应用对应的配置和状态。
 bool MainWindow::applyCameraExposureValue(
     int exposureValue,
     QString *errorMessage)
@@ -457,7 +338,6 @@ bool MainWindow::applyCameraExposureValue(
     return result.success;
 }
 
-// 函数说明：applyCameraExposureFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyCameraExposureFromUi(
     QStringList *errors,
     bool showSuccessMessage)
@@ -477,7 +357,6 @@ bool MainWindow::applyCameraExposureFromUi(
     return true;
 }
 
-// 函数说明：applyCameraGainFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyCameraGainFromUi(
     QStringList *errors,
     bool showSuccessMessage)
@@ -510,12 +389,11 @@ bool MainWindow::applyCameraGainFromUi(
     return true;
 }
 
-// 函数说明：applyPlcTriggerModeFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage)
 {
-    PLCmode = ui->comboBox_plcTriggerMode->currentIndex();
+    const int plcMode = ui->comboBox_plcTriggerMode->currentIndex();
 
-    if (PLCmode != 0 && PLCmode != 1) {
+    if (plcMode != 0 && plcMode != 1) {
         const QString message = "PLC触发模式无效";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
@@ -523,7 +401,7 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
     }
 
     const QString modeId = appSettingsTriggerModeIds()
-            .value(PLCmode);
+            .value(plcMode);
     const OperationResult result =
             m_inspectionApplicationService
             ->applyPlcTriggerMode(modeId);
@@ -535,7 +413,9 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
     }
 
     if (showSuccessMessage) {
-        showParameterInfo("提示", PLCmode == 0 ? "连续模式设置成功" : "间歇模式设置成功");
+        showParameterInfo("提示", plcMode == 0
+                          ? "连续模式设置成功"
+                          : "间歇模式设置成功");
     }
     m_machineSettingsPage->updateAppliedFromUi("plc.trigger_mode");
     m_machineSettingsPage->refreshDirty("plc.trigger_mode");
@@ -543,7 +423,6 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
     return true;
 }
 
-// 函数说明：applyPlcRunSettingsFromUi 函数更新或应用对应的配置和状态。
 bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
     PlcRunSettingsCommand plcSettings;
@@ -590,7 +469,6 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
  * @brief 曝光确定按钮点击槽函数
  * @details 设置相机曝光值
  */
-// 函数说明：on_pushButton_applyCameraExposure_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyCameraExposure_clicked()
 {
     QStringList errors;
@@ -609,7 +487,6 @@ void MainWindow::on_pushButton_applyCameraExposure_clicked()
  * @brief PLC连接按钮点击槽函数
  * @details 连接到西门子PLC
  */
-// 函数说明：on_pushButton_connectPlc_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_connectPlc_clicked()
 {
     PlcConnectionCommand command;
@@ -638,7 +515,6 @@ void MainWindow::on_pushButton_connectPlc_clicked()
 /**
  * @brief PLC断开按钮点击槽函数
  */
-// 函数说明：on_pushButton_disconnectPlc_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_disconnectPlc_clicked()
 {
     const OperationResult result =
@@ -661,7 +537,6 @@ void MainWindow::on_pushButton_disconnectPlc_clicked()
  * @brief 写入批次时间按钮点击槽函数
  * @details 向PLC DB1.982写入WORD值（批次时间）
  */
-// 函数说明：on_pushButton_applyPlcProcessParameters_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 {
     QStringList errors;
@@ -670,7 +545,6 @@ void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 
 
 
-// 函数说明：on_toolButton_stopInspection_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_toolButton_stopInspection_clicked()
 {
     if (m_inspectionPage) {
@@ -696,7 +570,7 @@ void MainWindow::on_toolButton_stopInspection_clicked()
             imageLabel->clearSelection();
         }
         clearBarcodeTemplateValidation();
-        hideTemplateGuide();
+        m_templateEditorPage->hideTemplateGuide();
         ui->label_runtimeStatus->setText(
                     isCameraOpen()
                     ? "已退出模板制作，相机已打开"
@@ -710,60 +584,24 @@ void MainWindow::on_toolButton_stopInspection_clicked()
         return;
     }
 
-    m_barcodeWordRunActive = false;
     finishInspectionStopUi(
                 m_inspectionApplicationService->stop(command));
 }
-
-
-
-/**
- * @brief 目标字符确定按钮点击槽函数
- */
-
-// 函数说明：on_pushButton_applyTargetText_clicked 函数执行对应事件或业务处理。
-void MainWindow::on_pushButton_applyTargetText_clicked()
-{
-    m_templateEditorPage->applyCurrentTargetText();
-}
-
-// 函数说明：on_pushButton_applyBatchTargetText_clicked 函数执行对应事件或业务处理。
-void MainWindow::on_pushButton_applyBatchTargetText_clicked()
-{
-    m_templateEditorPage->applyBatchTargetText();
-}
-
-// 函数说明：on_pushButton_applyBatchImageThreshold_clicked 函数执行对应事件或业务处理。
-void MainWindow::on_pushButton_applyBatchImageThreshold_clicked()
-{
-    m_templateEditorPage->applyBatchImageThreshold();
-}
-// 函数说明：applyMachineSettingsToUi 函数更新或应用对应的配置和状态。
 void MainWindow::applyMachineSettingsToUi(
     const AppSettings &settings)
 {
     if (m_machineSettingsPage) {
         m_machineSettingsPage->applyToUi(settings);
     }
-    m_currentDetectModeId = currentDetectModeId();
-    restoreTemplatesForMode(m_currentDetectModeId, false);
-}
-
-void MainWindow::applyTemplateSettingsToUi(
-        const TemplateSettings &settings)
-{
-    QSignalBlocker targetBlocker(ui->textEdit_targetText);
-    QSignalBlocker thresholdBlocker(ui->lineEdit_imageThreshold);
-    ui->textEdit_targetText->setPlainText(settings.targetText);
-    ui->lineEdit_imageThreshold->setText(QString::number(static_cast<int>(settings.imageThresholdPercent)));
-    refreshTemplateDirty();
+    m_currentDetectModeId = m_templateEditorPage->currentDetectModeId();
+    m_templateEditorPage->restoreTemplatesForMode(
+                m_currentDetectModeId, false);
 }
 
 /**
  * @brief 设置非公共配置初始值
  * @details 公共配置统一由 AppSettings::defaults() 提供
  */
-// 函数说明：setupNonPersistentDefaults 函数更新或应用对应的配置和状态。
 void MainWindow::setupNonPersistentDefaults()
 {
     ui->lineEdit_imageThreshold->setText(QString::number(
@@ -797,14 +635,6 @@ void MainWindow::on_pushButton_applyCameraGain_clicked()
     }
 }
 
-// 函数说明：on_pushButton_applyTissueRoughnessThreshold_clicked 函数执行对应事件或业务处理。
-void MainWindow::on_pushButton_applyTissueRoughnessThreshold_clicked()
-{
-    m_templateEditorPage->applyCurrentTissueThreshold();
-}
-
-
-// 函数说明：on_pushButton_applyPhotoDistance_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyPhotoDistance_clicked()
 {
     const std::uint32_t value =

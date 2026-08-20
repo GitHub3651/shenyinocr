@@ -22,7 +22,6 @@
 
 namespace {
 
-// 函数说明：setLabelTextIfChanged 函数更新或应用对应的配置和状态。
 void setLabelTextIfChanged(QLabel *label, const QString &text)
 {
     if (label && label->text() != text) {
@@ -68,7 +67,6 @@ QString runtimeUiState(OperationUiState state)
 
 } // namespace
 
-// 函数说明：InspectionPage 构造函数创建组件并初始化其依赖和初始状态。
 InspectionPage::InspectionPage(
     QWidget *rootWidget,
     const InspectionPageViewBindings &view,
@@ -88,7 +86,6 @@ InspectionPage::InspectionPage(
 }
 
 InspectionViewBindingsDto
-// 函数说明：resultViewBindings 函数实现名称所表示的处理步骤。
 InspectionPage::resultViewBindings() const
 {
     InspectionViewBindingsDto bindings;
@@ -161,7 +158,6 @@ InspectionPage::resultViewBindings() const
     return bindings;
 }
 
-// 函数说明：applyOperationState 根据统一权限快照更新检测页控件。
 void InspectionPage::applyOperationState(
     OperationUiState requestedState,
     const OperationUiSnapshot &operationUi)
@@ -236,7 +232,6 @@ void InspectionPage::applyOperationState(
 
 }
 
-// 函数说明：presentFault 函数执行对应事件或业务处理。
 void InspectionPage::presentFault(
     const ApplicationFaultSnapshot &snapshot,
     bool *alarmPresented)
@@ -267,7 +262,6 @@ void InspectionPage::presentFault(
     }
 }
 
-// 函数说明：confirmFaultRecovery 函数实现名称所表示的处理步骤。
 bool InspectionPage::confirmFaultRecovery(
     const ApplicationFaultSnapshot &snapshot) const
 {
@@ -299,7 +293,6 @@ bool InspectionPage::confirmFaultRecovery(
     return messageBox.exec() == QMessageBox::Yes;
 }
 
-// 函数说明：restoreNormalFaultStyle 函数校验、转换或恢复对应数据。
 void InspectionPage::restoreNormalFaultStyle()
 {
     if (!m_view.label_runtimeStatus) {
@@ -315,7 +308,6 @@ void InspectionPage::restoreNormalFaultStyle()
                 QStringLiteral("idle"));
 }
 
-// 函数说明：showDetectionRoiWarning 函数实现名称所表示的处理步骤。
 void InspectionPage::showDetectionRoiWarning()
 {
     if (m_detectionRoiWarningActive) {
@@ -337,7 +329,6 @@ void InspectionPage::showDetectionRoiWarning()
     }
 }
 
-// 函数说明：clearDetectionRoiWarning 函数停止流程、清理状态或释放对应资源。
 void InspectionPage::clearDetectionRoiWarning(
     const QString &runningStatusText)
 {
@@ -354,7 +345,6 @@ void InspectionPage::clearDetectionRoiWarning(
     }
 }
 
-// 函数说明：warnMissingAnnotatedImage 函数实现名称所表示的处理步骤。
 void InspectionPage::warnMissingAnnotatedImage() const
 {
     QMessageBox::warning(
@@ -365,7 +355,6 @@ void InspectionPage::warnMissingAnnotatedImage() const
                     L"未采集到图像！"));
 }
 
-// 函数说明：reportImageSaveFailure 函数实现名称所表示的处理步骤。
 void InspectionPage::reportImageSaveFailure(
     quint64 totalFailed,
     const QString &latestError)

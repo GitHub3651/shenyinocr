@@ -37,7 +37,6 @@
 
 #pragma execution_character_set("utf-8")
 
-// 函数说明：presentInspectionFault 函数执行对应事件或业务处理。
 void MainWindow::presentInspectionFault()
 {
     if (!m_inspectionPage) {
@@ -49,7 +48,6 @@ void MainWindow::presentInspectionFault()
                 &m_faultAlarmPresented);
 }
 
-// 函数说明：confirmInspectionFaultRecovery 函数实现名称所表示的处理步骤。
 bool MainWindow::confirmInspectionFaultRecovery()
 {
     return m_inspectionPage
@@ -57,13 +55,11 @@ bool MainWindow::confirmInspectionFaultRecovery()
                 m_inspectionApplicationService->faultSnapshot());
 }
 
-// 函数说明：checkInspectionPlcHealth 函数校验、转换或恢复对应数据。
 void MainWindow::checkInspectionPlcHealth()
 {
     m_inspectionApplicationService->checkPlcHealth();
 }
 
-// 函数说明：restoreNormalFaultUi 函数校验、转换或恢复对应数据。
 void MainWindow::restoreNormalFaultUi()
 {
     m_faultAlarmPresented = false;
@@ -73,7 +69,6 @@ void MainWindow::restoreNormalFaultUi()
     }
 }
 
-// 函数说明：presentStartFailure 函数执行对应事件或业务处理。
 void MainWindow::presentStartFailure(
     const StartInspectionResult &result)
 {
@@ -150,7 +145,6 @@ void MainWindow::presentStartFailure(
     }
 }
 
-// 函数说明：finishInspectionStopUi 函数实现名称所表示的处理步骤。
 void MainWindow::finishInspectionStopUi(
     const StopInspectionResult &result)
 {
@@ -191,9 +185,10 @@ void MainWindow::finishInspectionStopUi(
         imageLabel->setTemplateDrawingEnabled(false);
         imageLabel->clearSelection();
     }
-    hideTemplateGuide();
+    if (m_templateEditorPage) {
+        m_templateEditorPage->hideTemplateGuide();
+    }
     m_inspectionApplicationService->clearResultView();
-    m_barcodeWordRunActive = false;
     if (result.issue == StopInspectionIssue::RuntimeFault
             || result.issue
                == StopInspectionIssue::FaultReconciliationFailed) {
@@ -225,7 +220,6 @@ void MainWindow::finishInspectionStopUi(
  * @param image OpenCV Mat图像指针
  * @details 将OpenCV图像转换为QPixmap并显示在UI上
  */
-// 函数说明：slot_displayAndDetect 函数实现名称所表示的处理步骤。
 void MainWindow::slot_displayAndDetect(cv::Mat *image)
 {
     DetectionMode activeMode = DetectionMode::Word;
@@ -242,13 +236,11 @@ void MainWindow::slot_displayAndDetect(cv::Mat *image)
 }
 
 
-// 函数说明：clearBarcodeTemplateValidation 函数停止流程、清理状态或释放对应资源。
 void MainWindow::clearBarcodeTemplateValidation()
 {
     m_templateEditorPage->clearBarcodeTemplateValidation();
 }
 
-// 函数说明：operationUiState 函数实现名称所表示的处理步骤。
 OperationUiState MainWindow::operationUiState() const
 {
     const RuntimeSnapshot snapshot =
@@ -279,27 +271,23 @@ OperationUiState MainWindow::operationUiState() const
     }
 }
 
-// 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。
 bool MainWindow::isCameraOpen() const
 {
     return m_inspectionApplicationService
             ->runtimeSnapshot().cameraOpen;
 }
 
-// 函数说明：isInspectionBusy 函数检查相关状态并返回判断结果。
 bool MainWindow::isInspectionBusy() const
 {
     return m_inspectionApplicationService
             ->runtimeSnapshot().isInspectionBusy();
 }
 
-// 函数说明：machineSettings 函数实现名称所表示的处理步骤。
 const AppSettings &MainWindow::machineSettings() const
 {
     return m_settingsApplicationService->current();
 }
 
-// 函数说明：updateOperationUiState 函数更新或应用对应的配置和状态。
 void MainWindow::updateOperationUiState()
 {
     if (!m_inspectionPage) {
@@ -351,7 +339,6 @@ void MainWindow::updateOperationUiState()
                 snapshot.rejectQueueReset);
 }
 
-// 函数说明：resetTemplateCaptureState 函数停止流程、清理状态或释放对应资源。
 void MainWindow::resetTemplateCaptureState()
 {
     if (m_templateEditorPage) {
@@ -362,7 +349,6 @@ void MainWindow::resetTemplateCaptureState()
 /**
  * @brief 制作模板按钮点击槽函数
  */
-// 函数说明：on_toolButton_createTemplate_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_toolButton_createTemplate_clicked()
 {
     if (m_templateEditorPage) {
@@ -370,13 +356,11 @@ void MainWindow::on_toolButton_createTemplate_clicked()
     }
 }
 
-// 函数说明：showParameterInfo 函数实现名称所表示的处理步骤。
 void MainWindow::showParameterInfo(const QString &title, const QString &message)
 {
     QMessageBox::information(this, title, message);
 }
 
-// 函数说明：showParameterInfoWithRedWarning 函数实现名称所表示的处理步骤。
 void MainWindow::showParameterInfoWithRedWarning(const QString &title,
                                              const QString &message,
                                              const QString &warningMessage)
@@ -404,19 +388,16 @@ void MainWindow::showParameterInfoWithRedWarning(const QString &title,
     messageBox.exec();
 }
 
-// 函数说明：showParameterInfoAsError 函数实现名称所表示的处理步骤。
 void MainWindow::showParameterInfoAsError(const QString &title, const QString &message)
 {
     QMessageBox::information(this, title, message);
 }
 
-// 函数说明：showParameterWarning 函数实现名称所表示的处理步骤。
 void MainWindow::showParameterWarning(const QString &title, const QString &message)
 {
     QMessageBox::warning(this, title, message);
 }
 
-// 函数说明：showParameterCritical 函数实现名称所表示的处理步骤。
 void MainWindow::showParameterCritical(const QString &title, const QString &message)
 {
     QMessageBox::critical(this, title, message);
@@ -427,7 +408,6 @@ void MainWindow::showParameterCritical(const QString &title, const QString &mess
  * @param event 关闭事件对象
  * @details 关闭时保存设置，销毁所有OpenCV窗口
  */
-// 函数说明：closeEvent 函数停止流程、清理状态或释放对应资源。
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     if (m_applicationExitInProgress) {
@@ -436,7 +416,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     m_applicationExitInProgress = true;
-    m_barcodeWordRunActive = false;
     if (m_templateCaptureAttentionTimer) {
         m_templateCaptureAttentionTimer->stop();
     }
@@ -454,49 +433,24 @@ void MainWindow::closeEvent(QCloseEvent *event)
 }
 
 /**
- * @brief 阈值确定按钮点击槽函数
- * @details 设置相似度判断阈值
- */
-// 函数说明：on_pushButton_applyImageThreshold_clicked 函数执行对应事件或业务处理。
-void MainWindow::on_pushButton_applyImageThreshold_clicked()
-{
-    m_templateEditorPage->applyCurrentImageThreshold();
-}
-
-/**
- * @brief 保存当前图像按钮点击槽函数
- * @details 打开文件保存对话框，保存当前显示的图像
- */
-// 函数说明：on_pushButton_saveTemplate_clicked 函数执行对应事件或业务处理。
-void MainWindow::on_pushButton_saveTemplate_clicked()
-{
-    m_templateEditorPage->saveCurrentTemplate();
-}
-
-// 先定义一个保存参数到指定文件夹的函数（可放在MainWindow类中）
-void MainWindow::on_toolButton_selectTemplate_clicked()
-{
-    m_templateEditorPage->selectTemplatesForCurrentMode();
-}
-
-/**
  * @brief 选择保存文件夹按钮点击槽函数
  */
-// 函数说明：on_pushButton_browseImageSavePath_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_browseImageSavePath_clicked()
 {
     const QString dirPath = QFileDialog::getExistingDirectory(
                 this,
                 "选择图像保存路径",
-                selectedDir.isEmpty() ? QString("C:/") : selectedDir,
+                ui->lineEdit_imageSavePath->text().trimmed().isEmpty()
+                ? QString("C:/")
+                : ui->lineEdit_imageSavePath->text().trimmed(),
                 QFileDialog::ShowDirsOnly);
     if (dirPath.isEmpty()) {
         return;
     }
 
-    selectedDir = dirPath;
+    ui->lineEdit_imageSavePath->setText(dirPath);
     updateSaveDirButtonText();
-    qDebug() << "save file path:" << selectedDir;
+    qDebug() << "save file path:" << dirPath;
 }
 
 
@@ -504,7 +458,6 @@ void MainWindow::on_pushButton_browseImageSavePath_clicked()
 /**
  * @brief 清空总数统计按钮点击槽函数
  */
-// 函数说明：on_pushButton_resetTotalCount_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_resetTotalCount_clicked()
 {
     const OperationResult result =
@@ -517,7 +470,6 @@ void MainWindow::on_pushButton_resetTotalCount_clicked()
 /**
  * @brief 清空NG数统计按钮点击槽函数
  */
-// 函数说明：on_pushButton_resetNgCount_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_resetNgCount_clicked()
 {
     const OperationResult result =
@@ -531,7 +483,6 @@ void MainWindow::on_pushButton_resetNgCount_clicked()
  * @brief 旋转角度确定按钮点击槽函数
  * @details 设置图像旋转角度（0°、90°、180°、270°）
  */
-// 函数说明：on_pushButton_applyImageRotation_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_pushButton_applyImageRotation_clicked()
 {
     m_machineSettingsPage->updateAppliedFromUi("image.rotation");
@@ -557,7 +508,7 @@ void MainWindow::on_toolButton_closeCamera_clicked()
     // 清空文本并将文本置0
     ui->label_verdictResult->clear();
     imageLabel->setTemplateDrawingEnabled(false);
-    hideTemplateGuide();
+    m_templateEditorPage->hideTemplateGuide();
     imageLabel->clear();
     ui->imageLabel_inspection->clear();
     ui->lineEdit_totalCount->clear();
@@ -573,13 +524,12 @@ void MainWindow::on_toolButton_closeCamera_clicked()
     updateOperationUiState();
 }
 
-// 函数说明：on_toolButton_startInspection_clicked 函数执行对应事件或业务处理。
 void MainWindow::on_toolButton_startInspection_clicked()
 {
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
-    refreshTemplateDirty();
-    updateCurrentTemplateName();
+    m_templateEditorPage->refreshTemplateDirty();
+    m_templateEditorPage->updateCurrentTemplateName();
 
     StartInspectionCommand command;
     command.unappliedChanges = m_settingsEditState.dirtyNames();
@@ -617,16 +567,10 @@ void MainWindow::on_toolButton_startInspection_clicked()
                     QStringLiteral("部分模板已跳过"),
                     result.details.join(QStringLiteral("\n")));
     }
-    DetectionMode activeMode = DetectionMode::Stamp;
-    detectionModeFromUiId(
-                m_appliedMachineSettings.detectModeId,
-                &activeMode);
-    m_barcodeWordRunActive =
-            activeMode == DetectionMode::BarcodeWord;
     if (imageLabel) {
         imageLabel->setTemplateDrawingEnabled(false);
     }
-    hideTemplateGuide();
+    m_templateEditorPage->hideTemplateGuide();
     if (m_inspectionPage) {
         m_inspectionPage->clearDetectionRoiWarning(QString());
     }

@@ -7,7 +7,6 @@
 #include <QVariant>
 #include <QWidget>
 
-// 函数说明：create 函数创建、准备或启动对应流程。
 namespace {
 
 OperationUiSnapshot::Access access(

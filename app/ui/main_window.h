@@ -67,23 +67,6 @@ public:
         QWidget *parent = nullptr);
     ~MainWindow();
 
-    InspectionPageViewBindings inspectionPageViewBindings() const;
-    MachineSettingsPageViewBindings machineSettingsPageViewBindings() const;
-    QTimer *templateAttentionTimerForComposition() const;
-    bool *templateAttentionFlagForComposition();
-    SettingsEditState *settingsEditStateForComposition();
-    QString *selectedDirectoryForComposition();
-    bool *applyingSettingsFlagForComposition();
-    bool *updatingSettingsUiFlagForComposition();
-    InspectionPage::Callbacks inspectionPageCallbacks();
-    MachineSettingsPage::Callbacks machineSettingsPageCallbacks();
-    TemplateEditorViewBindings templateEditorViewBindings() const;
-    TemplateEditorPageCallbacks templateEditorPageCallbacks();
-    void attachPages(
-        InspectionPage *inspectionPage,
-        MachineSettingsPage *machineSettingsPage,
-        TemplateEditorPage *templateEditorPage);
-
 private slots:
     void slot_displayAndDetect(cv::Mat *image);  ///< 显示和检测槽
 
@@ -97,17 +80,11 @@ private slots:
     void on_pushButton_disconnectPlc_clicked(); ///< 断开PLC按钮
     void on_pushButton_applyPhotoDistance_clicked(); ///< 写入VD按钮
 
-    void on_pushButton_applyTargetText_clicked();     ///< 文本确定按钮
-    void on_pushButton_applyBatchTargetText_clicked(); ///< 批量文本确定按钮
-    void on_pushButton_applyBatchImageThreshold_clicked(); ///< 批量设置字库模板图像阈值
     void on_toolButton_stopInspection_clicked();           ///< 取消按钮
     void closeEvent(QCloseEvent *event) override; ///< 关闭事件
 
     void on_pushButton_applyPlcTriggerMode_clicked();       ///< PLC模式按钮
 
-    void on_pushButton_applyImageThreshold_clicked();
-    void on_pushButton_saveTemplate_clicked();
-    void on_toolButton_selectTemplate_clicked();
     void on_pushButton_browseImageSavePath_clicked();
     void on_pushButton_applyPlcProcessParameters_clicked();
     void on_pushButton_applyImageRotation_clicked();
@@ -122,9 +99,14 @@ private slots:
 
     void on_pushButton_applyCameraGain_clicked();
 
-    void on_pushButton_applyTissueRoughnessThreshold_clicked();
-
 private:
+    void initializePages();
+    InspectionPageViewBindings inspectionPageViewBindings() const;
+    MachineSettingsPageViewBindings machineSettingsPageViewBindings() const;
+    InspectionPage::Callbacks inspectionPageCallbacks();
+    MachineSettingsPage::Callbacks machineSettingsPageCallbacks();
+    TemplateEditorViewBindings templateEditorViewBindings() const;
+    TemplateEditorPageCallbacks templateEditorPageCallbacks();
     void showParameterInfo(const QString &title, const QString &message);
     void showParameterInfoWithRedWarning(const QString &title,
                                          const QString &message,
@@ -140,25 +122,12 @@ private:
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
-    void setupTemplateDirtyTracking();
-    void refreshTemplateDirty();
-    void clearTemplateDirty();
-    void updateCurrentTemplateName();
     void updateSaveDirButtonText();
     void updateImageSaveOptionsVisibility();
     void updateTissueRoughnessUiVisibility();
-    void setupTemplateGuide();
-    void adjustTemplateGuideHeight();
-    void hideTemplateGuide();
-    void updateImageDisplayStatusText(const QString &body);
-    void handleTemplateGuideEvent(const QString &eventName, int pointCount);
-    void setupManualCharacterCropUi();
     void setupSoftwareSettingsPage();
     void clearCurrentSoftwareData();
     void restoreDefaultMachineSettings();
-    QString detectModeIdForIndex(int index) const;
-    QString currentDetectModeId() const;
-    void restoreTemplatesForMode(const QString &modeId, bool showMessage);
     void resetTemplateCaptureState();
     void updateOperationUiState();
     OperationUiState operationUiState() const;
@@ -183,15 +152,13 @@ private:
     std::shared_ptr<TemplateApplicationService>
             m_templateApplicationService;
     QString m_currentDetectModeId;
-    bool m_applyingMachineSettings = false;
-    bool m_updatingMachineSettingsUi = false;
     SettingsEditState m_settingsEditState;
-    MachineSettingsPage *m_machineSettingsPage = nullptr;
-    TemplateEditorPage *m_templateEditorPage = nullptr;
+    std::unique_ptr<MachineSettingsPage> m_machineSettingsPage;
+    std::unique_ptr<TemplateEditorPage> m_templateEditorPage;
 
     using OperationState = OperationUiState;
     bool m_applicationExitInProgress = false;
-    InspectionPage *m_inspectionPage = nullptr;
+    std::unique_ptr<InspectionPage> m_inspectionPage;
     bool m_faultAlarmPresented = false;
 
     // ========== 定时器 ==========
@@ -199,22 +166,13 @@ private:
     QTimer *m_templateCaptureAttentionTimer = nullptr;
     bool m_templateCaptureAttentionOn = false;
 
-    int PLCmode = 0;
     QPointer<ImageLabel> imageLabel;
-    QString selectedDir;
-
-    bool m_barcodeWordRunActive = false; ///< 当前采集线程是否按二维码+三期快照分发
-    void setupCurrentTemplateEditor();
     void setupDetectModeChangeTracking();
-    void clearTemplateState();
-    void refreshCurrentTemplateEditor();
-    int currentTemplateIndex() const;
     void clearBarcodeTemplateValidation();
 
     // ========== 设置相关函数 ==========
     bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
     void applyMachineSettingsToUi(const AppSettings &settings);
-    void applyTemplateSettingsToUi(const TemplateSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
     void initStyle();  // 声明后才能在 cpp 中实现和调用
 };

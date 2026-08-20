@@ -6,7 +6,6 @@
 
 #include <QStringList>
 
-// 函数说明：isValid 函数检查相关状态并返回判断结果。
 bool InspectionFaultPresentation::isValid() const
 {
     return !statusText.isEmpty()
@@ -14,7 +13,6 @@ bool InspectionFaultPresentation::isValid() const
             && !operatorMessage.isEmpty();
 }
 
-// 函数说明：create 函数创建、准备或启动对应流程。
 InspectionFaultPresentation InspectionFaultPresenter::create(
     const ApplicationFaultSnapshot &snapshot)
 {

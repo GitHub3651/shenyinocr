@@ -17,7 +17,6 @@
 
 namespace TemplateEditorSupport {
 
-// 函数说明：setLabelTextIfChanged 函数更新或应用对应的配置和状态。
 void setLabelTextIfChanged(QLabel *label, const QString &text)
 {
     if (label && label->text() != text) {
@@ -25,7 +24,6 @@ void setLabelTextIfChanged(QLabel *label, const QString &text)
     }
 }
 
-// 函数说明：parseIntValue 函数校验、转换或恢复对应数据。
 bool parseIntValue(const QString &text, int *value)
 {
     bool ok = false;
@@ -48,7 +46,6 @@ bool isSingleTemplateMode(const QString &modeId)
                == DetectionTrackingKind::SingleTemplate;
 }
 
-// 函数说明：imageFromBgrMat 函数实现名称所表示的处理步骤。
 QImage imageFromBgrMat(const cv::Mat &image)
 {
     if (image.empty()) return QImage();
@@ -115,7 +112,6 @@ struct QuickROIState {
     bool isDone = false;
 };
 
-// 函数说明：quickMouseCallback 函数实现名称所表示的处理步骤。
 static void quickMouseCallback(int event, int x, int y, int, void* userdata) {
     QuickROIState* state = reinterpret_cast<QuickROIState*>(userdata);
 
@@ -140,7 +136,6 @@ static void quickMouseCallback(int event, int x, int y, int, void* userdata) {
     }
 }
 
-// 函数说明：getPolygonROI 函数读取、等待或计算对应的数据。
 std::vector<cv::Point> getPolygonROI(const cv::Mat& img, const std::string& windowTitle) {
     cv::Mat displayImg = img.clone();
     int screenHeightLimit = 800;
@@ -183,7 +178,6 @@ std::vector<cv::Point> getPolygonROI(const cv::Mat& img, const std::string& wind
     return finalPts;
 }
 
-// 函数说明：getQuickRectROI 函数读取、等待或计算对应的数据。
 cv::Rect getQuickRectROI(const cv::Mat& img, const std::string& windowTitle) {
     cv::Mat displayImg = img.clone();
     int screenHeightLimit = 800;

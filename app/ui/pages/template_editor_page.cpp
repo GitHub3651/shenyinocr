@@ -15,9 +15,6 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
-#include <QGridLayout>
-#include <QGroupBox>
-#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -25,10 +22,9 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QSignalBlocker>
-#include <QSizePolicy>
 #include <QTextEdit>
 #include <QTimer>
-#include <QVBoxLayout>
+#include <QToolButton>
 
 #include <algorithm>
 #include <stdexcept>
@@ -126,6 +122,11 @@ TemplateEditorPage::TemplateEditorPage(
             }
         }
     }, Qt::QueuedConnection);
+    setupCurrentTemplateEditor();
+    setupTemplateGuide();
+    setupManualCharacterCropUi();
+    setupTemplateDirtyTracking();
+    connectPageActions();
 }
 
 void TemplateEditorPage::applyOperationState(
@@ -159,16 +160,6 @@ void TemplateEditorPage::applyOperationState(
                            editAccess);
     applyOperationUiAccess(m_view.pushButton_applyTissueRoughnessThreshold,
                            snapshot.templateEditing);
-}
-
-QFrame *TemplateEditorPage::guideFrame() const
-{
-    return m_templateGuideFrame;
-}
-
-QPushButton *TemplateEditorPage::manualCharacterCropButton() const
-{
-    return m_manualCharacterCropButton;
 }
 
 QWidget *TemplateEditorPage::dialogParent() const
@@ -340,32 +331,17 @@ void TemplateEditorPage::handlePreviewFailure(
 
 void TemplateEditorPage::setupCurrentTemplateEditor()
 {
-    if (m_currentTemplateEditWidget || !m_view.textEdit_targetText) {
+    if (m_currentTemplateEditWidget || !m_view.textEdit_targetText
+            || !m_view.widget_currentTemplateEditor
+            || !m_view.label_currentEditTemplate
+            || !m_view.comboBox_currentEditTemplate
+            || !m_view.pushButton_removeCurrentTemplate) {
         return;
     }
-    QWidget *parent = m_view.textEdit_targetText->parentWidget();
-    QGridLayout *grid = parent
-            ? qobject_cast<QGridLayout *>(parent->layout()) : nullptr;
-    if (!parent || !grid) {
-        return;
-    }
-    m_currentTemplateEditWidget = new QWidget(parent);
-    QHBoxLayout *layout = new QHBoxLayout(m_currentTemplateEditWidget);
-    layout->setContentsMargins(0, 0, 0, 0);
-    m_currentTemplateEditLabel = new QLabel(
-                QStringLiteral("当前编辑模板："),
-                m_currentTemplateEditWidget);
-    m_currentTemplateEditLabel->setObjectName(
-                QStringLiteral("label_currentEditTemplate"));
-    m_currentTemplateEditComboBox = new QComboBox(
-                m_currentTemplateEditWidget);
-    m_currentTemplateEditComboBox->setObjectName(
-                QStringLiteral("comboBox_currentEditTemplate"));
-    m_removeCurrentTemplateButton = new QPushButton(
-                QStringLiteral("移除模板"),
-                m_currentTemplateEditWidget);
-    m_removeCurrentTemplateButton->setObjectName(
-                QStringLiteral("toolButton_removeCurrentTemplate"));
+    m_currentTemplateEditWidget = m_view.widget_currentTemplateEditor;
+    m_currentTemplateEditLabel = m_view.label_currentEditTemplate;
+    m_currentTemplateEditComboBox = m_view.comboBox_currentEditTemplate;
+    m_removeCurrentTemplateButton = m_view.pushButton_removeCurrentTemplate;
     m_removeCurrentTemplateButton->setToolTip(
                 QStringLiteral("从当前检测方案移除模板，不会删除模板文件夹。"));
     if (m_view.label_targetText) {
@@ -377,10 +353,6 @@ void TemplateEditorPage::setupCurrentTemplateEditor()
         m_currentTemplateEditLabel->setFixedWidth(sharedLabelWidth);
         m_view.label_targetText->setFixedWidth(sharedLabelWidth);
     }
-    layout->addWidget(m_currentTemplateEditLabel);
-    layout->addWidget(m_currentTemplateEditComboBox, 1);
-    layout->addWidget(m_removeCurrentTemplateButton);
-    grid->addWidget(m_currentTemplateEditWidget, 0, 0, 1, 3);
     connect(m_currentTemplateEditComboBox,
             static_cast<void (QComboBox::*)(int)>(
                 &QComboBox::currentIndexChanged),
@@ -1032,10 +1004,6 @@ void TemplateEditorPage::clearTemplateDirty()
 void TemplateEditorPage::applyTemplateSettingsToUi(
         const TemplateSettings &settings)
 {
-    if (m_callbacks.applyTemplateSettingsToUi) {
-        m_callbacks.applyTemplateSettingsToUi(settings);
-        return;
-    }
     QSignalBlocker targetBlocker(m_view.textEdit_targetText);
     QSignalBlocker thresholdBlocker(m_view.lineEdit_imageThreshold);
     m_view.textEdit_targetText->setPlainText(settings.targetText);
@@ -1068,32 +1036,14 @@ void TemplateEditorPage::updateCurrentTemplateName()
 
 void TemplateEditorPage::setupTemplateGuide()
 {
-    if (m_templateGuideFrame || !m_view.verticalLayout_imageDisplay) {
+    if (m_templateGuideFrame || !m_view.frame_templateGuide
+            || !m_view.label_templateGuideTitle
+            || !m_view.label_templateGuideBody) {
         return;
     }
-    m_templateGuideFrame = new QFrame(m_view.groupBox_imageDisplay);
-    m_templateGuideFrame->setObjectName(
-                QStringLiteral("frame_templateGuide"));
-    m_templateGuideFrame->setSizePolicy(
-                QSizePolicy::Maximum, QSizePolicy::Maximum);
-
-    QHBoxLayout *layout = new QHBoxLayout(m_templateGuideFrame);
-    m_templateGuideTitleLabel = new QLabel(
-                QStringLiteral("模板制作向导"), m_templateGuideFrame);
-    m_templateGuideTitleLabel->setObjectName(
-                QStringLiteral("label_templateGuideTitle"));
-    m_templateGuideBodyLabel = new QLabel(m_templateGuideFrame);
-    m_templateGuideBodyLabel->setObjectName(
-                QStringLiteral("label_templateGuideBody"));
-    layout->addWidget(m_templateGuideTitleLabel);
-    layout->addWidget(m_templateGuideBodyLabel);
-    m_view.verticalLayout_imageDisplay->insertWidget(
-                0,
-                m_templateGuideFrame,
-                0,
-                Qt::AlignLeft | Qt::AlignTop);
-    m_view.verticalLayout_imageDisplay->setStretch(0, 0);
-    m_view.verticalLayout_imageDisplay->setStretch(1, 1);
+    m_templateGuideFrame = m_view.frame_templateGuide;
+    m_templateGuideTitleLabel = m_view.label_templateGuideTitle;
+    m_templateGuideBodyLabel = m_view.label_templateGuideBody;
     m_templateGuideFrame->hide();
 }
 
@@ -1336,6 +1286,40 @@ void TemplateEditorPage::setupManualCharacterCropUi()
                 this, [this]() {
             showManualCharacterTemplateEditorDialog();
         });
+    }
+}
+
+void TemplateEditorPage::connectPageActions()
+{
+    if (m_view.toolButton_selectTemplate) {
+        connect(m_view.toolButton_selectTemplate, &QToolButton::clicked,
+                this, [this]() { selectTemplatesForCurrentMode(); });
+    }
+    if (m_view.pushButton_saveTemplate) {
+        connect(m_view.pushButton_saveTemplate, &QPushButton::clicked,
+                this, [this]() { saveCurrentTemplate(); });
+    }
+    if (m_view.pushButton_applyTargetText) {
+        connect(m_view.pushButton_applyTargetText, &QPushButton::clicked,
+                this, [this]() { applyCurrentTargetText(); });
+    }
+    if (m_view.pushButton_applyBatchTargetText) {
+        connect(m_view.pushButton_applyBatchTargetText, &QPushButton::clicked,
+                this, [this]() { applyBatchTargetText(); });
+    }
+    if (m_view.pushButton_applyImageThreshold) {
+        connect(m_view.pushButton_applyImageThreshold, &QPushButton::clicked,
+                this, [this]() { applyCurrentImageThreshold(); });
+    }
+    if (m_view.pushButton_applyBatchImageThreshold) {
+        connect(m_view.pushButton_applyBatchImageThreshold,
+                &QPushButton::clicked,
+                this, [this]() { applyBatchImageThreshold(); });
+    }
+    if (m_view.pushButton_applyTissueRoughnessThreshold) {
+        connect(m_view.pushButton_applyTissueRoughnessThreshold,
+                &QPushButton::clicked,
+                this, [this]() { applyCurrentTissueThreshold(); });
     }
 }
 

@@ -6,7 +6,6 @@
 
 namespace {
 
-// 函数说明：normalizedDisplayName 函数校验、转换或恢复对应数据。
 QString normalizedDisplayName(const QString &displayName,
                               const QString &fallback)
 {
@@ -18,7 +17,6 @@ QString normalizedDisplayName(const QString &displayName,
 
 } // namespace
 
-// 函数说明：registerGlobalSetting 函数实现名称所表示的处理步骤。
 void SettingsEditState::registerGlobalSetting(
         const QString &key,
         const QString &displayName)
@@ -32,14 +30,12 @@ void SettingsEditState::registerGlobalSetting(
     m_globalSettings.insert(normalizedKey, entry);
 }
 
-// 函数说明：isGlobalDirty 函数检查相关状态并返回判断结果。
 bool SettingsEditState::isGlobalDirty(const QString &key) const
 {
     const auto it = m_globalSettings.constFind(key);
     return it != m_globalSettings.constEnd() && it.value().dirty;
 }
 
-// 函数说明：setGlobalDirty 函数更新或应用对应的配置和状态。
 void SettingsEditState::setGlobalDirty(const QString &key, bool dirty)
 {
     auto it = m_globalSettings.find(key);
@@ -48,7 +44,6 @@ void SettingsEditState::setGlobalDirty(const QString &key, bool dirty)
     }
 }
 
-// 函数说明：clearAllGlobalDirty 函数停止流程、清理状态或释放对应资源。
 void SettingsEditState::clearAllGlobalDirty()
 {
     for (auto it = m_globalSettings.begin();
@@ -58,38 +53,32 @@ void SettingsEditState::clearAllGlobalDirty()
     }
 }
 
-// 函数说明：setTemplateTargetDirty 函数更新或应用对应的配置和状态。
 void SettingsEditState::setTemplateTargetDirty(bool dirty)
 {
     m_templateTargetDirty = dirty;
 }
 
-// 函数说明：setTemplateThresholdDirty 函数更新或应用对应的配置和状态。
 void SettingsEditState::setTemplateThresholdDirty(bool dirty)
 {
     m_templateThresholdDirty = dirty;
 }
 
-// 函数说明：isTemplateTargetDirty 函数检查相关状态并返回判断结果。
 bool SettingsEditState::isTemplateTargetDirty() const
 {
     return m_templateTargetDirty;
 }
 
-// 函数说明：isTemplateThresholdDirty 函数检查相关状态并返回判断结果。
 bool SettingsEditState::isTemplateThresholdDirty() const
 {
     return m_templateThresholdDirty;
 }
 
-// 函数说明：clearTemplateDirty 函数停止流程、清理状态或释放对应资源。
 void SettingsEditState::clearTemplateDirty()
 {
     m_templateTargetDirty = false;
     m_templateThresholdDirty = false;
 }
 
-// 函数说明：globalDirtyNames 函数实现名称所表示的处理步骤。
 QStringList SettingsEditState::globalDirtyNames() const
 {
     QStringList names;
@@ -103,7 +92,6 @@ QStringList SettingsEditState::globalDirtyNames() const
     return names;
 }
 
-// 函数说明：templateDirtyNames 函数实现名称所表示的处理步骤。
 QStringList SettingsEditState::templateDirtyNames() const
 {
     QStringList names;
@@ -118,7 +106,6 @@ QStringList SettingsEditState::templateDirtyNames() const
     return names;
 }
 
-// 函数说明：dirtyNames 函数实现名称所表示的处理步骤。
 QStringList SettingsEditState::dirtyNames() const
 {
     QStringList names = globalDirtyNames();
@@ -131,13 +118,11 @@ QStringList SettingsEditState::dirtyNames() const
     return names;
 }
 
-// 函数说明：hasDirtySettings 函数检查相关状态并返回判断结果。
 bool SettingsEditState::hasDirtySettings() const
 {
     return !dirtyNames().isEmpty();
 }
 
-// 函数说明：dirtySettingsMessage 函数实现名称所表示的处理步骤。
 QString SettingsEditState::dirtySettingsMessage() const
 {
     const QStringList names = dirtyNames();

@@ -30,9 +30,7 @@ public:
 
     // ================= 模板区域绘制接口 =================
     QPolygon getDetectionPoly() const { return m_detectionPoly; }
-    // 函数说明：getTrackingRect 函数读取、等待或计算对应的数据。
     QRect getTrackingRect() const { return m_trackingRect; }
-    // 函数说明：getBarcodeRect 函数读取、等待或计算对应的数据。
     QRect getBarcodeRect() const { return m_barcodeRect; }
     bool isDetectionPolyComplete() const;
     void setTemplateDrawingEnabled(bool enabled);

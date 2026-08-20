@@ -30,49 +30,42 @@
 
 namespace {
 
-// 函数说明：detectModeIds 函数执行对应事件或业务处理。
 const QStringList &detectModeIds()
 {
     static const QStringList ids = appSettingsDetectionModeIds();
     return ids;
 }
 
-// 函数说明：imageSaveModeIds 函数实现名称所表示的处理步骤。
 const QStringList &imageSaveModeIds()
 {
     static const QStringList ids = appSettingsImageSaveModeIds();
     return ids;
 }
 
-// 函数说明：imageSaveTypeIds 函数实现名称所表示的处理步骤。
 const QStringList &imageSaveTypeIds()
 {
     static const QStringList ids = appSettingsImageSaveTypeIds();
     return ids;
 }
 
-// 函数说明：colorChannelIds 函数实现名称所表示的处理步骤。
 const QStringList &colorChannelIds()
 {
     static const QStringList ids = appSettingsColorChannelIds();
     return ids;
 }
 
-// 函数说明：rotationIds 函数实现名称所表示的处理步骤。
 const QStringList &rotationIds()
 {
     static const QStringList ids = appSettingsRotationIds();
     return ids;
 }
 
-// 函数说明：triggerModeIds 函数执行对应事件或业务处理。
 const QStringList &triggerModeIds()
 {
     static const QStringList ids = appSettingsTriggerModeIds();
     return ids;
 }
 
-// 函数说明：idAt 函数实现名称所表示的处理步骤。
 QString idAt(
     const QStringList &ids,
     int index,
@@ -83,7 +76,6 @@ QString idAt(
             : fallback;
 }
 
-// 函数说明：indexOf 函数实现名称所表示的处理步骤。
 int indexOf(
     const QStringList &ids,
     const QString &id,
@@ -93,7 +85,6 @@ int indexOf(
     return index >= 0 ? index : fallback;
 }
 
-// 函数说明：parseInt 函数校验、转换或恢复对应数据。
 bool parseInt(const QString &text, int *value)
 {
     bool ok = false;
@@ -107,7 +98,6 @@ bool parseInt(const QString &text, int *value)
     return true;
 }
 
-// 函数说明：parseDouble 函数校验、转换或恢复对应数据。
 bool parseDouble(const QString &text, double *value)
 {
     bool ok = false;
@@ -121,7 +111,6 @@ bool parseDouble(const QString &text, double *value)
     return true;
 }
 
-// 函数说明：text 函数实现名称所表示的处理步骤。
 QString text(const wchar_t *value)
 {
     return QString::fromWCharArray(value);
@@ -129,14 +118,10 @@ QString text(const wchar_t *value)
 
 } // namespace
 
-// 函数说明：MachineSettingsPage 构造函数创建组件并初始化其依赖和初始状态。
 MachineSettingsPage::MachineSettingsPage(
     const MachineSettingsPageViewBindings &view,
     SettingsApplicationService *settingsService,
     SettingsEditState *editState,
-    QString *selectedDirectory,
-    bool *applyingSettings,
-    bool *updatingSettingsUi,
     const Callbacks &callbacks,
     QObject *parent)
     : QObject(parent),
@@ -146,14 +131,10 @@ MachineSettingsPage::MachineSettingsPage(
                         : nullptr),
       m_settingsService(settingsService),
       m_editState(editState),
-      m_selectedDirectory(selectedDirectory),
-      m_applyingSettings(applyingSettings),
-      m_updatingSettingsUi(updatingSettingsUi),
       m_callbacks(callbacks)
 {
 }
 
-// 函数说明：setupBindings 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setupBindings()
 {
     if (!m_view.comboBox_detectionMode || !m_editState) {
@@ -253,7 +234,6 @@ void MachineSettingsPage::setupBindings()
     }
 }
 
-// 函数说明：setupNumericInputValidators 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setupNumericInputValidators()
 {
     if (!m_view.comboBox_detectionMode) {
@@ -293,7 +273,6 @@ void MachineSettingsPage::setupNumericInputValidators()
     }
 }
 
-// 函数说明：installWheelProtection 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::installWheelProtection(
     QWidget *rootWidget)
 {
@@ -312,7 +291,6 @@ void MachineSettingsPage::installWheelProtection(
     }
 }
 
-// 函数说明：setSoftwareDataDirectoryEditor 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::setSoftwareDataDirectoryEditor(
     QLineEdit *editor)
 {
@@ -328,7 +306,6 @@ void MachineSettingsPage::setSoftwareDataDirectoryEditor(
     }
 }
 
-// 函数说明：initialize 函数创建、准备或启动对应流程。
 void MachineSettingsPage::initialize(
     const AppSettings &settings)
 {
@@ -340,7 +317,6 @@ void MachineSettingsPage::initialize(
     applyToUi(settings);
 }
 
-// 函数说明：save 函数保存对应的数据和资源。
 bool MachineSettingsPage::save(
     bool,
     QString *errorMessage)
@@ -366,7 +342,6 @@ bool MachineSettingsPage::save(
     return saved.isSuccess();
 }
 
-// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 bool MachineSettingsPage::clear(QString *errorMessage)
 {
     const OperationResult cleared = m_settingsService
@@ -388,7 +363,6 @@ bool MachineSettingsPage::clear(QString *errorMessage)
     return true;
 }
 
-// 函数说明：defaultsForHardwareState 函数实现名称所表示的处理步骤。
 AppSettings MachineSettingsPage::defaultsForHardwareState(
     bool cameraOpen,
     bool plcConnected) const
@@ -401,23 +375,17 @@ AppSettings MachineSettingsPage::defaultsForHardwareState(
         plcConnected);
 }
 
-// 函数说明：applyToUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::applyToUi(
     const AppSettings &settings)
 {
     if (!m_view.comboBox_detectionMode) {
         return;
     }
-    const bool previousApplying =
-        m_applyingSettings ? *m_applyingSettings : false;
-    const bool previousUpdating =
-        m_updatingSettingsUi ? *m_updatingSettingsUi : false;
-    if (m_applyingSettings) {
-        *m_applyingSettings = true;
-    }
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = true;
-    }
+    const bool previousApplying = m_applyingSettings;
+    const bool previousUpdating = m_updatingSettingsUi;
+    m_applyingSettings = true;
+    m_updatingSettingsUi = true;
+    QSignalBlocker detectionModeBlocker(m_view.comboBox_detectionMode);
 
     m_view.comboBox_detectionMode->setCurrentIndex(
         indexOf(detectModeIds(), settings.detectModeId, 1));
@@ -444,6 +412,7 @@ void MachineSettingsPage::applyToUi(
     m_view.lineEdit_rejectDistance->setText(QString::number(settings.rejectDistance));
     m_view.lineEdit_rejectTime->setText(QString::number(settings.rejectTime));
     m_view.lineEdit_rejectPosition->setText(QString::number(settings.rejectPosition));
+    m_view.lineEdit_imageSavePath->setText(settings.imageSavePath);
 
     if (m_view.splitter_mainContent
             && !settings.rightPanelSplitterState.isEmpty()
@@ -464,9 +433,6 @@ void MachineSettingsPage::applyToUi(
         }
         m_view.splitter_mainContent->setChildrenCollapsible(true);
     }
-    if (m_selectedDirectory) {
-        *m_selectedDirectory = settings.imageSavePath;
-    }
     if (m_callbacks.updateSaveDirectoryText) {
         m_callbacks.updateSaveDirectoryText();
     }
@@ -474,15 +440,10 @@ void MachineSettingsPage::applyToUi(
         m_callbacks.updateTissueVisibility();
     }
 
-    if (m_applyingSettings) {
-        *m_applyingSettings = previousApplying;
-    }
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = previousUpdating;
-    }
+    m_applyingSettings = previousApplying;
+    m_updatingSettingsUi = previousUpdating;
 }
 
-// 函数说明：registerGlobalSetting 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::registerGlobalSetting(
     const QString &key,
     QWidget *editor,
@@ -504,8 +465,7 @@ void MachineSettingsPage::registerGlobalSetting(
     m_editState->registerGlobalSetting(key, binding.originalLabelText);
 
     auto changed = [this, key]() {
-        if ((m_updatingSettingsUi && *m_updatingSettingsUi)
-                || (m_applyingSettings && *m_applyingSettings)) {
+        if (m_updatingSettingsUi || m_applyingSettings) {
             return;
         }
         const auto it = m_bindings.constFind(key);
@@ -548,7 +508,6 @@ void MachineSettingsPage::registerGlobalSetting(
     }
 }
 
-// 函数说明：registerHardwareAction 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::registerHardwareAction(
     QWidget *control,
     HardwareDependency dependency)
@@ -562,7 +521,6 @@ void MachineSettingsPage::registerHardwareAction(
     m_hardwareActions.append(binding);
 }
 
-// 函数说明：isDirtyByValue 函数检查相关状态并返回判断结果。
 bool MachineSettingsPage::isDirtyByValue(
     const QString &key) const
 {
@@ -648,7 +606,6 @@ bool MachineSettingsPage::isDirtyByValue(
     return false;
 }
 
-// 函数说明：refreshDirty 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::refreshDirty(const QString &key)
 {
     if (!m_editState || !m_bindings.contains(key)) {
@@ -658,7 +615,6 @@ void MachineSettingsPage::refreshDirty(const QString &key)
     updateDirtyLabel(key);
 }
 
-// 函数说明：refreshDirty 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::refreshDirty(const QStringList &keys)
 {
     for (const QString &key : keys) {
@@ -666,7 +622,6 @@ void MachineSettingsPage::refreshDirty(const QStringList &keys)
     }
 }
 
-// 函数说明：refreshAllDirty 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::refreshAllDirty()
 {
     for (auto it = m_bindings.constBegin();
@@ -675,7 +630,6 @@ void MachineSettingsPage::refreshAllDirty()
     }
 }
 
-// 函数说明：clearDirty 函数停止流程、清理状态或释放对应资源。
 void MachineSettingsPage::clearDirty(const QString &key)
 {
     if (!m_editState || !m_bindings.contains(key)) {
@@ -685,7 +639,6 @@ void MachineSettingsPage::clearDirty(const QString &key)
     updateDirtyLabel(key);
 }
 
-// 函数说明：clearDirty 函数停止流程、清理状态或释放对应资源。
 void MachineSettingsPage::clearDirty(const QStringList &keys)
 {
     for (const QString &key : keys) {
@@ -693,7 +646,6 @@ void MachineSettingsPage::clearDirty(const QStringList &keys)
     }
 }
 
-// 函数说明：clearAllDirty 函数停止流程、清理状态或释放对应资源。
 void MachineSettingsPage::clearAllDirty()
 {
     if (!m_editState) {
@@ -706,7 +658,6 @@ void MachineSettingsPage::clearAllDirty()
     }
 }
 
-// 函数说明：updateDirtyLabel 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateDirtyLabel(const QString &key)
 {
     if (!m_editState) {
@@ -731,7 +682,6 @@ void MachineSettingsPage::updateDirtyLabel(const QString &key)
                    : it.value().originalLabelText);
 }
 
-// 函数说明：updateAppliedFromUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateAppliedFromUi(
     const QString &key)
 {
@@ -751,8 +701,9 @@ void MachineSettingsPage::updateAppliedFromUi(
             imageSaveTypeIds(),
             m_view.comboBox_imageSaveContent->currentIndex(),
             m_appliedSettings->imageSaveTypeId);
-    } else if (key == "image.save_path" && m_selectedDirectory) {
-        m_appliedSettings->imageSavePath = *m_selectedDirectory;
+    } else if (key == "image.save_path") {
+        m_appliedSettings->imageSavePath =
+                m_view.lineEdit_imageSavePath->text().trimmed();
     } else if (key == "trigger.enabled") {
         m_appliedSettings->triggerEnabled = m_view.checkBox_hardwareTriggerEnabled->isChecked();
     } else if (key == "camera.exposure") {
@@ -792,7 +743,6 @@ void MachineSettingsPage::updateAppliedFromUi(
     }
 }
 
-// 函数说明：updateAppliedFromUi 函数更新或应用对应的配置和状态。
 void MachineSettingsPage::updateAppliedFromUi(
     const QStringList &keys)
 {
@@ -801,7 +751,6 @@ void MachineSettingsPage::updateAppliedFromUi(
     }
 }
 
-// 函数说明：syncImmediateSettings 函数实现名称所表示的处理步骤。
 void MachineSettingsPage::syncImmediateSettings()
 {
     updateAppliedFromUi(QStringList()
@@ -820,17 +769,13 @@ void MachineSettingsPage::syncImmediateSettings()
     }
 }
 
-// 函数说明：restoreUnappliedMachineSettings 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restoreUnappliedMachineSettings()
 {
     if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
-    const bool previousUpdating =
-        m_updatingSettingsUi ? *m_updatingSettingsUi : false;
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = true;
-    }
+    const bool previousUpdating = m_updatingSettingsUi;
+    m_updatingSettingsUi = true;
     QSignalBlocker exposure(m_view.spinBox_cameraExposure);
     QSignalBlocker gain(m_view.lineEdit_cameraGain);
     QSignalBlocker channel(m_view.comboBox_colorChannel);
@@ -864,45 +809,33 @@ void MachineSettingsPage::restoreUnappliedMachineSettings()
         QString::number(m_appliedSettings->rejectTime));
     m_view.lineEdit_rejectPosition->setText(
         QString::number(m_appliedSettings->rejectPosition));
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = previousUpdating;
-    }
+    m_updatingSettingsUi = previousUpdating;
     refreshAllDirty();
 }
 
-// 函数说明：restoreCameraUiFromApplied 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restoreCameraUiFromApplied()
 {
     if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
-    const bool previousUpdating =
-        m_updatingSettingsUi ? *m_updatingSettingsUi : false;
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = true;
-    }
+    const bool previousUpdating = m_updatingSettingsUi;
+    m_updatingSettingsUi = true;
     QSignalBlocker exposure(m_view.spinBox_cameraExposure);
     QSignalBlocker gain(m_view.lineEdit_cameraGain);
     m_view.spinBox_cameraExposure->setValue(m_appliedSettings->cameraExposure);
     m_view.lineEdit_cameraGain->setText(QString::number(
         static_cast<int>(m_appliedSettings->cameraGain)));
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = previousUpdating;
-    }
+    m_updatingSettingsUi = previousUpdating;
     refreshDirty(QStringList() << "camera.exposure" << "camera.gain");
 }
 
-// 函数说明：restorePlcUiFromApplied 函数校验、转换或恢复对应数据。
 void MachineSettingsPage::restorePlcUiFromApplied()
 {
     if (!m_view.comboBox_detectionMode || !m_appliedSettings) {
         return;
     }
-    const bool previousUpdating =
-        m_updatingSettingsUi ? *m_updatingSettingsUi : false;
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = true;
-    }
+    const bool previousUpdating = m_updatingSettingsUi;
+    m_updatingSettingsUi = true;
     QSignalBlocker trigger(m_view.comboBox_plcTriggerMode);
     QSignalBlocker photoDistance(m_view.lineEdit_photoDistance);
     QSignalBlocker photoTime(m_view.lineEdit_photoTime);
@@ -925,9 +858,7 @@ void MachineSettingsPage::restorePlcUiFromApplied()
         QString::number(m_appliedSettings->rejectTime));
     m_view.lineEdit_rejectPosition->setText(
         QString::number(m_appliedSettings->rejectPosition));
-    if (m_updatingSettingsUi) {
-        *m_updatingSettingsUi = previousUpdating;
-    }
+    m_updatingSettingsUi = previousUpdating;
     refreshDirty(QStringList()
         << "plc.trigger_mode"
         << "plc.photo_distance"
@@ -938,7 +869,6 @@ void MachineSettingsPage::restorePlcUiFromApplied()
         << "plc.reject_position");
 }
 
-// 函数说明：applyOperationState 根据统一权限快照更新设置页控件。
 void MachineSettingsPage::applyOperationState(
     const OperationUiSnapshot &snapshot)
 {
@@ -976,7 +906,6 @@ void MachineSettingsPage::applyOperationState(
     }
 }
 
-// 函数说明：eventFilter 函数实现名称所表示的处理步骤。
 bool MachineSettingsPage::eventFilter(
     QObject *watched,
     QEvent *event)
