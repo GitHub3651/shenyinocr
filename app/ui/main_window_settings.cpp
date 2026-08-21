@@ -24,8 +24,6 @@
 
 #include <cstdint>
 
-#pragma execution_character_set("utf-8")
-
 namespace {
 bool parseIntValue(const QString &text, int *value)
 {

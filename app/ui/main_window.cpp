@@ -30,8 +30,6 @@
 #include <QTextOption>
 #include <QDebug>
 
-#pragma execution_character_set("utf-8")
-
 /**
  * @brief MainWindow构造函数
  * @param parent 父窗口指针

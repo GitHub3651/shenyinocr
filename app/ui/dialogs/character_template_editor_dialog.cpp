@@ -24,8 +24,6 @@
 #include <algorithm>
 #include <functional>
 
-#pragma execution_character_set("utf-8")
-
 namespace {
 
 void setInputError(QLineEdit *edit, bool hasError)

@@ -33,8 +33,6 @@
 
 #include <limits>
 
-#pragma execution_character_set("utf-8")
-
 void MainWindow::presentInspectionFault()
 {
     if (!m_inspectionPage) {
