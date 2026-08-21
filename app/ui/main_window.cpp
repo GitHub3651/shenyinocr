@@ -30,8 +30,6 @@
 #include <QTextOption>
 #include <QDebug>
 
-#include <opencv2/highgui.hpp>
-
 #pragma execution_character_set("utf-8")
 
 /**
@@ -71,8 +69,8 @@ MainWindow::MainWindow(
     };
     resultCallbacks.clearPreviousOverlay = [this](
         bool clearImageLabelRects) {
-        if (clearImageLabelRects && imageLabel) {
-            imageLabel->clearSelection();
+        if (clearImageLabelRects && m_templateEditorPage) {
+            m_templateEditorPage->cancelTemplateDrawing();
         }
     };
     resultCallbacks.showDetectionRoiWarning = [this]() {
@@ -419,10 +417,6 @@ void MainWindow::initializePages()
     ui->textEdit_targetText->setWordWrapMode(QTextOption::WordWrap);
     setupSoftwareSettingsPage();
     m_machineSettingsPage->installWheelProtection(this);
-    connect(imageLabel, &ImageLabel::signal_templateGuideEvent,
-            m_templateEditorPage.get(),
-            &TemplateEditorPage::handleTemplateGuideEvent);
-
     m_machineSettingsPage->setupNumericInputValidators();
     setupNonPersistentDefaults();
     m_machineSettingsPage->setupBindings();
@@ -480,9 +474,6 @@ MainWindow::~MainWindow()
     m_inspectionApplicationService->clearUiBindings();
     m_inspectionApplicationService->shutdown();
 
-    try {
-        cv::destroyAllWindows();
-    } catch (...) {}
     m_templateEditorPage.reset();
     m_machineSettingsPage.reset();
     m_inspectionPage.reset();

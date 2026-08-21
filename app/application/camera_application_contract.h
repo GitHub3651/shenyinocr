@@ -18,6 +18,7 @@ enum class CameraOpenIssueDto
 {
     None,
     DeviceNotFound,
+    DeviceError,
     DeviceOpenFailed,
     ExposureFailed,
     InitializationFailed

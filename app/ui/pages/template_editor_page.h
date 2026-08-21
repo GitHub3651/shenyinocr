@@ -3,6 +3,7 @@
 
 #include "application/template_application_service.h"
 #include "ui/controllers/operation_ui_policy.h"
+#include "ui/widgets/image_label.h"
 
 #include <QObject>
 #include <QRect>
@@ -10,7 +11,6 @@
 
 #include <functional>
 
-class ImageLabel;
 class InspectionApplicationService;
 class SettingsApplicationService;
 class SettingsEditState;
@@ -85,24 +85,12 @@ public:
     void handlePreviewFrame(quint64 sessionId, const cv::Mat &image);
     void handlePreviewFailure(quint64 sessionId, const QString &reason);
 
-    void clearBarcodeTemplateValidation();
-    bool validateBarcodeTemplateRect(
-        const QRect &uiBarcodeRect,
-        const TemplateBarcodeValidationOptions &options,
-        QString *failureReason);
-    TemplateBarcodeValidationOptions barcodeTemplateValidationOptions() const;
-    bool barcodeTemplateReadable() const;
-    QRect validatedBarcodeRect() const;
-    void acceptBarcodeTemplateValidation(const QRect &barcodeRect);
-
     void updateCurrentTemplateName();
     void updateTemplateGuideText(const QString &title,
                                  const QString &body);
     void hideTemplateGuide();
     void updateImageDisplayStatusText(const QString &body);
-    void showTemplateGuideForCurrentMode();
-    void handleTemplateGuideEvent(const QString &eventName,
-                                  int pointCount);
+    void cancelTemplateDrawing();
     void refreshTemplateDirty();
     void clearTemplateDirty();
     void showManualCharacterTemplateEditorDialog();
@@ -137,6 +125,22 @@ private:
     void setupCurrentTemplateEditor();
     void setupTemplateGuide();
     void adjustTemplateGuideHeight();
+    void handleTemplateDrawingChanged(
+        ImageLabel::DrawingStep step,
+        ImageLabel::DrawingEvent event,
+        int pointCount);
+    bool validateCompletedBarcode();
+    void updateDrawingGuide(ImageLabel::DrawingStep step,
+                            ImageLabel::DrawingEvent event,
+                            int pointCount);
+    void askToSaveCompletedTemplate(DetectionMode mode);
+    void clearBarcodeTemplateValidation();
+    bool validateBarcodeTemplateRect(
+        const QRect &uiBarcodeRect,
+        const TemplateBarcodeValidationOptions &options,
+        QString *failureReason);
+    TemplateBarcodeValidationOptions barcodeTemplateValidationOptions() const;
+    void acceptBarcodeTemplateValidation(const QRect &barcodeRect);
     void setupManualCharacterCropUi();
     void setupTemplateDirtyTracking();
     void connectPageActions();

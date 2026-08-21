@@ -1,8 +1,10 @@
 # OCRGangYin 架构重构 Agent 执行提示词
 
+> 状态：历史执行提示。本文记录早期阶段 0～3 的授权和工作流，不再作为当前任务入口。当前任务统一使用 `$ocrgangyin-project`，并从 `docs/development/OCRGangYin计划索引.md` 选择有效计划。
+
 ## 使用方式
 
-在仓库根目录 `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin` 新建一个 Codex Agent 后，只需发送下面这一句话：
+以下调用方式仅保留为历史记录，不应再用于启动新任务：
 
 > 请完整读取并严格执行 `docs/development/OCRGangYin架构重构Agent执行提示词.md`，使用 `$ocrgangyin-refactor` Skill，从当前实际进度正式开始重构开发。
 

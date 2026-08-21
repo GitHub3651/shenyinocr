@@ -168,7 +168,6 @@ private:
 
     QPointer<ImageLabel> imageLabel;
     void setupDetectModeChangeTracking();
-    void clearBarcodeTemplateValidation();
 
     // ========== 设置相关函数 ==========
     bool saveSettings(bool showErrorMessage = true);                ///< 保存设置

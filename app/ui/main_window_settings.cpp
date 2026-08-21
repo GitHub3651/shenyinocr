@@ -201,9 +201,8 @@ void MainWindow::clearCurrentSoftwareData()
     m_templateEditorPage->clearTemplateState();
     m_templateEditorPage->setCurrentTemplateNameVisible(false);
     m_templateEditorPage->updateCurrentTemplateName();
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearSelection();
+    if (m_templateEditorPage) {
+        m_templateEditorPage->cancelTemplateDrawing();
     }
     m_machineSettingsPage->clearAllDirty();
     m_templateEditorPage->clearTemplateDirty();
@@ -303,10 +302,7 @@ void MainWindow::setupDetectModeChangeTracking()
                 resetTemplateCaptureState();
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
-                if (imageLabel) {
-                    imageLabel->setTemplateDrawingEnabled(false);
-                }
-                m_templateEditorPage->hideTemplateGuide();
+                m_templateEditorPage->cancelTemplateDrawing();
                 if (previousModeId != nextModeId) {
                     m_templateEditorPage->clearTemplateState();
                 }
@@ -565,12 +561,7 @@ void MainWindow::on_toolButton_stopInspection_clicked()
     if (m_templateEditorPage
             && m_templateEditorPage->templateOperationActive()) {
         resetTemplateCaptureState();
-        if (imageLabel) {
-            imageLabel->setTemplateDrawingEnabled(false);
-            imageLabel->clearSelection();
-        }
-        clearBarcodeTemplateValidation();
-        m_templateEditorPage->hideTemplateGuide();
+        m_templateEditorPage->cancelTemplateDrawing();
         ui->label_runtimeStatus->setText(
                     isCameraOpen()
                     ? "已退出模板制作，相机已打开"

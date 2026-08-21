@@ -18,11 +18,9 @@
 namespace {
 
 // 函数说明：cameraErrorText 函数实现名称所表示的处理步骤。
-QString cameraErrorText(const QString &operation, int nativeErrorCode)
+QString cameraErrorText(const QString &, int)
 {
-    return QStringLiteral("%1，错误码：%2")
-            .arg(operation)
-            .arg(nativeErrorCode);
+    return QStringLiteral("相机异常。");
 }
 
 // 函数说明：integerRange 函数实现名称所表示的处理步骤。
@@ -100,15 +98,19 @@ InspectionCameraOpenResult CameraSession::openFirst(
 {
     InspectionCameraOpenResult output;
     CameraResult result = m_cameraDevice->enumerate(&output.deviceCount);
-    if (!result.isSuccess() || output.deviceCount <= 0) {
+    if (!result.isSuccess()) {
+        output.issue = InspectionCameraOpenIssue::DeviceError;
+        output.diagnostic = QStringLiteral("相机异常。");
+        return output;
+    }
+    if (output.deviceCount <= 0) {
         output.issue = InspectionCameraOpenIssue::DeviceNotFound;
-        output.diagnostic = QString::number(result.nativeErrorCode);
         return output;
     }
     result = m_cameraDevice->openFirst();
     if (!result.isSuccess()) {
         output.issue = InspectionCameraOpenIssue::DeviceOpenFailed;
-        output.diagnostic = QString::number(result.nativeErrorCode);
+        output.diagnostic = QStringLiteral("相机异常。");
         return output;
     }
     result = m_cameraDevice->setTriggerMode(CameraTriggerMode::Software);

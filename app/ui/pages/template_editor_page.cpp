@@ -7,7 +7,6 @@
 #include "ui/controllers/settings_edit_state.h"
 #include "ui/dialogs/character_template_editor_dialog.h"
 #include "ui/dialogs/template_selection_dialog.h"
-#include "ui/pages/template_editor_support.h"
 #include "ui/widgets/image_label.h"
 
 #include <QComboBox>
@@ -15,6 +14,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
+#include <QImage>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -31,9 +31,41 @@
 
 #include <opencv2/imgproc.hpp>
 
-using namespace TemplateEditorSupport;
-
 namespace {
+
+bool parseIntValue(const QString &text, int *value)
+{
+    bool ok = false;
+    const int parsed = text.trimmed().toInt(&ok);
+    if (!ok) {
+        return false;
+    }
+    if (value) {
+        *value = parsed;
+    }
+    return true;
+}
+
+QImage imageFromBgrMat(const cv::Mat &image)
+{
+    if (image.empty()) {
+        return QImage();
+    }
+    cv::Mat converted;
+    if (image.channels() == 1) {
+        cv::cvtColor(image, converted, cv::COLOR_GRAY2RGB);
+    } else if (image.channels() == 4) {
+        cv::cvtColor(image, converted, cv::COLOR_BGRA2RGBA);
+        return QImage(converted.data, converted.cols, converted.rows,
+                      static_cast<int>(converted.step),
+                      QImage::Format_RGBA8888).copy();
+    } else {
+        cv::cvtColor(image, converted, cv::COLOR_BGR2RGB);
+    }
+    return QImage(converted.data, converted.cols, converted.rows,
+                  static_cast<int>(converted.step),
+                  QImage::Format_RGB888).copy();
+}
 
 bool isMultiTemplateMode(DetectionMode mode)
 {
@@ -73,6 +105,66 @@ QString templateGuideDetectionRegionName(DetectionMode mode)
         break;
     }
     return QStringLiteral("检测区域");
+}
+
+int drawingStepCount(DetectionMode mode)
+{
+    return mode == DetectionMode::Stamp
+            ? 4 : mode == DetectionMode::BarcodeWord ? 3 : 2;
+}
+
+int drawingStepNumber(DetectionMode mode, ImageLabel::DrawingStep step)
+{
+    switch (step) {
+    case ImageLabel::DrawingStep::TrackingAnchor:
+    case ImageLabel::DrawingStep::StampAnchor:
+        return 1;
+    case ImageLabel::DrawingStep::DetectionPolygon:
+    case ImageLabel::DrawingStep::BarcodeRegion:
+    case ImageLabel::DrawingStep::StampPolygon:
+        return 2;
+    case ImageLabel::DrawingStep::DateAnchor:
+        return 3;
+    case ImageLabel::DrawingStep::DatePolygon:
+        return mode == DetectionMode::Stamp ? 4 : 3;
+    case ImageLabel::DrawingStep::Idle:
+    case ImageLabel::DrawingStep::Complete:
+        break;
+    }
+    return 0;
+}
+
+QString drawingRegionName(DetectionMode mode, ImageLabel::DrawingStep step)
+{
+    switch (step) {
+    case ImageLabel::DrawingStep::TrackingAnchor:
+        return mode == DetectionMode::BarcodeWord
+                ? QStringLiteral("生产日期定位锚点")
+                : QStringLiteral("定位区域");
+    case ImageLabel::DrawingStep::DetectionPolygon:
+        return templateGuideDetectionRegionName(mode);
+    case ImageLabel::DrawingStep::BarcodeRegion:
+        return QStringLiteral("二维码区域");
+    case ImageLabel::DrawingStep::StampAnchor:
+        return QStringLiteral("吸管口定位锚点");
+    case ImageLabel::DrawingStep::StampPolygon:
+        return QStringLiteral("钢印检测区域");
+    case ImageLabel::DrawingStep::DateAnchor:
+        return QStringLiteral("生产日期定位锚点");
+    case ImageLabel::DrawingStep::DatePolygon:
+        return QStringLiteral("生产日期检测区域");
+    case ImageLabel::DrawingStep::Idle:
+    case ImageLabel::DrawingStep::Complete:
+        break;
+    }
+    return QStringLiteral("检测区域");
+}
+
+bool isDrawingPolygonStep(ImageLabel::DrawingStep step)
+{
+    return step == ImageLabel::DrawingStep::DetectionPolygon
+            || step == ImageLabel::DrawingStep::DatePolygon
+            || step == ImageLabel::DrawingStep::StampPolygon;
 }
 
 }
@@ -124,6 +216,8 @@ TemplateEditorPage::TemplateEditorPage(
     }, Qt::QueuedConnection);
     setupCurrentTemplateEditor();
     setupTemplateGuide();
+    connect(imageLabel, &ImageLabel::templateDrawingChanged,
+            this, &TemplateEditorPage::handleTemplateDrawingChanged);
     setupManualCharacterCropUi();
     setupTemplateDirtyTracking();
     connectPageActions();
@@ -238,9 +332,7 @@ bool TemplateEditorPage::startTemplatePreview()
                     : result.error.userMessage);
         return false;
     }
-    imageLabel->setTemplateDrawingEnabled(false);
-    imageLabel->clearSelection();
-    clearBarcodeTemplateValidation();
+    cancelTemplateDrawing();
     m_captureState = CaptureState::Previewing;
     m_lastPreviewFrame.release();
     updateImageDisplayStatusText(
@@ -271,11 +363,10 @@ bool TemplateEditorPage::freezeTemplatePreview()
     }
     DetectionMode mode = DetectionMode::Stamp;
     detectionModeFromUiId(currentDetectModeId(), &mode);
-    imageLabel->setBarcodeRegionRequired(mode == DetectionMode::BarcodeWord);
-    imageLabel->setTemplateDrawingEnabled(mode != DetectionMode::Tissue);
-    if (mode != DetectionMode::Tissue) {
-        imageLabel->resetDrawingStep();
-        showTemplateGuideForCurrentMode();
+    clearBarcodeTemplateValidation();
+    imageLabel->beginTemplateDrawing(mode);
+    if (mode == DetectionMode::Tissue) {
+        hideTemplateGuide();
     }
     if (m_callbacks.updateOperationUiState) {
         m_callbacks.updateOperationUiState();
@@ -290,9 +381,11 @@ void TemplateEditorPage::handleTemplateCaptureButton()
         return;
     }
     if (m_captureState == CaptureState::Frozen
-            && (!imageLabel->getTrackingRect().isNull()
-                || !imageLabel->getBarcodeRect().isNull()
-                || !imageLabel->getDetectionPoly().isEmpty())) {
+            && (!imageLabel->trackingAnchorRect().isNull()
+                || !imageLabel->barcodeRect().isNull()
+                || !imageLabel->stampAnchorRect().isNull()
+                || !imageLabel->datePolygon().isEmpty()
+                || !imageLabel->stampPolygon().isEmpty())) {
         if (QMessageBox::question(
                 dialogParent(), QStringLiteral("重新取景"),
                 QStringLiteral("重新取景会清空当前框线，是否继续？"),
@@ -615,26 +708,33 @@ void TemplateEditorPage::saveCurrentTemplate()
                     QStringLiteral("请先制作并冻结模板画面。"));
         return;
     }
-    const QRect trackingUi = imageLabel->getTrackingRect().normalized();
-    const QRect barcodeUi = imageLabel->getBarcodeRect().normalized();
-    const QPolygon dateUi = imageLabel->getDetectionPoly();
-    if (trackingUi.width() <= 5 || trackingUi.height() <= 5
-            || dateUi.size() < 3
-            || !imageLabel->isDetectionPolyComplete()) {
+    if (imageLabel->templateDrawingMode() != mode
+            || !imageLabel->isTemplateDrawingComplete()) {
         showWarning(QStringLiteral("提示"),
-                    QStringLiteral("请完成定位区域和闭合的检测区域。"));
+                    QStringLiteral("请先完成当前模式的全部模板框选步骤。"));
         return;
     }
+    TemplateDrawingInput drawingInput;
+    drawingInput.mode = mode;
+    drawingInput.trackingAnchorRect =
+            imageLabel->trackingAnchorRect().normalized();
+    drawingInput.barcodeRect = imageLabel->barcodeRect().normalized();
+    drawingInput.stampAnchorRect =
+            imageLabel->stampAnchorRect().normalized();
+    drawingInput.datePolygon = imageLabel->datePolygon();
+    drawingInput.stampPolygon = imageLabel->stampPolygon();
     if (mode == DetectionMode::BarcodeWord
             && (!m_barcodeTemplateReadable
-                || m_validatedBarcodeRect != barcodeUi)) {
+                || m_validatedBarcodeRect
+                   != drawingInput.barcodeRect)) {
         QString reason;
         if (!validateBarcodeTemplateRect(
-                barcodeUi, barcodeTemplateValidationOptions(), &reason)) {
+                drawingInput.barcodeRect,
+                barcodeTemplateValidationOptions(), &reason)) {
             showWarning(QStringLiteral("二维码扫描失败"), reason);
             return;
         }
-        acceptBarcodeTemplateValidation(barcodeUi);
+        acceptBarcodeTemplateValidation(drawingInput.barcodeRect);
     }
     int threshold = TemplateSettings::DefaultImageThresholdPercent;
     if (mode != DetectionMode::Ocr
@@ -691,9 +791,7 @@ void TemplateEditorPage::saveCurrentTemplate()
         imageSize
     };
     const TemplateGeometryResult geometry =
-            m_templateService->buildGeometry(
-                trackingUi, barcodeUi, dateUi,
-                mode == DetectionMode::BarcodeWord, display);
+            m_templateService->buildGeometry(drawingInput, display);
     if (!geometry.valid) {
         showWarning(QStringLiteral("模板区域无效"),
                     geometry.errorMessage);
@@ -712,29 +810,17 @@ void TemplateEditorPage::saveCurrentTemplate()
     assets.datePolygon = geometry.datePolygon;
     assets.barcodePolygon = geometry.barcodePolygon;
     if (mode == DetectionMode::Stamp) {
-        const cv::Rect ring = getQuickRectROI(rawImage, "STAMP_RING");
+        const cv::Rect ring = geometry.stampAnchorImageRect;
         if (ring.width <= 5 || ring.height <= 5
                 || ring.x < 0 || ring.y < 0
                 || ring.x + ring.width > rawImage.cols
                 || ring.y + ring.height > rawImage.rows) {
             showWarning(QStringLiteral("钢印标定无效"),
-                        QStringLiteral("请重新选择有效的钢印环区域。"));
+                        QStringLiteral("请重新选择有效的吸管口定位锚点。"));
             return;
         }
         assets.stampRing = rawImage(ring).clone();
-        const cv::Point2f center(ring.x + ring.width / 2.0f,
-                                 ring.y + ring.height / 2.0f);
-        const std::vector<cv::Point> polygon =
-                getPolygonROI(rawImage, "STAMP_REGION");
-        if (polygon.size() < 3u) {
-            showWarning(QStringLiteral("钢印标定无效"),
-                        QStringLiteral("钢印区域至少需要三个点。"));
-            return;
-        }
-        for (const cv::Point &point : polygon) {
-            assets.stampPolygon.emplace_back(
-                        point.x - center.x, point.y - center.y);
-        }
+        assets.stampPolygon = geometry.stampPolygon;
     }
     EditableTemplate editable;
     if (!m_templateService->stageInitialAssets(
@@ -764,10 +850,7 @@ void TemplateEditorPage::saveCurrentTemplate()
         showWarning(QStringLiteral("模板已保存但未应用"),
                     selected.error.userMessage);
     }
-    imageLabel->setTemplateDrawingEnabled(false);
-    imageLabel->clearSelection();
-    clearBarcodeTemplateValidation();
-    hideTemplateGuide();
+    cancelTemplateDrawing();
     resetTemplateCaptureState();
     refreshCurrentTemplateEditor();
     const int savedIndex = m_currentTemplateEditComboBox
@@ -1099,182 +1182,192 @@ void TemplateEditorPage::updateImageDisplayStatusText(const QString &body)
     }
 }
 
-void TemplateEditorPage::showTemplateGuideForCurrentMode()
+void TemplateEditorPage::cancelTemplateDrawing()
 {
-    DetectionMode mode = DetectionMode::Stamp;
-    if (!detectionModeFromUiId(currentDetectModeId(), &mode)
-            || mode == DetectionMode::Tissue) {
-        hideTemplateGuide();
-        return;
+    if (imageLabel) {
+        imageLabel->cancelTemplateDrawing();
     }
-    const bool barcodeWord = mode == DetectionMode::BarcodeWord;
-    updateTemplateGuideText(
-                templateGuideTitle(mode),
-                barcodeWord
-                ? QStringLiteral(
-                      "【步骤1/3】按住鼠标左键拖动，框选稳定且不会变化的定位锚点。")
-                : QStringLiteral(
-                      "【步骤1/2】按住鼠标左键拖动，框选定位区域；下一步将框选%1。")
-                  .arg(templateGuideDetectionRegionName(mode)));
+    clearBarcodeTemplateValidation();
+    hideTemplateGuide();
 }
 
-void TemplateEditorPage::handleTemplateGuideEvent(
-        const QString &eventName, int pointCount)
+void TemplateEditorPage::handleTemplateDrawingChanged(
+        ImageLabel::DrawingStep step,
+        ImageLabel::DrawingEvent event,
+        int pointCount)
 {
-    DetectionMode mode = DetectionMode::Stamp;
-    if (!detectionModeFromUiId(currentDetectModeId(), &mode)
-            || mode == DetectionMode::Tissue) {
+    if (!imageLabel) {
+        return;
+    }
+    const DetectionMode mode = imageLabel->templateDrawingMode();
+    if (mode == DetectionMode::Tissue) {
         hideTemplateGuide();
         return;
     }
 
-    const bool barcodeWord = mode == DetectionMode::BarcodeWord;
-    const QString title = templateGuideTitle(mode);
-    const QString detectionRegion =
-            templateGuideDetectionRegionName(mode);
-    const bool guideVisible =
-            m_templateGuideFrame && m_templateGuideFrame->isVisible();
-
-    if (barcodeWord
-            && (eventName == QLatin1String("tracking_started")
-                || eventName == QLatin1String("barcode_started")
-                || eventName == QLatin1String("barcode_too_small")
-                || eventName == QLatin1String("template_reset"))) {
-        clearBarcodeTemplateValidation();
+    if (event == ImageLabel::DrawingEvent::StepCompleted
+            && step == ImageLabel::DrawingStep::BarcodeRegion
+            && !validateCompletedBarcode()) {
+        return;
     }
+    if (event == ImageLabel::DrawingEvent::WorkflowCompleted) {
+        updateDrawingGuide(step, event, pointCount);
+        askToSaveCompletedTemplate(mode);
+        return;
+    }
+    updateDrawingGuide(step, event, pointCount);
+}
 
-    if (barcodeWord && eventName == QLatin1String("barcode_done")) {
-        const QRect barcodeRect = imageLabel->getBarcodeRect().normalized();
-        QString failureReason;
-        if (!validateBarcodeTemplateRect(
-                barcodeRect,
+bool TemplateEditorPage::validateCompletedBarcode()
+{
+    const QRect barcode = imageLabel->barcodeRect().normalized();
+    QString failureReason;
+    if (validateBarcodeTemplateRect(
+                barcode,
                 barcodeTemplateValidationOptions(),
                 &failureReason)) {
+        acceptBarcodeTemplateValidation(barcode);
+        return true;
+    }
+
+    clearBarcodeTemplateValidation();
+    imageLabel->retryBarcodeRegion();
+    updateTemplateGuideText(
+                templateGuideTitle(DetectionMode::BarcodeWord),
+                QStringLiteral(
+                    "【步骤2/3】二维码扫描失败，生产日期定位锚点已保留，请重新完整框选二维码区域。"));
+    QTimer::singleShot(0, this, [this, failureReason]() {
+        showWarning(
+                    QStringLiteral("二维码扫描失败"),
+                    failureReason.trimmed().isEmpty()
+                    ? QStringLiteral(
+                          "二维码区域无法解码，请重新完整框选，四周保留少量背景，不要包含日期区域。")
+                    : failureReason
+                      + QStringLiteral(
+                          "\n\n请重新完整框选二维码区域，四周保留少量背景，不要包含日期区域。"));
+    });
+    return false;
+}
+
+void TemplateEditorPage::updateDrawingGuide(
+        ImageLabel::DrawingStep step,
+        ImageLabel::DrawingEvent event,
+        int pointCount)
+{
+    const DetectionMode mode = imageLabel->templateDrawingMode();
+    const QString title = templateGuideTitle(mode);
+    const QString region = drawingRegionName(mode, step);
+    const QString stepPrefix = QStringLiteral("【步骤%1/%2】")
+            .arg(drawingStepNumber(mode, step))
+            .arg(drawingStepCount(mode));
+
+    switch (event) {
+    case ImageLabel::DrawingEvent::StepStarted: {
+        if (step == ImageLabel::DrawingStep::TrackingAnchor
+                || step == ImageLabel::DrawingStep::BarcodeRegion) {
             clearBarcodeTemplateValidation();
-            imageLabel->retryBarcodeRegion();
-            if (guideVisible) {
-                updateTemplateGuideText(
-                            title,
-                            QStringLiteral(
-                                "【步骤2/3】二维码扫描失败，定位锚点已保留，请重新完整框选二维码区域。"));
+        }
+        QString instruction;
+        if (isDrawingPolygonStep(step)) {
+            instruction = QStringLiteral(
+                        "%1用鼠标左键依次点击%2边缘，右键闭合。")
+                    .arg(stepPrefix, region);
+            if (step == ImageLabel::DrawingStep::DatePolygon
+                    && mode == DetectionMode::BarcodeWord
+                    && m_barcodeTemplateReadable) {
+                instruction.prepend(QStringLiteral("二维码扫描成功。"));
             }
-            QTimer::singleShot(0, this, [this, failureReason]() {
-                showWarning(
-                            QStringLiteral("二维码扫描失败"),
-                            failureReason.trimmed().isEmpty()
-                            ? QStringLiteral(
-                                  "二维码区域无法解码，请重新完整框选，四周保留少量背景，不要包含日期区域。")
-                            : failureReason
-                              + QStringLiteral(
-                                  "\n\n请重新完整框选二维码区域，四周保留少量背景，不要包含日期区域。"));
-            });
+        } else if (step == ImageLabel::DrawingStep::BarcodeRegion) {
+            instruction = QStringLiteral(
+                        "%1按住鼠标左键拖动，完整框选二维码区域；松开后立即验证是否可读，四周保留少量背景。")
+                    .arg(stepPrefix);
+        } else {
+            instruction = QStringLiteral(
+                        "%1按住鼠标左键拖动，框选%2；松开左键完成。")
+                    .arg(stepPrefix, region);
+        }
+        updateTemplateGuideText(title, instruction);
+        return;
+    }
+    case ImageLabel::DrawingEvent::Reset:
+        clearBarcodeTemplateValidation();
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral("%1已清空当前模式全部框线，请重新框选%2。")
+                    .arg(stepPrefix, region));
+        return;
+    case ImageLabel::DrawingEvent::RegionTooSmall:
+        if (step == ImageLabel::DrawingStep::BarcodeRegion) {
+            clearBarcodeTemplateValidation();
+        }
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral("%1%2太小，请重新框选。")
+                    .arg(stepPrefix, region));
+        return;
+    case ImageLabel::DrawingEvent::PointAdded:
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral(
+                        "%1已选择%2个点，继续点击%3边缘或右键闭合。")
+                    .arg(stepPrefix).arg(pointCount).arg(region));
+        return;
+    case ImageLabel::DrawingEvent::TooFewPoints:
+        updateTemplateGuideText(
+                    title,
+                    QStringLiteral(
+                        "%1至少需要3个点，当前%2个，请继续点击%3边缘。")
+                    .arg(stepPrefix).arg(pointCount).arg(region));
+        return;
+    case ImageLabel::DrawingEvent::StepCompleted:
+        return;
+    case ImageLabel::DrawingEvent::WorkflowCompleted:
+        break;
+    }
+
+    const QString completedText = mode == DetectionMode::Stamp
+            ? QStringLiteral(
+                  "【步骤4/4】吸管口锚点、钢印区域、日期锚点和日期区域均已完成，请点击【保存模板】。")
+            : mode == DetectionMode::BarcodeWord
+              ? QStringLiteral(
+                    "【步骤3/3】日期锚点、二维码区域和日期区域均已完成，请点击【保存模板】。")
+              : QStringLiteral(
+                    "【步骤2/2】定位区域和%1均已完成，请点击【保存模板】。")
+                .arg(templateGuideDetectionRegionName(mode));
+    updateTemplateGuideText(title, completedText);
+}
+
+void TemplateEditorPage::askToSaveCompletedTemplate(DetectionMode mode)
+{
+    QTimer::singleShot(0, this, [this, mode]() {
+        if (!imageLabel
+                || imageLabel->templateDrawingMode() != mode
+                || !imageLabel->isTemplateDrawingComplete()) {
             return;
         }
-
-        acceptBarcodeTemplateValidation(barcodeRect);
-        if (guideVisible) {
-            updateTemplateGuideText(
-                        title,
-                        QStringLiteral(
-                            "【步骤3/3】二维码扫描成功。用鼠标左键依次点击日期检测区域边缘，右键闭合。"));
+        QMessageBox saveMessageBox(dialogParent());
+        saveMessageBox.setIcon(QMessageBox::Question);
+        saveMessageBox.setWindowTitle(QStringLiteral("保存模板"));
+        saveMessageBox.setText(
+                    mode == DetectionMode::Stamp
+                    ? QStringLiteral(
+                          "吸管口定位锚点、钢印区域、生产日期定位锚点和日期区域均已完成。\n\n是否立即保存当前模板？")
+                    : mode == DetectionMode::BarcodeWord
+                      ? QStringLiteral(
+                            "生产日期定位锚点、二维码区域和日期区域均已完成。\n\n是否立即保存当前模板？")
+                      : QStringLiteral(
+                            "定位区域和%1均已完成。\n\n是否立即保存当前模板？")
+                        .arg(templateGuideDetectionRegionName(mode)));
+        QPushButton *saveButton = saveMessageBox.addButton(
+                    QStringLiteral("保存"), QMessageBox::AcceptRole);
+        saveMessageBox.addButton(
+                    QStringLiteral("取消"), QMessageBox::RejectRole);
+        saveMessageBox.setDefaultButton(saveButton);
+        saveMessageBox.exec();
+        if (saveMessageBox.clickedButton() == saveButton) {
+            saveCurrentTemplate();
         }
-        return;
-    }
-
-    if (!guideVisible) {
-        return;
-    }
-
-    if (eventName == QLatin1String("tracking_started")) {
-        updateTemplateGuideText(
-                    title,
-                    barcodeWord
-                    ? QStringLiteral(
-                          "【步骤1/3】松开鼠标左键，完成定位锚点。")
-                    : QStringLiteral(
-                          "【步骤1/2】松开鼠标左键，完成定位区域。"));
-    } else if (eventName == QLatin1String("template_reset")) {
-        updateTemplateGuideText(
-                    title,
-                    barcodeWord
-                    ? QStringLiteral(
-                          "【步骤1/3】已清空当前框线，请重新框选稳定定位锚点。")
-                    : QStringLiteral(
-                          "【步骤1/2】已清空当前框线，请重新框选定位区域。"));
-    } else if (eventName == QLatin1String("tracking_too_small")) {
-        updateTemplateGuideText(
-                    title,
-                    barcodeWord
-                    ? QStringLiteral(
-                          "【步骤1/3】定位锚点太小，请重新框选更大的稳定定位锚点。")
-                    : QStringLiteral(
-                          "【步骤1/2】定位区域太小，请重新框选更大的定位区域。"));
-    } else if (eventName == QLatin1String("tracking_done")) {
-        updateTemplateGuideText(
-                    title,
-                    barcodeWord
-                    ? QStringLiteral(
-                          "【步骤2/3】按住鼠标左键拖动，完整框选二维码区域，四周保留少量背景。")
-                    : QStringLiteral(
-                          "【步骤2/2】用鼠标左键依次点击%1边缘，右键闭合。")
-                      .arg(detectionRegion));
-    } else if (eventName == QLatin1String("barcode_started")) {
-        updateTemplateGuideText(
-                    title,
-                    QStringLiteral(
-                        "【步骤2/3】松开鼠标左键后，程序将立即验证二维码是否可读。"));
-    } else if (eventName == QLatin1String("barcode_too_small")) {
-        updateTemplateGuideText(
-                    title,
-                    QStringLiteral(
-                        "【步骤2/3】二维码区域太小，请重新框选完整二维码区域。"));
-    } else if (eventName == QLatin1String("poly_point_added")) {
-        updateTemplateGuideText(
-                    title,
-                    QStringLiteral("【步骤%1/%1】已选择%2个点，继续点击%3边缘或右键闭合。")
-                    .arg(barcodeWord ? 3 : 2)
-                    .arg(pointCount)
-                    .arg(detectionRegion));
-    } else if (eventName == QLatin1String("poly_too_few")) {
-        updateTemplateGuideText(
-                    title,
-                    QStringLiteral("【步骤%1/%1】至少需要3个点，当前%2个，请继续点击%3边缘。")
-                    .arg(barcodeWord ? 3 : 2)
-                    .arg(pointCount)
-                    .arg(detectionRegion));
-    } else if (eventName == QLatin1String("poly_done")) {
-        updateTemplateGuideText(
-                    title,
-                    QStringLiteral("【步骤%1/%1】%2已完成，请点击【保存模板】。")
-                    .arg(barcodeWord ? 3 : 2)
-                    .arg(detectionRegion));
-
-        const DetectionMode completedMode = mode;
-        QTimer::singleShot(0, this, [this, completedMode]() {
-            if (!imageLabel || !imageLabel->isTemplateDrawingEnabled()) {
-                return;
-            }
-            QMessageBox saveMessageBox(dialogParent());
-            saveMessageBox.setIcon(QMessageBox::Question);
-            saveMessageBox.setWindowTitle(QStringLiteral("保存模板"));
-            saveMessageBox.setText(
-                        completedMode == DetectionMode::BarcodeWord
-                        ? QStringLiteral(
-                              "定位锚点、二维码区域和日期检测区域均已完成。\n\n是否立即保存当前模板？")
-                        : QStringLiteral("定位区域和%1均已完成。\n\n是否立即保存当前模板？")
-                          .arg(templateGuideDetectionRegionName(
-                                   completedMode)));
-            QPushButton *saveButton = saveMessageBox.addButton(
-                        QStringLiteral("保存"), QMessageBox::AcceptRole);
-            saveMessageBox.addButton(
-                        QStringLiteral("取消"), QMessageBox::RejectRole);
-            saveMessageBox.setDefaultButton(saveButton);
-            saveMessageBox.exec();
-            if (saveMessageBox.clickedButton() == saveButton) {
-                saveCurrentTemplate();
-            }
-        });
-    }
+    });
 }
 
 void TemplateEditorPage::setupManualCharacterCropUi()
@@ -1365,16 +1458,6 @@ bool TemplateEditorPage::validateBarcodeTemplateRect(
                 uiBarcodeRect, geometry);
     return m_templateService->validateBarcodeTemplate(
                 source, imageRect, options, failureReason);
-}
-
-bool TemplateEditorPage::barcodeTemplateReadable() const
-{
-    return m_barcodeTemplateReadable;
-}
-
-QRect TemplateEditorPage::validatedBarcodeRect() const
-{
-    return m_validatedBarcodeRect;
 }
 
 void TemplateEditorPage::acceptBarcodeTemplateValidation(

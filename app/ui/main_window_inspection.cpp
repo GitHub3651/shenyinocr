@@ -33,8 +33,6 @@
 
 #include <limits>
 
-#include <opencv2/highgui.hpp>
-
 #pragma execution_character_set("utf-8")
 
 void MainWindow::presentInspectionFault()
@@ -181,12 +179,8 @@ void MainWindow::finishInspectionStopUi(
         }
     }
 
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-        imageLabel->clearSelection();
-    }
     if (m_templateEditorPage) {
-        m_templateEditorPage->hideTemplateGuide();
+        m_templateEditorPage->cancelTemplateDrawing();
     }
     m_inspectionApplicationService->clearResultView();
     if (result.issue == StopInspectionIssue::RuntimeFault
@@ -235,11 +229,6 @@ void MainWindow::slot_displayAndDetect(cv::Mat *image)
     }
 }
 
-
-void MainWindow::clearBarcodeTemplateValidation()
-{
-    m_templateEditorPage->clearBarcodeTemplateValidation();
-}
 
 OperationUiState MainWindow::operationUiState() const
 {
@@ -406,7 +395,7 @@ void MainWindow::showParameterCritical(const QString &title, const QString &mess
 /**
  * @brief 窗口关闭事件
  * @param event 关闭事件对象
- * @details 关闭时保存设置，销毁所有OpenCV窗口
+ * @details 关闭时停止运行服务并保存设置
  */
 void MainWindow::closeEvent(QCloseEvent *event)
 {
@@ -424,10 +413,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     m_inspectionApplicationService->shutdown();
 
-    try {
-        cv::destroyAllWindows();
-    } catch (...) {
-    }
     saveSettings(false);
     event->accept();
 }
@@ -507,8 +492,7 @@ void MainWindow::on_toolButton_closeCamera_clicked()
     }
     // 清空文本并将文本置0
     ui->label_verdictResult->clear();
-    imageLabel->setTemplateDrawingEnabled(false);
-    m_templateEditorPage->hideTemplateGuide();
+    m_templateEditorPage->cancelTemplateDrawing();
     imageLabel->clear();
     ui->imageLabel_inspection->clear();
     ui->lineEdit_totalCount->clear();
@@ -567,10 +551,7 @@ void MainWindow::on_toolButton_startInspection_clicked()
                     QStringLiteral("部分模板已跳过"),
                     result.details.join(QStringLiteral("\n")));
     }
-    if (imageLabel) {
-        imageLabel->setTemplateDrawingEnabled(false);
-    }
-    m_templateEditorPage->hideTemplateGuide();
+    m_templateEditorPage->cancelTemplateDrawing();
     if (m_inspectionPage) {
         m_inspectionPage->clearDetectionRoiWarning(QString());
     }
@@ -625,16 +606,13 @@ void MainWindow::on_toolButton_openCamera_clicked()
     if (!openResult.isSuccess()) {
         if (openResult.issue
                 == CameraOpenIssueDto::DeviceNotFound) {
-            QMessageBox::warning(this, "警告", "未找到相机设备！");
+            QMessageBox::warning(this, "警告", "相机未连接！");
             return;
         }
         if (openResult.issue
-                == CameraOpenIssueDto::DeviceOpenFailed) {
-            QMessageBox::warning(
-                this, "警告", "打开设备失败！");
-            return;
-        }
-        {
+                == CameraOpenIssueDto::ExposureFailed
+                || openResult.issue
+                   == CameraOpenIssueDto::InitializationFailed) {
             QSignalBlocker blocker(ui->spinBox_cameraExposure);
             ui->spinBox_cameraExposure->setRange(
                 0, (std::numeric_limits<int>::max)());
@@ -646,8 +624,7 @@ void MainWindow::on_toolButton_openCamera_clicked()
         QMessageBox::warning(
             this,
             "警告",
-            QString("打开相机后应用曝光参数失败：\n%1")
-            .arg(openResult.diagnostic));
+            "相机异常！");
         return;
     }
 

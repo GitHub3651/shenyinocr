@@ -23,6 +23,7 @@ enum class InspectionCameraOpenIssue
 {
     None,
     DeviceNotFound,
+    DeviceError,
     DeviceOpenFailed,
     ExposureFailed,
     InitializationFailed

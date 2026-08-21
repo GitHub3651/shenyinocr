@@ -1,8 +1,10 @@
-// 文件作用：本文件用于校验并转换模板跟踪框、二维码框和日期多边形坐标。
-// 主要职责：校验并转换模板跟踪框、二维码框和日期多边形坐标。
+// 文件作用：校验并转换各检测模式的模板绘图坐标。
+// 主要职责：把 ImageLabel 显示坐标统一转换为模板保存所需的原图坐标和相对坐标。
 // 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
+
+#include "contracts/detection_mode.h"
 
 #include <QPolygon>
 #include <QRect>
@@ -22,6 +24,16 @@ struct TemplateDisplayGeometry
     QSize sourceImageSize;
 };
 
+struct TemplateDrawingInput
+{
+    DetectionMode mode = DetectionMode::Tissue;
+    QRect trackingAnchorRect;
+    QRect barcodeRect;
+    QRect stampAnchorRect;
+    QPolygon datePolygon;
+    QPolygon stampPolygon;
+};
+
 // 组件说明：TemplateGeometryResult 数据结构集中保存该流程需要的一组相关数据。
 struct TemplateGeometryResult
 {
@@ -29,8 +41,10 @@ struct TemplateGeometryResult
     QString errorMessage;
     QRectF trackingRoi;
     cv::Rect trackingImageRect;
+    cv::Rect stampAnchorImageRect;
     std::vector<cv::Point2f> datePolygon;
     std::vector<cv::Point2f> barcodePolygon;
+    std::vector<cv::Point2f> stampPolygon;
 };
 
 // Pure coordinate conversion used by template editing. It has no UI, disk,
@@ -43,9 +57,6 @@ public:
         const TemplateDisplayGeometry &geometry) const;
 
     TemplateGeometryResult buildGeometry(
-        const QRect &trackingDisplayRect,
-        const QRect &barcodeDisplayRect,
-        const QPolygon &dateDisplayPolygon,
-        bool includeBarcode,
+        const TemplateDrawingInput &input,
         const TemplateDisplayGeometry &geometry) const;
 };

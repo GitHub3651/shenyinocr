@@ -103,6 +103,10 @@ QWidget#widget_plcSettingsScrollContent {
     background-color: #ffffff;
 }
 
+QWidget#widget_currentTemplateEditor {
+    background: transparent;
+}
+
 QSplitter#splitter_mainContent::handle:vertical {
     border: none;
     background: qlineargradient(
@@ -673,8 +677,4 @@ QCheckBox#checkBox_hardwareTriggerEnabled:disabled {
 QCheckBox#checkBox_hardwareTriggerEnabled::indicator {
     width: 24px;
     height: 24px;
-}
-
-QPushButton#pushButton_saveTemplate {
-    min-height: 46px;
 }

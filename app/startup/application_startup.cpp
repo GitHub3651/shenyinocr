@@ -32,7 +32,6 @@
 #include <QLibraryInfo>
 #include <QMessageBox>
 #include <QStandardPaths>
-#include <QThread>
 #include <QTimer>
 #include <QTranslator>
 
@@ -40,7 +39,6 @@
 #include <utility>
 
 #include <opencv2/core.hpp>
-#include <opencv2/highgui.hpp>
 
 namespace {
 
@@ -97,14 +95,6 @@ int ApplicationStartup::run(int argc, char *argv[])
                 &application, &qtBaseTranslator, &qtTranslator);
     qRegisterMetaType<cv::Mat>("cv::Mat");
     QApplication::setQuitOnLastWindowClosed(true);
-    QObject::connect(
-                &application,
-                &QCoreApplication::aboutToQuit,
-                []() {
-        cv::destroyAllWindows();
-        QThread::msleep(100);
-    });
-
     if (!RuntimeGuard::check()) {
         showRuntimeGuardExitMessage(
                     QStringLiteral("系统初始化失败，"
@@ -270,7 +260,6 @@ int ApplicationStartup::run(int argc, char *argv[])
         result = application.exec();
     }
 
-    cv::destroyAllWindows();
     ApplicationLogger::shutdown();
     return result;
 }

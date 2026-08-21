@@ -362,15 +362,10 @@ QRect TemplateApplicationService::mapDisplayRectToImage(
 }
 
 TemplateGeometryResult TemplateApplicationService::buildGeometry(
-        const QRect &trackingDisplayRect,
-        const QRect &barcodeDisplayRect,
-        const QPolygon &dateDisplayPolygon,
-        bool includeBarcode,
+        const TemplateDrawingInput &input,
         const TemplateDisplayGeometry &geometry) const
 {
-    return m_geometryService.buildGeometry(
-                trackingDisplayRect, barcodeDisplayRect,
-                dateDisplayPolygon, includeBarcode, geometry);
+    return m_geometryService.buildGeometry(input, geometry);
 }
 
 bool TemplateApplicationService::validateBarcodeTemplate(

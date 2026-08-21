@@ -13,8 +13,7 @@ ui/
 ├─ pages/
 │  ├─ inspection_page.h/.cpp
 │  ├─ machine_settings_page.h/.cpp
-│  ├─ template_editor_page.h/.cpp        模板选择/编辑/取景集中页面
-│  └─ template_editor_support.h/.cpp
+│  └─ template_editor_page.h/.cpp        模板选择/编辑/取景集中页面
 ├─ dialogs/
 │  ├─ template_selection_dialog.h/.cpp   预勾选、单/多选、排序
 │  └─ character_template_editor_dialog.h/.cpp
@@ -45,6 +44,10 @@ ui/
 ```
 
 单模板模式最多一项；多模板模式可排序多项；纸巾模式隐藏选择、名称、新建、保存、字符和 ROI 制作控件，只显示粗糙度阈值。
+
+四种模板模式统一使用主界面的 `ImageLabel`，纸巾模式禁用模板绘图。字库和 OCR 使用“定位锚点 → 检测多边形”，二维码使用“日期锚点 → 二维码矩形 → 日期多边形”，刚印使用“吸管口锚点 → 钢印多边形 → 日期锚点 → 日期多边形”。刚印的两个锚点和两个多边形分别保存、分别换算；不再从日期多边形推导钢印区域，也不再创建 OpenCV 原生交互窗口。
+
+`ImageLabel` 只维护显示坐标、绘制步骤和框线，并向 `TemplateEditorPage` 发出强类型进度事件。模板页直接绑定该事件，负责中文向导、二维码即时校验和保存确认；MainWindow 不转发原始鼠标事件或模板绘图事件。
 
 ## 页面所有权与调用流
 

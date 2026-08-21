@@ -18,7 +18,48 @@
 #include <new>
 #include <vector>
 
+#if defined(_MSC_VER)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <excpt.h>
+#endif
+
 namespace {
+
+#if defined(_MSC_VER)
+int cameraSdkExceptionFilter(unsigned long exceptionCode) noexcept
+{
+    switch (exceptionCode) {
+    case EXCEPTION_ACCESS_VIOLATION:
+    case EXCEPTION_IN_PAGE_ERROR:
+    case EXCEPTION_ILLEGAL_INSTRUCTION:
+        return EXCEPTION_EXECUTE_HANDLER;
+    default:
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+}
+#endif
+
+// 只拦截厂商 SDK 调用中可归类为无效代码或内存访问的结构化异常。
+// 栈溢出、断点等其他异常继续交给应用级崩溃处理程序。
+template <typename Function>
+int invokeCameraSdk(const Function &function) noexcept
+{
+#if defined(_MSC_VER)
+    __try {
+        return function();
+    } __except (cameraSdkExceptionFilter(GetExceptionCode())) {
+        return MV_E_UNKNOW;
+    }
+#else
+    return function();
+#endif
+}
 
 // 函数说明：settingRange 函数更新或应用对应的配置和状态。
 CameraSettingRange settingRange(const MVCC_FLOATVALUE &value)
@@ -87,8 +128,10 @@ struct HikvisionCameraDevice::Impl
             parameters.pDstBuffer = converted.data();
             parameters.nDstBufferSize = bufferSize;
             if (!self->handle
-                    || MV_CC_ConvertPixelType(
-                        self->handle, &parameters) != MV_OK) {
+                    || invokeCameraSdk([&]() {
+                return MV_CC_ConvertPixelType(
+                            self->handle, &parameters);
+            }) != MV_OK) {
                 std::lock_guard<std::mutex> lock(self->mutex);
                 self->callbackError = MV_E_PARAMETER;
                 self->condition.notify_all();
@@ -155,9 +198,11 @@ HikvisionCameraDevice::~HikvisionCameraDevice()
 CameraResult HikvisionCameraDevice::enumerate(int *deviceCount)
 {
     std::memset(&m_impl->devices, 0, sizeof(m_impl->devices));
-    const int result = MV_CC_EnumDevices(
-                MV_GIGE_DEVICE | MV_USB_DEVICE,
-                &m_impl->devices);
+    const int result = invokeCameraSdk([&]() {
+        return MV_CC_EnumDevices(
+                    MV_GIGE_DEVICE | MV_USB_DEVICE,
+                    &m_impl->devices);
+    });
     if (deviceCount) {
         *deviceCount = result == MV_OK
                 ? static_cast<int>(m_impl->devices.nDeviceNum)
@@ -187,16 +232,22 @@ CameraResult HikvisionCameraDevice::openFirst()
         }
     }
 
-    int nativeResult = MV_CC_CreateHandle(
-                &m_impl->handle,
-                m_impl->devices.pDeviceInfo[0]);
+    int nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_CreateHandle(
+                    &m_impl->handle,
+                    m_impl->devices.pDeviceInfo[0]);
+    });
     if (nativeResult != MV_OK) {
         m_impl->handle = nullptr;
         return CameraResult::deviceError(nativeResult);
     }
-    nativeResult = MV_CC_OpenDevice(m_impl->handle);
+    nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_OpenDevice(m_impl->handle);
+    });
     if (nativeResult != MV_OK) {
-        MV_CC_DestroyHandle(m_impl->handle);
+        invokeCameraSdk([&]() {
+            return MV_CC_DestroyHandle(m_impl->handle);
+        });
         m_impl->handle = nullptr;
         return CameraResult::deviceError(nativeResult);
     }
@@ -218,13 +269,17 @@ CameraResult HikvisionCameraDevice::applySettings(
     MVCC_FLOATVALUE gain;
     std::memset(&exposure, 0, sizeof(exposure));
     std::memset(&gain, 0, sizeof(gain));
-    int nativeResult = MV_CC_GetFloatValue(
-                m_impl->handle, "ExposureTime", &exposure);
+    int nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_GetFloatValue(
+                    m_impl->handle, "ExposureTime", &exposure);
+    });
     if (nativeResult != MV_OK) {
         return CameraResult::deviceError(nativeResult);
     }
-    nativeResult = MV_CC_GetFloatValue(
-                m_impl->handle, "Gain", &gain);
+    nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_GetFloatValue(
+                    m_impl->handle, "Gain", &gain);
+    });
     if (nativeResult != MV_OK) {
         return CameraResult::deviceError(nativeResult);
     }
@@ -240,37 +295,45 @@ CameraResult HikvisionCameraDevice::applySettings(
         return result;
     }
     if (settings.updateExposure) {
-        nativeResult = MV_CC_SetFloatValue(
-                    m_impl->handle,
-                    "ExposureTime",
-                    settings.exposure);
+        nativeResult = invokeCameraSdk([&]() {
+            return MV_CC_SetFloatValue(
+                        m_impl->handle,
+                        "ExposureTime",
+                        settings.exposure);
+        });
         if (nativeResult != MV_OK) {
             return CameraResult::deviceError(nativeResult);
         }
         result.exposureRange.current = settings.exposure;
     }
     if (settings.updateGain) {
-        nativeResult = MV_CC_SetFloatValue(
-                    m_impl->handle, "Gain", settings.gain);
+        nativeResult = invokeCameraSdk([&]() {
+            return MV_CC_SetFloatValue(
+                        m_impl->handle, "Gain", settings.gain);
+        });
         if (nativeResult != MV_OK) {
             return CameraResult::deviceError(nativeResult);
         }
         result.gainRange.current = settings.gain;
     }
     if (settings.updateTriggerDelay) {
-        nativeResult = MV_CC_SetFloatValue(
-                    m_impl->handle,
-                    "TriggerDelay",
-                    settings.triggerDelayMicroseconds);
+        nativeResult = invokeCameraSdk([&]() {
+            return MV_CC_SetFloatValue(
+                        m_impl->handle,
+                        "TriggerDelay",
+                        settings.triggerDelayMicroseconds);
+        });
         if (nativeResult != MV_OK) {
             return CameraResult::deviceError(nativeResult);
         }
     }
     if (settings.updateLineDebouncerTime) {
-        nativeResult = MV_CC_SetEnumValue(
-                    m_impl->handle,
-                    "LineDebouncerTime",
-                    settings.lineDebouncerTime);
+        nativeResult = invokeCameraSdk([&]() {
+            return MV_CC_SetEnumValue(
+                        m_impl->handle,
+                        "LineDebouncerTime",
+                        settings.lineDebouncerTime);
+        });
         if (nativeResult != MV_OK) {
             return CameraResult::deviceError(nativeResult);
         }
@@ -288,13 +351,17 @@ CameraResult HikvisionCameraDevice::setTriggerMode(
         result.nativeErrorCode = MV_E_HANDLE;
         return result;
     }
-    int nativeResult = MV_CC_SetEnumValue(
-                m_impl->handle, "TriggerMode", 1U);
+    int nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_SetEnumValue(
+                    m_impl->handle, "TriggerMode", 1U);
+    });
     if (nativeResult == MV_OK) {
-        nativeResult = MV_CC_SetEnumValue(
-                    m_impl->handle,
-                    "TriggerSource",
-                    mode == CameraTriggerMode::Software ? 7U : 0U);
+        nativeResult = invokeCameraSdk([&]() {
+            return MV_CC_SetEnumValue(
+                        m_impl->handle,
+                        "TriggerSource",
+                        mode == CameraTriggerMode::Software ? 7U : 0U);
+        });
     }
     if (nativeResult != MV_OK) {
         return CameraResult::deviceError(nativeResult);
@@ -321,12 +388,16 @@ CameraResult HikvisionCameraDevice::startGrabbing()
         m_impl->callbackError = MV_OK;
         return CameraResult();
     }
-    int nativeResult = MV_CC_RegisterImageCallBackEx(
-                m_impl->handle,
-                &Impl::onImage,
-                m_impl.get());
+    int nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_RegisterImageCallBackEx(
+                    m_impl->handle,
+                    &Impl::onImage,
+                    m_impl.get());
+    });
     if (nativeResult == MV_OK) {
-        nativeResult = MV_CC_StartGrabbing(m_impl->handle);
+        nativeResult = invokeCameraSdk([&]() {
+            return MV_CC_StartGrabbing(m_impl->handle);
+        });
     }
     if (nativeResult != MV_OK) {
         return CameraResult::deviceError(nativeResult);
@@ -350,8 +421,10 @@ CameraResult HikvisionCameraDevice::triggerSoftware()
         result.nativeErrorCode = MV_E_CALLORDER;
         return result;
     }
-    const int nativeResult = MV_CC_SetCommandValue(
-                m_impl->handle, "TriggerSoftware");
+    const int nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_SetCommandValue(
+                    m_impl->handle, "TriggerSoftware");
+    });
     return nativeResult == MV_OK
             ? CameraResult()
             : CameraResult::deviceError(nativeResult);
@@ -411,7 +484,9 @@ CameraResult HikvisionCameraDevice::stopGrabbing()
     if (!m_impl->handle || !m_impl->grabbing) {
         return CameraResult();
     }
-    const int nativeResult = MV_CC_StopGrabbing(m_impl->handle);
+    const int nativeResult = invokeCameraSdk([&]() {
+        return MV_CC_StopGrabbing(m_impl->handle);
+    });
     if (nativeResult == MV_OK) {
         m_impl->grabbing = false;
         return CameraResult();
@@ -427,8 +502,12 @@ CameraResult HikvisionCameraDevice::close()
         return CameraResult();
     }
     CameraResult stop = stopGrabbing();
-    const int closeResult = MV_CC_CloseDevice(m_impl->handle);
-    const int destroyResult = MV_CC_DestroyHandle(m_impl->handle);
+    const int closeResult = invokeCameraSdk([&]() {
+        return MV_CC_CloseDevice(m_impl->handle);
+    });
+    const int destroyResult = invokeCameraSdk([&]() {
+        return MV_CC_DestroyHandle(m_impl->handle);
+    });
     m_impl->handle = nullptr;
     m_impl->grabbing = false;
     {

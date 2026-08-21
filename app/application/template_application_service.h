@@ -65,10 +65,7 @@ public:
         const QRect &displayRect,
         const TemplateDisplayGeometry &geometry) const;
     TemplateGeometryResult buildGeometry(
-        const QRect &trackingDisplayRect,
-        const QRect &barcodeDisplayRect,
-        const QPolygon &dateDisplayPolygon,
-        bool includeBarcode,
+        const TemplateDrawingInput &input,
         const TemplateDisplayGeometry &geometry) const;
     bool validateBarcodeTemplate(
         const cv::Mat &sourceImage,

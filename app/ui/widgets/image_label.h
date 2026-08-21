@@ -1,50 +1,73 @@
-﻿#ifndef IMAGELABEL_H
-// 文件作用：本文件用于显示检测图像，并处理模板制作时的矩形、多边形和鼠标键盘绘制交互。
-// 主要职责：显示检测图像，并处理模板制作时的矩形、多边形和鼠标键盘绘制交互。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
+#ifndef IMAGELABEL_H
+// 文件作用：显示检测图像，并处理模板制作时的模式化矩形、多边形和鼠标键盘交互。
+// 模块位置：界面层；只保存显示坐标和绘制状态，不拥有模板业务、磁盘或检测算法。
 #define IMAGELABEL_H
 
-#include <QLabel>
-#include <QRect>
-#include <QMouseEvent>
+#include "contracts/detection_mode.h"
+
 #include <QKeyEvent>
+#include <QLabel>
+#include <QMouseEvent>
 #include <QPaintEvent>
-#include <QPolygon>
 #include <QPixmap>
+#include <QPolygon>
+#include <QRect>
 #include <QResizeEvent>
 
-// 组件说明：ImageLabel 组件负责对应界面区域的显示和用户交互。
 class ImageLabel : public QLabel
 {
     Q_OBJECT
 
 public:
-    explicit ImageLabel(QWidget *parent = nullptr);
+    enum class DrawingStep {
+        Idle,
+        TrackingAnchor,
+        DetectionPolygon,
+        BarcodeRegion,
+        StampAnchor,
+        StampPolygon,
+        DateAnchor,
+        DatePolygon,
+        Complete
+    };
+    Q_ENUM(DrawingStep)
 
-    void clearSelection();
+    enum class DrawingEvent {
+        StepStarted,
+        StepCompleted,
+        RegionTooSmall,
+        PointAdded,
+        TooFewPoints,
+        Reset,
+        WorkflowCompleted
+    };
+    Q_ENUM(DrawingEvent)
+
+    explicit ImageLabel(QWidget *parent = nullptr);
 
     void setPixmap(const QPixmap &pixmap);
     void setAutoFitPixmap(const QPixmap &pixmap);
     void clear();
 
-    // ================= 模板区域绘制接口 =================
-    QPolygon getDetectionPoly() const { return m_detectionPoly; }
-    QRect getTrackingRect() const { return m_trackingRect; }
-    QRect getBarcodeRect() const { return m_barcodeRect; }
-    bool isDetectionPolyComplete() const;
-    void setTemplateDrawingEnabled(bool enabled);
+    void beginTemplateDrawing(DetectionMode mode);
+    void cancelTemplateDrawing();
+    DetectionMode templateDrawingMode() const;
     bool isTemplateDrawingEnabled() const;
-    void setBarcodeRegionRequired(bool required);
+    bool isTemplateDrawingComplete() const;
+
+    QRect trackingAnchorRect() const;
+    QRect barcodeRect() const;
+    QRect stampAnchorRect() const;
+    QPolygon datePolygon() const;
+    QPolygon stampPolygon() const;
+
     void retryBarcodeRegion();
-    void resetDrawingStep();
 
 signals:
-    void mousePressed(QMouseEvent *event);
-    void mouseMoved(QMouseEvent *event);
-    void mouseReleased(QMouseEvent *event);
-
-    void signal_templateGuideEvent(QString eventName, int pointCount);
+    void templateDrawingChanged(
+        ImageLabel::DrawingStep step,
+        ImageLabel::DrawingEvent event,
+        int pointCount);
 
 protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -55,26 +78,28 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    enum DrawStep {
-        STEP_TRACKING,
-        STEP_BARCODE,
-        STEP_DETECTION_POLY,
-        STEP_DONE
-    };
-    DrawStep m_currentStep = STEP_TRACKING;
+    QRect *activeRect();
+    QPolygon *activePolygon();
+    void clearTemplateGeometry();
+    void finishCurrentStep();
+    void advanceStep(int pointCount);
+    void emitStepChanged(DrawingStep step,
+                         DrawingEvent event,
+                         int pointCount = 0);
+    void updateAutoFitPixmap();
 
-    QPolygon m_detectionPoly;
-    QPoint m_tempPolyPoint;
-    QRect m_trackingRect;
+    DrawingStep m_drawingStep = DrawingStep::Idle;
+    DetectionMode m_templateDrawingMode = DetectionMode::Tissue;
+    QRect m_trackingAnchorRect;
     QRect m_barcodeRect;
-    bool m_barcodeRegionRequired = false;
+    QRect m_stampAnchorRect;
+    QPolygon m_datePolygon;
+    QPolygon m_stampPolygon;
+    QPoint m_tempPolyPoint;
     bool m_isInteracting = false;
-    bool m_templateDrawingEnabled = false;
     QPoint m_startPoint;
     QPixmap m_autoFitSourcePixmap;
     bool m_autoFitPixmapEnabled = false;
-
-    void updateAutoFitPixmap();
 };
 
 #endif // IMAGELABEL_H

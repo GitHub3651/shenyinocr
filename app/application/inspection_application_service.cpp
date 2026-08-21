@@ -211,6 +211,8 @@ CameraOpenIssueDto cameraOpenIssueDto(
     switch (issue) {
     case InspectionCameraOpenIssue::DeviceNotFound:
         return CameraOpenIssueDto::DeviceNotFound;
+    case InspectionCameraOpenIssue::DeviceError:
+        return CameraOpenIssueDto::DeviceError;
     case InspectionCameraOpenIssue::DeviceOpenFailed:
         return CameraOpenIssueDto::DeviceOpenFailed;
     case InspectionCameraOpenIssue::ExposureFailed:
@@ -719,7 +721,7 @@ OpenCameraResult InspectionApplicationService::openCamera(
     if (!result.camera.isSuccess()) {
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_OPEN_FAILED"),
-                    QStringLiteral("打开相机失败。"),
+                    QStringLiteral("相机异常。"),
                     result.camera.diagnostic);
         result.snapshot = runtimeSnapshot();
         publishSnapshot();

@@ -42,7 +42,6 @@ SOURCES += \
     ui/controllers/operation_ui_policy.cpp \
     ui/controllers/settings_edit_state.cpp \
     ui/pages/template_editor_page.cpp \
-    ui/pages/template_editor_support.cpp \
     system_support/machine_settings_policy.cpp \
     system_support/settings/app_settings.cpp \
     system_support/settings/app_settings_store.cpp \
@@ -119,7 +118,6 @@ HEADERS += \
     ui/controllers/operation_ui_policy.h \
     ui/controllers/settings_edit_state.h \
     ui/pages/template_editor_page.h \
-    ui/pages/template_editor_support.h \
     system_support/machine_settings_policy.h \
     system_support/settings/app_settings.h \
     system_support/settings/app_settings_store.h \
