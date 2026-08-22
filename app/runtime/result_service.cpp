@@ -306,17 +306,6 @@ ResultServiceProcessOutcome ResultService::process(
         requestPlc(DetectionPlcAction::RequestNg, delayedProduct);
     }
 
-    InspectionPresentation presentation;
-    {
-        std::lock_guard<std::mutex> lock(m_presentationMutex);
-        if (request.preparePresentation) {
-            presentation = request.preparePresentation();
-        }
-        if (request.finalizePresentation) {
-            request.finalizePresentation(&presentation);
-        }
-    }
-
     const DetectionResultSaveAction saveAction = imageSaveActionFor(
                 request.completion.result.verdict);
     {
@@ -339,6 +328,17 @@ ResultServiceProcessOutcome ResultService::process(
         outcome.statistics = m_statistics;
     }
     outcome.resultRecorded = true;
+
+    InspectionPresentation presentation;
+    {
+        std::lock_guard<std::mutex> lock(m_presentationMutex);
+        if (request.preparePresentation) {
+            presentation = request.preparePresentation();
+        }
+        if (request.finalizePresentation) {
+            request.finalizePresentation(&presentation);
+        }
+    }
 
     outcome.imageSaveRequested =
             saveAction != DetectionResultSaveAction::DoNotSave

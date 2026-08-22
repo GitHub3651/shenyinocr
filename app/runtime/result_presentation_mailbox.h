@@ -5,27 +5,21 @@
 #ifndef RESULT_PRESENTATION_MAILBOX_H
 #define RESULT_PRESENTATION_MAILBOX_H
 
-#include <condition_variable>
-#include <functional>
+#include "contracts/inspection_presentation.h"
+
 #include <mutex>
 
-// Capacity-one handoff between a detection worker and the UI thread.
-// A submitted work item owns the complete presentation of one product
-// (image, text, statistics and timing). The next product cannot be handed
-// off until the current UI work item has finished, so Qt's event queue never
-// becomes an unbounded second result queue.
 // 组件说明：UiCompletionMailbox 以容量一邮箱把完整产品结果安全交给UI线程。
 class UiCompletionMailbox
 {
 public:
-    typedef std::function<void()> Work;
-
     UiCompletionMailbox();
-    ~UiCompletionMailbox();
+    ~UiCompletionMailbox() = default;
 
     bool reopen();
-    bool submit(const Work &work);
-    bool processOne();
+    bool submit(const InspectionPresentation &presentation);
+    bool processOne(InspectionPresentation *presentation);
+    bool hasPending() const;
     void cancel();
 
 private:
@@ -33,11 +27,9 @@ private:
     UiCompletionMailbox &operator=(const UiCompletionMailbox &) = delete;
 
     mutable std::mutex m_mutex;
-    std::condition_variable m_spaceAvailable;
-    Work m_work;
+    InspectionPresentation m_pendingPresentation;
     bool m_cancelled;
-    bool m_hasPendingWork;
-    bool m_processing;
+    bool m_hasPendingPresentation;
 };
 
 #endif // RESULT_PRESENTATION_MAILBOX_H

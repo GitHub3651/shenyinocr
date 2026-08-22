@@ -5,6 +5,7 @@
 #include "runtime/inspection_runtime.h"
 
 #include <QDebug>
+#include <QMetaObject>
 #include <QUuid>
 
 #include <stdexcept>
@@ -110,6 +111,7 @@ QString InspectionRuntime::beginStart(
     m_faultSnapshot = InspectionFaultSnapshot();
     m_acceptedFrames.clear();
     m_products.clear();
+    m_uiCompletionMailbox.reopen();
     return newRunId;
 }
 
@@ -156,6 +158,8 @@ bool InspectionRuntime::beginStop()
         }
     }
     if (accepted) {
+        m_uiCompletionMailbox.cancel();
+        m_wakePosted.store(false);
         requestDetectionWorkerStop();
     }
     return accepted;
@@ -170,6 +174,8 @@ void InspectionRuntime::waitForStop()
 // 函数说明：finishStop 函数实现名称所表示的处理步骤。
 void InspectionRuntime::finishStop()
 {
+    m_uiCompletionMailbox.cancel();
+    m_wakePosted.store(false);
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Fault) {
         m_state = InspectionRuntimeState::Idle;
@@ -209,6 +215,8 @@ bool InspectionRuntime::enterFault(
     }
 
     m_resultService->recordSystemFault();
+    m_uiCompletionMailbox.cancel();
+    m_wakePosted.store(false);
     emit faultSnapshotChanged(faultSnapshot());
     requestDetectionWorkerStop();
     return true;
@@ -235,6 +243,8 @@ int InspectionRuntime::reconcileFaultProducts()
 bool InspectionRuntime::acknowledgeFault()
 {
     waitForDetectionWorkerStop();
+    m_uiCompletionMailbox.cancel();
+    m_wakePosted.store(false);
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Fault
             || !m_products.empty()
@@ -623,10 +633,21 @@ DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionFrame(
 bool InspectionRuntime::publishPresentation(
     const InspectionPresentation &presentation)
 {
-    if (!presentation.isValid()) {
+    if (!m_uiCompletionMailbox.submit(presentation)) {
         return false;
     }
-    emit presentationReady(presentation);
+    bool expected = false;
+    if (!m_wakePosted.compare_exchange_strong(expected, true)) {
+        return true;
+    }
+    if (!QMetaObject::invokeMethod(
+                this,
+                "drainPresentationMailbox",
+                Qt::QueuedConnection)) {
+        m_wakePosted.store(false);
+        m_uiCompletionMailbox.cancel();
+        return false;
+    }
     return true;
 }
 
@@ -642,23 +663,26 @@ void InspectionRuntime::publishRoiWarning(bool active)
     emit roiWarningChanged(active);
 }
 
-// 函数说明：submitUiCompletion 函数执行对应事件或业务处理。
-bool InspectionRuntime::submitUiCompletion(
-    const UiCompletionMailbox::Work &work)
+void InspectionRuntime::drainPresentationMailbox()
 {
-    return m_uiCompletionMailbox.submit(work);
-}
-
-// 函数说明：processOneUiCompletion 函数执行对应事件或业务处理。
-bool InspectionRuntime::processOneUiCompletion()
-{
-    return m_uiCompletionMailbox.processOne();
-}
-
-// 函数说明：cancelUiCompletion 函数检查相关状态并返回判断结果。
-void InspectionRuntime::cancelUiCompletion()
-{
-    m_uiCompletionMailbox.cancel();
+    m_wakePosted.store(false);
+    InspectionPresentation presentation;
+    if (!m_uiCompletionMailbox.processOne(&presentation)) {
+        return;
+    }
+    emit presentationReady(presentation);
+    if (m_uiCompletionMailbox.hasPending()) {
+        bool expected = false;
+        if (m_wakePosted.compare_exchange_strong(expected, true)) {
+            if (!QMetaObject::invokeMethod(
+                        this,
+                        "drainPresentationMailbox",
+                        Qt::QueuedConnection)) {
+                m_wakePosted.store(false);
+                m_uiCompletionMailbox.cancel();
+            }
+        }
+    }
 }
 
 // 函数说明：resultService 函数实现名称所表示的处理步骤。

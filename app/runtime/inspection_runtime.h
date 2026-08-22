@@ -150,10 +150,6 @@ public:
     DetectionWorkSubmissionResult trySubmitDetectionFrame(
         const std::shared_ptr<const FrameData> &frame);
 
-    bool submitUiCompletion(const UiCompletionMailbox::Work &work);
-    bool processOneUiCompletion();
-    void cancelUiCompletion();
-
     ResultService &resultService();
     const ResultService &resultService() const;
     DetectionResultStatistics statistics() const;
@@ -181,6 +177,9 @@ private:
         quint64 totalFailed,
         const QString &latestError);
     void publishRoiWarning(bool active);
+
+private slots:
+    void drainPresentationMailbox();
 
     // 组件说明：ProductProgress 枚举列出该组件允许使用的稳定状态和选项。
     enum class ProductProgress
@@ -212,5 +211,6 @@ private:
     mutable std::mutex m_detectionWorkerMutex;
     std::shared_ptr<DetectionWorker> m_detectionWorker;
     UiCompletionMailbox m_uiCompletionMailbox;
+    std::atomic<bool> m_wakePosted{false};
     std::atomic<bool> m_detectionWorkerActive{false};
 };
