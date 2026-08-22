@@ -178,14 +178,6 @@ MainWindow::MainWindow(
         }
     },
     Qt::QueuedConnection);
-    connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::faultEntered,
-            this,
-            [this]() {
-        presentInspectionFault();
-    },
-    Qt::QueuedConnection);
-
     initializePages();
     connect(
         m_runtime,
@@ -193,6 +185,7 @@ MainWindow::MainWindow(
         this,
         [this](const InspectionPresentation &presentation) {
         m_inspectionPage->present(presentation);
+        m_inspectionPage->setStatistics(m_runtime->statistics());
     },
     Qt::QueuedConnection);
     connect(
@@ -414,6 +407,8 @@ void MainWindow::initializePages()
     if (!resetResult.isSuccess()) {
         qWarning() << "初始化统计清零被拒绝："
                    << resetResult.error.code;
+    } else {
+        m_inspectionPage->setStatistics(m_runtime->statistics());
     }
     ui->textEdit_targetText->setWordWrapMode(QTextOption::WordWrap);
     setupSoftwareSettingsPage();

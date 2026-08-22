@@ -118,6 +118,7 @@ public:
     quint64 completedProductCount() const;
 
     bool isPlcConnected() const;
+    bool requiresPlcForRun() const;
     PlcOperationResult connectPlc(
         const QString &address,
         int rack,
@@ -128,6 +129,10 @@ public:
         const InspectionPlcRunSettings &settings);
     PlcOperationResult writePlcPhotoDistance(std::uint32_t photoDistance);
     PlcOperationResult writePlcResultValue(std::uint8_t value);
+
+    QImage renderPreviewFrame(
+        const cv::Mat &image,
+        bool includeTissueOverlay);
 
     DetectionRuntimeReadiness prepareDetection(DetectionMode mode) const;
     bool startDetection(
@@ -150,8 +155,6 @@ public:
     DetectionWorkSubmissionResult trySubmitDetectionFrame(
         const std::shared_ptr<const FrameData> &frame);
 
-    ResultService &resultService();
-    const ResultService &resultService() const;
     DetectionResultStatistics statistics() const;
     DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;
@@ -181,6 +184,7 @@ private:
 private slots:
     void drainPresentationMailbox();
 
+private:
     // 组件说明：ProductProgress 枚举列出该组件允许使用的稳定状态和选项。
     enum class ProductProgress
     {

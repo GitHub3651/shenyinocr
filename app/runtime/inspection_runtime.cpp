@@ -312,6 +312,19 @@ bool InspectionRuntime::isPlcConnected() const
     return m_plcController && m_plcController->isConnected();
 }
 
+bool InspectionRuntime::requiresPlcForRun() const
+{
+    return m_resultService->requiresPlcForRun();
+}
+
+QImage InspectionRuntime::renderPreviewFrame(
+    const cv::Mat &image,
+    bool includeTissueOverlay)
+{
+    return m_resultService->renderPreviewFrame(
+                image, includeTissueOverlay);
+}
+
 // 函数说明：connectPlc 函数建立或断开对应外部连接。
 PlcOperationResult InspectionRuntime::connectPlc(
     const QString &address,
@@ -683,18 +696,6 @@ void InspectionRuntime::drainPresentationMailbox()
             }
         }
     }
-}
-
-// 函数说明：resultService 函数实现名称所表示的处理步骤。
-ResultService &InspectionRuntime::resultService()
-{
-    return *m_resultService;
-}
-
-// 函数说明：resultService 函数实现名称所表示的处理步骤。
-const ResultService &InspectionRuntime::resultService() const
-{
-    return *m_resultService;
 }
 
 // 函数说明：statistics 函数实现名称所表示的处理步骤。

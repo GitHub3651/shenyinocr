@@ -164,7 +164,6 @@ signals:
     void templatePreviewFrameReady(quint64 sessionId, cv::Mat image);
     void templatePreviewFailed(quint64 sessionId, QString reason);
     void captureStopped(bool preview);
-    void faultEntered();
 
 private:
     StartInspectionResult rejectStart(

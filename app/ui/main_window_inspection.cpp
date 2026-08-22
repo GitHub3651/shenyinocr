@@ -180,6 +180,7 @@ void MainWindow::finishInspectionStopUi(
     if (m_templateEditorPage) {
         m_templateEditorPage->cancelTemplateDrawing();
     }
+    m_inspectionPage->setStatistics(m_runtime->statistics());
     m_inspectionPage->clearResultView();
     if (result.issue == StopInspectionIssue::RuntimeFault
             || result.issue

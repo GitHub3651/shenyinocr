@@ -1120,7 +1120,7 @@ QImage InspectionApplicationService::renderPreviewFrame(
     if (image.empty() || (tissueMode && productionRunning)) {
         return QImage();
     }
-    return m_runtime->resultService().renderPreviewFrame(image, tissueMode);
+    return m_runtime->renderPreviewFrame(image, tissueMode);
 }
 
 // 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
@@ -1164,7 +1164,7 @@ InspectionApplicationService::clearPendingDelayedNgRequests()
 void InspectionApplicationService::checkPlcHealth()
 {
     if (!m_runtime->isRunning()
-            || !m_runtime->resultService().requiresPlcForRun()
+            || !m_runtime->requiresPlcForRun()
             || m_runtime->isPlcConnected()) {
         return;
     }
@@ -1182,7 +1182,6 @@ void InspectionApplicationService::enterFault(
         return;
     }
     publishSnapshot();
-    emit faultEntered();
 }
 
 // 函数说明：runtimeSnapshot 函数执行对应事件或业务处理。

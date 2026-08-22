@@ -382,7 +382,7 @@ void InspectionPage::reportImageSaveFailure(
     m_imageSaveWarningScheduled = true;
     QTimer::singleShot(250, m_rootWidget, [this]() {
         m_imageSaveWarningScheduled = false;
-        QString warningText = totalFailed == 0
+        QString warningText = m_imageSaveFailedCount == 0
                 ? QString::fromWCharArray(L"保存失败：未采集到标注图像。")
                 : QString::fromWCharArray(
                     L"存图失败：累计 %1 个任务。"
