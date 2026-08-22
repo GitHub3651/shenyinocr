@@ -163,7 +163,6 @@ bool InspectionPresentationRenderer::hasViewBindings() const
 void InspectionPresentationRenderer::clear()
 {
     m_state = InspectionPresentationRenderState();
-    m_lastPresentedProductKey = ProductKey();
 }
 
 // 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
@@ -187,10 +186,12 @@ bool InspectionPresentationRenderer::present(
 
     m_viewBindings.showImage(snapshot.image);
     m_viewBindings.showVerdictStyle(snapshot.verdictStyle);
-    m_viewBindings.showVerdictText(
-                snapshot.verdictStyle == DetectionVerdictViewStyle::Correct
-                ? QStringLiteral("正确")
-                : QStringLiteral("错误"));
+    m_viewBindings.showVerdictText(snapshot.verdictText.isEmpty()
+                                   ? (snapshot.verdictStyle
+                                      == DetectionVerdictViewStyle::Correct
+                                      ? QStringLiteral("正确")
+                                      : QStringLiteral("错误"))
+                                   : snapshot.verdictText);
     m_viewBindings.showRecognitionText(snapshot.recognitionText);
     if (snapshot.updatesTemplateName) {
         m_viewBindings.showTemplateName(snapshot.templateName);
@@ -200,7 +201,6 @@ bool InspectionPresentationRenderer::present(
     m_viewBindings.showPassRate(
                 snapshot.statistics.passRatePercent());
     m_viewBindings.showElapsedText(snapshot.elapsedText);
-    m_lastPresentedProductKey = snapshot.productKey;
     return true;
 }
 
@@ -232,12 +232,6 @@ void InspectionPresentationRenderer::presentNgCount(int ngCount)
     if (hasViewBindings()) {
         m_viewBindings.showNgCount(ngCount);
     }
-}
-
-// 函数说明：lastPresentedProductKey 函数实现名称所表示的处理步骤。
-const ProductKey &InspectionPresentationRenderer::lastPresentedProductKey() const
-{
-    return m_lastPresentedProductKey;
 }
 
 // 函数说明：installDetectionResult 函数实现名称所表示的处理步骤。

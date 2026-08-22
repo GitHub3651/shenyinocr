@@ -85,15 +85,13 @@ InspectionPage::InspectionPage(
     }
 }
 
-InspectionViewBindingsDto
-InspectionPage::resultViewBindings() const
+void InspectionPage::present(const InspectionPresentation &presentation)
 {
-    InspectionViewBindingsDto bindings;
-    bindings.showImage = [this](const QImage &image) {
-        if (!m_view.label_runtimeStatus || !m_view.imageLabel_inspection) {
-            return;
-        }
-        const QPixmap pixmap = QPixmap::fromImage(image);
+    if (!presentation.isValid()) {
+        return;
+    }
+    if (m_view.imageLabel_inspection) {
+        const QPixmap pixmap = QPixmap::fromImage(presentation.image);
         m_view.imageLabel_inspection->setScaledContents(false);
         m_view.imageLabel_inspection->setAlignment(Qt::AlignCenter);
         m_view.imageLabel_inspection->setAutoFitPixmap(pixmap);
@@ -104,58 +102,56 @@ InspectionPage::resultViewBindings() const
                             "正在显示"
                             "相机采集图像..."));
         }
-    };
-    bindings.showVerdictStyle = [this](
-            InspectionVerdictStyleDto style) {
-        if (!m_view.label_runtimeStatus || !m_view.label_verdictResult) {
-            return;
-        }
+    }
+    if (m_view.label_verdictResult) {
         m_view.label_verdictResult->setTextFormat(Qt::PlainText);
         setStyleProperty(
                     m_view.label_verdictResult,
                     "verdict",
-                    style == InspectionVerdictStyleDto::Correct
+                    presentation.verdictStyle
+                    == DetectionVerdictViewStyle::Correct
                     ? QStringLiteral("ok")
                     : QStringLiteral("ng"));
         m_view.label_verdictResult->setWordWrap(true);
-    };
-    bindings.showVerdictText = [this](const QString &text) {
-        if (m_view.label_runtimeStatus) {
-            setLabelTextIfChanged(m_view.label_verdictResult, text);
-        }
-    };
-    bindings.showRecognitionText = [this](const QString &text) {
-        if (m_view.label_runtimeStatus) {
-            setLabelTextIfChanged(m_view.label_recognitionText, text);
-        }
-    };
-    bindings.showTemplateName = [this](const QString &text) {
-        if (m_view.label_runtimeStatus && m_view.lineEdit_currentTemplateName) {
-            m_view.lineEdit_currentTemplateName->setText(text);
-        }
-    };
-    bindings.showTotalCount = [this](int count) {
-        if (m_view.label_runtimeStatus && m_view.lineEdit_totalCount) {
-            m_view.lineEdit_totalCount->setText(QString::number(count));
-        }
-    };
-    bindings.showNgCount = [this](int count) {
-        if (m_view.label_runtimeStatus && m_view.lineEdit_ngCount) {
-            m_view.lineEdit_ngCount->setText(QString::number(count));
-        }
-    };
-    bindings.showPassRate = [this](double passRate) {
-        if (m_view.label_runtimeStatus && m_view.lineEdit_passRate) {
-            m_view.lineEdit_passRate->setText(
-                        QString::number(passRate, 'f', 1));
-        }
-    };
-    bindings.showElapsedText = [this](const QString &text) {
-        if (m_view.label_runtimeStatus && m_view.lineEdit_detectionDuration) {
-            m_view.lineEdit_detectionDuration->setText(text);
-        }
-    };
-    return bindings;
+        setLabelTextIfChanged(
+                    m_view.label_verdictResult,
+                    presentation.verdictText.isEmpty()
+                    ? (presentation.verdictStyle
+                       == DetectionVerdictViewStyle::Correct
+                       ? QStringLiteral("正确")
+                       : QStringLiteral("错误"))
+                    : presentation.verdictText);
+    }
+    setLabelTextIfChanged(
+                m_view.label_recognitionText,
+                presentation.recognitionText);
+    if (presentation.updatesTemplateName
+            && m_view.lineEdit_currentTemplateName) {
+        m_view.lineEdit_currentTemplateName->setText(
+                    presentation.templateName);
+    }
+    setStatistics(presentation.statistics);
+    if (m_view.lineEdit_detectionDuration) {
+        m_view.lineEdit_detectionDuration->setText(
+                    presentation.elapsedText);
+    }
+}
+
+void InspectionPage::setStatistics(
+    const DetectionResultStatistics &statistics)
+{
+    if (m_view.lineEdit_totalCount) {
+        m_view.lineEdit_totalCount->setText(
+                    QString::number(statistics.totalCount));
+    }
+    if (m_view.lineEdit_ngCount) {
+        m_view.lineEdit_ngCount->setText(
+                    QString::number(statistics.ngCount));
+    }
+    if (m_view.lineEdit_passRate) {
+        m_view.lineEdit_passRate->setText(
+                    QString::number(statistics.passRatePercent(), 'f', 1));
+    }
 }
 
 void InspectionPage::applyOperationState(

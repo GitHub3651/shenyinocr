@@ -6,7 +6,7 @@
 
 #include "detection/positioning/detection_pose.h"
 #include "runtime/image_save_service.h"
-#include "runtime/inspection_presentation.h"
+#include "contracts/inspection_presentation.h"
 #include "runtime/inspection_presentation_renderer.h"
 #include "runtime/detection_worker.h"
 #include "runtime/result_presentation_mailbox.h"
@@ -118,8 +118,6 @@ public:
         bool productionRunning);
     void presentTotalAndNgCounts(int totalCount, int ngCount);
     void presentNgCount(int ngCount);
-    ProductKey lastPresentedProductKey() const;
-
     DetectionResultStatistics statistics() const;
     DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;

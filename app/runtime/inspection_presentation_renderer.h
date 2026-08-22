@@ -5,7 +5,7 @@
 #pragma once
 
 #include "detection/positioning/detection_pose.h"
-#include "runtime/inspection_presentation.h"
+#include "contracts/inspection_presentation.h"
 
 #include <QImage>
 
@@ -46,8 +46,6 @@ public:
     bool presentFrame(const QImage &image);
     void presentTotalAndNgCounts(int totalCount, int ngCount);
     void presentNgCount(int ngCount);
-    const ProductKey &lastPresentedProductKey() const;
-
     void installDetectionResult(const DetectionResult &result);
 
     const InspectionPresentationRenderState &state() const;
@@ -58,5 +56,4 @@ public:
 private:
     InspectionPresentationRenderState m_state;
     InspectionPresentationViewBindings m_viewBindings;
-    ProductKey m_lastPresentedProductKey;
 };

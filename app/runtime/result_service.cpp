@@ -194,13 +194,6 @@ void ResultService::presentNgCount(int ngCount)
     m_presentationRenderer.presentNgCount(ngCount);
 }
 
-// 函数说明：lastPresentedProductKey 函数实现名称所表示的处理步骤。
-ProductKey ResultService::lastPresentedProductKey() const
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    return m_presentationRenderer.lastPresentedProductKey();
-}
-
 // 函数说明：statistics 函数实现名称所表示的处理步骤。
 DetectionResultStatistics ResultService::statistics() const
 {
@@ -439,7 +432,6 @@ ResultServiceProcessOutcome ResultService::process(
                     request, saveAction, presentation.image);
     }
 
-    presentation.productKey = request.completion.frame->productKey;
     presentation.statistics = outcome.statistics;
     outcome.presentationAccepted = postUiWork(
                 [this, presentation, request]() {
@@ -663,6 +655,10 @@ void ResultService::handleCompletion(
         presentation.image = m_presentationRenderer.renderFrame(
                     accepted.frame->originalImage, true);
         presentation.verdictStyle = verdictStyle(accepted.result.verdict);
+        presentation.verdictText = presentation.verdictStyle
+                == DetectionVerdictViewStyle::Correct
+                ? QStringLiteral("正确")
+                : QStringLiteral("错误");
         presentation.recognitionText = accepted.result.hasPresentationText
                 ? accepted.result.presentationText
                 : QString();

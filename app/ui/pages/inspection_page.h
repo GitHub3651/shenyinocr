@@ -5,6 +5,7 @@
 #pragma once
 
 #include "application/inspection_ui_contract.h"
+#include "contracts/inspection_presentation.h"
 #include "ui/controllers/operation_ui_policy.h"
 
 #include <QString>
@@ -57,7 +58,8 @@ public:
     InspectionPage(const InspectionPage &) = delete;
     InspectionPage &operator=(const InspectionPage &) = delete;
 
-    InspectionViewBindingsDto resultViewBindings() const;
+    void present(const InspectionPresentation &presentation);
+    void setStatistics(const DetectionResultStatistics &statistics);
     void applyOperationState(
         OperationUiState requestedState,
         const OperationUiSnapshot &operationUi);

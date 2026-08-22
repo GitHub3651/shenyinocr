@@ -111,7 +111,7 @@ HEADERS += \
     templates/template_store.h \
     ui/dialogs/template_selection_dialog.h \
     ui/dialogs/character_template_editor_dialog.h \
-    runtime/inspection_presentation.h \
+    contracts/inspection_presentation.h \
     runtime/result_service.h \
     ui/pages/inspection_page.h \
     ui/pages/machine_settings_page.h \
