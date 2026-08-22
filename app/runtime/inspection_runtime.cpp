@@ -47,7 +47,8 @@ InspectionRuntime::InspectionRuntime(
     const RunIdFactory &runIdFactory,
     const std::shared_ptr<InspectionPlcController> &plcController,
     const std::shared_ptr<DetectionRegistry> &detectionRegistry)
-    : m_runIdFactory(runIdFactory),
+    : QObject(nullptr),
+      m_runIdFactory(runIdFactory),
       m_plcController(plcController),
       m_detectionRegistry(detectionRegistry)
 {
@@ -208,6 +209,7 @@ bool InspectionRuntime::enterFault(
     }
 
     m_resultService->recordSystemFault();
+    emit faultSnapshotChanged(faultSnapshot());
     requestDetectionWorkerStop();
     return true;
 }
@@ -615,7 +617,29 @@ DetectionWorkSubmissionResult InspectionRuntime::trySubmitDetectionFrame(
     }
     return !m_detectionWorkerActive.load() || !worker
             ? DetectionWorkSubmissionResult::NotRunning
-            : worker->trySubmit(frame);
+             : worker->trySubmit(frame);
+}
+
+bool InspectionRuntime::publishPresentation(
+    const InspectionPresentation &presentation)
+{
+    if (!presentation.isValid()) {
+        return false;
+    }
+    emit presentationReady(presentation);
+    return true;
+}
+
+void InspectionRuntime::publishImageSaveFailure(
+    quint64 totalFailed,
+    const QString &latestError)
+{
+    emit imageSaveFailed(totalFailed, latestError);
+}
+
+void InspectionRuntime::publishRoiWarning(bool active)
+{
+    emit roiWarningChanged(active);
 }
 
 // 函数说明：submitUiCompletion 函数执行对应事件或业务处理。

@@ -1111,81 +1111,16 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     publishSnapshot();
 }
 
-// 函数说明：setUiCallbacks 函数更新或应用对应的配置和状态。
-void InspectionApplicationService::setUiCallbacks(
-    const InspectionUiCallbacks &callbacks)
-{
-    ResultServiceCallbacks runtimeCallbacks;
-    runtimeCallbacks.runtimeFaulted = [this]() {
-        publishSnapshot();
-        emit faultEntered();
-    };
-    runtimeCallbacks.warnMissingAnnotatedImage =
-            callbacks.warnMissingAnnotatedImage;
-    runtimeCallbacks.reportImageSaveFailure =
-            callbacks.reportImageSaveFailure;
-    runtimeCallbacks.clearPreviousOverlay =
-            callbacks.clearPreviousOverlay;
-    runtimeCallbacks.showDetectionRoiWarning =
-            callbacks.showDetectionRoiWarning;
-    runtimeCallbacks.clearDetectionRoiWarning =
-            callbacks.clearDetectionRoiWarning;
-    m_runtime->resultService().setCallbacks(runtimeCallbacks);
-}
-
-// 函数说明：bindView 函数实现名称所表示的处理步骤。
-void InspectionApplicationService::bindView(
-    const InspectionViewBindingsDto &bindings)
-{
-    InspectionPresentationViewBindings runtimeBindings;
-    runtimeBindings.showImage = bindings.showImage;
-    runtimeBindings.showVerdictText = bindings.showVerdictText;
-    runtimeBindings.showRecognitionText = bindings.showRecognitionText;
-    runtimeBindings.showTemplateName = bindings.showTemplateName;
-    runtimeBindings.showTotalCount = bindings.showTotalCount;
-    runtimeBindings.showNgCount = bindings.showNgCount;
-    runtimeBindings.showPassRate = bindings.showPassRate;
-    runtimeBindings.showElapsedText = bindings.showElapsedText;
-    runtimeBindings.showVerdictStyle = [bindings](
-            DetectionVerdictViewStyle style) {
-        if (bindings.showVerdictStyle) {
-            bindings.showVerdictStyle(
-                        style == DetectionVerdictViewStyle::Correct
-                        ? InspectionVerdictStyleDto::Correct
-                        : InspectionVerdictStyleDto::Incorrect);
-        }
-    };
-    m_runtime->resultService().bindView(runtimeBindings);
-}
-
-// 函数说明：clearUiBindings 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::clearUiBindings()
-{
-    m_runtime->resultService().setCallbacks(ResultServiceCallbacks());
-    m_runtime->resultService().bindView(
-                InspectionPresentationViewBindings());
-}
-
-// 函数说明：clearResultView 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::clearResultView()
-{
-    m_runtime->resultService().clear();
-}
-
-// 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::clearTransientView()
-{
-    m_runtime->resultService().clearTransientView();
-}
-
-// 函数说明：presentPreviewFrame 函数执行对应事件或业务处理。
-void InspectionApplicationService::presentPreviewFrame(
+// 函数说明：renderPreviewFrame 函数执行对应事件或业务处理。
+QImage InspectionApplicationService::renderPreviewFrame(
     const cv::Mat &image,
     bool tissueMode,
     bool productionRunning)
 {
-    m_runtime->resultService().presentPreviewFrame(
-                image, tissueMode, productionRunning);
+    if (image.empty() || (tissueMode && productionRunning)) {
+        return QImage();
+    }
+    return m_runtime->resultService().renderPreviewFrame(image, tissueMode);
 }
 
 // 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
@@ -1197,8 +1132,6 @@ OperationResult InspectionApplicationService::resetStatistics()
                     QStringLiteral("请先停止当前任务再清零统计。"));
     }
     m_runtime->resetStatistics();
-    m_runtime->resultService().presentTotalAndNgCounts(
-                m_runtime->totalCount(), m_runtime->ngCount());
     return OperationResult::accepted();
 }
 
@@ -1211,7 +1144,6 @@ OperationResult InspectionApplicationService::resetNgCount()
                     QStringLiteral("请先停止当前任务再清零统计。"));
     }
     m_runtime->resetNgCount();
-    m_runtime->resultService().presentNgCount(m_runtime->ngCount());
     return OperationResult::accepted();
 }
 
@@ -1239,24 +1171,6 @@ void InspectionApplicationService::checkPlcHealth()
     enterFault(
                 InspectionFaultReason::PlcDisconnected,
                 QStringLiteral("运行中 PLC 连接状态已断开。"));
-}
-
-ApplicationFaultSnapshot
-// 函数说明：faultSnapshot 函数实现名称所表示的处理步骤。
-InspectionApplicationService::faultSnapshot() const
-{
-    const InspectionFaultSnapshot source = m_runtime->faultSnapshot();
-    ApplicationFaultSnapshot snapshot;
-    snapshot.active = source.isActive();
-    snapshot.reasonText = faultReasonText(source.reason);
-    snapshot.diagnostic = source.diagnostic;
-    snapshot.runId = source.runId;
-    snapshot.acceptedProductCount = source.acceptedProductCount;
-    snapshot.completedProductCount = source.completedProductCount;
-    snapshot.postFaultDroppedFrameCount =
-            source.postFaultDroppedFrameCount;
-    snapshot.occurredAtUtc = source.occurredAtUtc;
-    return snapshot;
 }
 
 // 函数说明：enterFault 函数实现名称所表示的处理步骤。

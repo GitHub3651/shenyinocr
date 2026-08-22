@@ -102,7 +102,6 @@ HEADERS += \
     application/camera_application_contract.h \
     application/inspection_application_service.h \
     application/inspection_start_preflight.h \
-    application/inspection_ui_contract.h \
     application/runtime_snapshot.h \
     application/settings_application_service.h \
     application/template_application_service.h \

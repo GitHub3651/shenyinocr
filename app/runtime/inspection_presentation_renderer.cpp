@@ -132,106 +132,10 @@ void drawTissueEllipse(
 }
 }
 
-// 函数说明：isValid 函数检查相关状态并返回判断结果。
-bool InspectionPresentationViewBindings::isValid() const
-{
-    return showImage
-            && showVerdictStyle
-            && showVerdictText
-            && showRecognitionText
-            && showTemplateName
-            && showTotalCount
-            && showNgCount
-            && showPassRate
-            && showElapsedText;
-}
-
-// 函数说明：bindView 函数实现名称所表示的处理步骤。
-void InspectionPresentationRenderer::bindView(
-    const InspectionPresentationViewBindings &bindings)
-{
-    m_viewBindings = bindings;
-}
-
-// 函数说明：hasViewBindings 函数检查相关状态并返回判断结果。
-bool InspectionPresentationRenderer::hasViewBindings() const
-{
-    return m_viewBindings.isValid();
-}
-
 // 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 void InspectionPresentationRenderer::clear()
 {
     m_state = InspectionPresentationRenderState();
-}
-
-// 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
-void InspectionPresentationRenderer::clearTransientView()
-{
-    if (!hasViewBindings()) {
-        return;
-    }
-    m_viewBindings.showVerdictText(QString());
-    m_viewBindings.showRecognitionText(QString());
-    m_viewBindings.showElapsedText(QString());
-}
-
-// 函数说明：present 函数执行对应事件或业务处理。
-bool InspectionPresentationRenderer::present(
-    const InspectionPresentation &snapshot)
-{
-    if (!hasViewBindings() || !snapshot.isValid()) {
-        return false;
-    }
-
-    m_viewBindings.showImage(snapshot.image);
-    m_viewBindings.showVerdictStyle(snapshot.verdictStyle);
-    m_viewBindings.showVerdictText(snapshot.verdictText.isEmpty()
-                                   ? (snapshot.verdictStyle
-                                      == DetectionVerdictViewStyle::Correct
-                                      ? QStringLiteral("正确")
-                                      : QStringLiteral("错误"))
-                                   : snapshot.verdictText);
-    m_viewBindings.showRecognitionText(snapshot.recognitionText);
-    if (snapshot.updatesTemplateName) {
-        m_viewBindings.showTemplateName(snapshot.templateName);
-    }
-    m_viewBindings.showTotalCount(snapshot.statistics.totalCount);
-    m_viewBindings.showNgCount(snapshot.statistics.ngCount);
-    m_viewBindings.showPassRate(
-                snapshot.statistics.passRatePercent());
-    m_viewBindings.showElapsedText(snapshot.elapsedText);
-    return true;
-}
-
-// 函数说明：presentFrame 函数执行对应事件或业务处理。
-bool InspectionPresentationRenderer::presentFrame(const QImage &image)
-{
-    if (!hasViewBindings() || image.isNull()) {
-        return false;
-    }
-    m_viewBindings.showImage(image);
-    return true;
-}
-
-// 函数说明：presentTotalAndNgCounts 函数执行对应事件或业务处理。
-void InspectionPresentationRenderer::presentTotalAndNgCounts(
-    int totalCount,
-    int ngCount)
-{
-    if (!hasViewBindings()) {
-        return;
-    }
-    m_viewBindings.showTotalCount(totalCount);
-    m_viewBindings.showNgCount(ngCount);
-}
-
-// 函数说明：presentNgCount 函数执行对应事件或业务处理。
-void InspectionPresentationRenderer::presentNgCount(int ngCount)
-{
-    if (hasViewBindings()) {
-        m_viewBindings.showNgCount(ngCount);
-    }
 }
 
 // 函数说明：installDetectionResult 函数实现名称所表示的处理步骤。

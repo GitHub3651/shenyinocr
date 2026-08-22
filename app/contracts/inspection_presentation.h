@@ -3,6 +3,7 @@
 #pragma once
 
 #include <QImage>
+#include <QMetaType>
 #include <QString>
 #include <QtGlobal>
 
@@ -49,3 +50,5 @@ struct InspectionPresentation
         return !image.isNull();
     }
 };
+
+Q_DECLARE_METATYPE(InspectionPresentation)

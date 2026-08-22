@@ -17,6 +17,7 @@
 
 #include <QDateTime>
 #include <QMetaType>
+#include <QObject>
 #include <QString>
 #include <QtGlobal>
 
@@ -71,10 +72,14 @@ struct InspectionFaultSnapshot
     }
 };
 
+Q_DECLARE_METATYPE(InspectionFaultSnapshot)
+
 // Owns one complete production run. Frame admission never creates a missing
 // run implicitly; beginStart() is the only run creation point.
-class InspectionRuntime
+class InspectionRuntime : public QObject
 {
+    Q_OBJECT
+
 public:
     using RunIdFactory = std::function<QString()>;
 
@@ -82,7 +87,7 @@ public:
         const RunIdFactory &runIdFactory,
         const std::shared_ptr<InspectionPlcController> &plcController,
         const std::shared_ptr<DetectionRegistry> &detectionRegistry);
-    ~InspectionRuntime();
+    ~InspectionRuntime() override;
 
     QString beginStart(
         const AppSettings &machineSettings,
@@ -161,7 +166,22 @@ public:
     void resetNgCount();
     void clearPendingDelayedNgRequests();
 
+signals:
+    void presentationReady(InspectionPresentation presentation);
+    void imageSaveFailed(quint64 totalFailed, QString latestError);
+    void roiWarningChanged(bool active);
+    void faultSnapshotChanged(InspectionFaultSnapshot snapshot);
+
 private:
+    friend class ResultService;
+
+    bool publishPresentation(
+        const InspectionPresentation &presentation);
+    void publishImageSaveFailure(
+        quint64 totalFailed,
+        const QString &latestError);
+    void publishRoiWarning(bool active);
+
     // 组件说明：ProductProgress 枚举列出该组件允许使用的稳定状态和选项。
     enum class ProductProgress
     {

@@ -66,17 +66,6 @@ struct ResultServiceRunConfiguration
     ResultSaveOptions saveOptions;
 };
 
-// 组件说明：ResultServiceCallbacks 数据结构集中传递该流程需要的只读数据或回调。
-struct ResultServiceCallbacks
-{
-    std::function<void()> runtimeFaulted;
-    std::function<void()> warnMissingAnnotatedImage;
-    std::function<void(quint64, const QString &)> reportImageSaveFailure;
-    std::function<void(bool)> clearPreviousOverlay;
-    std::function<void()> showDetectionRoiWarning;
-    std::function<void()> clearDetectionRoiWarning;
-};
-
 // 组件说明：ResultServiceProcessOutcome 数据结构保存一次操作的结果、状态和错误信息。
 struct ResultServiceProcessOutcome
 {
@@ -101,23 +90,14 @@ public:
         QObject *parent = nullptr);
     ~ResultService() override;
 
-    void setCallbacks(const ResultServiceCallbacks &callbacks);
-    void bindView(const InspectionPresentationViewBindings &bindings);
     void configureRun(const ResultServiceRunConfiguration &configuration);
     bool requiresPlcForRun() const;
     DetectionWorker::CompletionConsumer completionConsumer();
 
     void clear();
-    void clearTransientView();
-    bool renderAndPresentFrame(
+    QImage renderPreviewFrame(
         const cv::Mat &image,
         bool includeTissueOverlay);
-    bool presentPreviewFrame(
-        const cv::Mat &image,
-        bool tissueMode,
-        bool productionRunning);
-    void presentTotalAndNgCounts(int totalCount, int ngCount);
-    void presentNgCount(int ngCount);
     DetectionResultStatistics statistics() const;
     DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;
@@ -149,10 +129,8 @@ private:
         std::function<InspectionPresentation()> preparePresentation;
         std::function<void(InspectionPresentation *)>
                 finalizePresentation;
-        std::function<void()> beforePresent;
     };
 
-    bool postUiWork(const UiCompletionMailbox::Work &work);
     DetectionCompletion acceptCompletion(
         const DetectionCompletion &completion);
     void handleCompletion(const DetectionCompletion &completion);
@@ -172,12 +150,10 @@ private:
 
     static qint64 presentationElapsedMs(
         const DetectionCompletion &completion);
-    void clearPreviousOverlay(bool clearImageLabelRects) const;
 
     InspectionRuntime &m_runtime;
     mutable std::mutex m_mutex;
     mutable std::mutex m_presentationMutex;
-    ResultServiceCallbacks m_callbacks;
     ResultServiceRunConfiguration m_runConfiguration;
     DetectionResultStatistics m_statistics;
     DetectionAbnormalStatistics m_abnormalStatistics;

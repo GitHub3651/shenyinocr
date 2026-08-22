@@ -37,12 +37,14 @@
  */
 MainWindow::MainWindow(
     const std::shared_ptr<InspectionApplicationService> &inspectionService,
+    InspectionRuntime *runtime,
     const std::shared_ptr<SettingsApplicationService> &settingsService,
     const std::shared_ptr<TemplateApplicationService> &templateService,
     QWidget *parent)
     : QWidget(parent),
       ui(new Ui::MainWindow),
       m_inspectionApplicationService(inspectionService),
+      m_runtime(runtime),
       m_settingsApplicationService(settingsService),
       m_appliedMachineSettings(
           m_settingsApplicationService->editableDraft()),
@@ -50,46 +52,6 @@ MainWindow::MainWindow(
       imageLabel(nullptr)
 {
     ui->setupUi(this);
-    InspectionUiCallbacks resultCallbacks;
-    resultCallbacks.warnMissingAnnotatedImage = [this]() {
-        if (m_inspectionPage) {
-            m_inspectionPage->warnMissingAnnotatedImage();
-        }
-    };
-    resultCallbacks.reportImageSaveFailure = [this](
-            quint64 totalFailed,
-            const QString &latestError) {
-        if (m_inspectionPage) {
-            m_inspectionPage->reportImageSaveFailure(
-                        totalFailed,
-                        latestError);
-        }
-    };
-    resultCallbacks.clearPreviousOverlay = [this](
-        bool clearImageLabelRects) {
-        if (clearImageLabelRects && m_templateEditorPage) {
-            m_templateEditorPage->cancelTemplateDrawing();
-        }
-    };
-    resultCallbacks.showDetectionRoiWarning = [this]() {
-        if (m_inspectionPage) {
-            m_inspectionPage->showDetectionRoiWarning();
-        }
-    };
-    resultCallbacks.clearDetectionRoiWarning = [this]() {
-        if (m_inspectionPage) {
-            m_inspectionPage->clearDetectionRoiWarning(
-                        operationUiState() == OperationState::Detecting
-                        ? (ui->checkBox_hardwareTriggerEnabled->isChecked()
-                           ? QString::fromWCharArray(
-                               L"触发模式运行中")
-                           : QString::fromWCharArray(
-                               L"软触发模式运行中"))
-                        : QString());
-        }
-    };
-    m_inspectionApplicationService->setUiCallbacks(resultCallbacks);
-
     initStyle();
 
     // 检测信息区域允许被分隔条压缩；空间不足时只在该区域内部滚动。
@@ -225,6 +187,49 @@ MainWindow::MainWindow(
     Qt::QueuedConnection);
 
     initializePages();
+    connect(
+        m_runtime,
+        &InspectionRuntime::presentationReady,
+        this,
+        [this](const InspectionPresentation &presentation) {
+        m_inspectionPage->present(presentation);
+    },
+    Qt::QueuedConnection);
+    connect(
+        m_runtime,
+        &InspectionRuntime::imageSaveFailed,
+        this,
+        [this](quint64 totalFailed, const QString &latestError) {
+        m_inspectionPage->reportImageSaveFailure(
+                    totalFailed, latestError);
+    },
+    Qt::QueuedConnection);
+    connect(
+        m_runtime,
+        &InspectionRuntime::roiWarningChanged,
+        this,
+        [this](bool active) {
+        if (active) {
+            m_inspectionPage->showDetectionRoiWarning();
+        } else {
+            m_inspectionPage->clearDetectionRoiWarning(
+                        operationUiState() == OperationUiState::Detecting
+                        ? (ui->checkBox_hardwareTriggerEnabled->isChecked()
+                           ? QStringLiteral("触发模式运行中")
+                           : QStringLiteral("软触发模式运行中"))
+                        : QString());
+        }
+    },
+    Qt::QueuedConnection);
+    connect(
+        m_runtime,
+        &InspectionRuntime::faultSnapshotChanged,
+        this,
+        [this](const InspectionFaultSnapshot &snapshot) {
+        m_inspectionPage->presentFault(snapshot, &m_faultAlarmPresented);
+        updateOperationUiState();
+    },
+    Qt::QueuedConnection);
     qDebug() << "MainWindow shell constructed";
 }
 
@@ -404,8 +409,6 @@ void MainWindow::initializePages()
                 m_settingsApplicationService.get(),
                 &m_settingsEditState,
                 templateEditorPageCallbacks()));
-    m_inspectionApplicationService->bindView(
-                m_inspectionPage->resultViewBindings());
     const OperationResult resetResult =
             m_inspectionApplicationService->resetStatistics();
     if (!resetResult.isSuccess()) {
@@ -469,7 +472,6 @@ MainWindow::~MainWindow()
     qDebug() << "MainWindow destructor called";
 
     resetTemplateCaptureState();
-    m_inspectionApplicationService->clearUiBindings();
     m_inspectionApplicationService->shutdown();
 
     m_templateEditorPage.reset();

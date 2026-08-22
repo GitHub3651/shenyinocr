@@ -154,6 +154,35 @@ void InspectionPage::setStatistics(
     }
 }
 
+void InspectionPage::presentPreviewImage(const QImage &image)
+{
+    if (image.isNull() || !m_view.imageLabel_inspection) {
+        return;
+    }
+    m_view.imageLabel_inspection->setScaledContents(false);
+    m_view.imageLabel_inspection->setAlignment(Qt::AlignCenter);
+    m_view.imageLabel_inspection->setAutoFitPixmap(QPixmap::fromImage(image));
+}
+
+void InspectionPage::clearResultView()
+{
+    setLabelTextIfChanged(m_view.label_verdictResult, QString());
+    setLabelTextIfChanged(m_view.label_recognitionText, QString());
+    if (m_view.lineEdit_detectionDuration) {
+        m_view.lineEdit_detectionDuration->clear();
+    }
+    setStyleProperty(m_view.label_verdictResult, "verdict", QStringLiteral("idle"));
+}
+
+void InspectionPage::clearTransientView()
+{
+    m_detectionRoiWarningActive = false;
+    m_imageSaveWarningScheduled = false;
+    if (m_view.label_runtimeStatus) {
+        m_view.label_runtimeStatus->clear();
+    }
+}
+
 void InspectionPage::applyOperationState(
     OperationUiState requestedState,
     const OperationUiSnapshot &operationUi)
@@ -229,7 +258,7 @@ void InspectionPage::applyOperationState(
 }
 
 void InspectionPage::presentFault(
-    const ApplicationFaultSnapshot &snapshot,
+    const InspectionFaultSnapshot &snapshot,
     bool *alarmPresented)
 {
     const InspectionFaultPresentation presentation =
@@ -259,7 +288,7 @@ void InspectionPage::presentFault(
 }
 
 bool InspectionPage::confirmFaultRecovery(
-    const ApplicationFaultSnapshot &snapshot) const
+    const InspectionFaultSnapshot &snapshot) const
 {
     const InspectionFaultPresentation presentation =
             InspectionFaultPresenter::create(snapshot);
@@ -341,16 +370,6 @@ void InspectionPage::clearDetectionRoiWarning(
     }
 }
 
-void InspectionPage::warnMissingAnnotatedImage() const
-{
-    QMessageBox::warning(
-                m_rootWidget,
-                QString::fromWCharArray(L"警告"),
-                QString::fromWCharArray(
-                    L"保存失败,"
-                    L"未采集到图像！"));
-}
-
 void InspectionPage::reportImageSaveFailure(
     quint64 totalFailed,
     const QString &latestError)
@@ -363,7 +382,9 @@ void InspectionPage::reportImageSaveFailure(
     m_imageSaveWarningScheduled = true;
     QTimer::singleShot(250, m_rootWidget, [this]() {
         m_imageSaveWarningScheduled = false;
-        QString warningText = QString::fromWCharArray(
+        QString warningText = totalFailed == 0
+                ? QString::fromWCharArray(L"保存失败：未采集到标注图像。")
+                : QString::fromWCharArray(
                     L"存图失败：累计 %1 个任务。"
                     L"请检查存图目录、权限和磁盘空间。")
                 .arg(m_imageSaveFailedCount);

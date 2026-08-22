@@ -94,6 +94,8 @@ int ApplicationStartup::run(int argc, char *argv[])
     installQtTranslations(
                 &application, &qtBaseTranslator, &qtTranslator);
     qRegisterMetaType<cv::Mat>("cv::Mat");
+    qRegisterMetaType<InspectionPresentation>("InspectionPresentation");
+    qRegisterMetaType<InspectionFaultSnapshot>("InspectionFaultSnapshot");
     QApplication::setQuitOnLastWindowClosed(true);
     if (!RuntimeGuard::check()) {
         showRuntimeGuardExitMessage(
@@ -254,6 +256,7 @@ int ApplicationStartup::run(int argc, char *argv[])
                         barcodeDecoder));
         MainWindow window(
                     inspectionService,
+                    runtime.get(),
                     settingsService,
                     templateService);
         window.showMaximized();

@@ -4,8 +4,8 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include "application/inspection_ui_contract.h"
 #include "contracts/inspection_presentation.h"
+#include "runtime/inspection_runtime.h"
 #include "ui/controllers/operation_ui_policy.h"
 
 #include <QString>
@@ -60,18 +60,20 @@ public:
 
     void present(const InspectionPresentation &presentation);
     void setStatistics(const DetectionResultStatistics &statistics);
+    void presentPreviewImage(const QImage &image);
+    void clearResultView();
+    void clearTransientView();
     void applyOperationState(
         OperationUiState requestedState,
         const OperationUiSnapshot &operationUi);
     void presentFault(
-        const ApplicationFaultSnapshot &snapshot,
+        const InspectionFaultSnapshot &snapshot,
         bool *alarmPresented);
     bool confirmFaultRecovery(
-        const ApplicationFaultSnapshot &snapshot) const;
+        const InspectionFaultSnapshot &snapshot) const;
     void restoreNormalFaultStyle();
     void showDetectionRoiWarning();
     void clearDetectionRoiWarning(const QString &runningStatusText);
-    void warnMissingAnnotatedImage() const;
     void reportImageSaveFailure(
         quint64 totalFailed,
         const QString &latestError);

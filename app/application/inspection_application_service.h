@@ -7,10 +7,10 @@
 #include "application/application_result.h"
 #include "application/camera_application_contract.h"
 #include "application/inspection_start_preflight.h"
-#include "application/inspection_ui_contract.h"
 #include "application/runtime_snapshot.h"
 
 #include <QObject>
+#include <QImage>
 #include <QStringList>
 
 #include <opencv2/core.hpp>
@@ -149,12 +149,7 @@ public:
     bool isCameraOpen() const;
     void shutdown();
     void completeUnexpectedAcquisitionStop();
-    void setUiCallbacks(const InspectionUiCallbacks &callbacks);
-    void bindView(const InspectionViewBindingsDto &bindings);
-    void clearUiBindings();
-    void clearResultView();
-    void clearTransientView();
-    void presentPreviewFrame(
+    QImage renderPreviewFrame(
         const cv::Mat &image,
         bool tissueMode,
         bool productionRunning);
@@ -162,8 +157,6 @@ public:
     OperationResult resetNgCount();
     OperationResult clearPendingDelayedNgRequests();
     void checkPlcHealth();
-    ApplicationFaultSnapshot faultSnapshot() const;
-
     RuntimeSnapshot runtimeSnapshot() const;
 
 signals:

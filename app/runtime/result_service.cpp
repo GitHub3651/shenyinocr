@@ -85,14 +85,7 @@ ResultService::ResultService(
             &ImageSaveService::taskFailed,
             this,
             [this](quint64 totalFailed, const QString &latestError) {
-        ResultServiceCallbacks callbacks;
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            callbacks = m_callbacks;
-        }
-        if (callbacks.reportImageSaveFailure) {
-            callbacks.reportImageSaveFailure(totalFailed, latestError);
-        }
+        m_runtime.publishImageSaveFailure(totalFailed, latestError);
     },
     Qt::QueuedConnection);
 }
@@ -101,20 +94,6 @@ ResultService::ResultService(
 ResultService::~ResultService()
 {
     shutdown();
-}
-
-// 函数说明：setCallbacks 函数更新或应用对应的配置和状态。
-void ResultService::setCallbacks(const ResultServiceCallbacks &callbacks)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_callbacks = callbacks;
-}
-
-// 函数说明：bindView 函数实现名称所表示的处理步骤。
-void ResultService::bindView(const InspectionPresentationViewBindings &bindings)
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    m_presentationRenderer.bindView(bindings);
 }
 
 // 函数说明：configureRun 函数更新或应用对应的配置和状态。
@@ -149,49 +128,13 @@ void ResultService::clear()
     m_presentationRenderer.clear();
 }
 
-// 函数说明：clearTransientView 函数停止流程、清理状态或释放对应资源。
-void ResultService::clearTransientView()
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    m_presentationRenderer.clearTransientView();
-}
-
-// 函数说明：renderAndPresentFrame 函数执行对应事件或业务处理。
-bool ResultService::renderAndPresentFrame(
+// 函数说明：renderPreviewFrame 函数执行对应事件或业务处理。
+QImage ResultService::renderPreviewFrame(
     const cv::Mat &image,
     bool includeTissueOverlay)
 {
     std::lock_guard<std::mutex> lock(m_presentationMutex);
-    const QImage rendered = m_presentationRenderer.renderFrame(
-                image, includeTissueOverlay);
-    return !rendered.isNull()
-            && m_presentationRenderer.presentFrame(rendered);
-}
-
-// 函数说明：presentPreviewFrame 函数执行对应事件或业务处理。
-bool ResultService::presentPreviewFrame(
-    const cv::Mat &image,
-    bool tissueMode,
-    bool productionRunning)
-{
-    if (image.empty() || (tissueMode && productionRunning)) {
-        return false;
-    }
-    return renderAndPresentFrame(image, tissueMode);
-}
-
-// 函数说明：presentTotalAndNgCounts 函数执行对应事件或业务处理。
-void ResultService::presentTotalAndNgCounts(int totalCount, int ngCount)
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    m_presentationRenderer.presentTotalAndNgCounts(totalCount, ngCount);
-}
-
-// 函数说明：presentNgCount 函数执行对应事件或业务处理。
-void ResultService::presentNgCount(int ngCount)
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    m_presentationRenderer.presentNgCount(ngCount);
+    return m_presentationRenderer.renderFrame(image, includeTissueOverlay);
 }
 
 // 函数说明：statistics 函数实现名称所表示的处理步骤。
@@ -261,16 +204,11 @@ void ResultService::clearPendingDelayedNgRequests()
 // 函数说明：recordSystemFault 函数实现名称所表示的处理步骤。
 void ResultService::recordSystemFault()
 {
-    ResultServiceCallbacks callbacks;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         ++m_abnormalStatistics.systemFaultCount;
         std::queue<DelayedNgRequest> empty;
         m_delayedNgRequests.swap(empty);
-        callbacks = m_callbacks;
-    }
-    if (callbacks.runtimeFaulted) {
-        callbacks.runtimeFaulted();
     }
 }
 
@@ -300,26 +238,6 @@ void ResultService::shutdown()
         m_imageSaveService->shutdown();
         m_imageSaveService.reset();
     }
-}
-
-// 函数说明：postUiWork 函数实现名称所表示的处理步骤。
-bool ResultService::postUiWork(const UiCompletionMailbox::Work &work)
-{
-    if (!m_runtime.submitUiCompletion(work)) {
-        return false;
-    }
-    const bool posted = QMetaObject::invokeMethod(
-                this,
-                [this]() {
-        if (!m_runtime.processOneUiCompletion()) {
-            qDebug() << "[UI_COMPLETION] cancelled or empty work ignored";
-        }
-    },
-    Qt::QueuedConnection);
-    if (!posted) {
-        m_runtime.cancelUiCompletion();
-    }
-    return posted;
 }
 
 // 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
@@ -433,18 +351,10 @@ ResultServiceProcessOutcome ResultService::process(
     }
 
     presentation.statistics = outcome.statistics;
-    outcome.presentationAccepted = postUiWork(
-                [this, presentation, request]() {
-        if (request.beforePresent) {
-            request.beforePresent();
-        }
-        std::lock_guard<std::mutex> lock(m_presentationMutex);
-        m_presentationRenderer.present(presentation);
-    });
-
     if (m_runtime.state() != InspectionRuntimeState::Fault) {
         requestPlc(outcome.plcAction, request.completion.frame->productKey);
     }
+    outcome.presentationAccepted = m_runtime.publishPresentation(presentation);
     return outcome;
 }
 
@@ -485,14 +395,9 @@ bool ResultService::submitImageSave(
                 || options.imageContentModeIndex == 2;
         if (saveAnnotated) {
             if (annotatedImage.isNull()) {
-                ResultServiceCallbacks callbacks;
-                {
-                    std::lock_guard<std::mutex> lock(m_mutex);
-                    callbacks = m_callbacks;
-                }
-                if (callbacks.warnMissingAnnotatedImage) {
-                    callbacks.warnMissingAnnotatedImage();
-                }
+                m_runtime.publishImageSaveFailure(
+                            0,
+                            QStringLiteral("未采集到标注图像。"));
             } else {
                 task.items.push_back(saveItem(
                     annotatedImage,
@@ -620,22 +525,15 @@ void ResultService::handleCompletion(
         return;
     }
 
-    ResultServiceCallbacks callbacks;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        callbacks = m_callbacks;
-    }
     if (accepted.result.status == DetectionStatus::Cancelled) {
         m_runtime.claimResult(accepted.frame->productKey);
-        if (accepted.result.showRoiWarningOnCancelled
-                && callbacks.showDetectionRoiWarning) {
-            postUiWork(callbacks.showDetectionRoiWarning);
+        if (accepted.result.showRoiWarningOnCancelled) {
+            m_runtime.publishRoiWarning(true);
         }
         return;
     }
-    if (accepted.result.clearRoiWarningOnCompleted
-            && callbacks.clearDetectionRoiWarning) {
-        postUiWork(callbacks.clearDetectionRoiWarning);
+    if (accepted.result.clearRoiWarningOnCompleted) {
+        m_runtime.publishRoiWarning(false);
     }
 
     ProcessRequest request;
@@ -667,9 +565,6 @@ void ResultService::handleCompletion(
         presentation.templateName = accepted.result.templateName;
         return presentation;
     };
-    request.beforePresent = [this, accepted]() {
-        clearPreviousOverlay(accepted.result.clearImageLabelRects);
-    };
     request.finalizePresentation = [accepted](
         InspectionPresentation *presentation) {
         const qint64 elapsed = presentationElapsedMs(accepted);
@@ -680,17 +575,4 @@ void ResultService::handleCompletion(
                 : QStringLiteral("检测耗时 %1 毫秒").arg(elapsed);
     };
     process(request);
-}
-
-// 函数说明：clearPreviousOverlay 函数停止流程、清理状态或释放对应资源。
-void ResultService::clearPreviousOverlay(bool clearImageLabelRects) const
-{
-    ResultServiceCallbacks callbacks;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        callbacks = m_callbacks;
-    }
-    if (callbacks.clearPreviousOverlay) {
-        callbacks.clearPreviousOverlay(clearImageLabelRects);
-    }
 }

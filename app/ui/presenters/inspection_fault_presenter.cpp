@@ -14,7 +14,7 @@ bool InspectionFaultPresentation::isValid() const
 }
 
 InspectionFaultPresentation InspectionFaultPresenter::create(
-    const ApplicationFaultSnapshot &snapshot)
+    const InspectionFaultSnapshot &snapshot)
 {
     InspectionFaultPresentation presentation;
     if (!snapshot.isActive()) {
@@ -25,8 +25,27 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
     presentation.resultText = QStringLiteral("检测暂停");
 
     QStringList details;
-    details << QStringLiteral("故障原因：%1")
-               .arg(snapshot.reasonText);
+    QString reasonText;
+    switch (snapshot.reason) {
+    case InspectionFaultReason::CameraDisconnected:
+        reasonText = QStringLiteral("相机断连或正式采集异常");
+        break;
+    case InspectionFaultReason::PlcDisconnected:
+        reasonText = QStringLiteral("PLC连接或结果输出异常");
+        break;
+    case InspectionFaultReason::HardTriggerQueueOverflow:
+        reasonText = QStringLiteral("硬触发检测队列已满");
+        break;
+    case InspectionFaultReason::ProductIdentityAmbiguous:
+        reasonText = QStringLiteral("产品身份无法唯一确定");
+        break;
+    case InspectionFaultReason::RuntimeInvariantViolation:
+        reasonText = QStringLiteral("检测运行约束被破坏");
+        break;
+    case InspectionFaultReason::None:
+        break;
+    }
+    details << QStringLiteral("故障原因：%1").arg(reasonText);
     if (!snapshot.diagnostic.isEmpty()) {
         details << QStringLiteral("诊断信息：%1")
                    .arg(snapshot.diagnostic);

@@ -40,7 +40,7 @@ void MainWindow::presentInspectionFault()
     }
     updateOperationUiState();
     m_inspectionPage->presentFault(
-                m_inspectionApplicationService->faultSnapshot(),
+                m_runtime->faultSnapshot(),
                 &m_faultAlarmPresented);
 }
 
@@ -48,7 +48,7 @@ bool MainWindow::confirmInspectionFaultRecovery()
 {
     return m_inspectionPage
             && m_inspectionPage->confirmFaultRecovery(
-                m_inspectionApplicationService->faultSnapshot());
+                m_runtime->faultSnapshot());
 }
 
 void MainWindow::checkInspectionPlcHealth()
@@ -59,8 +59,8 @@ void MainWindow::checkInspectionPlcHealth()
 void MainWindow::restoreNormalFaultUi()
 {
     m_faultAlarmPresented = false;
-    m_inspectionApplicationService->clearTransientView();
     if (m_inspectionPage) {
+        m_inspectionPage->clearTransientView();
         m_inspectionPage->restoreNormalFaultStyle();
     }
 }
@@ -180,7 +180,7 @@ void MainWindow::finishInspectionStopUi(
     if (m_templateEditorPage) {
         m_templateEditorPage->cancelTemplateDrawing();
     }
-    m_inspectionApplicationService->clearResultView();
+    m_inspectionPage->clearResultView();
     if (result.issue == StopInspectionIssue::RuntimeFault
             || result.issue
                == StopInspectionIssue::FaultReconciliationFailed) {
@@ -222,8 +222,9 @@ void MainWindow::slot_displayAndDetect(cv::Mat *image)
     const bool productionRunning =
             isInspectionBusy();
     if (image) {
-        m_inspectionApplicationService->presentPreviewFrame(
+        const QImage preview = m_inspectionApplicationService->renderPreviewFrame(
                     *image, tissueMode, productionRunning);
+        m_inspectionPage->presentPreviewImage(preview);
     }
 }
 
@@ -447,6 +448,8 @@ void MainWindow::on_pushButton_resetTotalCount_clicked()
             m_inspectionApplicationService->resetStatistics();
     if (!result.isSuccess()) {
         showParameterWarning(QStringLiteral("提示"), result.error.userMessage);
+    } else if (m_runtime) {
+        m_inspectionPage->setStatistics(m_runtime->statistics());
     }
 }
 
@@ -459,6 +462,8 @@ void MainWindow::on_pushButton_resetNgCount_clicked()
             m_inspectionApplicationService->resetNgCount();
     if (!result.isSuccess()) {
         showParameterWarning(QStringLiteral("提示"), result.error.userMessage);
+    } else if (m_runtime) {
+        m_inspectionPage->setStatistics(m_runtime->statistics());
     }
 }
 

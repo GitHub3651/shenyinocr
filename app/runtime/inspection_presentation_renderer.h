@@ -9,43 +9,17 @@
 
 #include <QImage>
 
-#include <functional>
-
 // 组件说明：InspectionPresentationRenderState 数据结构集中保存该流程需要的一组相关数据。
 struct InspectionPresentationRenderState
 {
     DetectionOverlay overlay;
 };
 
-// 组件说明：InspectionPresentationViewBindings 数据结构集中传递该流程需要的只读数据或回调。
-struct InspectionPresentationViewBindings
-{
-    std::function<void(const QImage &)> showImage;
-    std::function<void(DetectionVerdictViewStyle)> showVerdictStyle;
-    std::function<void(const QString &)> showVerdictText;
-    std::function<void(const QString &)> showRecognitionText;
-    std::function<void(const QString &)> showTemplateName;
-    std::function<void(int)> showTotalCount;
-    std::function<void(int)> showNgCount;
-    std::function<void(double)> showPassRate;
-    std::function<void(const QString &)> showElapsedText;
-
-    bool isValid() const;
-};
-
 // 组件说明：InspectionPresentationRenderer 组件封装本文件中与其名称对应的单一职责。
 class InspectionPresentationRenderer
 {
 public:
-    void bindView(const InspectionPresentationViewBindings &bindings);
-    bool hasViewBindings() const;
-
     void clear();
-    void clearTransientView();
-    bool present(const InspectionPresentation &snapshot);
-    bool presentFrame(const QImage &image);
-    void presentTotalAndNgCounts(int totalCount, int ngCount);
-    void presentNgCount(int ngCount);
     void installDetectionResult(const DetectionResult &result);
 
     const InspectionPresentationRenderState &state() const;
@@ -55,5 +29,4 @@ public:
 
 private:
     InspectionPresentationRenderState m_state;
-    InspectionPresentationViewBindings m_viewBindings;
 };

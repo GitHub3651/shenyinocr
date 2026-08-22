@@ -4,7 +4,7 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include "application/inspection_ui_contract.h"
+#include "runtime/inspection_runtime.h"
 
 #include <QString>
 
@@ -23,5 +23,5 @@ class InspectionFaultPresenter
 {
 public:
     static InspectionFaultPresentation create(
-        const ApplicationFaultSnapshot &snapshot);
+        const InspectionFaultSnapshot &snapshot);
 };

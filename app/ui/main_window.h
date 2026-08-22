@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "application/inspection_application_service.h"
+#include "runtime/inspection_runtime.h"
 #include "application/settings_application_service.h"
 #include "templates/template_store.h"
 #include "ui/controllers/operation_ui_policy.h"
@@ -62,6 +63,7 @@ class MainWindow : public QWidget
 public:
     explicit MainWindow(
         const std::shared_ptr<InspectionApplicationService> &inspectionService,
+        InspectionRuntime *runtime,
         const std::shared_ptr<SettingsApplicationService> &settingsService,
         const std::shared_ptr<TemplateApplicationService> &templateService,
         QWidget *parent = nullptr);
@@ -146,6 +148,7 @@ private:
     QLineEdit *m_softwareDataDirLineEdit = nullptr;
     std::shared_ptr<InspectionApplicationService>
             m_inspectionApplicationService;
+    InspectionRuntime *m_runtime = nullptr;
     std::shared_ptr<SettingsApplicationService>
             m_settingsApplicationService;
     AppSettings &m_appliedMachineSettings;
