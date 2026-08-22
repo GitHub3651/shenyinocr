@@ -2,7 +2,7 @@
 
 ## 1. 文档状态与最终决策
 
-- 状态：架构设计和代码实施规则已由用户确认；尚未批准修改生产代码。
+- 状态：架构设计和代码实施规则已由用户确认；四个代码阶段已完成并分别提交，尚待用户在 Qt Creator 统一构建、运行和现场验证。
 - 更新日期：2026-08-23。
 - 本文只定义目标架构、明确决策、实施顺序和验收门禁，不代表生产代码已经修改、构建或现场验证。
 - 适用范围：`app/application`、`app/contracts`、`app/runtime`、`app/detection`、`app/ui` 中与检测运行、结果呈现和模板预览有关的边界。
@@ -1032,7 +1032,16 @@ t_interval：相邻产品结果产生的时间间隔
 
 ## 39. 方案实施前的明确前提
 
-本文已经固定了架构选择，但代码实施仍必须先记录当前基线并得到本方案的实施批准。批准不等于构建通过；每个阶段都要单独构建、回归并更新执行记录。若源码事实与本文冲突，应先暂停对应阶段，核对真实调用链，不得用文档强行覆盖生产行为。
+本文已经固定了架构选择，并已获得本轮代码实施批准。四个阶段的提交为：
+
+```text
+5da95b4  refactor: migrate inspection presentation contract
+b169bb4  refactor: remove cross-layer UI callbacks
+010b57b  refactor: make presentation mailbox nonblocking
+8db119e  refactor: hide result service behind runtime
+```
+
+阶段提交前已执行差异检查、旧符号检索、qmake 清单路径检查和 Qt moc 解析。当前尚未完成 Qt Creator 的 Run qmake/Rebuild、程序运行、相机/PLC、Fault 恢复和生产现场验证；这些验证由用户在全部阶段完成后统一执行。若构建或运行暴露源码事实与本文冲突，应暂停后续修订，核对真实调用链，不得用文档强行覆盖生产行为。
 
 ## 40. 结论
 
