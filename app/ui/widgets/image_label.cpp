@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QPainter>
 #include <QPen>
+#include <QtGlobal>
 
 namespace {
 
@@ -21,6 +22,81 @@ ImageLabel::DrawingStep initialDrawingStep(DetectionMode mode)
         return ImageLabel::DrawingStep::Idle;
     }
     return ImageLabel::DrawingStep::Idle;
+}
+
+QRectF centeredImageRect(const QSize &viewSize, const QSize &imageSize)
+{
+    if (viewSize.width() <= 0 || viewSize.height() <= 0
+            || imageSize.width() <= 0 || imageSize.height() <= 0) {
+        return QRectF();
+    }
+    return QRectF(
+                (viewSize.width() - imageSize.width()) / 2.0,
+                (viewSize.height() - imageSize.height()) / 2.0,
+                imageSize.width(), imageSize.height());
+}
+
+QPointF remapPoint(
+        const QPointF &point,
+        const QRectF &oldImageRect,
+        const QRectF &newImageRect)
+{
+    return QPointF(
+                newImageRect.left()
+                + (point.x() - oldImageRect.left())
+                  * newImageRect.width() / oldImageRect.width(),
+                newImageRect.top()
+                + (point.y() - oldImageRect.top())
+                  * newImageRect.height() / oldImageRect.height());
+}
+
+void remapRect(
+        QRectF *rect,
+        const QRectF &oldImageRect,
+        const QRectF &newImageRect)
+{
+    if (!rect || rect->isNull()) {
+        return;
+    }
+    *rect = QRectF(
+                remapPoint(rect->topLeft(), oldImageRect, newImageRect),
+                remapPoint(rect->bottomRight(), oldImageRect, newImageRect));
+}
+
+void remapPolygon(
+        QPolygonF *polygon,
+        const QRectF &oldImageRect,
+        const QRectF &newImageRect)
+{
+    if (!polygon) {
+        return;
+    }
+    for (QPointF &point : *polygon) {
+        point = remapPoint(point, oldImageRect, newImageRect);
+    }
+}
+
+QPoint roundedPoint(const QPointF &point)
+{
+    return QPoint(qRound(point.x()), qRound(point.y()));
+}
+
+QRect roundedRect(const QRectF &rect)
+{
+    return rect.isNull()
+            ? QRect()
+            : QRect(roundedPoint(rect.topLeft()),
+                    roundedPoint(rect.bottomRight()));
+}
+
+QPolygon roundedPolygon(const QPolygonF &polygon)
+{
+    QPolygon result;
+    result.reserve(polygon.size());
+    for (const QPointF &point : polygon) {
+        result.append(roundedPoint(point));
+    }
+    return result;
 }
 
 }
@@ -69,11 +145,40 @@ void ImageLabel::updateAutoFitPixmap()
 
 void ImageLabel::resizeEvent(QResizeEvent *event)
 {
+    const QPixmap *oldPixmap = pixmap();
+    const QRectF oldImageRect = centeredImageRect(
+                event->oldSize(),
+                oldPixmap ? oldPixmap->size() : QSize());
     QLabel::resizeEvent(event);
     updateAutoFitPixmap();
+
+    const QPixmap *newPixmap = pixmap();
+    const QRectF newImageRect = centeredImageRect(
+                event->size(),
+                newPixmap ? newPixmap->size() : QSize());
+    if (m_drawingStep == DrawingStep::Idle
+            || oldImageRect.isEmpty() || newImageRect.isEmpty()
+            || oldImageRect == newImageRect) {
+        return;
+    }
+
+    remapRect(&m_trackingAnchorRect, oldImageRect, newImageRect);
+    remapRect(&m_barcodeRect, oldImageRect, newImageRect);
+    remapRect(&m_stampAnchorRect, oldImageRect, newImageRect);
+    remapPolygon(&m_datePolygon, oldImageRect, newImageRect);
+    remapPolygon(&m_stampPolygon, oldImageRect, newImageRect);
+    if (m_isInteracting) {
+        m_startPoint = remapPoint(
+                    m_startPoint, oldImageRect, newImageRect);
+    }
+    const QPolygonF *polygon = activePolygon();
+    if (polygon && !polygon->isEmpty()) {
+        m_tempPolyPoint = remapPoint(
+                    m_tempPolyPoint, oldImageRect, newImageRect);
+    }
 }
 
-QRect *ImageLabel::activeRect()
+QRectF *ImageLabel::activeRect()
 {
     switch (m_drawingStep) {
     case DrawingStep::TrackingAnchor:
@@ -88,7 +193,7 @@ QRect *ImageLabel::activeRect()
     }
 }
 
-QPolygon *ImageLabel::activePolygon()
+QPolygonF *ImageLabel::activePolygon()
 {
     switch (m_drawingStep) {
     case DrawingStep::DetectionPolygon:
@@ -103,12 +208,12 @@ QPolygon *ImageLabel::activePolygon()
 
 void ImageLabel::clearTemplateGeometry()
 {
-    m_trackingAnchorRect = QRect();
-    m_barcodeRect = QRect();
-    m_stampAnchorRect = QRect();
+    m_trackingAnchorRect = QRectF();
+    m_barcodeRect = QRectF();
+    m_stampAnchorRect = QRectF();
     m_datePolygon.clear();
     m_stampPolygon.clear();
-    m_tempPolyPoint = QPoint();
+    m_tempPolyPoint = QPointF();
     m_isInteracting = false;
 }
 
@@ -148,27 +253,27 @@ bool ImageLabel::isTemplateDrawingComplete() const
 
 QRect ImageLabel::trackingAnchorRect() const
 {
-    return m_trackingAnchorRect;
+    return roundedRect(m_trackingAnchorRect);
 }
 
 QRect ImageLabel::barcodeRect() const
 {
-    return m_barcodeRect;
+    return roundedRect(m_barcodeRect);
 }
 
 QRect ImageLabel::stampAnchorRect() const
 {
-    return m_stampAnchorRect;
+    return roundedRect(m_stampAnchorRect);
 }
 
 QPolygon ImageLabel::datePolygon() const
 {
-    return m_datePolygon;
+    return roundedPolygon(m_datePolygon);
 }
 
 QPolygon ImageLabel::stampPolygon() const
 {
-    return m_stampPolygon;
+    return roundedPolygon(m_stampPolygon);
 }
 
 void ImageLabel::retryBarcodeRegion()
@@ -185,9 +290,9 @@ void ImageLabel::retryBarcodeRegion()
         return;
     }
 
-    m_barcodeRect = QRect();
+    m_barcodeRect = QRectF();
     m_datePolygon.clear();
-    m_tempPolyPoint = QPoint();
+    m_tempPolyPoint = QPointF();
     m_isInteracting = false;
     m_drawingStep = DrawingStep::BarcodeRegion;
     emitStepChanged(m_drawingStep, DrawingEvent::StepStarted);
@@ -257,10 +362,10 @@ void ImageLabel::advanceStep(int pointCount)
 
 void ImageLabel::finishCurrentStep()
 {
-    if (QRect *rect = activeRect()) {
+    if (QRectF *rect = activeRect()) {
         *rect = rect->normalized();
-        if (rect->width() <= 5 || rect->height() <= 5) {
-            *rect = QRect();
+        if (rect->width() <= 5.0 || rect->height() <= 5.0) {
+            *rect = QRectF();
             emitStepChanged(m_drawingStep, DrawingEvent::RegionTooSmall);
             update();
             return;
@@ -269,7 +374,7 @@ void ImageLabel::finishCurrentStep()
         return;
     }
 
-    QPolygon *polygon = activePolygon();
+    QPolygonF *polygon = activePolygon();
     if (!polygon) {
         return;
     }
@@ -282,7 +387,7 @@ void ImageLabel::finishCurrentStep()
         return;
     }
     const int pointCount = polygon->size();
-    m_tempPolyPoint = QPoint();
+    m_tempPolyPoint = QPointF();
     advanceStep(pointCount);
 }
 
@@ -295,18 +400,18 @@ void ImageLabel::mousePressEvent(QMouseEvent *event)
     }
 
     setFocus(Qt::MouseFocusReason);
-    if (QRect *rect = activeRect()) {
+    if (QRectF *rect = activeRect()) {
         if (event->button() == Qt::LeftButton) {
             m_isInteracting = true;
             m_startPoint = event->pos();
-            *rect = QRect(m_startPoint, m_startPoint);
+            *rect = QRectF(m_startPoint, m_startPoint);
             event->accept();
             update();
             return;
         }
-    } else if (QPolygon *polygon = activePolygon()) {
+    } else if (QPolygonF *polygon = activePolygon()) {
         if (event->button() == Qt::LeftButton) {
-            *polygon << event->pos();
+            *polygon << QPointF(event->pos());
             m_tempPolyPoint = event->pos();
             emitStepChanged(
                         m_drawingStep,
@@ -328,14 +433,14 @@ void ImageLabel::mousePressEvent(QMouseEvent *event)
 void ImageLabel::mouseMoveEvent(QMouseEvent *event)
 {
     if (m_isInteracting) {
-        if (QRect *rect = activeRect()) {
+        if (QRectF *rect = activeRect()) {
             rect->setBottomRight(event->pos());
             event->accept();
             update();
             return;
         }
     }
-    const QPolygon *polygon = activePolygon();
+    const QPolygonF *polygon = activePolygon();
     if (polygon && !polygon->isEmpty()) {
         m_tempPolyPoint = event->pos();
         event->accept();
@@ -380,7 +485,7 @@ void ImageLabel::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    const auto drawRect = [&painter](const QRect &rect,
+    const auto drawRect = [&painter](const QRectF &rect,
                                     const QColor &color) {
         if (rect.isNull()) {
             return;
@@ -390,7 +495,7 @@ void ImageLabel::paintEvent(QPaintEvent *event)
         painter.drawRect(rect);
     };
     const auto drawPolygon = [this, &painter](
-            const QPolygon &polygon,
+            const QPolygonF &polygon,
             const QColor &color,
             DrawingStep activeStep) {
         if (polygon.isEmpty()) {
@@ -408,7 +513,7 @@ void ImageLabel::paintEvent(QPaintEvent *event)
         }
         painter.setPen(QPen(color, 1, Qt::SolidLine));
         painter.setBrush(color);
-        for (const QPoint &point : polygon) {
+        for (const QPointF &point : polygon) {
             painter.drawEllipse(point, 4, 4);
         }
     };

@@ -78,8 +78,8 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    QRect *activeRect();
-    QPolygon *activePolygon();
+    QRectF *activeRect();
+    QPolygonF *activePolygon();
     void clearTemplateGeometry();
     void finishCurrentStep();
     void advanceStep(int pointCount);
@@ -90,14 +90,14 @@ private:
 
     DrawingStep m_drawingStep = DrawingStep::Idle;
     DetectionMode m_templateDrawingMode = DetectionMode::Tissue;
-    QRect m_trackingAnchorRect;
-    QRect m_barcodeRect;
-    QRect m_stampAnchorRect;
-    QPolygon m_datePolygon;
-    QPolygon m_stampPolygon;
-    QPoint m_tempPolyPoint;
+    QRectF m_trackingAnchorRect;
+    QRectF m_barcodeRect;
+    QRectF m_stampAnchorRect;
+    QPolygonF m_datePolygon;
+    QPolygonF m_stampPolygon;
+    QPointF m_tempPolyPoint;
     bool m_isInteracting = false;
-    QPoint m_startPoint;
+    QPointF m_startPoint;
     QPixmap m_autoFitSourcePixmap;
     bool m_autoFitPixmapEnabled = false;
 };

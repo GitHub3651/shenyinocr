@@ -170,20 +170,20 @@ TemplateGeometryResult TemplateGeometryService::buildGeometry(
                 &result.datePolygon);
 
     if (input.mode == DetectionMode::BarcodeWord) {
-        const QRectF barcode = mapTemplateRect(
+        const QRect barcode = mapDisplayRectToImage(
                     input.barcodeRect, geometry);
-        if (barcode.width() <= 5.0 || barcode.height() <= 5.0) {
+        if (barcode.width() <= 5 || barcode.height() <= 5) {
             result.errorMessage = QStringLiteral(
                         "二维码区域转换后无效，模板未保存。");
             return result;
         }
-        const QPointF corners[] = {
+        const QPoint corners[] = {
             barcode.topLeft(),
-            QPointF(barcode.right(), barcode.top()),
+            barcode.topRight(),
             barcode.bottomRight(),
-            QPointF(barcode.left(), barcode.bottom())
+            barcode.bottomLeft()
         };
-        for (const QPointF &point : corners) {
+        for (const QPoint &point : corners) {
             result.barcodePolygon.emplace_back(
                         static_cast<float>(
                             point.x() - trackingCenter.x()),

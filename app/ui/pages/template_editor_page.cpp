@@ -138,19 +138,28 @@ QString drawingRegionName(DetectionMode mode, ImageLabel::DrawingStep step)
 {
     switch (step) {
     case ImageLabel::DrawingStep::TrackingAnchor:
-        return mode == DetectionMode::BarcodeWord
-                ? QStringLiteral("生产日期定位锚点")
-                : QStringLiteral("定位区域");
+        switch (mode) {
+        case DetectionMode::Word:
+            return QStringLiteral("文字检测区域定位锚点");
+        case DetectionMode::Ocr:
+            return QStringLiteral("OCR 检测区域定位锚点");
+        case DetectionMode::BarcodeWord:
+            return QStringLiteral("二维码与生产日期区域定位锚点");
+        case DetectionMode::Stamp:
+        case DetectionMode::Tissue:
+            break;
+        }
+        return QStringLiteral("定位锚点");
     case ImageLabel::DrawingStep::DetectionPolygon:
         return templateGuideDetectionRegionName(mode);
     case ImageLabel::DrawingStep::BarcodeRegion:
         return QStringLiteral("二维码区域");
     case ImageLabel::DrawingStep::StampAnchor:
-        return QStringLiteral("吸管口定位锚点");
+        return QStringLiteral("钢印区域定位锚点（吸管口）");
     case ImageLabel::DrawingStep::StampPolygon:
         return QStringLiteral("钢印检测区域");
     case ImageLabel::DrawingStep::DateAnchor:
-        return QStringLiteral("生产日期定位锚点");
+        return QStringLiteral("生产日期检测区域定位锚点");
     case ImageLabel::DrawingStep::DatePolygon:
         return QStringLiteral("生产日期检测区域");
     case ImageLabel::DrawingStep::Idle:
@@ -158,6 +167,33 @@ QString drawingRegionName(DetectionMode mode, ImageLabel::DrawingStep step)
         break;
     }
     return QStringLiteral("检测区域");
+}
+
+QString emphasizedDrawingRegion(
+        DetectionMode mode, ImageLabel::DrawingStep step)
+{
+    QString color = QStringLiteral("#157A3D");
+    switch (step) {
+    case ImageLabel::DrawingStep::TrackingAnchor:
+    case ImageLabel::DrawingStep::DateAnchor:
+        color = QStringLiteral("#0067C0");
+        break;
+    case ImageLabel::DrawingStep::BarcodeRegion:
+    case ImageLabel::DrawingStep::StampAnchor:
+        color = QStringLiteral("#B85C00");
+        break;
+    case ImageLabel::DrawingStep::StampPolygon:
+        color = QStringLiteral("#C43D24");
+        break;
+    case ImageLabel::DrawingStep::DetectionPolygon:
+    case ImageLabel::DrawingStep::DatePolygon:
+    case ImageLabel::DrawingStep::Idle:
+    case ImageLabel::DrawingStep::Complete:
+        break;
+    }
+    return QStringLiteral(
+                "<b><span style=\"color:%1;\">%2</span></b>")
+            .arg(color, drawingRegionName(mode, step).toHtmlEscaped());
 }
 
 bool isDrawingPolygonStep(ImageLabel::DrawingStep step)
@@ -814,9 +850,10 @@ void TemplateEditorPage::saveCurrentTemplate()
         if (ring.width <= 5 || ring.height <= 5
                 || ring.x < 0 || ring.y < 0
                 || ring.x + ring.width > rawImage.cols
-                || ring.y + ring.height > rawImage.rows) {
+            || ring.y + ring.height > rawImage.rows) {
             showWarning(QStringLiteral("钢印标定无效"),
-                        QStringLiteral("请重新选择有效的吸管口定位锚点。"));
+                        QStringLiteral(
+                            "请重新选择有效的钢印区域定位锚点（吸管口）。"));
             return;
         }
         assets.stampRing = rawImage(ring).clone();
@@ -1127,6 +1164,7 @@ void TemplateEditorPage::setupTemplateGuide()
     m_templateGuideFrame = m_view.frame_templateGuide;
     m_templateGuideTitleLabel = m_view.label_templateGuideTitle;
     m_templateGuideBodyLabel = m_view.label_templateGuideBody;
+    m_templateGuideBodyLabel->setTextFormat(Qt::RichText);
     m_templateGuideFrame->hide();
 }
 
@@ -1232,10 +1270,17 @@ bool TemplateEditorPage::validateCompletedBarcode()
 
     clearBarcodeTemplateValidation();
     imageLabel->retryBarcodeRegion();
+    const QString barcodeRegion = emphasizedDrawingRegion(
+                DetectionMode::BarcodeWord,
+                ImageLabel::DrawingStep::BarcodeRegion);
+    const QString trackingAnchor = emphasizedDrawingRegion(
+                DetectionMode::BarcodeWord,
+                ImageLabel::DrawingStep::TrackingAnchor);
     updateTemplateGuideText(
                 templateGuideTitle(DetectionMode::BarcodeWord),
                 QStringLiteral(
-                    "【步骤2/3】二维码扫描失败，生产日期定位锚点已保留，请重新完整框选二维码区域。"));
+                    "【步骤2/3】%1扫描失败，%2已保留，请重新完整框选%1。")
+                .arg(barcodeRegion, trackingAnchor));
     QTimer::singleShot(0, this, [this, failureReason]() {
         showWarning(
                     QStringLiteral("二维码扫描失败"),
@@ -1256,7 +1301,7 @@ void TemplateEditorPage::updateDrawingGuide(
 {
     const DetectionMode mode = imageLabel->templateDrawingMode();
     const QString title = templateGuideTitle(mode);
-    const QString region = drawingRegionName(mode, step);
+    const QString region = emphasizedDrawingRegion(mode, step);
     const QString stepPrefix = QStringLiteral("【步骤%1/%2】")
             .arg(drawingStepNumber(mode, step))
             .arg(drawingStepCount(mode));
@@ -1279,8 +1324,8 @@ void TemplateEditorPage::updateDrawingGuide(
             }
         } else if (step == ImageLabel::DrawingStep::BarcodeRegion) {
             instruction = QStringLiteral(
-                        "%1按住鼠标左键拖动，完整框选二维码区域；松开后立即验证是否可读，四周保留少量背景。")
-                    .arg(stepPrefix);
+                        "%1按住鼠标左键拖动，完整框选%2；松开后立即验证是否可读，四周保留少量背景。")
+                    .arg(stepPrefix, region);
         } else {
             instruction = QStringLiteral(
                         "%1按住鼠标左键拖动，框选%2；松开左键完成。")
@@ -1325,15 +1370,35 @@ void TemplateEditorPage::updateDrawingGuide(
         break;
     }
 
-    const QString completedText = mode == DetectionMode::Stamp
-            ? QStringLiteral(
-                  "【步骤4/4】吸管口锚点、钢印区域、日期锚点和日期区域均已完成，请点击【保存模板】。")
-            : mode == DetectionMode::BarcodeWord
-              ? QStringLiteral(
-                    "【步骤3/3】日期锚点、二维码区域和日期区域均已完成，请点击【保存模板】。")
-              : QStringLiteral(
-                    "【步骤2/2】定位区域和%1均已完成，请点击【保存模板】。")
-                .arg(templateGuideDetectionRegionName(mode));
+    QString completedText;
+    if (mode == DetectionMode::Stamp) {
+        completedText = QStringLiteral(
+                    "【步骤4/4】%1、%2、%3和%4均已完成，请点击【保存模板】。")
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::StampAnchor))
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::StampPolygon))
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::DateAnchor))
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::DatePolygon));
+    } else if (mode == DetectionMode::BarcodeWord) {
+        completedText = QStringLiteral(
+                    "【步骤3/3】%1、%2和%3均已完成，请点击【保存模板】。")
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::TrackingAnchor))
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::BarcodeRegion))
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::DatePolygon));
+    } else {
+        completedText = QStringLiteral(
+                    "【步骤2/2】%1和%2均已完成，请点击【保存模板】。")
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::TrackingAnchor))
+                .arg(emphasizedDrawingRegion(
+                         mode, ImageLabel::DrawingStep::DetectionPolygon));
+    }
     updateTemplateGuideText(title, completedText);
 }
 
@@ -1351,13 +1416,18 @@ void TemplateEditorPage::askToSaveCompletedTemplate(DetectionMode mode)
         saveMessageBox.setText(
                     mode == DetectionMode::Stamp
                     ? QStringLiteral(
-                          "吸管口定位锚点、钢印区域、生产日期定位锚点和日期区域均已完成。\n\n是否立即保存当前模板？")
+                          "钢印区域定位锚点（吸管口）、钢印检测区域、生产日期检测区域定位锚点和生产日期检测区域均已完成。\n\n是否立即保存当前模板？")
                     : mode == DetectionMode::BarcodeWord
                       ? QStringLiteral(
-                            "生产日期定位锚点、二维码区域和日期区域均已完成。\n\n是否立即保存当前模板？")
+                            "二维码与生产日期区域定位锚点、二维码区域和生产日期检测区域均已完成。\n\n是否立即保存当前模板？")
                       : QStringLiteral(
-                            "定位区域和%1均已完成。\n\n是否立即保存当前模板？")
-                        .arg(templateGuideDetectionRegionName(mode)));
+                            "%1和%2均已完成。\n\n是否立即保存当前模板？")
+                        .arg(drawingRegionName(
+                                 mode,
+                                 ImageLabel::DrawingStep::TrackingAnchor),
+                             drawingRegionName(
+                                 mode,
+                                 ImageLabel::DrawingStep::DetectionPolygon)));
         QPushButton *saveButton = saveMessageBox.addButton(
                     QStringLiteral("保存"), QMessageBox::AcceptRole);
         saveMessageBox.addButton(
