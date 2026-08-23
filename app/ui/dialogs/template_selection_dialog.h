@@ -25,6 +25,7 @@ public:
 
 private:
     void addTemplateFolder();
+    void removeCurrentTemplate();
     void addPath(const QString &path, bool checked);
     void handleItemChanged(QTreeWidgetItem *changed, int column);
     void moveCurrentItem(int offset);

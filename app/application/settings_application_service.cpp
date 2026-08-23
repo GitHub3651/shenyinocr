@@ -115,6 +115,20 @@ OperationResult SettingsApplicationService::saveTemplatePaths(
     return saveCandidate(candidate, true);
 }
 
+OperationResult SettingsApplicationService::removeTemplatePath(
+    DetectionMode mode,
+    const QString &path)
+{
+    QStringList paths = m_current.detectionSchemes.templatePaths(mode);
+    for (int index = paths.size() - 1; index >= 0; --index) {
+        if (QString::compare(paths.at(index), path,
+                             Qt::CaseInsensitive) == 0) {
+            paths.removeAt(index);
+        }
+    }
+    return saveTemplatePaths(mode, paths);
+}
+
 OperationResult SettingsApplicationService::saveTemplatePathsAndDirectory(
     DetectionMode mode,
     const QStringList &paths,

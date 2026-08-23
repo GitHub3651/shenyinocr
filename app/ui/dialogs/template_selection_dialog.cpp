@@ -50,8 +50,8 @@ TemplateSelectionDialog::TemplateSelectionDialog(
     QVBoxLayout *layout = new QVBoxLayout(this);
     QLabel *description = new QLabel(
                 multipleTemplatesAllowed(mode)
-                ? QStringLiteral("已应用模板会显示勾选。可以取消、增加或调整多个模板的顺序。")
-                : QStringLiteral("已应用模板会显示勾选。当前模式最多应用一个模板。"),
+                ? QStringLiteral("已应用模板会显示勾选。可以取消、增加、移除或调整多个模板的顺序。")
+                : QStringLiteral("已应用模板会显示勾选。可以增加或移除模板，当前模式最多应用一个模板。"),
                 this);
     description->setObjectName(QStringLiteral("label_templateSelectionDescription"));
     description->setWordWrap(true);
@@ -86,6 +86,14 @@ TemplateSelectionDialog::TemplateSelectionDialog(
     QPushButton *addButton = new QPushButton(
                 QStringLiteral("增加模板文件夹"), this);
     addButton->setObjectName(QStringLiteral("pushButton_addTemplateFolder"));
+    QPushButton *removeButton = new QPushButton(
+                QStringLiteral("移除该模板"), this);
+    removeButton->setObjectName(
+                QStringLiteral("pushButton_removeSelectedTemplate"));
+    removeButton->setToolTip(
+                QStringLiteral("从当前检测方案移除模板，不会删除模板文件夹。"));
+    removeButton->setProperty("uiRole", QStringLiteral("danger"));
+    removeButton->setEnabled(m_tree->currentItem() != nullptr);
     QPushButton *upButton = new QPushButton(
                 QStringLiteral("上移"), this);
     upButton->setObjectName(QStringLiteral("pushButton_moveTemplateUp"));
@@ -93,11 +101,18 @@ TemplateSelectionDialog::TemplateSelectionDialog(
                 QStringLiteral("下移"), this);
     downButton->setObjectName(QStringLiteral("pushButton_moveTemplateDown"));
     actions->addWidget(addButton);
+    actions->addWidget(removeButton);
     actions->addWidget(upButton);
     actions->addWidget(downButton);
     actions->addStretch(1);
     connect(addButton, &QPushButton::clicked,
             this, [this]() { addTemplateFolder(); });
+    connect(removeButton, &QPushButton::clicked,
+            this, [this]() { removeCurrentTemplate(); });
+    connect(m_tree, &QTreeWidget::currentItemChanged,
+            this, [removeButton](QTreeWidgetItem *current) {
+        removeButton->setEnabled(current != nullptr);
+    });
     connect(upButton, &QPushButton::clicked,
             this, [this]() { moveCurrentItem(-1); });
     connect(downButton, &QPushButton::clicked,
@@ -156,6 +171,27 @@ void TemplateSelectionDialog::addTemplateFolder()
         return;
     }
     addPath(path, true);
+}
+
+void TemplateSelectionDialog::removeCurrentTemplate()
+{
+    QTreeWidgetItem *item = m_tree->currentItem();
+    if (!item) {
+        return;
+    }
+    const OperationResult result = m_settingsService->removeTemplatePath(
+                m_mode, item->data(0, kPathRole).toString());
+    if (!result.isSuccess()) {
+        QMessageBox::critical(
+                    this, QStringLiteral("移除失败"),
+                    result.error.userMessage.isEmpty()
+                    ? QStringLiteral("无法从当前检测方案移除模板。")
+                    : result.error.userMessage);
+        return;
+    }
+    delete m_tree->takeTopLevelItem(
+                m_tree->indexOfTopLevelItem(item));
+    refreshOrderColumn();
 }
 
 void TemplateSelectionDialog::addPath(

@@ -699,10 +699,8 @@ void TemplateEditorPage::selectTemplatesForCurrentMode()
     TemplateSelectionDialog dialog(
                 mode, currentModeTemplatePaths(),
                 m_templateService, m_settingsService, dialogParent());
-    if (dialog.exec() != QDialog::Accepted) {
-        return;
-    }
-    restoreTemplatesForMode(currentDetectModeId(), true);
+    const bool applied = dialog.exec() == QDialog::Accepted;
+    restoreTemplatesForMode(currentDetectModeId(), applied);
 }
 
 void TemplateEditorPage::removeCurrentTemplate()
@@ -712,14 +710,13 @@ void TemplateEditorPage::removeCurrentTemplate()
             || mode == DetectionMode::Tissue) {
         return;
     }
-    QStringList paths = currentModeTemplatePaths();
     const int index = currentTemplateIndex();
-    if (index < 0 || index >= paths.size()) {
+    if (index < 0 || !m_currentTemplateEditComboBox) {
         return;
     }
-    paths.removeAt(index);
-    const OperationResult saved = m_settingsService->saveTemplatePaths(
-                mode, paths);
+    const OperationResult saved = m_settingsService->removeTemplatePath(
+                mode, m_currentTemplateEditComboBox
+                ->itemData(index).toString());
     if (!saved.isSuccess()) {
         showCritical(QStringLiteral("移除失败"), saved.error.userMessage);
         return;
