@@ -4,6 +4,9 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/settings_application_service.h"
 
+#include <QDir>
+#include <QFileInfo>
+
 #include <cmath>
 
 // 函数说明：SettingsApplicationService 构造函数创建组件并初始化其依赖和初始状态。
@@ -46,6 +49,7 @@ OperationResult SettingsApplicationService::applyDraft()
 {
     AppSettings candidate = m_draft;
     candidate.detectionSchemes = m_current.detectionSchemes;
+    candidate.templateSaveDirectory = m_current.templateSaveDirectory;
     return saveCandidate(candidate);
 }
 
@@ -111,6 +115,25 @@ OperationResult SettingsApplicationService::saveTemplatePaths(
     return saveCandidate(candidate, true);
 }
 
+OperationResult SettingsApplicationService::saveTemplatePathsAndDirectory(
+    DetectionMode mode,
+    const QStringList &paths,
+    const QString &directoryPath)
+{
+    AppSettings candidate = m_current;
+    QString errorMessage;
+    if (!candidate.detectionSchemes.setTemplatePaths(
+            mode, paths, &errorMessage)) {
+        return OperationResult::rejected(
+                    QStringLiteral("TEMPLATE_SELECTION_INVALID"),
+                    errorMessage.isEmpty()
+                    ? QStringLiteral("模板选择无效。") : errorMessage);
+    }
+    candidate.templateSaveDirectory = QDir::cleanPath(
+                QFileInfo(directoryPath).absoluteFilePath());
+    return saveCandidate(candidate, true);
+}
+
 OperationResult SettingsApplicationService::saveTissueThreshold(double value)
 {
     if (!std::isfinite(value) || value < 0.0) {
@@ -136,6 +159,7 @@ OperationResult SettingsApplicationService::saveCandidate(
     if (preserveMachineDraft) {
         m_draft = previousDraft;
         m_draft.detectionSchemes = candidate.detectionSchemes;
+        m_draft.templateSaveDirectory = candidate.templateSaveDirectory;
     } else {
         m_draft = candidate;
     }

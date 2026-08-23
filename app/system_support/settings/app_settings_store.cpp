@@ -297,6 +297,12 @@ bool validateSettings(const AppSettings &settings,
                     QStringLiteral("启用存图时必须选择绝对输出目录。"),
                     QStringLiteral("imageSaving.outputDirectory invalid."));
     }
+    if (!validTemplatePath(settings.templateSaveDirectory)) {
+        return fail(error,
+                    QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
+                    QStringLiteral("模板保存目录必须是规范化绝对路径。"),
+                    QStringLiteral("ui.templateSaveDirectory invalid."));
+    }
     if (settings.plcTriggerModeDb != defaults.plcTriggerModeDb
             || settings.plcTriggerModeOffset != defaults.plcTriggerModeOffset
             || settings.plcResultDb != defaults.plcResultDb
@@ -398,6 +404,8 @@ QJsonObject settingsToJson(const AppSettings &settings)
     ui.insert(QStringLiteral("selectedDetectionMode"), detectionModeId(selectedMode));
     ui.insert(QStringLiteral("rightPanelSplitterStateBase64"),
               QString::fromLatin1(settings.rightPanelSplitterState.toBase64()));
+    ui.insert(QStringLiteral("templateSaveDirectory"),
+              settings.templateSaveDirectory);
 
     const DetectionSchemes &schemes = settings.detectionSchemes;
     QJsonObject stamp;
@@ -527,7 +535,8 @@ bool settingsFromJson(const QJsonObject &root,
                             QStringLiteral("imageSaving"), error)
             || !hasOnlyKeys(ui,
                             QStringList() << QStringLiteral("selectedDetectionMode")
-                                          << QStringLiteral("rightPanelSplitterStateBase64"),
+                                          << QStringLiteral("rightPanelSplitterStateBase64")
+                                          << QStringLiteral("templateSaveDirectory"),
                             QStringLiteral("ui"), error)
             || !hasOnlyKeys(detectionSchemes,
                             QStringList() << QStringLiteral("stamp")
@@ -552,6 +561,18 @@ bool settingsFromJson(const QJsonObject &root,
                             QStringList() << QStringLiteral("templatePaths"),
                             QStringLiteral("detectionSchemes.barcodeWord"), error)) {
         return false;
+    }
+
+    const QJsonValue templateSaveDirectory =
+            ui.value(QStringLiteral("templateSaveDirectory"));
+    if (!templateSaveDirectory.isUndefined()) {
+        if (!templateSaveDirectory.isString()) {
+            return fail(error,
+                        QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
+                        QStringLiteral("模板保存目录字段类型不正确。"),
+                        QStringLiteral("Expected string: templateSaveDirectory"));
+        }
+        candidate.templateSaveDirectory = templateSaveDirectory.toString();
     }
 
     QString triggerSource, rotation, colorChannel, triggerMode;

@@ -334,15 +334,16 @@ bool TemplateApplicationService::stageCharacterAssets(
     QVector<TemplateCharacterAsset> assets;
     for (auto it = characterImages.constBegin();
          it != characterImages.constEnd(); ++it) {
-        const QString name = it.key().trimmed();
+        const QString fileName = it.key().trimmed();
         const cv::Mat image = imageFromQImage(it.value());
-        if (name.isEmpty() || image.empty()) {
+        if (fileName.isEmpty() || image.empty()) {
             setError(errorMessage, QStringLiteral("字符模板名称或图像无效。"));
             return false;
         }
         TemplateCharacterAsset asset;
-        asset.fileName = name + QStringLiteral(".png");
-        asset.normalizedBaseName = name.toLower();
+        asset.fileName = fileName;
+        asset.normalizedBaseName = QFileInfo(fileName)
+                .completeBaseName().trimmed().toLower();
         asset.image = image;
         assets.append(asset);
     }

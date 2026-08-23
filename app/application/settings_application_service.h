@@ -25,6 +25,10 @@ public:
     void discardDraft();
     OperationResult saveTemplatePaths(DetectionMode mode,
                                       const QStringList &paths);
+    OperationResult saveTemplatePathsAndDirectory(
+        DetectionMode mode,
+        const QStringList &paths,
+        const QString &directoryPath);
     OperationResult saveTissueThreshold(double value);
     OperationResult restoreDefaults();
     OperationResult clearSettings();

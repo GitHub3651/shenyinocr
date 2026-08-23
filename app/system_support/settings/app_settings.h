@@ -67,6 +67,7 @@ struct AppSettings
     int plcRejectTimeOffset;
 
     QByteArray rightPanelSplitterState;
+    QString templateSaveDirectory;
     DetectionSchemes detectionSchemes;
 
     static AppSettings defaults();

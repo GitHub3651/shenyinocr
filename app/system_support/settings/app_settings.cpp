@@ -224,6 +224,7 @@ bool operator==(const AppSettings &left,
             && left.plcRejectDistanceOffset == right.plcRejectDistanceOffset
             && left.plcRejectTimeOffset == right.plcRejectTimeOffset
             && left.rightPanelSplitterState == right.rightPanelSplitterState
+            && left.templateSaveDirectory == right.templateSaveDirectory
             && left.detectionSchemes == right.detectionSchemes;
 }
 

@@ -878,4 +878,15 @@
         <translation type="unfinished"></translation>
     </message>
 </context>
+<context>
+    <name>QFileDialog</name>
+    <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>&amp;Cancel</source>
+        <translation>取消(&amp;C)</translation>
+    </message>
+</context>
 </TS>

@@ -27,9 +27,14 @@ $sourcePath = (Resolve-Path -LiteralPath $Source).Path.TrimEnd('\\')
 $destinationPath = [System.IO.Path]::GetFullPath($Destination).TrimEnd('\\')
 $qtBinPath = (Resolve-Path -LiteralPath $QtBinDirectory).Path.TrimEnd('\\')
 $windeployQtPath = Join-Path $qtBinPath 'windeployqt.exe'
+$qtChineseTranslationPath = Join-Path (
+    Split-Path -Parent $qtBinPath) 'translations\qt_zh_CN.qm'
 
 if (-not (Test-Path -LiteralPath $windeployQtPath -PathType Leaf)) {
     throw "Qt deployment tool does not exist: $windeployQtPath"
+}
+if (-not (Test-Path -LiteralPath $qtChineseTranslationPath -PathType Leaf)) {
+    throw "Qt Chinese translation does not exist: $qtChineseTranslationPath"
 }
 
 if ($sourcePath.Equals($destinationPath, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -66,6 +71,11 @@ if ($winDeployQtExitCode -ne 0) {
     throw "Qt runtime deployment failed (windeployqt exit code $winDeployQtExitCode)."
 }
 
+$translationDestination = Join-Path $destinationPath 'translations'
+New-Item -ItemType Directory -Force -Path $translationDestination | Out-Null
+Copy-Item -LiteralPath $qtChineseTranslationPath `
+    -Destination (Join-Path $translationDestination 'qt_zh_CN.qm') -Force
+
 $requiredFiles = @(
     'config1.txt',
     'en_dict.txt',
@@ -87,6 +97,7 @@ $requiredFiles = @(
     'Qt5Gui.dll',
     'Qt5Widgets.dll',
     'platforms\\qwindows.dll',
+    'translations\\qt_zh_CN.qm',
     'Model\\en_PP-OCRv3_det_infer\\inference.pdmodel',
     'Model\\en_PP-OCRv3_det_infer\\inference.pdiparams',
     'Model\\en_PP-OCRv3_rec_infer\\inference.pdmodel',

@@ -135,7 +135,9 @@ QStringList TemplateSelectionDialog::selectedTemplatePaths() const
 void TemplateSelectionDialog::addTemplateFolder()
 {
     const QString path = QFileDialog::getExistingDirectory(
-                this, QStringLiteral("选择模板文件夹"));
+                this, QStringLiteral("选择模板文件夹"), QString(),
+                QFileDialog::ShowDirsOnly
+                | QFileDialog::DontUseNativeDialog);
     if (path.isEmpty()) {
         return;
     }

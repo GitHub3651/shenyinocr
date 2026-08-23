@@ -60,9 +60,11 @@ void showRuntimeGuardExitMessage(const QString &message)
 // 函数说明：installQtTranslations 函数实现名称所表示的处理步骤。
 void installQtTranslations(QApplication *application,
                            QTranslator *qtBaseTranslator,
-                           QTranslator *qtTranslator)
+                           QTranslator *qtTranslator,
+                           QTranslator *applicationTranslator)
 {
-    if (!application || !qtBaseTranslator || !qtTranslator) {
+    if (!application || !qtBaseTranslator || !qtTranslator
+            || !applicationTranslator) {
         return;
     }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
@@ -80,6 +82,10 @@ void installQtTranslations(QApplication *application,
                 QStringLiteral("qt_zh_CN"), translationPath)) {
         application->installTranslator(qtTranslator);
     }
+    if (applicationTranslator->load(
+                QStringLiteral(":/Translate_CN.qm"))) {
+        application->installTranslator(applicationTranslator);
+    }
 }
 
 } // namespace
@@ -91,8 +97,10 @@ int ApplicationStartup::run(int argc, char *argv[])
 
     QTranslator qtBaseTranslator;
     QTranslator qtTranslator;
+    QTranslator applicationTranslator;
     installQtTranslations(
-                &application, &qtBaseTranslator, &qtTranslator);
+                &application, &qtBaseTranslator, &qtTranslator,
+                &applicationTranslator);
     qRegisterMetaType<cv::Mat>("cv::Mat");
     qRegisterMetaType<InspectionPresentation>("InspectionPresentation");
     qRegisterMetaType<InspectionFaultSnapshot>("InspectionFaultSnapshot");

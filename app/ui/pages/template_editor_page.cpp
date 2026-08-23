@@ -10,21 +10,27 @@
 #include "ui/widgets/image_label.h"
 
 #include <QComboBox>
+#include <QDialog>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QImage>
-#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QPixmap>
+#include <QPolygonF>
+#include <QRegularExpression>
 #include <QSignalBlocker>
+#include <QStandardPaths>
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolButton>
+#include <QVBoxLayout>
 
 #include <algorithm>
 #include <stdexcept>
@@ -781,24 +787,93 @@ void TemplateEditorPage::saveCurrentTemplate()
                     QStringLiteral("图像阈值必须是 0 到 100 的整数。"));
         return;
     }
-    const QString parentDirectory = QFileDialog::getExistingDirectory(
-                dialogParent(), QStringLiteral("选择模板保存位置"));
-    if (parentDirectory.isEmpty()) {
+    QString parentDirectory =
+            m_settingsService->current().templateSaveDirectory;
+    if (!QFileInfo(parentDirectory).isDir()) {
+        parentDirectory = QStandardPaths::writableLocation(
+                    QStandardPaths::DesktopLocation);
+        if (!QFileInfo(parentDirectory).isDir()) {
+            parentDirectory = QDir::homePath();
+        }
+    }
+    parentDirectory = QDir(parentDirectory).absolutePath();
+
+    QDialog saveDialog(dialogParent());
+    saveDialog.setWindowTitle(QStringLiteral("保存模板"));
+    saveDialog.setWindowFlags(
+                saveDialog.windowFlags() & ~Qt::WindowContextHelpButtonHint);
+    QVBoxLayout *mainLayout = new QVBoxLayout(&saveDialog);
+    QFormLayout *formLayout = new QFormLayout;
+    QLineEdit *nameEdit = new QLineEdit(&saveDialog);
+    QLineEdit *directoryEdit = new QLineEdit(parentDirectory, &saveDialog);
+    directoryEdit->setReadOnly(true);
+    QPushButton *browseButton = new QPushButton(
+                QStringLiteral("浏览"), &saveDialog);
+    QHBoxLayout *directoryLayout = new QHBoxLayout;
+    directoryLayout->addWidget(directoryEdit);
+    directoryLayout->addWidget(browseButton);
+    formLayout->addRow(QStringLiteral("产品模板文件夹名称："), nameEdit);
+    formLayout->addRow(QStringLiteral("模板文件夹保存目录："),
+                       directoryLayout);
+    mainLayout->addLayout(formLayout);
+    QLabel *hintLabel = new QLabel(
+                QStringLiteral("保存后将使用当前框选区域和参数生成产品模板。"),
+                &saveDialog);
+    hintLabel->setWordWrap(true);
+    mainLayout->addWidget(hintLabel);
+    QHBoxLayout *buttonLayout = new QHBoxLayout;
+    QPushButton *okButton = new QPushButton(
+                QStringLiteral("确定"), &saveDialog);
+    QPushButton *cancelButton = new QPushButton(
+                QStringLiteral("取消"), &saveDialog);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(okButton);
+    buttonLayout->addWidget(cancelButton);
+    mainLayout->addLayout(buttonLayout);
+
+    connect(browseButton, &QPushButton::clicked, &saveDialog,
+            [&saveDialog, directoryEdit]() {
+        const QString selected = QFileDialog::getExistingDirectory(
+                    &saveDialog, QStringLiteral("选择模板保存目录"),
+                    directoryEdit->text(), QFileDialog::ShowDirsOnly
+                    | QFileDialog::DontUseNativeDialog);
+        if (!selected.isEmpty()) {
+            directoryEdit->setText(QDir(selected).absolutePath());
+        }
+    });
+    connect(nameEdit, &QLineEdit::textChanged, okButton,
+            [okButton](const QString &text) {
+        okButton->setEnabled(!text.trimmed().isEmpty());
+    });
+    okButton->setEnabled(false);
+    connect(okButton, &QPushButton::clicked, &saveDialog,
+            [&saveDialog, nameEdit, directoryEdit]() {
+        const QString name = nameEdit->text().trimmed();
+        const QRegularExpression invalidChars(
+                    QStringLiteral(R"([\\/:*?\"<>|])"));
+        if (name == QLatin1String(".") || name == QLatin1String("..")
+                || name.contains(invalidChars)) {
+            QMessageBox::warning(
+                        &saveDialog, QStringLiteral("模板名称无效"),
+                        QStringLiteral("模板名称不能是“.”或“..”，也不能包含 "
+                                       "\\ / : * ? \" < > |。"));
+            return;
+        }
+        if (!QFileInfo(directoryEdit->text()).isDir()) {
+            QMessageBox::warning(
+                        &saveDialog, QStringLiteral("模板保存目录无效"),
+                        QStringLiteral("当前模板保存目录不存在，请重新选择。"));
+            return;
+        }
+        saveDialog.accept();
+    });
+    connect(cancelButton, &QPushButton::clicked,
+            &saveDialog, &QDialog::reject);
+    if (saveDialog.exec() != QDialog::Accepted) {
         return;
     }
-    bool accepted = false;
-    const QString name = QInputDialog::getText(
-                dialogParent(), QStringLiteral("新建模板"),
-                QStringLiteral("模板名称："), QLineEdit::Normal,
-                QString(), &accepted).trimmed();
-    if (!accepted || name.isEmpty()) {
-        return;
-    }
-    if (QFileInfo(name).fileName() != name) {
-        showWarning(QStringLiteral("模板名称无效"),
-                    QStringLiteral("模板名称不能包含路径分隔符。"));
-        return;
-    }
+    const QString name = nameEdit->text().trimmed();
+    parentDirectory = QDir(directoryEdit->text()).absolutePath();
     const QString target = QDir(parentDirectory).filePath(name);
     const bool targetExists = QFileInfo::exists(target);
     if (targetExists
@@ -881,11 +956,14 @@ void TemplateEditorPage::saveCurrentTemplate()
     } else {
         paths = QStringList() << target;
     }
-    const OperationResult selected = m_settingsService->saveTemplatePaths(
-                mode, paths);
+    const OperationResult selected =
+            m_settingsService->saveTemplatePathsAndDirectory(
+                mode, paths, parentDirectory);
     if (!selected.isSuccess()) {
         showWarning(QStringLiteral("模板已保存但未应用"),
-                    selected.error.userMessage);
+                    selected.error.userMessage
+                    + QStringLiteral("\n\n保存目录也未记住。"));
+        return;
     }
     cancelTemplateDrawing();
     resetTemplateCaptureState();
@@ -898,6 +976,26 @@ void TemplateEditorPage::saveCurrentTemplate()
         const QSignalBlocker blocker(m_currentTemplateEditComboBox);
         m_currentTemplateEditComboBox->setCurrentIndex(savedIndex);
         loadTemplateAtIndex(savedIndex, false);
+    }
+    if (mode == DetectionMode::Stamp
+            || mode == DetectionMode::Word
+            || mode == DetectionMode::BarcodeWord) {
+        QMessageBox characterMessageBox(dialogParent());
+        characterMessageBox.setIcon(QMessageBox::Question);
+        characterMessageBox.setWindowTitle(QStringLiteral("保存成功"));
+        characterMessageBox.setText(
+                    QStringLiteral("产品模板已保存成功。\n\n"
+                                   "是否立即切割字符模板？"));
+        QPushButton *confirmButton = characterMessageBox.addButton(
+                    QStringLiteral("确定"), QMessageBox::AcceptRole);
+        characterMessageBox.addButton(
+                    QStringLiteral("取消"), QMessageBox::RejectRole);
+        characterMessageBox.setDefaultButton(confirmButton);
+        characterMessageBox.exec();
+        if (characterMessageBox.clickedButton() == confirmButton) {
+            showManualCharacterTemplateEditorDialog();
+        }
+        return;
     }
     showInfo(QStringLiteral("保存成功"),
              targetExists
@@ -1064,8 +1162,37 @@ void TemplateEditorPage::showManualCharacterTemplateEditorDialog()
         return;
     }
     EditableTemplate value = m_templateService->draft();
+    if (value.settings.trackingRoi.width() <= 0.0
+            || value.settings.trackingRoi.height() <= 0.0
+            || value.settings.datePolygon.size() < 3) {
+        showWarning(
+                    QStringLiteral("日期/文字检测区域无效"),
+                    QStringLiteral("当前模板的日期/文字检测区域无效，"
+                                   "请重新制作或编辑模板。"));
+        return;
+    }
+    const QPointF trackingCenter = value.settings.trackingRoi.center();
+    QPolygonF absoluteDatePolygon;
+    for (const QPointF &point : value.settings.datePolygon) {
+        absoluteDatePolygon.append(point + trackingCenter);
+    }
+    const QRect imageBounds(
+                0, 0, value.rawImage.cols, value.rawImage.rows);
+    const QRect characterRegionRect = absoluteDatePolygon.boundingRect()
+            .toAlignedRect().intersected(imageBounds);
+    if (characterRegionRect.width() <= 0
+            || characterRegionRect.height() <= 0) {
+        showWarning(
+                    QStringLiteral("日期/文字检测区域无效"),
+                    QStringLiteral("当前模板的日期/文字检测区域无效，"
+                                   "请重新制作或编辑模板。"));
+        return;
+    }
+    const cv::Rect characterRegion(
+                characterRegionRect.x(), characterRegionRect.y(),
+                characterRegionRect.width(), characterRegionRect.height());
     CharacterTemplateEditorDialog dialog(
-                imageFromBgrMat(value.rawImage),
+                imageFromBgrMat(value.rawImage(characterRegion)),
                 value.settings, dialogParent());
     if (dialog.exec() != QDialog::Accepted) {
         return;

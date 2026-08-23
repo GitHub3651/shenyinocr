@@ -428,7 +428,8 @@ void MainWindow::on_pushButton_browseImageSavePath_clicked()
                 ui->lineEdit_imageSavePath->text().trimmed().isEmpty()
                 ? QString("C:/")
                 : ui->lineEdit_imageSavePath->text().trimmed(),
-                QFileDialog::ShowDirsOnly);
+                QFileDialog::ShowDirsOnly
+                | QFileDialog::DontUseNativeDialog);
     if (dirPath.isEmpty()) {
         return;
     }
