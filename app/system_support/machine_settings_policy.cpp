@@ -19,6 +19,8 @@ AppSettings MachineSettingsPolicy::defaultsForHardwareState(
     editable.colorChannelId = defaults.colorChannelId;
     editable.imageRotationId = defaults.imageRotationId;
     editable.triggerEnabled = defaults.triggerEnabled;
+    editable.detectionSchemes.tissueRoughnessThreshold =
+            defaults.detectionSchemes.tissueRoughnessThreshold;
     if (cameraOpen) {
         editable.cameraExposure = defaults.cameraExposure;
         editable.cameraGain = defaults.cameraGain;

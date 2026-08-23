@@ -248,8 +248,6 @@ void MainWindow::restoreDefaultMachineSettings()
     }
 
     applyMachineSettingsToUi(editableDefaults);
-    m_templateEditorPage->restoreTemplatesForMode(
-                m_templateEditorPage->currentDetectModeId(), false);
     m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
@@ -304,11 +302,6 @@ void MainWindow::setupDetectModeChangeTracking()
                                 QStringLiteral("detect.mode"));
                     m_currentDetectModeId = previousModeId;
                     updateTissueRoughnessUiVisibility();
-                    m_templateEditorPage->cancelTemplateDrawing();
-                    m_templateEditorPage->clearTemplateState();
-                    m_templateEditorPage->refreshCurrentTemplateEditor();
-                    m_templateEditorPage->restoreTemplatesForMode(
-                                previousModeId, false);
                     showParameterCritical(
                                 QStringLiteral("严重警告"),
                                 QStringLiteral("检测模式保存失败：\n%1")
@@ -463,6 +456,25 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
 
 bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage)
 {
+    const QStringList keys = QStringList()
+            << "plc.photo_distance"
+            << "plc.photo_time"
+            << "plc.camera_delay"
+            << "plc.reject_distance"
+            << "plc.reject_time"
+            << "plc.reject_position";
+    if (!ui->lineEdit_photoDistance->hasAcceptableInput()
+            || !ui->lineEdit_photoTime->hasAcceptableInput()
+            || !ui->lineEdit_hardwareTriggerDelay->hasAcceptableInput()
+            || !ui->lineEdit_rejectDistance->hasAcceptableInput()
+            || !ui->lineEdit_rejectTime->hasAcceptableInput()
+            || !ui->lineEdit_rejectPosition->hasAcceptableInput()) {
+        const QString message = QStringLiteral("PLC 过程参数必须是有效整数。");
+        if (errors) errors->append(message);
+        if (showSuccessMessage) showParameterWarning("error", message);
+        m_machineSettingsPage->restoreAppliedValues(keys);
+        return false;
+    }
     PlcRunSettingsCommand plcSettings;
     plcSettings.rejectTime = static_cast<std::uint16_t>(
                 ui->lineEdit_rejectTime->text().toUInt());
@@ -479,23 +491,10 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
         const QString message = result.error.userMessage;
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
-        m_machineSettingsPage->restoreAppliedValues(QStringList()
-            << "plc.photo_distance"
-            << "plc.photo_time"
-            << "plc.camera_delay"
-            << "plc.reject_distance"
-            << "plc.reject_time"
-            << "plc.reject_position");
+        m_machineSettingsPage->restoreAppliedValues(keys);
         return false;
     }
 
-    const QStringList keys = QStringList()
-            << "plc.photo_distance"
-            << "plc.photo_time"
-            << "plc.camera_delay"
-            << "plc.reject_distance"
-            << "plc.reject_time"
-            << "plc.reject_position";
     const bool persisted = saveAppliedHardwareSettings(keys);
     if (showSuccessMessage && persisted) {
         showParameterInfo("提示", "所有设置已经完成！");
@@ -523,6 +522,15 @@ void MainWindow::on_pushButton_applyCameraExposure_clicked()
  */
 void MainWindow::on_pushButton_connectPlc_clicked()
 {
+    const QStringList connectionKeys =
+            QStringList() << "plc.ip" << "plc.rack" << "plc.slot";
+    if (ui->lineEdit_plcIpAddress->text().trimmed().isEmpty()
+            || !ui->lineEdit_plcRack->hasAcceptableInput()
+            || !ui->lineEdit_plcSlot->hasAcceptableInput()) {
+        m_machineSettingsPage->restoreAppliedValues(connectionKeys);
+        showParameterWarning("error", "PLC 连接参数无效");
+        return;
+    }
     PlcConnectionCommand command;
     command.address = ui->lineEdit_plcIpAddress->text();
     command.rack = ui->lineEdit_plcRack->text().toInt();
@@ -532,8 +540,8 @@ void MainWindow::on_pushButton_connectPlc_clicked()
 
     if (result.isSuccess())
     {
-        const bool persisted = saveAppliedHardwareSettings(
-                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+        const bool persisted =
+                saveAppliedHardwareSettings(connectionKeys);
         updateOperationUiState();
         if (persisted) {
             QMessageBox::information(this, "success", "PLC连接成功");
@@ -541,8 +549,7 @@ void MainWindow::on_pushButton_connectPlc_clicked()
     }
     else
     {
-        m_machineSettingsPage->restoreAppliedValues(
-                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+        m_machineSettingsPage->restoreAppliedValues(connectionKeys);
         updateOperationUiState();
         QMessageBox::critical(
                     this, "error", result.error.userMessage);
@@ -675,6 +682,11 @@ void MainWindow::on_pushButton_applyCameraGain_clicked()
 
 void MainWindow::on_pushButton_applyPhotoDistance_clicked()
 {
+    if (!ui->lineEdit_photoDistance->hasAcceptableInput()) {
+        m_machineSettingsPage->restoreAppliedValue("plc.photo_distance");
+        showParameterWarning("error", "拍照距离必须是有效整数");
+        return;
+    }
     const std::uint32_t value =
             ui->lineEdit_photoDistance->text().toUInt();
     const OperationResult result =

@@ -850,6 +850,14 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
     }
     m_updatingSettingsUi = previousUpdating;
     refreshDirty(keys);
+    if (keys.contains(QStringLiteral("image.save_mode"))
+            && m_callbacks.updateImageSaveOptionsVisibility) {
+        m_callbacks.updateImageSaveOptionsVisibility();
+    }
+    if (keys.contains(QStringLiteral("image.save_path"))
+            && m_callbacks.updateSaveDirectoryText) {
+        m_callbacks.updateSaveDirectoryText();
+    }
 }
 
 void MachineSettingsPage::restoreCameraUiFromApplied()

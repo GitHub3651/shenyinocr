@@ -446,6 +446,9 @@ void MainWindow::initializePages()
                     : QString(
                         "PLC 自动连接失败！\n尝试连接的地址：%1\n"
                         "请检查网络或稍后手动连接！").arg(targetIp);
+            m_machineSettingsPage->restoreAppliedValues(
+                        QStringList()
+                        << "plc.ip" << "plc.rack" << "plc.slot");
             QMessageBox::warning(this, "警告", errorMessage);
         }
         updateOperationUiState();
