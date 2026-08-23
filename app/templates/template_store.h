@@ -132,3 +132,6 @@ QStringList templateTargetUnits(const QString &targetText);
 bool templateCharacterAssetMatchesTarget(
     const QString &normalizedBaseName,
     const QString &target);
+QString missingTemplateTargetUnit(
+    const TemplateSettings &settings,
+    const QVector<TemplateCharacterAsset> &characterAssets);

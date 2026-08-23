@@ -955,6 +955,14 @@ bool TemplateStore::loadPrepared(const QString &directoryPath,
                         &editable.characterAssets, error)) {
         return false;
     }
+    const QString missingTarget = missingTemplateTargetUnit(
+                editable.settings, editable.characterAssets);
+    if (!missingTarget.isEmpty()) {
+        return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
+                    QStringLiteral("模板缺少目标文字所需字符：%1")
+                    .arg(missingTarget),
+                    editable.settings.targetText, directory);
+    }
     if (editable.trackingTemplate.cols
             != static_cast<int>(editable.settings.trackingRoi.width())
             || editable.trackingTemplate.rows
@@ -981,21 +989,13 @@ bool TemplateStore::loadPrepared(const QString &directoryPath,
     const QStringList targets = templateTargetUnits(
                 editable.settings.targetText);
     for (int targetIndex = 0; targetIndex < targets.size(); ++targetIndex) {
-        bool matched = false;
         for (const TemplateCharacterAsset &asset : editable.characterAssets) {
             if (!templateCharacterAssetMatchesTarget(
                     asset.normalizedBaseName, targets.at(targetIndex))) {
                 continue;
             }
-            matched = true;
             candidate->characterTemplates.push_back(asset.image);
             candidate->characterTemplateTargetIndexes.push_back(targetIndex);
-        }
-        if (charactersRequired && !matched) {
-            return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                        QStringLiteral("模板缺少目标文字所需字符：%1")
-                        .arg(targets.at(targetIndex)),
-                        editable.settings.targetText, directory);
         }
     }
     *value = candidate;
@@ -1121,4 +1121,29 @@ bool templateCharacterAssetMatchesTarget(
     return suffix.startsWith(QLatin1Char('_'))
             || suffix.startsWith(QLatin1Char('-'))
             || suffix.startsWith(QLatin1Char('('));
+}
+
+QString missingTemplateTargetUnit(
+    const TemplateSettings &settings,
+    const QVector<TemplateCharacterAsset> &characterAssets)
+{
+    if (settings.detectionMode != DetectionMode::Stamp
+            && settings.detectionMode != DetectionMode::Word
+            && settings.detectionMode != DetectionMode::BarcodeWord) {
+        return QString();
+    }
+    for (const QString &target : templateTargetUnits(settings.targetText)) {
+        bool matched = false;
+        for (const TemplateCharacterAsset &asset : characterAssets) {
+            if (templateCharacterAssetMatchesTarget(
+                    asset.normalizedBaseName, target)) {
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            return target;
+        }
+    }
+    return QString();
 }

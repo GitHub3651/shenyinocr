@@ -1036,6 +1036,14 @@ void TemplateEditorPage::applyCurrentTargetText()
     EditableTemplate value = m_templateService->draft();
     value.settings.targetText = m_view.textEdit_targetText
             ->toPlainText().trimmed();
+    const QString missingTarget = missingTemplateTargetUnit(
+                value.settings, value.characterAssets);
+    if (!missingTarget.isEmpty()) {
+        showWarning(QStringLiteral("目标文字保存失败"),
+                    QStringLiteral("模板缺少目标文字所需字符：%1")
+                    .arg(missingTarget));
+        return;
+    }
     QString errorMessage;
     if (!m_templateService->replaceDraft(value, &errorMessage)
             || !saveCurrentDraft(false)) {
