@@ -181,10 +181,10 @@ void MainWindow::finishInspectionStopUi(
         m_templateEditorPage->cancelTemplateDrawing();
     }
     m_inspectionPage->setStatistics(m_runtime->statistics());
-    m_inspectionPage->clearResultView();
     if (result.issue == StopInspectionIssue::RuntimeFault
             || result.issue
                == StopInspectionIssue::FaultReconciliationFailed) {
+        m_inspectionPage->clearResultView();
         presentInspectionFault();
         if (!result.error.diagnostic.isEmpty()) {
             QMessageBox::critical(
@@ -196,6 +196,7 @@ void MainWindow::finishInspectionStopUi(
     }
 
     if (result.recoveredFault) {
+        m_inspectionPage->clearResultView();
         restoreNormalFaultUi();
     }
     if (!result.reconciliationSummary.isEmpty()) {
