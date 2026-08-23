@@ -2,7 +2,7 @@
 // 主要职责：根据当前模板选择定位方式，并输出检测区域对应的位置姿态。
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
-#include "detection/positioning/inspection_positioner.h"
+#include "detection/common/inspection_positioner.h"
 
 #include "detection/common/template_pose_selector.h"
 

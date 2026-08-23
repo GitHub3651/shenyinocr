@@ -1,7 +1,7 @@
 // 文件作用：从全部模板的并行定位结果中选择最高分模板。
 #pragma once
 
-#include "detection/positioning/detection_pose.h"
+#include "detection/common/detection_pose.h"
 
 #include <QString>
 #include <vector>

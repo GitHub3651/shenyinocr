@@ -2,7 +2,7 @@
 // 主要职责：计算纸巾纹理粗糙度并判断卷料表面是否合格。
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
-#include "detection/tissue/tissue_roll_detector.h"
+#include "detection/detectionmode/tissue/tissue_roll_detector.h"
 
 #include <algorithm>
 #include <cmath>

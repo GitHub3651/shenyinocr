@@ -55,21 +55,21 @@ app/
 │  ├─ common/
 │  │  ├─ character_template_matcher.h/.cpp
 │  │  ├─ detection_roi_geometry.h
-│  │  ├─ frame_preprocessor.h/.cpp
-│  │  └─ template_pose_selector.h/.cpp
-│  ├─ positioning/
 │  │  ├─ detection_pose.h
+│  │  ├─ frame_preprocessor.h/.cpp
 │  │  ├─ inspection_positioner.h/.cpp
+│  │  ├─ template_pose_selector.h/.cpp
 │  │  └─ tracking_pose_matcher.h/.cpp
-│  ├─ stamp/
-│  │  ├─ overlap_detector.h/.cpp
-│  │  └─ stamp_detection_pipeline.h/.cpp
-│  ├─ word/word_detection_pipeline.h/.cpp
-│  ├─ ocr/ocr_detection_pipeline.h/.cpp
-│  ├─ tissue/
-│  │  ├─ tissue_detection_pipeline.h/.cpp
-│  │  └─ tissue_roll_detector.h/.cpp
-│  └─ barcode_word/barcode_word_detection_pipeline.h/.cpp
+│  └─ detectionmode/
+│     ├─ stamp/
+│     │  ├─ overlap_detector.h/.cpp
+│     │  └─ stamp_detection_pipeline.h/.cpp
+│     ├─ word/word_detection_pipeline.h/.cpp
+│     ├─ ocr/ocr_detection_pipeline.h/.cpp
+│     ├─ tissue/
+│     │  ├─ tissue_detection_pipeline.h/.cpp
+│     │  └─ tissue_roll_detector.h/.cpp
+│     └─ barcode_word/barcode_word_detection_pipeline.h/.cpp
 ├─ devices/
 │  ├─ camera/
 │  │  ├─ camera_device.h
@@ -279,7 +279,7 @@ toolButton_selectTemplate
 | `system_support/settings/app_settings_store.cpp` | 严格分区 JSON 读写、完整约束和 `QSaveFile` 原子提交。 |
 | `system_support/machine_settings_policy.h/.cpp` | 相机/PLC当前状态下可恢复的整机默认字段；必须保留检测方案。 |
 
-### 5.4 detection 公共和定位
+### 5.4 detection 公共能力与装配
 
 | 文件 | 作用与修改注意点 |
 |---|---|
@@ -291,21 +291,21 @@ toolButton_selectTemplate
 | `common/detection_roi_geometry.h` | ROI/多边形几何内联工具。 |
 | `common/character_template_matcher.h/.cpp` | 字符模板预编译和字形匹配；各模式不要复制。 |
 | `common/template_pose_selector.h/.cpp` | 多模板最高分选择和同分稳定规则。 |
-| `positioning/detection_pose.h` | `FrameData/ProductKey/DetectionResult/Overlay/Pose/WorkItem` 高影响合同。 |
-| `positioning/tracking_pose_matcher.h/.cpp` | 单个定位模板初始化、帧准备和匹配。 |
-| `positioning/inspection_positioner.h/.cpp` | WholeFrame、SingleTemplate、MultipleTemplates 统一定位，多模板使用 `cv::parallel_for_`。 |
+| `common/detection_pose.h` | `FrameData/ProductKey/DetectionResult/Overlay/Pose/WorkItem` 高影响合同。 |
+| `common/tracking_pose_matcher.h/.cpp` | 单个定位模板初始化、帧准备和匹配。 |
+| `common/inspection_positioner.h/.cpp` | WholeFrame、SingleTemplate、MultipleTemplates 统一定位，多模板使用 `cv::parallel_for_`。 |
 
-### 5.5 五模式算法
+### 5.5 detectionmode 五种模式算法
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `stamp/overlap_detector.h/.cpp` | 刚印环定位、区域变换和刚印/日期重叠判断；纯内存算法。 |
-| `stamp/stamp_detection_pipeline.h/.cpp` | 刚印字符检测、重叠结果和统一输出。 |
-| `word/word_detection_pipeline.h/.cpp` | 字库字符匹配、文字组合、Overlay 和 OK/NG。 |
-| `ocr/ocr_detection_pipeline.h/.cpp` | 调用 OCR Engine、目标比较和结果转换。 |
-| `tissue/tissue_roll_detector.h/.cpp` | 纸巾纹理/粗糙度算法；阈值由构造参数提供。 |
-| `tissue/tissue_detection_pipeline.h/.cpp` | 纸巾算法适配为统一 `DetectionResult`。 |
-| `barcode_word/barcode_word_detection_pipeline.h/.cpp` | 二维码优先解码、日期字符检测、策略状态和综合判定。策略状态跟随运行模板条目。 |
+| `detectionmode/stamp/overlap_detector.h/.cpp` | 刚印环定位、区域变换和刚印/日期重叠判断；纯内存算法。 |
+| `detectionmode/stamp/stamp_detection_pipeline.h/.cpp` | 刚印字符检测、重叠结果和统一输出。 |
+| `detectionmode/word/word_detection_pipeline.h/.cpp` | 字库字符匹配、文字组合、Overlay 和 OK/NG。 |
+| `detectionmode/ocr/ocr_detection_pipeline.h/.cpp` | 调用 OCR Engine、目标比较和结果转换。 |
+| `detectionmode/tissue/tissue_roll_detector.h/.cpp` | 纸巾纹理/粗糙度算法；阈值由构造参数提供。 |
+| `detectionmode/tissue/tissue_detection_pipeline.h/.cpp` | 纸巾算法适配为统一 `DetectionResult`。 |
+| `detectionmode/barcode_word/barcode_word_detection_pipeline.h/.cpp` | 二维码优先解码、日期字符检测、策略状态和综合判定。策略状态跟随运行模板条目。 |
 
 ### 5.6 runtime
 

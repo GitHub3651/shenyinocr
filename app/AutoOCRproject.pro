@@ -72,15 +72,15 @@ SOURCES += \
     detection/common/character_template_matcher.cpp \
     detection/common/frame_preprocessor.cpp \
     detection/common/template_pose_selector.cpp \
-    detection/positioning/inspection_positioner.cpp \
-    detection/positioning/tracking_pose_matcher.cpp \
-    detection/ocr/ocr_detection_pipeline.cpp \
-    detection/barcode_word/barcode_word_detection_pipeline.cpp \
-    detection/stamp/stamp_detection_pipeline.cpp \
-    detection/tissue/tissue_detection_pipeline.cpp \
-    detection/word/word_detection_pipeline.cpp \
+    detection/common/inspection_positioner.cpp \
+    detection/common/tracking_pose_matcher.cpp \
+    detection/detectionmode/ocr/ocr_detection_pipeline.cpp \
+    detection/detectionmode/barcode_word/barcode_word_detection_pipeline.cpp \
+    detection/detectionmode/stamp/stamp_detection_pipeline.cpp \
+    detection/detectionmode/tissue/tissue_detection_pipeline.cpp \
+    detection/detectionmode/word/word_detection_pipeline.cpp \
     contracts/detection_mode.cpp \
-    detection/stamp/overlap_detector.cpp \
+    detection/detectionmode/stamp/overlap_detector.cpp \
     engines/ocr/vendor/paddle/src/clipper.cpp \
     engines/ocr/vendor/paddle/src/config.cpp \
     engines/ocr/vendor/paddle/src/ocr_cls.cpp \
@@ -89,7 +89,7 @@ SOURCES += \
     engines/ocr/vendor/paddle/src/postprocess_op.cpp \
     engines/ocr/vendor/paddle/src/preprocess_op.cpp \
     engines/ocr/vendor/paddle/src/utility.cpp \
-    detection/tissue/tissue_roll_detector.cpp \
+    detection/detectionmode/tissue/tissue_roll_detector.cpp \
     ui/widgets/image_label.cpp \
     startup/main.cpp \
     devices/plc/vendor/snap7.cpp \
@@ -152,17 +152,17 @@ HEADERS += \
     detection/common/detection_roi_geometry.h \
     detection/common/frame_preprocessor.h \
     detection/common/template_pose_selector.h \
-    detection/positioning/inspection_positioner.h \
-    detection/positioning/tracking_pose_matcher.h \
-    detection/ocr/ocr_detection_pipeline.h \
-    detection/barcode_word/barcode_word_detection_pipeline.h \
-    detection/stamp/stamp_detection_pipeline.h \
-    detection/tissue/tissue_detection_pipeline.h \
-    detection/word/word_detection_pipeline.h \
+    detection/common/inspection_positioner.h \
+    detection/common/tracking_pose_matcher.h \
+    detection/detectionmode/ocr/ocr_detection_pipeline.h \
+    detection/detectionmode/barcode_word/barcode_word_detection_pipeline.h \
+    detection/detectionmode/stamp/stamp_detection_pipeline.h \
+    detection/detectionmode/tissue/tissue_detection_pipeline.h \
+    detection/detectionmode/word/word_detection_pipeline.h \
     engines/barcode/vendor/barcode_decoder_api.h \
     engines/barcode/barcode_types.h \
     contracts/detection_mode.h \
-    detection/stamp/overlap_detector.h \
+    detection/detectionmode/stamp/overlap_detector.h \
     engines/ocr/vendor/paddle/include/clipper.h \
     engines/ocr/vendor/paddle/include/config.h \
     engines/ocr/vendor/paddle/include/ocr_cls.h \
@@ -171,8 +171,8 @@ HEADERS += \
     engines/ocr/vendor/paddle/include/postprocess_op.h \
     engines/ocr/vendor/paddle/include/preprocess_op.h \
     engines/ocr/vendor/paddle/include/utility.h \
-    detection/positioning/detection_pose.h \
-    detection/tissue/tissue_roll_detector.h \
+    detection/common/detection_pose.h \
+    detection/detectionmode/tissue/tissue_roll_detector.h \
     ui/widgets/image_label.h \
     devices/plc/vendor/snap7.h \
     ui/main_window.h
@@ -184,10 +184,10 @@ RESOURCES += \
     resource/image.qrc
 
 
-TRANSLATIONS += Translate_EN.ts \
-                Translate_CN.ts
+TRANSLATIONS += resource/Translate_EN.ts \
+                resource/Translate_CN.ts
 
-RC_ICONS = sy.ico
+RC_ICONS = resource/sy.ico
 
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin

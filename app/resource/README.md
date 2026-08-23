@@ -17,6 +17,9 @@ resource/
 ├─ H.png                     现有业务图片
 ├─ sample1.png / sample2.png 示例图片
 ├─ Img_Icon_*.ico            camera/database/image/qr/txt 图标
+├─ sy.ico                    Windows 应用图标（由 qmake 的 RC_ICONS 使用）
+├─ Translate_CN.ts           中文翻译源文件（由 qmake 生成 .qm）
+├─ Translate_EN.ts           英文翻译源文件（由 qmake 生成 .qm）
 ├─ Translate_CN.qm           已编译中文翻译资源
 ├─ Translate_EN.qm           已编译英文翻译资源
 ├─ qss/
@@ -73,7 +76,8 @@ CSS 文件和同名图片目录是一组资源，不能只替换其中一边。
 - `Translate_CN.qm`：由中文翻译源编译的运行时文件。
 - `Translate_EN.qm`：由英文翻译源编译的运行时文件。
 
-可编辑源文件位于 `app/Translate_CN.ts` 和 `app/Translate_EN.ts`。正常流程应修改 `.ts` 后重新生成 `.qm`，不要直接二进制修改 `.qm`。
+可编辑源文件位于 `app/resource/Translate_CN.ts` 和
+`app/resource/Translate_EN.ts`。正常流程应修改 `.ts` 后重新生成 `.qm`，不要直接二进制修改 `.qm`。
 
 ## 谁使用这些资源
 

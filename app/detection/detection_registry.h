@@ -3,7 +3,7 @@
 
 #include "contracts/detection_mode.h"
 #include "detection/detection_template_snapshot.h"
-#include "detection/positioning/detection_pose.h"
+#include "detection/common/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
 #include "templates/template_store.h"
 

@@ -2,7 +2,7 @@
 // 主要职责：通过模板匹配计算跟踪区域的位置、角度和变换矩阵。
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
-#include "detection/positioning/tracking_pose_matcher.h"
+#include "detection/common/tracking_pose_matcher.h"
 
 #include <opencv2/imgproc.hpp>
 

@@ -396,7 +396,7 @@ readSettings()
 
 ### 9.3 DetectionResult 携带过多 UI/存图策略
 
-`DetectionResult` 位于 `app/detection/positioning/detection_pose.h:64`，其中包含：
+`DetectionResult` 位于 `app/detection/common/detection_pose.h:64`，其中包含：
 
 - `modeId`。
 - `clearImageLabelRects`。

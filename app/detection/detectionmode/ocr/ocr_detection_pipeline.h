@@ -5,7 +5,7 @@
 #ifndef DETECTION_OCR_OCR_DETECTION_PIPELINE_H
 #define DETECTION_OCR_OCR_DETECTION_PIPELINE_H
 
-#include "detection/positioning/detection_pose.h"
+#include "detection/common/detection_pose.h"
 #include "engines/ocr/ocr_engine.h"
 
 #include <opencv2/core.hpp>

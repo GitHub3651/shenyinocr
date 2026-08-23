@@ -1,14 +1,14 @@
 // 文件作用：本文件在Detection内完成预处理、定位和模式算法装配。
 #include "detection/detection_registry.h"
 
-#include "detection/barcode_word/barcode_word_detection_pipeline.h"
+#include "detection/detectionmode/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
-#include "detection/ocr/ocr_detection_pipeline.h"
-#include "detection/positioning/inspection_positioner.h"
-#include "detection/stamp/overlap_detector.h"
-#include "detection/stamp/stamp_detection_pipeline.h"
-#include "detection/tissue/tissue_detection_pipeline.h"
-#include "detection/word/word_detection_pipeline.h"
+#include "detection/detectionmode/ocr/ocr_detection_pipeline.h"
+#include "detection/common/inspection_positioner.h"
+#include "detection/detectionmode/stamp/overlap_detector.h"
+#include "detection/detectionmode/stamp/stamp_detection_pipeline.h"
+#include "detection/detectionmode/tissue/tissue_detection_pipeline.h"
+#include "detection/detectionmode/word/word_detection_pipeline.h"
 #include "engines/barcode/barcode_decoder.h"
 #include "engines/ocr/ocr_engine.h"
 

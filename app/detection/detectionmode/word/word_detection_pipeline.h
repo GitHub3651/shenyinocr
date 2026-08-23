@@ -5,7 +5,7 @@
 #ifndef DETECTION_WORD_WORD_DETECTION_PIPELINE_H
 #define DETECTION_WORD_WORD_DETECTION_PIPELINE_H
 
-#include "detection/positioning/detection_pose.h"
+#include "detection/common/detection_pose.h"
 #include "detection/common/character_template_matcher.h"
 
 #include <QString>

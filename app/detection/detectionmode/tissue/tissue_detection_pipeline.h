@@ -5,8 +5,8 @@
 #ifndef DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
 #define DETECTION_TISSUE_TISSUE_DETECTION_PIPELINE_H
 
-#include "detection/tissue/tissue_roll_detector.h"
-#include "detection/positioning/detection_pose.h"
+#include "detection/detectionmode/tissue/tissue_roll_detector.h"
+#include "detection/common/detection_pose.h"
 
 // 组件说明：TissueDetectionPipeline 组件提供对应设备或检测能力的统一实现。
 class TissueDetectionPipeline

@@ -1,4 +1,4 @@
-﻿#include "detection/stamp/overlap_detector.h"
+#include "detection/detectionmode/stamp/overlap_detector.h"
 // 文件作用：本文件用于计算钢印区域的重叠特征，并给出重叠异常判断。
 // 主要职责：计算钢印区域的重叠特征，并给出重叠异常判断。
 // 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。

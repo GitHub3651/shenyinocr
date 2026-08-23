@@ -4,7 +4,7 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include "detection/positioning/detection_pose.h"
+#include "detection/common/detection_pose.h"
 
 #include <QByteArray>
 #include <QImage>

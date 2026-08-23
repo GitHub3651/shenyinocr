@@ -6,7 +6,7 @@
 #define DETECTION_BARCODE_WORD_BARCODE_WORD_DETECTION_PIPELINE_H
 
 #include "engines/barcode/barcode_types.h"
-#include "detection/word/word_detection_pipeline.h"
+#include "detection/detectionmode/word/word_detection_pipeline.h"
 
 #include <QString>
 
