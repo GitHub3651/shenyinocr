@@ -25,9 +25,9 @@ public:
     void discardDraft();
     OperationResult saveTemplatePaths(DetectionMode mode,
                                       const QStringList &paths);
-    OperationResult removeTemplatePath(
+    OperationResult removeTemplatePaths(
         DetectionMode mode,
-        const QString &path);
+        const QStringList &paths);
     OperationResult saveTemplatePathsAndDirectory(
         DetectionMode mode,
         const QStringList &paths,

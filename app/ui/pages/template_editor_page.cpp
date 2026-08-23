@@ -714,9 +714,10 @@ void TemplateEditorPage::removeCurrentTemplate()
     if (index < 0 || !m_currentTemplateEditComboBox) {
         return;
     }
-    const OperationResult saved = m_settingsService->removeTemplatePath(
-                mode, m_currentTemplateEditComboBox
-                ->itemData(index).toString());
+    const OperationResult saved = m_settingsService->removeTemplatePaths(
+                mode, QStringList()
+                << m_currentTemplateEditComboBox
+                   ->itemData(index).toString());
     if (!saved.isSuccess()) {
         showCritical(QStringLiteral("移除失败"), saved.error.userMessage);
         return;

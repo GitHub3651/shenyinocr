@@ -34,7 +34,6 @@ FrameData
     ├─ SingleTemplate：刚印、OCR
     └─ MultipleTemplates：并行评价全部有效模板
          → TemplatePoseSelector 取严格最高分
-         → 同分保留路径顺序较早项
  → 当前模式 Pipeline
  → DetectionResult
 ```

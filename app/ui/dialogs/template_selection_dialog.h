@@ -1,4 +1,4 @@
-// 文件作用：统一显示单模板和多模板选择，并预勾选当前已应用路径。
+// 文件作用：统一显示单模板和多模板，并提供增加和批量移除入口。
 #pragma once
 
 #include "contracts/detection_mode.h"
@@ -6,8 +6,8 @@
 #include <QDialog>
 #include <QStringList>
 
+class QPushButton;
 class QTreeWidget;
-class QTreeWidgetItem;
 class SettingsApplicationService;
 class TemplateApplicationService;
 
@@ -21,20 +21,19 @@ public:
         SettingsApplicationService *settingsService,
         QWidget *parent = nullptr);
 
-    QStringList selectedTemplatePaths() const;
+    QStringList templatePaths() const;
 
 private:
+    QStringList checkedTemplatePaths() const;
     void addTemplateFolder();
-    void removeCurrentTemplate();
-    void addPath(const QString &path, bool checked);
-    void handleItemChanged(QTreeWidgetItem *changed, int column);
-    void moveCurrentItem(int offset);
-    void refreshOrderColumn();
+    void removeCheckedTemplates();
+    void addPath(const QString &path);
+    void updateRemoveButtonState();
     void saveAndAccept();
 
     DetectionMode m_mode = DetectionMode::Stamp;
     TemplateApplicationService *m_templateService = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;
     QTreeWidget *m_tree = nullptr;
-    bool m_updating = false;
+    QPushButton *m_removeCheckedButton = nullptr;
 };

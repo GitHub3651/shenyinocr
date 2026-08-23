@@ -214,7 +214,7 @@ CameraSession/CaptureWorker
  → UI Renderer
 ```
 
-字库和二维码+三期在 `InspectionPositioner` 中并行评价全部有效定位模板，`TemplatePoseSelector` 只在分数严格更高时替换最佳项，同分保留更早路径。
+字库和二维码+三期在 `InspectionPositioner` 中并行评价全部有效定位模板，`TemplatePoseSelector` 只在分数严格更高时替换最佳项。
 
 ### 4.3 模板选择、编辑和保存
 
@@ -290,7 +290,7 @@ toolButton_selectTemplate
 | `common/frame_preprocessor.h/.cpp` | 旋转、通道转换等统一帧预处理。 |
 | `common/detection_roi_geometry.h` | ROI/多边形几何内联工具。 |
 | `common/character_template_matcher.h/.cpp` | 字符模板预编译和字形匹配；各模式不要复制。 |
-| `common/template_pose_selector.h/.cpp` | 多模板最高分选择和同分稳定规则。 |
+| `common/template_pose_selector.h/.cpp` | 多模板最高分选择。 |
 | `common/detection_pose.h` | `FrameData/ProductKey/DetectionResult/Overlay/Pose/WorkItem` 高影响合同。 |
 | `common/tracking_pose_matcher.h/.cpp` | 单个定位模板初始化、帧准备和匹配。 |
 | `common/inspection_positioner.h/.cpp` | WholeFrame、SingleTemplate、MultipleTemplates 统一定位，多模板使用 `cv::parallel_for_`。 |
@@ -441,6 +441,6 @@ toolButton_selectTemplate
 
 ## 8. 验证顺序
 
-Agent 只执行静态检查：旧符号清零、qmake 文件存在/无重复、include 解析、UI XML、UTF-8、资源差异和 `git diff --check`。用户在 Qt Creator 统一执行：Run qmake、Rebuild、设置重置、五模式显隐、模板选择/排序/移除、新建/覆盖、坏模板跳过、并行最高分、纸巾阈值和完整生产回归。
+Agent 只执行静态检查：旧符号清零、qmake 文件存在/无重复、include 解析、UI XML、UTF-8、资源差异和 `git diff --check`。用户在 Qt Creator 统一执行：Run qmake、Rebuild、设置重置、五模式显隐、模板选择/批量引用移除、新建/覆盖、坏模板跳过、并行最高分、纸巾阈值和完整生产回归。
 
 在用户确认前，阶段 8 状态保持“迁移中”，不得提交。

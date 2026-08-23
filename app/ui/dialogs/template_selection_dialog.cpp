@@ -1,10 +1,9 @@
-// 文件作用：实现模板路径勾选、增加外部文件夹、排序和单选约束。
+// 文件作用：实现模板路径展示、增加和批量引用移除。
 #include "ui/dialogs/template_selection_dialog.h"
 
 #include "application/settings_application_service.h"
 #include "application/template_application_service.h"
 
-#include <QAbstractItemView>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
@@ -50,8 +49,8 @@ TemplateSelectionDialog::TemplateSelectionDialog(
     QVBoxLayout *layout = new QVBoxLayout(this);
     QLabel *description = new QLabel(
                 multipleTemplatesAllowed(mode)
-                ? QStringLiteral("已应用模板会显示勾选。可以取消、增加、移除或调整多个模板的顺序。")
-                : QStringLiteral("已应用模板会显示勾选。可以增加或移除模板，当前模式最多应用一个模板。"),
+                ? QStringLiteral("勾选只用于选择要删除的模板。删除确认后立即生效，但不会删除磁盘模板文件夹。")
+                : QStringLiteral("勾选只用于选择要删除的模板。当前模式最多应用一个模板，删除不会影响磁盘模板文件夹。"),
                 this);
     description->setObjectName(QStringLiteral("label_templateSelectionDescription"));
     description->setWordWrap(true);
@@ -59,64 +58,45 @@ TemplateSelectionDialog::TemplateSelectionDialog(
 
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("treeWidget_templateSelection"));
-    m_tree->setColumnCount(5);
+    m_tree->setColumnCount(4);
     m_tree->setHeaderLabels(QStringList()
-                            << QStringLiteral("选择")
-                            << QStringLiteral("顺序")
+                            << QStringLiteral("待移除")
                             << QStringLiteral("模板名称")
                             << QStringLiteral("完整路径")
                             << QStringLiteral("状态"));
-    m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
     m_tree->setRootIsDecorated(false);
     m_tree->header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    m_tree->header()->setSectionResizeMode(3, QHeaderView::Stretch);
-    m_tree->header()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    m_tree->header()->setSectionResizeMode(2, QHeaderView::Stretch);
+    m_tree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     layout->addWidget(m_tree, 1);
     for (const QString &path : currentPaths) {
-        addPath(path, true);
+        addPath(path);
     }
     connect(m_tree, &QTreeWidget::itemChanged,
-            this, [this](QTreeWidgetItem *item, int column) {
-        handleItemChanged(item, column);
+            this, [this](QTreeWidgetItem *, int column) {
+        if (column == 0) {
+            updateRemoveButtonState();
+        }
     });
 
     QHBoxLayout *actions = new QHBoxLayout;
     QPushButton *addButton = new QPushButton(
                 QStringLiteral("增加模板文件夹"), this);
     addButton->setObjectName(QStringLiteral("pushButton_addTemplateFolder"));
-    QPushButton *removeButton = new QPushButton(
-                QStringLiteral("移除该模板"), this);
-    removeButton->setObjectName(
-                QStringLiteral("pushButton_removeSelectedTemplate"));
-    removeButton->setToolTip(
-                QStringLiteral("从当前检测方案移除模板，不会删除模板文件夹。"));
-    removeButton->setProperty("uiRole", QStringLiteral("danger"));
-    removeButton->setEnabled(m_tree->currentItem() != nullptr);
-    QPushButton *upButton = new QPushButton(
-                QStringLiteral("上移"), this);
-    upButton->setObjectName(QStringLiteral("pushButton_moveTemplateUp"));
-    QPushButton *downButton = new QPushButton(
-                QStringLiteral("下移"), this);
-    downButton->setObjectName(QStringLiteral("pushButton_moveTemplateDown"));
+    m_removeCheckedButton = new QPushButton(
+                QStringLiteral("删除已勾选模板"), this);
+    m_removeCheckedButton->setObjectName(
+                QStringLiteral("pushButton_removeCheckedTemplates"));
+    m_removeCheckedButton->setProperty(
+                "uiRole", QStringLiteral("danger"));
     actions->addWidget(addButton);
-    actions->addWidget(removeButton);
-    actions->addWidget(upButton);
-    actions->addWidget(downButton);
+    actions->addWidget(m_removeCheckedButton);
     actions->addStretch(1);
     connect(addButton, &QPushButton::clicked,
             this, [this]() { addTemplateFolder(); });
-    connect(removeButton, &QPushButton::clicked,
-            this, [this]() { removeCurrentTemplate(); });
-    connect(m_tree, &QTreeWidget::currentItemChanged,
-            this, [removeButton](QTreeWidgetItem *current) {
-        removeButton->setEnabled(current != nullptr);
-    });
-    connect(upButton, &QPushButton::clicked,
-            this, [this]() { moveCurrentItem(-1); });
-    connect(downButton, &QPushButton::clicked,
-            this, [this]() { moveCurrentItem(1); });
+    connect(m_removeCheckedButton, &QPushButton::clicked,
+            this, [this]() { removeCheckedTemplates(); });
     layout->addLayout(actions);
 
     QDialogButtonBox *buttons = new QDialogButtonBox(
@@ -132,10 +112,20 @@ TemplateSelectionDialog::TemplateSelectionDialog(
     connect(buttons, &QDialogButtonBox::rejected,
             this, &QDialog::reject);
     layout->addWidget(buttons);
-    refreshOrderColumn();
+    updateRemoveButtonState();
 }
 
-QStringList TemplateSelectionDialog::selectedTemplatePaths() const
+QStringList TemplateSelectionDialog::templatePaths() const
+{
+    QStringList paths;
+    for (int row = 0; row < m_tree->topLevelItemCount(); ++row) {
+        const QTreeWidgetItem *item = m_tree->topLevelItem(row);
+        paths.append(item->data(0, kPathRole).toString());
+    }
+    return paths;
+}
+
+QStringList TemplateSelectionDialog::checkedTemplatePaths() const
 {
     QStringList paths;
     for (int row = 0; row < m_tree->topLevelItemCount(); ++row) {
@@ -170,33 +160,42 @@ void TemplateSelectionDialog::addTemplateFolder()
                     + QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
         return;
     }
-    addPath(path, true);
+    addPath(path);
 }
 
-void TemplateSelectionDialog::removeCurrentTemplate()
+void TemplateSelectionDialog::removeCheckedTemplates()
 {
-    QTreeWidgetItem *item = m_tree->currentItem();
-    if (!item) {
+    const QStringList paths = checkedTemplatePaths();
+    if (paths.isEmpty()) {
         return;
     }
-    const OperationResult result = m_settingsService->removeTemplatePath(
-                m_mode, item->data(0, kPathRole).toString());
+    const QMessageBox::StandardButton answer = QMessageBox::question(
+                this, QStringLiteral("确认移除"),
+                QStringLiteral("将从当前检测方案移除所有已勾选模板，磁盘模板文件夹不会删除。是否继续？"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+    if (answer != QMessageBox::Yes) {
+        return;
+    }
+    const OperationResult result = m_settingsService->removeTemplatePaths(
+                m_mode, paths);
     if (!result.isSuccess()) {
         QMessageBox::critical(
                     this, QStringLiteral("移除失败"),
                     result.error.userMessage.isEmpty()
-                    ? QStringLiteral("无法从当前检测方案移除模板。")
+                    ? QStringLiteral("无法从当前检测方案移除已勾选模板。")
                     : result.error.userMessage);
         return;
     }
-    delete m_tree->takeTopLevelItem(
-                m_tree->indexOfTopLevelItem(item));
-    refreshOrderColumn();
+    for (int row = m_tree->topLevelItemCount() - 1; row >= 0; --row) {
+        if (m_tree->topLevelItem(row)->checkState(0) == Qt::Checked) {
+            delete m_tree->takeTopLevelItem(row);
+        }
+    }
+    updateRemoveButtonState();
 }
 
-void TemplateSelectionDialog::addPath(
-        const QString &path,
-        bool checked)
+void TemplateSelectionDialog::addPath(const QString &path)
 {
     const QString normalized = QDir::cleanPath(
                 QFileInfo(path).absoluteFilePath());
@@ -204,8 +203,6 @@ void TemplateSelectionDialog::addPath(
         QTreeWidgetItem *existing = m_tree->topLevelItem(row);
         if (QString::compare(existing->data(0, kPathRole).toString(),
                              normalized, Qt::CaseInsensitive) == 0) {
-            existing->setCheckState(0,
-                                    checked ? Qt::Checked : Qt::Unchecked);
             m_tree->setCurrentItem(existing);
             return;
         }
@@ -214,79 +211,32 @@ void TemplateSelectionDialog::addPath(
     const TemplateSummary summary = m_templateService
             ? m_templateService->readSummary(normalized, m_mode, &error)
             : TemplateSummary();
+    if (!multipleTemplatesAllowed(m_mode)) {
+        m_tree->clear();
+    }
     QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
     item->setData(0, kPathRole, normalized);
     item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-    item->setText(2, QFileInfo(normalized).fileName());
-    item->setText(3, normalized);
-    item->setText(4, summary.valid
+    item->setText(1, QFileInfo(normalized).fileName());
+    item->setText(2, normalized);
+    item->setText(3, summary.valid
                   ? summary.message
                   : (error.userMessage.isEmpty()
                      ? QStringLiteral("模板无法读取")
                      : error.userMessage));
-    item->setToolTip(3, normalized);
     if (!summary.valid) {
         item->setIcon(
-                    4,
+                    3,
                     style()->standardIcon(QStyle::SP_MessageBoxWarning));
     }
-    m_updating = true;
-    item->setCheckState(0, checked ? Qt::Checked : Qt::Unchecked);
-    m_updating = false;
+    item->setCheckState(0, Qt::Unchecked);
     m_tree->setCurrentItem(item);
-    if (checked) {
-        handleItemChanged(item, 0);
-    }
-    refreshOrderColumn();
 }
 
-void TemplateSelectionDialog::handleItemChanged(
-        QTreeWidgetItem *changed,
-        int column)
+void TemplateSelectionDialog::updateRemoveButtonState()
 {
-    if (m_updating || !changed || column != 0) {
-        return;
-    }
-    if (changed->checkState(0) == Qt::Checked
-            && !multipleTemplatesAllowed(m_mode)) {
-        m_updating = true;
-        for (int row = 0; row < m_tree->topLevelItemCount(); ++row) {
-            QTreeWidgetItem *item = m_tree->topLevelItem(row);
-            if (item != changed) {
-                item->setCheckState(0, Qt::Unchecked);
-            }
-        }
-        m_updating = false;
-    }
-    refreshOrderColumn();
-}
-
-void TemplateSelectionDialog::moveCurrentItem(int offset)
-{
-    QTreeWidgetItem *item = m_tree->currentItem();
-    const int row = m_tree->indexOfTopLevelItem(item);
-    const int target = row + offset;
-    if (!item || row < 0 || target < 0
-            || target >= m_tree->topLevelItemCount()) {
-        return;
-    }
-    m_tree->takeTopLevelItem(row);
-    m_tree->insertTopLevelItem(target, item);
-    m_tree->setCurrentItem(item);
-    refreshOrderColumn();
-}
-
-void TemplateSelectionDialog::refreshOrderColumn()
-{
-    int selectedOrder = 0;
-    for (int row = 0; row < m_tree->topLevelItemCount(); ++row) {
-        QTreeWidgetItem *item = m_tree->topLevelItem(row);
-        if (item->checkState(0) == Qt::Checked) {
-            item->setText(1, QString::number(++selectedOrder));
-        } else {
-            item->setText(1, QStringLiteral("--"));
-        }
-    }
+    m_removeCheckedButton->setEnabled(
+                !checkedTemplatePaths().isEmpty());
 }
 
 void TemplateSelectionDialog::saveAndAccept()
@@ -297,7 +247,7 @@ void TemplateSelectionDialog::saveAndAccept()
         return;
     }
     const OperationResult result = m_settingsService->saveTemplatePaths(
-                m_mode, selectedTemplatePaths());
+                m_mode, templatePaths());
     if (!result.isSuccess()) {
         QMessageBox::critical(
                     this, QStringLiteral("模板选择保存失败"),
