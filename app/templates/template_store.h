@@ -44,7 +44,7 @@ struct TemplateSettings
     QVector<QPointF> datePolygon;
     QVector<QPointF> barcodePolygon;
     QVector<QPointF> stampPolygon;
-    QSize characterSourceSize;
+    QSize characterSourceSize = QSize(0, 0);
     QVector<TemplateCharacterBox> characterBoxes;
     TemplateBarcodeParameters barcodeParameters;
 };
