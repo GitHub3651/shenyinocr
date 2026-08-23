@@ -1019,7 +1019,7 @@ bool TemplateEditorPage::saveCurrentDraft(bool showSuccessMessage)
         return false;
     }
     m_templateService->setActivePreparedTemplate(prepared);
-    clearTemplateDirty();
+    refreshTemplateDirty();
     if (showSuccessMessage) {
         showInfo(QStringLiteral("保存成功"),
                  QStringLiteral("当前模板已更新。"));
@@ -1034,23 +1034,43 @@ void TemplateEditorPage::applyCurrentTargetText()
                     QStringLiteral("请先选择当前编辑模板。"));
         return;
     }
-    EditableTemplate value = m_templateService->draft();
+    const EditableTemplate original = m_templateService->draft();
+    EditableTemplate value = original;
     value.settings.targetText = m_view.textEdit_targetText
             ->toPlainText().trimmed();
     const QString missingTarget = missingTemplateTargetUnit(
                 value.settings, value.characterAssets);
     if (!missingTarget.isEmpty()) {
+        {
+            QSignalBlocker blocker(m_view.textEdit_targetText);
+            m_view.textEdit_targetText->setPlainText(
+                        original.settings.targetText);
+        }
+        refreshTemplateDirty();
         showWarning(QStringLiteral("目标文字保存失败"),
-                    QStringLiteral("模板缺少目标文字所需字符：%1")
+                    QStringLiteral(
+                        "模板缺少目标文字所需字符：“%1”。\n"
+                        "目标文字未保存，已恢复为原内容。")
                     .arg(missingTarget));
         return;
     }
     QString errorMessage;
-    if (!m_templateService->replaceDraft(value, &errorMessage)
-            || !saveCurrentDraft(false)) {
-        if (!errorMessage.isEmpty()) {
-            showCritical(QStringLiteral("目标文字保存失败"), errorMessage);
+    if (!m_templateService->replaceDraft(value, &errorMessage)) {
+        QSignalBlocker blocker(m_view.textEdit_targetText);
+        m_view.textEdit_targetText->setPlainText(
+                    original.settings.targetText);
+        refreshTemplateDirty();
+        showCritical(QStringLiteral("目标文字保存失败"), errorMessage);
+        return;
+    }
+    if (!saveCurrentDraft(false)) {
+        m_templateService->replaceDraft(original);
+        {
+            QSignalBlocker blocker(m_view.textEdit_targetText);
+            m_view.textEdit_targetText->setPlainText(
+                        original.settings.targetText);
         }
+        refreshTemplateDirty();
         return;
     }
     showInfo(QStringLiteral("成功"),
@@ -1059,26 +1079,44 @@ void TemplateEditorPage::applyCurrentTargetText()
 
 void TemplateEditorPage::applyCurrentImageThreshold()
 {
-    int threshold = 0;
-    if (!parseIntValue(m_view.lineEdit_imageThreshold->text(), &threshold)
-            || threshold < 0 || threshold > 100) {
-        showWarning(QStringLiteral("参数错误"),
-                    QStringLiteral("图像阈值必须是 0 到 100 的整数。"));
-        return;
-    }
     if (!m_templateService->isActive()) {
         showWarning(QStringLiteral("提示"),
                     QStringLiteral("请先选择当前编辑模板。"));
         return;
     }
-    EditableTemplate value = m_templateService->draft();
+    const EditableTemplate original = m_templateService->draft();
+    int threshold = 0;
+    if (!parseIntValue(m_view.lineEdit_imageThreshold->text(), &threshold)
+            || threshold < 0 || threshold > 100) {
+        {
+            QSignalBlocker blocker(m_view.lineEdit_imageThreshold);
+            m_view.lineEdit_imageThreshold->setText(QString::number(
+                original.settings.imageThresholdPercent));
+        }
+        refreshTemplateDirty();
+        showWarning(QStringLiteral("参数错误"),
+                    QStringLiteral("图像阈值必须是 0 到 100 的整数。"));
+        return;
+    }
+    EditableTemplate value = original;
     value.settings.imageThresholdPercent = threshold;
     QString errorMessage;
-    if (!m_templateService->replaceDraft(value, &errorMessage)
-            || !saveCurrentDraft(false)) {
-        if (!errorMessage.isEmpty()) {
-            showCritical(QStringLiteral("阈值保存失败"), errorMessage);
+    if (!m_templateService->replaceDraft(value, &errorMessage)) {
+        QSignalBlocker blocker(m_view.lineEdit_imageThreshold);
+        m_view.lineEdit_imageThreshold->setText(QString::number(
+            original.settings.imageThresholdPercent));
+        refreshTemplateDirty();
+        showCritical(QStringLiteral("阈值保存失败"), errorMessage);
+        return;
+    }
+    if (!saveCurrentDraft(false)) {
+        m_templateService->replaceDraft(original);
+        {
+            QSignalBlocker blocker(m_view.lineEdit_imageThreshold);
+            m_view.lineEdit_imageThreshold->setText(QString::number(
+                original.settings.imageThresholdPercent));
         }
+        refreshTemplateDirty();
         return;
     }
     showInfo(QStringLiteral("成功"),
@@ -1094,12 +1132,10 @@ bool TemplateEditorPage::updateAllSelectedTemplates(
         if (errorMessage) *errorMessage = QStringLiteral("检测模式无效。");
         return false;
     }
-    if (!m_templateService->updateTemplates(
-            currentModeTemplatePaths(), mode, update, errorMessage)) {
-        return false;
-    }
+    const bool updated = m_templateService->updateTemplates(
+                currentModeTemplatePaths(), mode, update, errorMessage);
     restoreTemplatesForMode(currentDetectModeId(), false);
-    return true;
+    return updated;
 }
 
 void TemplateEditorPage::applyBatchTargetText()

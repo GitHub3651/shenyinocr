@@ -959,7 +959,7 @@ bool TemplateStore::loadPrepared(const QString &directoryPath,
                 editable.settings, editable.characterAssets);
     if (!missingTarget.isEmpty()) {
         return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                    QStringLiteral("模板缺少目标文字所需字符：%1")
+                    QStringLiteral("模板缺少目标文字所需字符：“%1”。")
                     .arg(missingTarget),
                     editable.settings.targetText, directory);
     }

@@ -220,66 +220,51 @@ bool TemplateApplicationService::updateTemplates(
         const std::function<void(TemplateSettings *)> &update,
         QString *resultMessage)
 {
-    QVector<EditableTemplate> values;
-    QStringList validationFailures;
-    values.reserve(directoryPaths.size());
+    if (directoryPaths.isEmpty()) {
+        setError(resultMessage, QStringLiteral("当前模式没有已选择模板。"));
+        return false;
+    }
+
+    int succeededCount = 0;
+    QStringList failures;
     for (const QString &path : directoryPaths) {
         EditableTemplate value;
         TemplateStoreError error;
         if (!m_store->loadEditable(path, expectedMode, &value, &error)) {
-            validationFailures.append(
+            failures.append(
                         QStringLiteral("%1\n%2\n%3")
                         .arg(QFileInfo(path).fileName(), path,
                              storeErrorMessage(error)));
             continue;
         }
         update(&value.settings);
-        values.append(value);
-    }
-    if (!validationFailures.isEmpty()) {
-        setError(resultMessage,
-                 QStringLiteral("预验证失败，本次没有修改任何模板：\n\n%1")
-                 .arg(validationFailures.join(QStringLiteral("\n\n"))));
-        return false;
-    }
-    if (values.isEmpty()) {
-        setError(resultMessage, QStringLiteral("当前模式没有已选择模板。"));
-        return false;
-    }
-
-    QStringList succeeded;
-    for (int index = 0; index < values.size(); ++index) {
-        const QString &path = directoryPaths.at(index);
-        TemplateStoreError error;
-        if (!m_store->save(path, values.at(index), true, &error)) {
-            QStringList pending;
-            for (int pendingIndex = index + 1;
-                 pendingIndex < directoryPaths.size(); ++pendingIndex) {
-                pending.append(QStringLiteral("%1\n%2")
-                               .arg(QFileInfo(directoryPaths.at(pendingIndex))
-                                    .fileName(),
-                                    directoryPaths.at(pendingIndex)));
-            }
-            const QString succeededText = succeeded.isEmpty()
-                    ? QStringLiteral("无")
-                    : succeeded.join(QStringLiteral("\n\n"));
-            const QString pendingText = pending.isEmpty()
-                    ? QStringLiteral("无")
-                    : pending.join(QStringLiteral("\n\n"));
-            setError(resultMessage,
-                     QStringLiteral("批量保存未全部完成。\n\n"
-                                    "已成功：\n%1\n\n"
-                                    "保存失败：\n%2\n%3\n\n"
-                                    "尚未处理：\n%4")
-                     .arg(succeededText,
-                          QFileInfo(path).fileName(),
-                          path + QStringLiteral("\n")
-                          + storeErrorMessage(error),
-                          pendingText));
-            return false;
+        const QString missingTarget = missingTemplateTargetUnit(
+                    value.settings, value.characterAssets);
+        if (!missingTarget.isEmpty()) {
+            failures.append(
+                        QStringLiteral(
+                            "%1\n%2\n模板缺少目标文字所需字符：“%3”。")
+                        .arg(QFileInfo(path).fileName(), path,
+                             missingTarget));
+            continue;
         }
-        succeeded.append(QStringLiteral("%1\n%2")
-                         .arg(QFileInfo(path).fileName(), path));
+        if (!m_store->save(path, value, true, &error)) {
+            failures.append(
+                        QStringLiteral("%1\n%2\n%3")
+                        .arg(QFileInfo(path).fileName(), path,
+                             storeErrorMessage(error)));
+            continue;
+        }
+        ++succeededCount;
+    }
+    if (!failures.isEmpty()) {
+        setError(resultMessage,
+                 QStringLiteral("批量保存完成，但有模板失败。\n\n"
+                                "成功：%1 个\n失败：%2 个\n\n%3")
+                 .arg(succeededCount)
+                 .arg(failures.size())
+                 .arg(failures.join(QStringLiteral("\n\n"))));
+        return false;
     }
     if (resultMessage) {
         resultMessage->clear();
