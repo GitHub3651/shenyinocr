@@ -4,6 +4,7 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "system_support/logging/application_logger.h"
 
+#include <QByteArray>
 #include <QDate>
 #include <QDateTime>
 #include <QDebug>
@@ -18,6 +19,8 @@
 #include <cstdlib>
 
 namespace {
+
+const QByteArray kUtf8Bom("\xEF\xBB\xBF", 3);
 
 QFile g_logFile;
 QString g_logDirectoryPath;
@@ -61,8 +64,37 @@ bool openLogFileForDate(const QDate &date)
     const QString logPath = QDir(g_logDirectoryPath).absoluteFilePath(
                 QStringLiteral("app_log_%1.txt").arg(
                     date.toString(QStringLiteral("yyyy-MM-dd"))));
+    const QFileInfo existingLog(logPath);
+    if (existingLog.exists() && existingLog.size() > 0) {
+        QFile file(logPath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            g_currentLogDate = QDate();
+            return false;
+        }
+        const bool isUtf8 = file.read(kUtf8Bom.size()) == kUtf8Bom;
+        file.close();
+        if (!isUtf8) {
+            const QString legacyPath = QDir(g_logDirectoryPath)
+                    .absoluteFilePath(
+                        QStringLiteral("app_log_%1_legacy_%2.txt")
+                        .arg(date.toString(QStringLiteral("yyyy-MM-dd")),
+                             QDateTime::currentDateTime().toString(
+                                 QStringLiteral("HHmmss_zzz"))));
+            if (!QFile::rename(logPath, legacyPath)) {
+                g_currentLogDate = QDate();
+                return false;
+            }
+        }
+    }
+
     g_logFile.setFileName(logPath);
     if (!g_logFile.open(QIODevice::Append | QIODevice::Text)) {
+        g_currentLogDate = QDate();
+        return false;
+    }
+    if (g_logFile.size() == 0
+            && g_logFile.write(kUtf8Bom) != kUtf8Bom.size()) {
+        g_logFile.close();
         g_currentLogDate = QDate();
         return false;
     }
@@ -83,19 +115,18 @@ void messageHandler(QtMsgType type,
         openLogFileForDate(today);
     }
 
-    const QByteArray localMessage = message.toLocal8Bit();
     const char *file = context.file ? context.file : "";
     const char *function = context.function ? context.function : "";
     const QString logMessage = QStringLiteral("%1 - %2 (%3:%4, %5)\n")
             .arg(QDateTime::currentDateTime().toString(
                      QStringLiteral("yyyy-MM-dd hh:mm:ss.zzz")))
-            .arg(QString::fromLocal8Bit(localMessage))
+            .arg(message)
             .arg(QString::fromLocal8Bit(file))
             .arg(context.line)
             .arg(QString::fromLocal8Bit(function));
 
     if (g_logFile.isOpen()) {
-        g_logFile.write(logMessage.toLocal8Bit());
+        g_logFile.write(logMessage.toUtf8());
         g_logFile.flush();
     }
     std::fprintf(stderr, "%s", logMessage.toLocal8Bit().constData());
