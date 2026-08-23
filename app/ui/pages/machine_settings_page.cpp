@@ -112,11 +112,6 @@ bool parseDouble(const QString &text, double *value)
     return true;
 }
 
-QString text(const wchar_t *value)
-{
-    return QString::fromWCharArray(value);
-}
-
 } // namespace
 
 MachineSettingsPage::MachineSettingsPage(
@@ -163,6 +158,9 @@ void MachineSettingsPage::setupBindings()
                           m_view.label_colorChannel, true);
     registerGlobalSetting("image.rotation", m_view.comboBox_imageRotation,
                           m_view.label_imageRotation, true);
+    registerGlobalSetting("tissue.roughness_threshold",
+                          m_view.lineEdit_tissueRoughnessThreshold,
+                          m_view.label_tissueRoughnessThreshold, true);
     registerGlobalSetting("plc.trigger_mode", m_view.comboBox_plcTriggerMode,
                           m_view.label_plcTriggerMode, true,
                           HardwareDependency::PlcRuntime);
@@ -185,13 +183,13 @@ void MachineSettingsPage::setupBindings()
                           m_view.label_rejectPosition, true,
                           HardwareDependency::PlcRuntime);
     registerGlobalSetting("plc.ip", m_view.lineEdit_plcIpAddress,
-                          m_view.label_plcIpAddress, false,
+                          m_view.label_plcIpAddress, true,
                           HardwareDependency::PlcConnection);
     registerGlobalSetting("plc.rack", m_view.lineEdit_plcRack,
-                          m_view.label_plcRackSlot, false,
+                          m_view.label_plcRackSlot, true,
                           HardwareDependency::PlcConnection);
     registerGlobalSetting("plc.slot", m_view.lineEdit_plcSlot,
-                          m_view.label_plcRackSlot, false,
+                          m_view.label_plcRackSlot, true,
                           HardwareDependency::PlcConnection);
     registerGlobalSetting("detect.mode", m_view.comboBox_detectionMode,
                           m_view.label_detectionMode, false);
@@ -216,6 +214,12 @@ void MachineSettingsPage::setupBindings()
                            HardwareDependency::PlcRuntime);
     registerHardwareAction(m_view.pushButton_applyPlcProcessParameters,
                            HardwareDependency::PlcRuntime);
+
+    QObject::connect(
+        m_view.pushButton_applyTissueRoughnessThreshold,
+        &QPushButton::clicked,
+        this,
+        [this]() { applyTissueRoughnessThreshold(); });
 
     QObject::connect(
         m_view.comboBox_imageSaveRange,
@@ -255,13 +259,6 @@ void MachineSettingsPage::setupNumericInputValidators()
     m_view.lineEdit_rejectTime->setValidator(
         new QIntValidator(0, 65535, m_view.lineEdit_rejectTime));
 
-    if (m_view.lineEdit_imageThreshold) {
-        m_view.lineEdit_imageThreshold->setValidator(
-            new QIntValidator(0, 100, m_view.lineEdit_imageThreshold));
-        m_view.lineEdit_imageThreshold->setMaxLength(3);
-        m_view.lineEdit_imageThreshold->setToolTip(
-            text(L"请输0到100之间的整数，单位：%"));
-    }
     if (m_view.lineEdit_tissueRoughnessThreshold) {
         QDoubleValidator *validator = new QDoubleValidator(
             0.001, 1000000.0, 3,
@@ -378,6 +375,10 @@ void MachineSettingsPage::applyToUi(
     m_view.lineEdit_rejectTime->setText(QString::number(settings.rejectTime));
     m_view.lineEdit_rejectPosition->setText(QString::number(settings.rejectPosition));
     m_view.lineEdit_imageSavePath->setText(settings.imageSavePath);
+    m_view.lineEdit_tissueRoughnessThreshold->setText(
+                QString::number(
+                    settings.detectionSchemes.tissueRoughnessThreshold,
+                    'f', 3));
 
     if (m_view.splitter_mainContent
             && !settings.rightPanelSplitterState.isEmpty()
@@ -544,6 +545,11 @@ bool MachineSettingsPage::isDirtyByValue(
     if (key == "image.rotation") {
         return comboDirty(m_view.comboBox_imageRotation, rotationIds(),
                           applied.imageRotationId);
+    }
+    if (key == "tissue.roughness_threshold") {
+        return doubleDirty(
+                    m_view.lineEdit_tissueRoughnessThreshold,
+                    applied.detectionSchemes.tissueRoughnessThreshold);
     }
     if (key == "plc.trigger_mode") {
         return comboDirty(m_view.comboBox_plcTriggerMode, triggerModeIds(),
@@ -734,6 +740,7 @@ void MachineSettingsPage::restoreUnappliedMachineSettings()
         << "camera.gain"
         << "image.color_channel"
         << "image.rotation"
+        << "tissue.roughness_threshold"
         << "plc.trigger_mode"
         << "plc.photo_distance"
         << "plc.photo_time"
@@ -794,6 +801,14 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
             QSignalBlocker blocker(m_view.comboBox_imageRotation);
             m_view.comboBox_imageRotation->setCurrentIndex(indexOf(
                 rotationIds(), applied.imageRotationId, 0));
+        } else if (key == "tissue.roughness_threshold") {
+            QSignalBlocker blocker(
+                        m_view.lineEdit_tissueRoughnessThreshold);
+            m_view.lineEdit_tissueRoughnessThreshold->setText(
+                        QString::number(
+                            applied.detectionSchemes
+                            .tissueRoughnessThreshold,
+                            'f', 3));
         } else if (key == "plc.trigger_mode") {
             QSignalBlocker blocker(m_view.comboBox_plcTriggerMode);
             m_view.comboBox_plcTriggerMode->setCurrentIndex(indexOf(
@@ -855,6 +870,36 @@ void MachineSettingsPage::restorePlcUiFromApplied()
         << "plc.reject_position");
 }
 
+void MachineSettingsPage::applyTissueRoughnessThreshold()
+{
+    double value = 0.0;
+    if (!parseDouble(
+            m_view.lineEdit_tissueRoughnessThreshold->text(), &value)
+            || value < 0.0) {
+        restoreAppliedValue("tissue.roughness_threshold");
+        QMessageBox::warning(
+                    m_view.lineEdit_tissueRoughnessThreshold,
+                    QStringLiteral("参数错误"),
+                    QStringLiteral("纸巾粗糙度阈值必须是非负数。"));
+        return;
+    }
+    const OperationResult saved =
+            m_settingsService->saveTissueThreshold(value);
+    if (!saved.isSuccess()) {
+        restoreAppliedValue("tissue.roughness_threshold");
+        QMessageBox::critical(
+                    m_view.lineEdit_tissueRoughnessThreshold,
+                    QStringLiteral("纸巾阈值保存失败"),
+                    saved.error.userMessage);
+        return;
+    }
+    refreshDirty("tissue.roughness_threshold");
+    QMessageBox::information(
+                m_view.lineEdit_tissueRoughnessThreshold,
+                QStringLiteral("成功"),
+                QStringLiteral("纸巾检测阈值已保存。"));
+}
+
 void MachineSettingsPage::applyOperationState(
     const OperationUiSnapshot &snapshot)
 {
@@ -890,6 +935,9 @@ void MachineSettingsPage::applyOperationState(
                 accessFor(binding.hardwareDependency);
         applyOperationUiAccess(binding.control, access);
     }
+    applyOperationUiAccess(
+                m_view.pushButton_applyTissueRoughnessThreshold,
+                snapshot.generalSettings);
 }
 
 bool MachineSettingsPage::eventFilter(

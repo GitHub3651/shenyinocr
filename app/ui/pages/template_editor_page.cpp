@@ -18,6 +18,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QImage>
+#include <QIntValidator>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -230,10 +231,21 @@ TemplateEditorPage::TemplateEditorPage(
 {
     if (!m_view.parentWidget || !imageLabel || !m_templateService
             || !m_inspectionService || !m_settingsService
-            || !m_settingsEditState) {
+            || !m_settingsEditState || !m_view.label_targetText
+            || !m_view.label_imageThreshold
+            || !m_view.lineEdit_imageThreshold) {
         throw std::invalid_argument(
                     "TemplateEditorPage requires complete bindings");
     }
+    m_targetTextLabelText = m_view.label_targetText->text();
+    m_imageThresholdLabelText = m_view.label_imageThreshold->text();
+    m_view.lineEdit_imageThreshold->setValidator(
+                new QIntValidator(0, 100,
+                                  m_view.lineEdit_imageThreshold));
+    m_view.lineEdit_imageThreshold->setMaxLength(3);
+    m_view.lineEdit_imageThreshold->setToolTip(
+                QString::fromWCharArray(
+                    L"请输0到100之间的整数，单位：%"));
     connect(m_inspectionService,
             &InspectionApplicationService::templatePreviewFrameReady,
             this, [this](quint64 sessionId, cv::Mat image) {
@@ -284,8 +296,6 @@ void TemplateEditorPage::applyOperationState(
                            editAccess);
     applyOperationUiAccess(m_view.lineEdit_imageThreshold,
                            editAccess);
-    applyOperationUiAccess(m_view.lineEdit_tissueRoughnessThreshold,
-                           snapshot.templateEditing);
     applyOperationUiAccess(m_view.pushButton_applyTargetText,
                            editAccess);
     applyOperationUiAccess(m_view.pushButton_applyBatchTargetText,
@@ -294,8 +304,6 @@ void TemplateEditorPage::applyOperationState(
                            editAccess);
     applyOperationUiAccess(m_view.pushButton_applyBatchImageThreshold,
                            editAccess);
-    applyOperationUiAccess(m_view.pushButton_applyTissueRoughnessThreshold,
-                           snapshot.templateEditing);
 }
 
 QWidget *TemplateEditorPage::dialogParent() const
@@ -657,12 +665,6 @@ void TemplateEditorPage::restoreTemplatesForMode(
     }
     if (mode == DetectionMode::Tissue) {
         clearTemplateState();
-        if (m_view.lineEdit_tissueRoughnessThreshold) {
-            m_view.lineEdit_tissueRoughnessThreshold->setText(
-                        QString::number(
-                            m_settingsService->current().detectionSchemes
-                            .tissueRoughnessThreshold, 'f', 3));
-        }
         return;
     }
     loadTemplateAtIndex(
@@ -734,7 +736,6 @@ void TemplateEditorPage::saveCurrentTemplate()
         return;
     }
     if (mode == DetectionMode::Tissue) {
-        applyCurrentTissueThreshold();
         return;
     }
     if (m_captureState != CaptureState::Frozen
@@ -1084,27 +1085,6 @@ void TemplateEditorPage::applyCurrentImageThreshold()
              QStringLiteral("当前模板的图像阈值已保存。"));
 }
 
-void TemplateEditorPage::applyCurrentTissueThreshold()
-{
-    bool ok = false;
-    const double value = m_view.lineEdit_tissueRoughnessThreshold
-            ->text().trimmed().toDouble(&ok);
-    if (!ok || value < 0.0) {
-        showWarning(QStringLiteral("参数错误"),
-                    QStringLiteral("纸巾粗糙度阈值必须是非负数。"));
-        return;
-    }
-    const OperationResult saved =
-            m_settingsService->saveTissueThreshold(value);
-    if (!saved.isSuccess()) {
-        showCritical(QStringLiteral("纸巾阈值保存失败"),
-                     saved.error.userMessage);
-        return;
-    }
-    showInfo(QStringLiteral("成功"),
-             QStringLiteral("纸巾检测阈值已保存。"));
-}
-
 bool TemplateEditorPage::updateAllSelectedTemplates(
         const std::function<void(TemplateSettings *)> &update,
         QString *errorMessage)
@@ -1237,21 +1217,32 @@ void TemplateEditorPage::refreshTemplateDirty()
         return;
     }
     const TemplateSettings &settings = m_templateService->draft().settings;
-    m_settingsEditState->setTemplateTargetDirty(
-                m_view.textEdit_targetText
-                && m_view.textEdit_targetText->toPlainText().trimmed()
-                   != settings.targetText);
+    const bool targetDirty = m_view.textEdit_targetText
+            && m_view.textEdit_targetText->toPlainText().trimmed()
+               != settings.targetText;
+    m_settingsEditState->setTemplateTargetDirty(targetDirty);
     bool ok = false;
     const int threshold = m_view.lineEdit_imageThreshold
             ? m_view.lineEdit_imageThreshold->text().toInt(&ok) : 0;
-    m_settingsEditState->setTemplateThresholdDirty(
-                settings.detectionMode != DetectionMode::Ocr
-                && (!ok || threshold != settings.imageThresholdPercent));
+    const bool thresholdDirty =
+            settings.detectionMode != DetectionMode::Ocr
+            && (!ok || threshold != settings.imageThresholdPercent);
+    m_settingsEditState->setTemplateThresholdDirty(thresholdDirty);
+    m_view.label_targetText->setText(
+                targetDirty
+                ? m_targetTextLabelText + QStringLiteral(" *")
+                : m_targetTextLabelText);
+    m_view.label_imageThreshold->setText(
+                thresholdDirty
+                ? m_imageThresholdLabelText + QStringLiteral(" *")
+                : m_imageThresholdLabelText);
 }
 
 void TemplateEditorPage::clearTemplateDirty()
 {
     m_settingsEditState->clearTemplateDirty();
+    m_view.label_targetText->setText(m_targetTextLabelText);
+    m_view.label_imageThreshold->setText(m_imageThresholdLabelText);
 }
 
 void TemplateEditorPage::applyTemplateSettingsToUi(
@@ -1611,11 +1602,6 @@ void TemplateEditorPage::connectPageActions()
         connect(m_view.pushButton_applyBatchImageThreshold,
                 &QPushButton::clicked,
                 this, [this]() { applyBatchImageThreshold(); });
-    }
-    if (m_view.pushButton_applyTissueRoughnessThreshold) {
-        connect(m_view.pushButton_applyTissueRoughnessThreshold,
-                &QPushButton::clicked,
-                this, [this]() { applyCurrentTissueThreshold(); });
     }
 }
 

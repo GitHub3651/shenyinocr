@@ -273,10 +273,11 @@ MainWindow::machineSettingsPageViewBindings() const
     view.label_rejectDistance = ui->label_rejectDistance;
     view.label_rejectPosition = ui->label_rejectPosition;
     view.label_rejectTime = ui->label_rejectTime;
+    view.label_tissueRoughnessThreshold =
+            ui->label_tissueRoughnessThreshold;
     view.lineEdit_cameraGain = ui->lineEdit_cameraGain;
     view.lineEdit_hardwareTriggerDelay = ui->lineEdit_hardwareTriggerDelay;
     view.lineEdit_imageSavePath = ui->lineEdit_imageSavePath;
-    view.lineEdit_imageThreshold = ui->lineEdit_imageThreshold;
     view.lineEdit_photoDistance = ui->lineEdit_photoDistance;
     view.lineEdit_photoTime = ui->lineEdit_photoTime;
     view.lineEdit_plcIpAddress = ui->lineEdit_plcIpAddress;
@@ -293,6 +294,8 @@ MainWindow::machineSettingsPageViewBindings() const
     view.pushButton_applyPlcTriggerMode = ui->pushButton_applyPlcTriggerMode;
     view.pushButton_connectPlc = ui->pushButton_connectPlc;
     view.pushButton_disconnectPlc = ui->pushButton_disconnectPlc;
+    view.pushButton_applyTissueRoughnessThreshold =
+            ui->pushButton_applyTissueRoughnessThreshold;
     view.spinBox_cameraExposure = ui->spinBox_cameraExposure;
     view.splitter_mainContent = ui->splitter_mainContent;
     return view;
@@ -335,10 +338,9 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     view.parentWidget = const_cast<MainWindow *>(this);
     view.imageLabel_templateCanvas = imageLabel;
     view.label_targetText = ui->label_targetText;
+    view.label_imageThreshold = ui->label_imageThreshold;
     view.textEdit_targetText = ui->textEdit_targetText;
     view.lineEdit_imageThreshold = ui->lineEdit_imageThreshold;
-    view.lineEdit_tissueRoughnessThreshold =
-            ui->lineEdit_tissueRoughnessThreshold;
     view.comboBox_imageRotation = ui->comboBox_imageRotation;
     view.comboBox_detectionMode = ui->comboBox_detectionMode;
     view.comboBox_colorChannel = ui->comboBox_colorChannel;
@@ -349,8 +351,6 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     view.pushButton_applyBatchTargetText = ui->pushButton_applyBatchTargetText;
     view.pushButton_applyBatchImageThreshold = ui->pushButton_applyBatchImageThreshold;
     view.pushButton_applyImageThreshold = ui->pushButton_applyImageThreshold;
-    view.pushButton_applyTissueRoughnessThreshold =
-            ui->pushButton_applyTissueRoughnessThreshold;
     view.pushButton_saveTemplate = ui->pushButton_saveTemplate;
     view.toolButton_selectTemplate = ui->toolButton_selectTemplate;
     view.widget_currentTemplateEditor = ui->widget_currentTemplateEditor;

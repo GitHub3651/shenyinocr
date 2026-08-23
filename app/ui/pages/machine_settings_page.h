@@ -52,10 +52,10 @@ struct MachineSettingsPageViewBindings
     QLabel *label_rejectDistance = nullptr;
     QLabel *label_rejectPosition = nullptr;
     QLabel *label_rejectTime = nullptr;
+    QLabel *label_tissueRoughnessThreshold = nullptr;
     QLineEdit *lineEdit_cameraGain = nullptr;
     QLineEdit *lineEdit_hardwareTriggerDelay = nullptr;
     QLineEdit *lineEdit_imageSavePath = nullptr;
-    QLineEdit *lineEdit_imageThreshold = nullptr;
     QLineEdit *lineEdit_photoDistance = nullptr;
     QLineEdit *lineEdit_photoTime = nullptr;
     QLineEdit *lineEdit_plcIpAddress = nullptr;
@@ -72,6 +72,7 @@ struct MachineSettingsPageViewBindings
     QPushButton *pushButton_applyPlcTriggerMode = nullptr;
     QPushButton *pushButton_connectPlc = nullptr;
     QPushButton *pushButton_disconnectPlc = nullptr;
+    QPushButton *pushButton_applyTissueRoughnessThreshold = nullptr;
     QSpinBox *spinBox_cameraExposure = nullptr;
     QSplitter *splitter_mainContent = nullptr;
 };
@@ -162,6 +163,7 @@ private:
     void registerHardwareAction(
         QWidget *control,
         HardwareDependency hardwareDependency);
+    void applyTissueRoughnessThreshold();
     bool isDirtyByValue(const QString &key) const;
     void updateDirtyLabel(const QString &key);
     void restoreCameraUiFromApplied();

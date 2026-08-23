@@ -29,9 +29,9 @@ struct TemplateEditorViewBindings
     QWidget *parentWidget = nullptr;
     ImageLabel *imageLabel_templateCanvas = nullptr;
     QLabel *label_targetText = nullptr;
+    QLabel *label_imageThreshold = nullptr;
     QTextEdit *textEdit_targetText = nullptr;
     QLineEdit *lineEdit_imageThreshold = nullptr;
-    QLineEdit *lineEdit_tissueRoughnessThreshold = nullptr;
     QComboBox *comboBox_detectionMode = nullptr;
     QComboBox *comboBox_imageRotation = nullptr;
     QComboBox *comboBox_colorChannel = nullptr;
@@ -42,7 +42,6 @@ struct TemplateEditorViewBindings
     QPushButton *pushButton_applyBatchTargetText = nullptr;
     QPushButton *pushButton_applyBatchImageThreshold = nullptr;
     QPushButton *pushButton_applyImageThreshold = nullptr;
-    QPushButton *pushButton_applyTissueRoughnessThreshold = nullptr;
     QPushButton *pushButton_saveTemplate = nullptr;
     QToolButton *toolButton_selectTemplate = nullptr;
     QWidget *widget_currentTemplateEditor = nullptr;
@@ -108,7 +107,6 @@ public:
 
     void applyCurrentTargetText();
     void applyCurrentImageThreshold();
-    void applyCurrentTissueThreshold();
     void applyBatchTargetText();
     void applyBatchImageThreshold();
 
@@ -175,4 +173,6 @@ private:
     QString m_currentTemplateDisplayName;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
+    QString m_targetTextLabelText;
+    QString m_imageThresholdLabelText;
 };
