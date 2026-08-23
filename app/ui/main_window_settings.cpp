@@ -230,17 +230,29 @@ void MainWindow::restoreDefaultMachineSettings()
             m_machineSettingsPage->defaultsForHardwareState(
                 cameraOpen, plcConnected);
 
+    AppSettings candidate = m_settingsApplicationService->current();
+    candidate.detectModeId = editableDefaults.detectModeId;
+    candidate.imageSaveModeId = editableDefaults.imageSaveModeId;
+    candidate.imageSaveTypeId = editableDefaults.imageSaveTypeId;
+    candidate.imageSavePath = editableDefaults.imageSavePath;
+    candidate.triggerEnabled = editableDefaults.triggerEnabled;
+    const OperationResult saved =
+            m_settingsApplicationService->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        applyMachineSettingsToUi(m_settingsApplicationService->current());
+        showParameterCritical(
+                    "严重警告",
+                    QString("恢复默认设置失败：\n%1")
+                    .arg(saved.error.userMessage));
+        return;
+    }
+
     applyMachineSettingsToUi(editableDefaults);
     m_templateEditorPage->restoreTemplatesForMode(
                 m_templateEditorPage->currentDetectModeId(), false);
     m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
-
-    if (!saveSettings(false)) {
-        showParameterCritical("严重警告", "恢复默认设置失败：公共配置保存失败。");
-        return;
-    }
 
     showParameterInfo(
         "提示",
@@ -250,26 +262,6 @@ void MainWindow::restoreDefaultMachineSettings()
 bool MainWindow::hasDirtySettings() const
 {
     return m_settingsEditState.hasDirtySettings();
-}
-
-bool MainWindow::saveSettings(bool showErrorMessage)
-{
-    QString errorMessage;
-    if (m_machineSettingsPage
-            && m_machineSettingsPage->save(
-                showErrorMessage, &errorMessage)) {
-        return true;
-    }
-    if (showErrorMessage) {
-        showParameterCritical(
-                    QStringLiteral("严重警告"),
-                    QStringLiteral("当前界面设置保存失败：\n%1")
-                    .arg(errorMessage));
-    } else {
-        qDebug() << "[MACHINE_SETTINGS] silent save failed:"
-                 << errorMessage;
-    }
-    return false;
 }
 
 QString MainWindow::dirtySettingsMessage() const
@@ -294,9 +286,35 @@ void MainWindow::setupDetectModeChangeTracking()
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
             [this](int index) {
-                const QString previousModeId = m_currentDetectModeId;
                 const QString nextModeId =
                         m_templateEditorPage->detectModeIdForIndex(index);
+                const QString previousModeId =
+                        m_settingsApplicationService->current().detectModeId;
+                if (nextModeId == previousModeId) {
+                    return;
+                }
+                AppSettings candidate =
+                        m_settingsApplicationService->current();
+                candidate.detectModeId = nextModeId;
+                const OperationResult saved =
+                        m_settingsApplicationService
+                        ->saveConfiguration(candidate);
+                if (!saved.isSuccess()) {
+                    m_machineSettingsPage->restoreAppliedValue(
+                                QStringLiteral("detect.mode"));
+                    m_currentDetectModeId = previousModeId;
+                    updateTissueRoughnessUiVisibility();
+                    m_templateEditorPage->cancelTemplateDrawing();
+                    m_templateEditorPage->clearTemplateState();
+                    m_templateEditorPage->refreshCurrentTemplateEditor();
+                    m_templateEditorPage->restoreTemplatesForMode(
+                                previousModeId, false);
+                    showParameterCritical(
+                                QStringLiteral("严重警告"),
+                                QStringLiteral("检测模式保存失败：\n%1")
+                                .arg(saved.error.userMessage));
+                    return;
+                }
                 resetTemplateCaptureState();
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
@@ -307,8 +325,27 @@ void MainWindow::setupDetectModeChangeTracking()
                 m_templateEditorPage->refreshCurrentTemplateEditor();
                 m_templateEditorPage->restoreTemplatesForMode(
                             m_currentDetectModeId, false);
-                saveSettings();
             });
+}
+
+bool MainWindow::saveAppliedHardwareSettings(
+    const QStringList &keys)
+{
+    AppSettings candidate = m_settingsApplicationService->current();
+    m_machineSettingsPage->copyUiValuesTo(candidate, keys);
+    const OperationResult saved =
+            m_settingsApplicationService
+            ->commitAppliedHardwareSettings(candidate);
+    m_machineSettingsPage->refreshDirty(keys);
+    if (saved.isSuccess()) {
+        return true;
+    }
+    showParameterWarning(
+                QStringLiteral("配置保存失败"),
+                QStringLiteral(
+                    "参数已下发，但保存配置失败，重启后可能不会保留。\n\n%1")
+                .arg(saved.error.userMessage));
+    return false;
 }
 
 bool MainWindow::applyCameraExposureValue(
@@ -342,10 +379,12 @@ bool MainWindow::applyCameraExposureFromUi(
                 ? QString("相机曝光设置失败") : error;
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
-        m_machineSettingsPage->refreshDirty("camera.exposure");
+        m_machineSettingsPage->restoreAppliedValue("camera.exposure");
         return false;
     }
-    if (showSuccessMessage) {
+    const bool persisted = saveAppliedHardwareSettings(
+                QStringList() << "camera.exposure");
+    if (showSuccessMessage && persisted) {
         showParameterInfo("提示", "相机曝光设置成功！");
     }
     return true;
@@ -366,6 +405,7 @@ bool MainWindow::applyCameraGainFromUi(
             .arg(range.maximumValue);
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
+        m_machineSettingsPage->restoreAppliedValue("camera.gain");
         return false;
     }
     const CameraParameterResultDto result =
@@ -375,9 +415,12 @@ bool MainWindow::applyCameraGainFromUi(
         if (showSuccessMessage) {
             showParameterWarning("提示", result.diagnostic);
         }
+        m_machineSettingsPage->restoreAppliedValue("camera.gain");
         return false;
     }
-    if (showSuccessMessage) {
+    const bool persisted = saveAppliedHardwareSettings(
+                QStringList() << "camera.gain");
+    if (showSuccessMessage && persisted) {
         showParameterInfo("提示", "相机增益设置成功！");
     }
     return true;
@@ -391,6 +434,7 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
         const QString message = "PLC触发模式无效";
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
+        m_machineSettingsPage->restoreAppliedValue("plc.trigger_mode");
         return false;
     }
 
@@ -403,17 +447,17 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
         const QString message = result.error.userMessage;
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
+        m_machineSettingsPage->restoreAppliedValue("plc.trigger_mode");
         return false;
     }
 
-    if (showSuccessMessage) {
+    const bool persisted = saveAppliedHardwareSettings(
+                QStringList() << "plc.trigger_mode");
+    if (showSuccessMessage && persisted) {
         showParameterInfo("提示", plcMode == 0
                           ? "连续模式设置成功"
                           : "间歇模式设置成功");
     }
-    m_machineSettingsPage->updateAppliedFromUi("plc.trigger_mode");
-    m_machineSettingsPage->refreshDirty("plc.trigger_mode");
-    saveSettings(false);
     return true;
 }
 
@@ -435,27 +479,27 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
         const QString message = result.error.userMessage;
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("error", message);
+        m_machineSettingsPage->restoreAppliedValues(QStringList()
+            << "plc.photo_distance"
+            << "plc.photo_time"
+            << "plc.camera_delay"
+            << "plc.reject_distance"
+            << "plc.reject_time"
+            << "plc.reject_position");
         return false;
     }
 
-    if (showSuccessMessage) {
+    const QStringList keys = QStringList()
+            << "plc.photo_distance"
+            << "plc.photo_time"
+            << "plc.camera_delay"
+            << "plc.reject_distance"
+            << "plc.reject_time"
+            << "plc.reject_position";
+    const bool persisted = saveAppliedHardwareSettings(keys);
+    if (showSuccessMessage && persisted) {
         showParameterInfo("提示", "所有设置已经完成！");
     }
-    m_machineSettingsPage->updateAppliedFromUi(QStringList()
-                                      << "plc.photo_distance"
-                                      << "plc.photo_time"
-                                      << "plc.camera_delay"
-                                      << "plc.reject_distance"
-                                      << "plc.reject_time"
-                                      << "plc.reject_position");
-    m_machineSettingsPage->refreshDirty(QStringList()
-                               << "plc.photo_distance"
-                               << "plc.photo_time"
-                               << "plc.camera_delay"
-                               << "plc.reject_distance"
-                               << "plc.reject_time"
-                               << "plc.reject_position");
-    saveSettings(false);
     return true;
 }
 
@@ -466,11 +510,7 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
 void MainWindow::on_pushButton_applyCameraExposure_clicked()
 {
     QStringList errors;
-    if (applyCameraExposureFromUi(&errors, true)) {
-        m_machineSettingsPage->updateAppliedFromUi("camera.exposure");
-        m_machineSettingsPage->refreshDirty("camera.exposure");
-        saveSettings(false);
-    }
+    applyCameraExposureFromUi(&errors, true);
 }
 
 /**
@@ -492,14 +532,17 @@ void MainWindow::on_pushButton_connectPlc_clicked()
 
     if (result.isSuccess())
     {
-        m_machineSettingsPage->updateAppliedFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
-        m_machineSettingsPage->refreshDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
-        saveSettings(false);
+        const bool persisted = saveAppliedHardwareSettings(
+                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
         updateOperationUiState();
-        QMessageBox::information(this, "success", "PLC连接成功");
+        if (persisted) {
+            QMessageBox::information(this, "success", "PLC连接成功");
+        }
     }
     else
     {
+        m_machineSettingsPage->restoreAppliedValues(
+                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
         updateOperationUiState();
         QMessageBox::critical(
                     this, "error", result.error.userMessage);
@@ -605,11 +648,21 @@ void MainWindow::setupNonPersistentDefaults()
 // ================= 拦截滚轮误操作事件 =================
 void MainWindow::on_pushButton_applyColorChannel_clicked()
 {
-    m_machineSettingsPage->updateAppliedFromUi("image.color_channel");
-    m_machineSettingsPage->refreshDirty("image.color_channel");
-    saveSettings(false);
+    const QStringList keys = QStringList() << "image.color_channel";
+    AppSettings candidate = m_settingsApplicationService->current();
+    m_machineSettingsPage->copyUiValuesTo(candidate, keys);
+    const OperationResult saved =
+            m_settingsApplicationService->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        m_machineSettingsPage->restoreAppliedValues(keys);
+        showParameterCritical(
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("颜色通道保存失败：\n%1")
+                    .arg(saved.error.userMessage));
+        return;
+    }
+    m_machineSettingsPage->refreshDirty(keys);
     showParameterInfo("提示", "颜色通道设置成功");
-
 }
 
 
@@ -617,11 +670,7 @@ void MainWindow::on_pushButton_applyColorChannel_clicked()
 void MainWindow::on_pushButton_applyCameraGain_clicked()
 {
     QStringList errors;
-    if (applyCameraGainFromUi(&errors, true)) {
-        m_machineSettingsPage->updateAppliedFromUi("camera.gain");
-        m_machineSettingsPage->refreshDirty("camera.gain");
-        saveSettings(false);
-    }
+    applyCameraGainFromUi(&errors, true);
 }
 
 void MainWindow::on_pushButton_applyPhotoDistance_clicked()
@@ -635,14 +684,15 @@ void MainWindow::on_pushButton_applyPhotoDistance_clicked()
     if (!result.isSuccess())
     {
         // 写入失败
+        m_machineSettingsPage->restoreAppliedValue("plc.photo_distance");
         showParameterWarning("error", result.error.userMessage);
     }
     else
     {
         // 写入成功
-        m_machineSettingsPage->updateAppliedFromUi("plc.photo_distance");
-        m_machineSettingsPage->refreshDirty("plc.photo_distance");
-        saveSettings(false);
-        showParameterInfo("提示", "拍照距离设置成功");
+        if (saveAppliedHardwareSettings(
+                    QStringList() << "plc.photo_distance")) {
+            showParameterInfo("提示", "拍照距离设置成功");
+        }
     }
 }

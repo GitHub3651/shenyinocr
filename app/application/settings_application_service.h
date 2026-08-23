@@ -18,11 +18,9 @@ public:
         const AppSettings &loadedSettings);
 
     const AppSettings &current() const;
-    const AppSettings &draft() const;
-    AppSettings &editableDraft();
-    void updateDraft(const AppSettings &draft);
-    OperationResult applyDraft();
-    void discardDraft();
+    OperationResult saveConfiguration(const AppSettings &candidate);
+    OperationResult commitAppliedHardwareSettings(
+        const AppSettings &appliedSettings);
     OperationResult saveTemplatePaths(DetectionMode mode,
                                       const QStringList &paths);
     OperationResult removeTemplatePaths(
@@ -33,19 +31,13 @@ public:
         const QStringList &paths,
         const QString &directoryPath);
     OperationResult saveTissueThreshold(double value);
-    OperationResult restoreDefaults();
     OperationResult clearSettings();
-    bool hasUnappliedChanges() const;
     QString applicationDataRoot() const;
 
 private:
     static OperationResult storeFailure(
         const AppSettingsStoreError &error);
 
-    OperationResult saveCandidate(const AppSettings &candidate,
-                                  bool preserveMachineDraft = false);
-
     std::shared_ptr<AppSettingsStore> m_store;
     AppSettings m_current;
-    AppSettings m_draft;
 };

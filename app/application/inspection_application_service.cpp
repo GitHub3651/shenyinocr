@@ -327,8 +327,7 @@ StartInspectionResult InspectionApplicationService::start(
     access.templateOperationActive = !access.runtimeBusy
             && m_cameraSession->isCapturing();
     access.cameraOpen = m_cameraSession->isOpen();
-    access.dirtySettings = m_settings->hasUnappliedChanges()
-            || !command.unappliedChanges.isEmpty();
+    access.dirtySettings = !command.unappliedChanges.isEmpty();
     access.plcTriggerEnabled = settings.triggerEnabled;
     access.plcConnected = m_runtime->isPlcConnected();
 
@@ -458,8 +457,8 @@ StartInspectionResult InspectionApplicationService::start(
             [this](int adjustedExposure, QString *errorMessage) {
         AppSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
-        m_settings->updateDraft(adjusted);
-        const OperationResult saved = m_settings->applyDraft();
+        const OperationResult saved =
+                m_settings->saveConfiguration(adjusted);
         if (!saved.isSuccess() && errorMessage) {
             *errorMessage = saved.error.userMessage;
         }
@@ -612,8 +611,8 @@ StopInspectionResult InspectionApplicationService::stop(
             [this](int adjustedExposure, QString *errorMessage) {
         AppSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
-        m_settings->updateDraft(adjusted);
-        const OperationResult saved = m_settings->applyDraft();
+        const OperationResult saved =
+                m_settings->saveConfiguration(adjusted);
         if (!saved.isSuccess() && errorMessage) {
             *errorMessage = saved.error.userMessage;
         }
@@ -708,8 +707,8 @@ OpenCameraResult InspectionApplicationService::openCamera(
             [this](int adjustedExposure, QString *errorMessage) {
         AppSettings adjusted = m_settings->current();
         adjusted.cameraExposure = adjustedExposure;
-        m_settings->updateDraft(adjusted);
-        const OperationResult saved = m_settings->applyDraft();
+        const OperationResult saved =
+                m_settings->saveConfiguration(adjusted);
         if (!saved.isSuccess() && errorMessage) {
             *errorMessage = saved.error.userMessage;
         }
@@ -1096,8 +1095,8 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
                 [this](int adjustedExposure, QString *errorMessage) {
             AppSettings adjusted = m_settings->current();
             adjusted.cameraExposure = adjustedExposure;
-            m_settings->updateDraft(adjusted);
-            const OperationResult saved = m_settings->applyDraft();
+            const OperationResult saved =
+                    m_settings->saveConfiguration(adjusted);
             if (!saved.isSuccess() && errorMessage) {
                 *errorMessage = saved.error.userMessage;
             }

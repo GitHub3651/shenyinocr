@@ -218,7 +218,7 @@ void MainWindow::slot_displayAndDetect(cv::Mat *image)
 {
     DetectionMode activeMode = DetectionMode::Word;
     const bool tissueMode = detectionModeFromUiId(
-                m_appliedMachineSettings.detectModeId,
+                machineSettings().detectModeId,
                 &activeMode)
             && activeMode == DetectionMode::Tissue;
     const bool productionRunning =
@@ -414,7 +414,15 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     m_inspectionApplicationService->shutdown();
 
-    saveSettings(false);
+    AppSettings candidate = m_settingsApplicationService->current();
+    candidate.rightPanelSplitterState =
+            ui->splitter_mainContent->saveState();
+    const OperationResult saved =
+            m_settingsApplicationService->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        qWarning() << "[MACHINE_SETTINGS] splitter state save failed:"
+                   << saved.error.userMessage;
+    }
     event->accept();
 }
 
@@ -476,9 +484,20 @@ void MainWindow::on_pushButton_resetNgCount_clicked()
  */
 void MainWindow::on_pushButton_applyImageRotation_clicked()
 {
-    m_machineSettingsPage->updateAppliedFromUi("image.rotation");
-    m_machineSettingsPage->refreshDirty("image.rotation");
-    saveSettings(false);
+    const QStringList keys = QStringList() << "image.rotation";
+    AppSettings candidate = m_settingsApplicationService->current();
+    m_machineSettingsPage->copyUiValuesTo(candidate, keys);
+    const OperationResult saved =
+            m_settingsApplicationService->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        m_machineSettingsPage->restoreAppliedValues(keys);
+        showParameterCritical(
+                    QStringLiteral("严重警告"),
+                    QStringLiteral("图像旋转保存失败：\n%1")
+                    .arg(saved.error.userMessage));
+        return;
+    }
+    m_machineSettingsPage->refreshDirty(keys);
     showParameterInfo("提示", "旋转角度设置成功");
 }
 
@@ -540,7 +559,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
         if (confirmBox.clickedButton() != continueButton) {
             return;
         }
-        m_settingsApplicationService->discardDraft();
         restoreUnappliedSettingsFromApplied();
         command.unappliedChanges.clear();
         result = m_inspectionApplicationService->start(command);
@@ -598,12 +616,13 @@ void MainWindow::on_toolButton_openCamera_clicked()
 
     if (result.plcConnectionFailed)
     {
+        m_machineSettingsPage->restoreAppliedValues(
+                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
         QMessageBox::critical(this, "error", "PLC连接失败");
     }
     else{
-    m_machineSettingsPage->updateAppliedFromUi(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
-    m_machineSettingsPage->refreshDirty(QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
-    saveSettings(false);
+    saveAppliedHardwareSettings(
+                QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
     qDebug()<<"opencamera，plc connect success";
     }
     updateOperationUiState();
@@ -623,7 +642,7 @@ void MainWindow::on_toolButton_openCamera_clicked()
             ui->spinBox_cameraExposure->setRange(
                 0, (std::numeric_limits<int>::max)());
             ui->spinBox_cameraExposure->setValue(
-                m_appliedMachineSettings.cameraExposure);
+                machineSettings().cameraExposure);
         }
         m_machineSettingsPage->refreshDirty("camera.exposure");
         updateOperationUiState();
@@ -634,8 +653,6 @@ void MainWindow::on_toolButton_openCamera_clicked()
         return;
     }
 
-    m_appliedMachineSettings =
-            m_settingsApplicationService->current();
     {
         QSignalBlocker blocker(ui->spinBox_cameraExposure);
         ui->spinBox_cameraExposure->setRange(

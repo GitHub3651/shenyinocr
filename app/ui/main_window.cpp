@@ -46,8 +46,6 @@ MainWindow::MainWindow(
       m_inspectionApplicationService(inspectionService),
       m_runtime(runtime),
       m_settingsApplicationService(settingsService),
-      m_appliedMachineSettings(
-          m_settingsApplicationService->editableDraft()),
       m_templateApplicationService(templateService),
       imageLabel(nullptr)
 {
@@ -314,9 +312,6 @@ InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
 MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
 {
     MachineSettingsPage::Callbacks callbacks;
-    callbacks.saveSettings = [this](bool showErrorMessage) {
-        return saveSettings(showErrorMessage);
-    };
     callbacks.updateImageSaveOptionsVisibility = [this]() {
         updateImageSaveOptionsVisibility();
     };
@@ -438,10 +433,9 @@ void MainWindow::initializePages()
         if (result.isSuccess()) {
             const QStringList connectionKeys =
                     QStringList() << "plc.ip" << "plc.rack" << "plc.slot";
-            m_machineSettingsPage->updateAppliedFromUi(connectionKeys);
-            m_machineSettingsPage->refreshDirty(connectionKeys);
-            saveSettings(false);
-            QMessageBox::information(this, "提示", "PLC 自动连接成功");
+            if (saveAppliedHardwareSettings(connectionKeys)) {
+                QMessageBox::information(this, "提示", "PLC 自动连接成功");
+            }
         } else {
             const bool stateRejected =
                     result.error.code == QStringLiteral("PLC_RUNTIME_BUSY")

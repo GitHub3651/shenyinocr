@@ -83,7 +83,6 @@ public:
     // 组件说明：Callbacks 数据结构集中传递该流程需要的只读数据或回调。
     struct Callbacks
     {
-        std::function<bool(bool)> saveSettings;
         std::function<void()> updateImageSaveOptionsVisibility;
         std::function<void()> updateSaveDirectoryText;
         std::function<void()> updateTissueVisibility;
@@ -103,21 +102,22 @@ public:
     void setSoftwareDataDirectoryEditor(QLineEdit *editor);
 
     void initialize(const AppSettings &settings);
-    bool save(bool showErrorMessage, QString *errorMessage);
     bool clear(QString *errorMessage);
     AppSettings defaultsForHardwareState(
         bool cameraOpen,
         bool plcConnected) const;
     void applyToUi(const AppSettings &settings);
 
-    void updateAppliedFromUi(const QString &key);
-    void updateAppliedFromUi(const QStringList &keys);
+    void copyUiValuesTo(AppSettings &settings,
+                        const QStringList &keys) const;
     void refreshDirty(const QString &key);
     void refreshDirty(const QStringList &keys);
     void refreshAllDirty();
     void clearDirty(const QString &key);
     void clearDirty(const QStringList &keys);
     void clearAllDirty();
+    void restoreAppliedValue(const QString &key);
+    void restoreAppliedValues(const QStringList &keys);
     void restoreUnappliedMachineSettings();
 
     void applyOperationState(const OperationUiSnapshot &snapshot);
@@ -164,11 +164,9 @@ private:
         HardwareDependency hardwareDependency);
     bool isDirtyByValue(const QString &key) const;
     void updateDirtyLabel(const QString &key);
-    void syncImmediateSettings();
     void restoreCameraUiFromApplied();
     void restorePlcUiFromApplied();
     MachineSettingsPageViewBindings m_view;
-    AppSettings *m_appliedSettings = nullptr;
     SettingsApplicationService *m_settingsService = nullptr;
     SettingsEditState *m_editState = nullptr;
     bool m_applyingSettings = false;

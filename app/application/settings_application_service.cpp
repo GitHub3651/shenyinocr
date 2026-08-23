@@ -14,8 +14,7 @@ SettingsApplicationService::SettingsApplicationService(
     const std::shared_ptr<AppSettingsStore> &store,
     const AppSettings &loadedSettings)
     : m_store(store),
-      m_current(loadedSettings),
-      m_draft(loadedSettings)
+      m_current(loadedSettings)
 {
 }
 
@@ -25,58 +24,32 @@ const AppSettings &SettingsApplicationService::current() const
     return m_current;
 }
 
-// 函数说明：draft 函数实现名称所表示的处理步骤。
-const AppSettings &SettingsApplicationService::draft() const
+OperationResult SettingsApplicationService::saveConfiguration(
+    const AppSettings &candidate)
 {
-    return m_draft;
+    AppSettingsStoreError error;
+    if (!m_store || !m_store->save(candidate, &error)) {
+        return storeFailure(error);
+    }
+    m_current = candidate;
+    return OperationResult::accepted();
 }
 
-// 函数说明：editableDraft 函数实现名称所表示的处理步骤。
-AppSettings &SettingsApplicationService::editableDraft()
+OperationResult SettingsApplicationService::commitAppliedHardwareSettings(
+    const AppSettings &appliedSettings)
 {
-    return m_draft;
-}
-
-// 函数说明：updateDraft 函数更新或应用对应的配置和状态。
-void SettingsApplicationService::updateDraft(
-    const AppSettings &draft)
-{
-    m_draft = draft;
-}
-
-// 函数说明：applyDraft 函数更新或应用对应的配置和状态。
-OperationResult SettingsApplicationService::applyDraft()
-{
-    AppSettings candidate = m_draft;
-    candidate.detectionSchemes = m_current.detectionSchemes;
-    candidate.templateSaveDirectory = m_current.templateSaveDirectory;
-    return saveCandidate(candidate);
-}
-
-// 函数说明：discardDraft 函数停止流程、清理状态或释放对应资源。
-void SettingsApplicationService::discardDraft()
-{
-    m_draft = m_current;
-}
-
-// 函数说明：restoreDefaults 函数校验、转换或恢复对应数据。
-OperationResult SettingsApplicationService::restoreDefaults()
-{
-    AppSettings defaults = AppSettings::defaults();
-    defaults.detectionSchemes = m_current.detectionSchemes;
-    return saveCandidate(defaults);
+    m_current = appliedSettings;
+    AppSettingsStoreError error;
+    if (!m_store || !m_store->save(m_current, &error)) {
+        return storeFailure(error);
+    }
+    return OperationResult::accepted();
 }
 
 // 函数说明：clearSettings 函数停止流程、清理状态或释放对应资源。
 OperationResult SettingsApplicationService::clearSettings()
 {
-    return saveCandidate(AppSettings::defaults());
-}
-
-// 函数说明：hasUnappliedChanges 函数检查相关状态并返回判断结果。
-bool SettingsApplicationService::hasUnappliedChanges() const
-{
-    return m_current != m_draft;
+    return saveConfiguration(AppSettings::defaults());
 }
 
 // 函数说明：applicationDataRoot 函数实现名称所表示的处理步骤。
@@ -112,7 +85,7 @@ OperationResult SettingsApplicationService::saveTemplatePaths(
                     errorMessage.isEmpty()
                     ? QStringLiteral("模板选择无效。") : errorMessage);
     }
-    return saveCandidate(candidate, true);
+    return saveConfiguration(candidate);
 }
 
 OperationResult SettingsApplicationService::removeTemplatePaths(
@@ -148,7 +121,7 @@ OperationResult SettingsApplicationService::saveTemplatePathsAndDirectory(
     }
     candidate.templateSaveDirectory = QDir::cleanPath(
                 QFileInfo(directoryPath).absoluteFilePath());
-    return saveCandidate(candidate, true);
+    return saveConfiguration(candidate);
 }
 
 OperationResult SettingsApplicationService::saveTissueThreshold(double value)
@@ -160,25 +133,5 @@ OperationResult SettingsApplicationService::saveTissueThreshold(double value)
     }
     AppSettings candidate = m_current;
     candidate.detectionSchemes.tissueRoughnessThreshold = value;
-    return saveCandidate(candidate, true);
-}
-
-OperationResult SettingsApplicationService::saveCandidate(
-    const AppSettings &candidate,
-    bool preserveMachineDraft)
-{
-    AppSettingsStoreError error;
-    if (!m_store || !m_store->save(candidate, &error)) {
-        return storeFailure(error);
-    }
-    const AppSettings previousDraft = m_draft;
-    m_current = candidate;
-    if (preserveMachineDraft) {
-        m_draft = previousDraft;
-        m_draft.detectionSchemes = candidate.detectionSchemes;
-        m_draft.templateSaveDirectory = candidate.templateSaveDirectory;
-    } else {
-        m_draft = candidate;
-    }
-    return OperationResult::accepted();
+    return saveConfiguration(candidate);
 }

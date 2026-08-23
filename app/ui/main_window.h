@@ -121,6 +121,7 @@ private:
     bool applyCameraGainFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccessMessage);
     bool applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccessMessage);
+    bool saveAppliedHardwareSettings(const QStringList &keys);
     bool hasDirtySettings() const;
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
@@ -151,7 +152,6 @@ private:
     InspectionRuntime *m_runtime = nullptr;
     std::shared_ptr<SettingsApplicationService>
             m_settingsApplicationService;
-    AppSettings &m_appliedMachineSettings;
     std::shared_ptr<TemplateApplicationService>
             m_templateApplicationService;
     QString m_currentDetectModeId;
@@ -173,7 +173,6 @@ private:
     void setupDetectModeChangeTracking();
 
     // ========== 设置相关函数 ==========
-    bool saveSettings(bool showErrorMessage = true);                ///< 保存设置
     void applyMachineSettingsToUi(const AppSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
     void initStyle();  // 声明后才能在 cpp 中实现和调用
