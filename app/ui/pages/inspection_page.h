@@ -10,8 +10,6 @@
 
 #include <QString>
 
-#include <functional>
-
 class QTimer;
 class QWidget;
 class QLabel;
@@ -43,18 +41,11 @@ struct InspectionPageViewBindings
 class InspectionPage
 {
 public:
-    // 组件说明：Callbacks 数据结构集中传递该流程需要的只读数据或回调。
-    struct Callbacks
-    {
-        std::function<void(const QString &)> updateImageDisplayStatus;
-    };
-
     InspectionPage(
         QWidget *rootWidget,
         const InspectionPageViewBindings &view,
         QTimer *templateAttentionTimer,
-        bool *templateAttentionOn,
-        const Callbacks &callbacks);
+        bool *templateAttentionOn);
     InspectionPage(const InspectionPage &) = delete;
     InspectionPage &operator=(const InspectionPage &) = delete;
 
@@ -83,7 +74,6 @@ private:
     InspectionPageViewBindings m_view;
     QTimer *m_templateAttentionTimer = nullptr;
     bool *m_templateAttentionOn = nullptr;
-    Callbacks m_callbacks;
     bool m_detectionRoiWarningActive = false;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;

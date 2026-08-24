@@ -301,17 +301,6 @@ MainWindow::machineSettingsPageViewBindings() const
     return view;
 }
 
-InspectionPage::Callbacks MainWindow::inspectionPageCallbacks()
-{
-    InspectionPage::Callbacks callbacks;
-    callbacks.updateImageDisplayStatus = [this](const QString &text) {
-        if (m_templateEditorPage) {
-            m_templateEditorPage->updateImageDisplayStatusText(text);
-        }
-    };
-    return callbacks;
-}
-
 MachineSettingsPage::Callbacks MainWindow::machineSettingsPageCallbacks()
 {
     MachineSettingsPage::Callbacks callbacks;
@@ -345,7 +334,6 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     view.comboBox_detectionMode = ui->comboBox_detectionMode;
     view.comboBox_colorChannel = ui->comboBox_colorChannel;
     view.lineEdit_currentTemplateName = ui->lineEdit_currentTemplateName;
-    view.label_runtimeStatus = ui->label_runtimeStatus;
     view.pushButton_editCharacterTemplates = ui->pushButton_editCharacterTemplates;
     view.pushButton_applyTargetText = ui->pushButton_applyTargetText;
     view.pushButton_applyBatchTargetText = ui->pushButton_applyBatchTargetText;
@@ -383,8 +371,7 @@ void MainWindow::initializePages()
                 this,
                 inspectionPageViewBindings(),
                 m_templateCaptureAttentionTimer,
-                &m_templateCaptureAttentionOn,
-                inspectionPageCallbacks()));
+                &m_templateCaptureAttentionOn));
     m_machineSettingsPage.reset(new MachineSettingsPage(
                 machineSettingsPageViewBindings(),
                 m_settingsApplicationService.get(),

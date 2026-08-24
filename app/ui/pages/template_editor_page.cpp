@@ -278,6 +278,7 @@ TemplateEditorPage::TemplateEditorPage(
 }
 
 void TemplateEditorPage::applyOperationState(
+        OperationUiState requestedState,
         const OperationUiSnapshot &snapshot)
 {
     OperationUiSnapshot::Access editAccess = snapshot.templateEditing;
@@ -304,6 +305,12 @@ void TemplateEditorPage::applyOperationState(
                            editAccess);
     applyOperationUiAccess(m_view.pushButton_applyBatchImageThreshold,
                            editAccess);
+    if (requestedState == OperationUiState::Detecting) {
+        showInspectionStatus();
+    } else if (requestedState == OperationUiState::Stopping
+               || requestedState == OperationUiState::Fault) {
+        cancelTemplateDrawing();
+    }
 }
 
 QWidget *TemplateEditorPage::dialogParent() const
@@ -385,7 +392,7 @@ bool TemplateEditorPage::startTemplatePreview()
     cancelTemplateDrawing();
     m_captureState = CaptureState::Previewing;
     m_lastPreviewFrame.release();
-    updateImageDisplayStatusText(
+    showTemplateCaptureStatus(
                 QStringLiteral("实时取景中，调整产品位置后点击拍照并开始框选。"));
     if (m_callbacks.updateOperationUiState) {
         m_callbacks.updateOperationUiState();
@@ -469,6 +476,7 @@ void TemplateEditorPage::handlePreviewFailure(
         return;
     }
     resetTemplateCaptureState();
+    cancelTemplateDrawing();
     showWarning(QStringLiteral("实时取景失败"), reason);
 }
 
@@ -592,31 +600,28 @@ bool TemplateEditorPage::loadTemplateAtIndex(
 {
     if (!m_currentTemplateEditComboBox || index < 0
             || index >= m_currentTemplateEditComboBox->count()) {
-        m_templateService->cancel();
-        m_templateService->setActivePreparedTemplate(
-                    PreparedTemplateSnapshot());
-        m_selectedTemplateInvalid = false;
-        m_currentTemplateDisplayName.clear();
-        m_currentTemplateNameVisible = false;
-        updateCurrentTemplateName();
+        clearTemplateState();
         return false;
     }
     DetectionMode mode;
     if (!detectionModeFromUiId(currentDetectModeId(), &mode)) {
+        hideTemplateGuide();
         return false;
     }
     const QString path = m_currentTemplateEditComboBox
             ->itemData(index).toString();
+    const QString templateName = QFileInfo(path).fileName();
     QString errorMessage;
     if (!m_templateService->beginEdit(path, mode, &errorMessage)) {
         m_templateService->cancel();
         m_templateService->setActivePreparedTemplate(
                     PreparedTemplateSnapshot());
         m_selectedTemplateInvalid = true;
-        m_currentTemplateDisplayName = QFileInfo(path).fileName()
+        m_currentTemplateDisplayName = templateName
                 + QStringLiteral("（状态异常）");
         m_currentTemplateNameVisible = true;
         updateCurrentTemplateName();
+        hideTemplateGuide();
         if (m_callbacks.updateOperationUiState) {
             m_callbacks.updateOperationUiState();
         }
@@ -645,8 +650,11 @@ bool TemplateEditorPage::loadTemplateAtIndex(
     if (!editable.rawImage.empty()
             && m_callbacks.displayPreviewFrame) {
         m_callbacks.displayPreviewFrame(editable.rawImage);
+        showTemplateImageSource(templateName);
+    } else {
+        hideTemplateGuide();
     }
-    m_currentTemplateDisplayName = QFileInfo(path).fileName();
+    m_currentTemplateDisplayName = templateName;
     m_currentTemplateNameVisible = true;
     updateCurrentTemplateName();
     clearTemplateDirty();
@@ -683,6 +691,7 @@ void TemplateEditorPage::clearTemplateState()
     m_selectedTemplateInvalid = false;
     updateCurrentTemplateName();
     clearTemplateDirty();
+    hideTemplateGuide();
 }
 
 int TemplateEditorPage::currentTemplateIndex() const
@@ -1359,25 +1368,61 @@ void TemplateEditorPage::hideTemplateGuide()
     if (m_templateGuideFrame) m_templateGuideFrame->hide();
 }
 
-void TemplateEditorPage::updateImageDisplayStatusText(const QString &body)
+void TemplateEditorPage::showInspectionStatus()
 {
-    if (m_view.label_runtimeStatus && !body.isEmpty()) {
-        m_view.label_runtimeStatus->setText(body);
+    if (!m_templateGuideFrame || !m_templateGuideTitleLabel
+            || !m_templateGuideBodyLabel) {
+        hideTemplateGuide();
+        return;
+    }
+    m_templateGuideTitleLabel->setText(QStringLiteral("【当前状态】"));
+    m_templateGuideBodyLabel->setText(QStringLiteral("正在检测中..."));
+    m_templateGuideFrame->show();
+    adjustTemplateGuideHeight();
+}
+
+void TemplateEditorPage::showTemplateImageSource(
+        const QString &templateName)
+{
+    const QString normalizedName = templateName.trimmed();
+    if (normalizedName.isEmpty()
+            || !m_templateGuideFrame
+            || !m_templateGuideTitleLabel
+            || !m_templateGuideBodyLabel) {
+        hideTemplateGuide();
+        return;
+    }
+    m_templateGuideTitleLabel->setText(QStringLiteral("【当前图像】"));
+    m_templateGuideBodyLabel->setText(
+                QStringLiteral("正在显示模板【%1】的产品图像。")
+                .arg(normalizedName.toHtmlEscaped()));
+    m_templateGuideFrame->show();
+    adjustTemplateGuideHeight();
+}
+
+void TemplateEditorPage::showTemplateCaptureStatus(const QString &body)
+{
+    if (m_captureState != CaptureState::Previewing
+            && m_captureState != CaptureState::Frozen) {
+        hideTemplateGuide();
+        return;
     }
     DetectionMode mode = DetectionMode::Stamp;
-    if (!body.trimmed().isEmpty()
-            && detectionModeFromUiId(currentDetectModeId(), &mode)
-            && mode != DetectionMode::Tissue
-            && m_templateGuideFrame
-            && m_templateGuideTitleLabel
-            && m_templateGuideBodyLabel) {
-        m_templateGuideTitleLabel->setText(
-                    QStringLiteral("【%1】")
-                    .arg(templateGuideTitle(mode)));
-        m_templateGuideBodyLabel->setText(body.trimmed());
-        m_templateGuideFrame->show();
-        adjustTemplateGuideHeight();
+    const QString status = body.trimmed();
+    if (status.isEmpty()
+            || !detectionModeFromUiId(currentDetectModeId(), &mode)
+            || mode == DetectionMode::Tissue
+            || !m_templateGuideFrame
+            || !m_templateGuideTitleLabel
+            || !m_templateGuideBodyLabel) {
+        hideTemplateGuide();
+        return;
     }
+    m_templateGuideTitleLabel->setText(
+                QStringLiteral("【%1】").arg(templateGuideTitle(mode)));
+    m_templateGuideBodyLabel->setText(status);
+    m_templateGuideFrame->show();
+    adjustTemplateGuideHeight();
 }
 
 void TemplateEditorPage::cancelTemplateDrawing()

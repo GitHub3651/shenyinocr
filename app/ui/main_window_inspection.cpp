@@ -297,7 +297,7 @@ void MainWindow::updateOperationUiState()
         m_machineSettingsPage->applyOperationState(snapshot);
     }
     if (m_templateEditorPage) {
-        m_templateEditorPage->applyOperationState(snapshot);
+        m_templateEditorPage->applyOperationState(context.state, snapshot);
     }
 
     applyOperationUiAccess(

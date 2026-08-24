@@ -106,7 +106,6 @@ private:
     void initializePages();
     InspectionPageViewBindings inspectionPageViewBindings() const;
     MachineSettingsPageViewBindings machineSettingsPageViewBindings() const;
-    InspectionPage::Callbacks inspectionPageCallbacks();
     MachineSettingsPage::Callbacks machineSettingsPageCallbacks();
     TemplateEditorViewBindings templateEditorViewBindings() const;
     TemplateEditorPageCallbacks templateEditorPageCallbacks();

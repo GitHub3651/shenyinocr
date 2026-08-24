@@ -36,7 +36,6 @@ struct TemplateEditorViewBindings
     QComboBox *comboBox_imageRotation = nullptr;
     QComboBox *comboBox_colorChannel = nullptr;
     QLineEdit *lineEdit_currentTemplateName = nullptr;
-    QLabel *label_runtimeStatus = nullptr;
     QPushButton *pushButton_editCharacterTemplates = nullptr;
     QPushButton *pushButton_applyTargetText = nullptr;
     QPushButton *pushButton_applyBatchTargetText = nullptr;
@@ -73,7 +72,9 @@ public:
         const TemplateEditorPageCallbacks &callbacks,
         QObject *parent = nullptr);
 
-    void applyOperationState(const OperationUiSnapshot &snapshot);
+    void applyOperationState(
+        OperationUiState requestedState,
+        const OperationUiSnapshot &snapshot);
     bool templateOperationActive() const;
     CaptureState captureState() const;
     bool startTemplatePreview();
@@ -88,7 +89,6 @@ public:
     void updateTemplateGuideText(const QString &title,
                                  const QString &body);
     void hideTemplateGuide();
-    void updateImageDisplayStatusText(const QString &body);
     void cancelTemplateDrawing();
     void refreshTemplateDirty();
     void clearTemplateDirty();
@@ -123,6 +123,9 @@ private:
     void setupCurrentTemplateEditor();
     void setupTemplateGuide();
     void adjustTemplateGuideHeight();
+    void showInspectionStatus();
+    void showTemplateImageSource(const QString &templateName);
+    void showTemplateCaptureStatus(const QString &body);
     void handleTemplateDrawingChanged(
         ImageLabel::DrawingStep step,
         ImageLabel::DrawingEvent event,

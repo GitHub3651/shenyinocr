@@ -71,13 +71,11 @@ InspectionPage::InspectionPage(
     QWidget *rootWidget,
     const InspectionPageViewBindings &view,
     QTimer *templateAttentionTimer,
-    bool *templateAttentionOn,
-    const Callbacks &callbacks)
+    bool *templateAttentionOn)
     : m_rootWidget(rootWidget),
       m_view(view),
       m_templateAttentionTimer(templateAttentionTimer),
-      m_templateAttentionOn(templateAttentionOn),
-      m_callbacks(callbacks)
+      m_templateAttentionOn(templateAttentionOn)
 {
     if (m_view.toolButton_createTemplate) {
         m_view.toolButton_createTemplate->setToolTip(
@@ -95,12 +93,10 @@ void InspectionPage::present(const InspectionPresentation &presentation)
         m_view.imageLabel_inspection->setScaledContents(false);
         m_view.imageLabel_inspection->setAlignment(Qt::AlignCenter);
         m_view.imageLabel_inspection->setAutoFitPixmap(pixmap);
-        if (!m_view.imageLabel_inspection->isTemplateDrawingEnabled()
-                && m_callbacks.updateImageDisplayStatus) {
-            m_callbacks.updateImageDisplayStatus(
-                        QStringLiteral(
-                            "正在显示"
-                            "相机采集图像..."));
+        if (!m_view.imageLabel_inspection->isTemplateDrawingEnabled()) {
+            setLabelTextIfChanged(
+                        m_view.label_runtimeStatus,
+                        QStringLiteral("正在显示相机采集图像..."));
         }
     }
     if (m_view.label_verdictResult) {
