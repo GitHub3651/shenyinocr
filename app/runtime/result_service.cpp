@@ -4,13 +4,13 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/result_service.h"
 
+#include "runtime/inspection_presentation_renderer.h"
 #include "runtime/inspection_runtime.h"
 
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
 #include <QMetaObject>
-#include <QStringList>
 #include <QThread>
 
 #include <chrono>
@@ -119,22 +119,6 @@ DetectionWorker::CompletionConsumer ResultService::completionConsumer()
     return [this](const DetectionCompletion &completion) {
         handleCompletion(completion);
     };
-}
-
-// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
-void ResultService::clear()
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    m_presentationRenderer.clear();
-}
-
-// 函数说明：renderPreviewFrame 函数执行对应事件或业务处理。
-QImage ResultService::renderPreviewFrame(
-    const cv::Mat &image,
-    bool includeTissueOverlay)
-{
-    std::lock_guard<std::mutex> lock(m_presentationMutex);
-    return m_presentationRenderer.renderFrame(image, includeTissueOverlay);
 }
 
 // 函数说明：statistics 函数实现名称所表示的处理步骤。
@@ -289,16 +273,14 @@ bool ResultService::consumeDueDelayedNgRequest(ProductKey *productKey)
 }
 
 // 函数说明：process 函数执行对应事件或业务处理。
-ResultServiceProcessOutcome ResultService::process(
-    const ProcessRequest &request)
+void ResultService::process(const ProcessRequest &request)
 {
-    ResultServiceProcessOutcome outcome;
     if (!request.completion.isValid()) {
-        return outcome;
+        return;
     }
 
     if (!m_runtime.claimResult(request.completion.frame->productKey)) {
-        return outcome;
+        return;
     }
 
     ProductKey delayedProduct;
@@ -308,15 +290,17 @@ ResultServiceProcessOutcome ResultService::process(
 
     const DetectionResultSaveAction saveAction = imageSaveActionFor(
                 request.completion.result.verdict);
+    DetectionPlcAction plcAction = DetectionPlcAction::NoRequest;
+    DetectionResultStatistics statistics;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         ++m_statistics.totalCount;
         if (request.completion.result.verdict == AlgorithmVerdict::Ok) {
-            outcome.plcAction = DetectionPlcAction::RequestOk;
+            plcAction = DetectionPlcAction::RequestOk;
         } else {
             ++m_statistics.ngCount;
             if (m_runConfiguration.delayedNgOffset == 0) {
-                outcome.plcAction = DetectionPlcAction::RequestNg;
+                plcAction = DetectionPlcAction::RequestNg;
             } else {
                 DelayedNgRequest delayed;
                 delayed.dueTotalCount = m_statistics.totalCount
@@ -325,31 +309,40 @@ ResultServiceProcessOutcome ResultService::process(
                 m_delayedNgRequests.push(delayed);
             }
         }
-        outcome.statistics = m_statistics;
+        statistics = m_statistics;
     }
-    outcome.resultRecorded = true;
 
     InspectionPresentation presentation;
-    {
-        std::lock_guard<std::mutex> lock(m_presentationMutex);
-        if (request.preparePresentation) {
-            presentation = request.preparePresentation();
-        }
-    }
+    presentation.image =
+            InspectionPresentationRenderer::renderDetectionFrame(
+                request.completion.frame->originalImage,
+                request.completion.result.overlay);
+    presentation.verdictStyle = verdictStyle(
+                request.completion.result.verdict);
+    presentation.verdictText = presentation.verdictStyle
+            == DetectionVerdictViewStyle::Correct
+            ? QStringLiteral("正确")
+            : QStringLiteral("错误");
+    presentation.recognitionText =
+            request.completion.result.hasPresentationText
+            ? request.completion.result.presentationText
+            : QString();
+    presentation.updatesTemplateName =
+            request.completion.result.updatesTemplateName;
+    presentation.templateName = request.completion.result.templateName;
 
-    outcome.imageSaveRequested =
+    const bool imageSaveRequested =
             saveAction != DetectionResultSaveAction::DoNotSave
             && (request.completion.result.verdict
                 != AlgorithmVerdict::NotEvaluated
                 || request.saveOptions.saveNotEvaluatedAsNg);
-    if (outcome.imageSaveRequested) {
-        outcome.imageSaveSubmitted = submitImageSave(
-                    request, saveAction, presentation.image);
+    if (imageSaveRequested) {
+        submitImageSave(request, saveAction, presentation.image);
     }
 
-    presentation.statistics = outcome.statistics;
+    presentation.statistics = statistics;
     if (m_runtime.state() != InspectionRuntimeState::Fault) {
-        requestPlc(outcome.plcAction, request.completion.frame->productKey);
+        requestPlc(plcAction, request.completion.frame->productKey);
     }
     const double processingElapsedMs =
             std::chrono::duration<double, std::milli>(
@@ -357,8 +350,7 @@ ResultServiceProcessOutcome ResultService::process(
                 - request.completion.frame->processingStartedAt).count();
     presentation.elapsedText = QStringLiteral("检测耗时 %1 ms")
             .arg(processingElapsedMs, 0, 'f', 2);
-    outcome.presentationAccepted = m_runtime.publishPresentation(presentation);
-    return outcome;
+    m_runtime.publishPresentation(presentation);
 }
 
 // 函数说明：submitImageSave 函数执行对应事件或业务处理。
@@ -536,23 +528,5 @@ void ResultService::handleCompletion(
             : ResultSaveLayout::AnnotatedAndRaw;
     request.saveOptions.saveNotEvaluatedAsNg =
             accepted.result.saveNotEvaluatedAsNg;
-    request.preparePresentation = [this, accepted]() {
-        m_presentationRenderer.installDetectionResult(accepted.result);
-        InspectionPresentation presentation;
-        presentation.image = m_presentationRenderer.renderFrame(
-                    accepted.frame->originalImage, true);
-        presentation.verdictStyle = verdictStyle(accepted.result.verdict);
-        presentation.verdictText = presentation.verdictStyle
-                == DetectionVerdictViewStyle::Correct
-                ? QStringLiteral("正确")
-                : QStringLiteral("错误");
-        presentation.recognitionText = accepted.result.hasPresentationText
-                ? accepted.result.presentationText
-                : QString();
-        presentation.updatesTemplateName =
-                accepted.result.updatesTemplateName;
-        presentation.templateName = accepted.result.templateName;
-        return presentation;
-    };
     process(request);
 }

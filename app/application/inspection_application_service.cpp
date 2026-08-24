@@ -1119,7 +1119,7 @@ QImage InspectionApplicationService::renderPreviewFrame(
     if (image.empty() || (tissueMode && productionRunning)) {
         return QImage();
     }
-    return m_runtime->renderPreviewFrame(image, tissueMode);
+    return m_runtime->renderPreviewFrame(image);
 }
 
 // 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。

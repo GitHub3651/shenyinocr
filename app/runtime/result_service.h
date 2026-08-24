@@ -7,14 +7,11 @@
 #include "detection/common/detection_pose.h"
 #include "runtime/image_save_service.h"
 #include "contracts/inspection_presentation.h"
-#include "runtime/inspection_presentation_renderer.h"
 #include "runtime/detection_worker.h"
-#include "runtime/result_presentation_mailbox.h"
 
 #include <QObject>
 #include <QTimer>
 
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -66,17 +63,6 @@ struct ResultServiceRunConfiguration
     ResultSaveOptions saveOptions;
 };
 
-// 组件说明：ResultServiceProcessOutcome 数据结构保存一次操作的结果、状态和错误信息。
-struct ResultServiceProcessOutcome
-{
-    bool resultRecorded = false;
-    bool imageSaveRequested = false;
-    bool imageSaveSubmitted = false;
-    bool presentationAccepted = false;
-    DetectionPlcAction plcAction = DetectionPlcAction::NoRequest;
-    DetectionResultStatistics statistics;
-};
-
 // The only final-result transaction. It accepts one completed ProductKey,
 // updates statistics once, submits at most one save task, performs the normal
 // PLC contract and publishes one complete presentation.
@@ -94,10 +80,6 @@ public:
     bool requiresPlcForRun() const;
     DetectionWorker::CompletionConsumer completionConsumer();
 
-    void clear();
-    QImage renderPreviewFrame(
-        const cv::Mat &image,
-        bool includeTissueOverlay);
     DetectionResultStatistics statistics() const;
     DetectionAbnormalStatistics abnormalStatistics() const;
     int totalCount() const;
@@ -121,18 +103,17 @@ private:
         ProductKey productKey;
     };
 
-    // 组件说明：ProcessRequest 数据结构集中传递该流程需要的只读数据或回调。
+    // 组件说明：ProcessRequest 数据结构集中传递该流程需要的只读数据。
     struct ProcessRequest
     {
         DetectionCompletion completion;
         ResultSaveOptions saveOptions;
-        std::function<InspectionPresentation()> preparePresentation;
     };
 
     DetectionCompletion acceptCompletion(
         const DetectionCompletion &completion);
     void handleCompletion(const DetectionCompletion &completion);
-    ResultServiceProcessOutcome process(const ProcessRequest &request);
+    void process(const ProcessRequest &request);
     DetectionResultSaveAction imageSaveActionFor(
         AlgorithmVerdict verdict) const;
     bool consumeDueDelayedNgRequest(ProductKey *productKey);
@@ -148,13 +129,11 @@ private:
 
     InspectionRuntime &m_runtime;
     mutable std::mutex m_mutex;
-    mutable std::mutex m_presentationMutex;
     ResultServiceRunConfiguration m_runConfiguration;
     DetectionResultStatistics m_statistics;
     DetectionAbnormalStatistics m_abnormalStatistics;
     std::queue<DelayedNgRequest> m_delayedNgRequests;
     std::vector<ProductKey> m_pendingPlcResetProducts;
-    InspectionPresentationRenderer m_presentationRenderer;
     std::unique_ptr<ImageSaveService> m_imageSaveService;
     QTimer m_plcResetTimer;
 };

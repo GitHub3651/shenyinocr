@@ -5,28 +5,15 @@
 #pragma once
 
 #include "detection/common/detection_pose.h"
-#include "contracts/inspection_presentation.h"
 
 #include <QImage>
-
-// 组件说明：InspectionPresentationRenderState 数据结构集中保存该流程需要的一组相关数据。
-struct InspectionPresentationRenderState
-{
-    DetectionOverlay overlay;
-};
 
 // 组件说明：InspectionPresentationRenderer 组件封装本文件中与其名称对应的单一职责。
 class InspectionPresentationRenderer
 {
 public:
-    void clear();
-    void installDetectionResult(const DetectionResult &result);
-
-    const InspectionPresentationRenderState &state() const;
-    QImage renderFrame(
+    static QImage renderRawFrame(const cv::Mat &image);
+    static QImage renderDetectionFrame(
         const cv::Mat &image,
-        bool includeTissueOverlay) const;
-
-private:
-    InspectionPresentationRenderState m_state;
+        const DetectionOverlay &overlay);
 };

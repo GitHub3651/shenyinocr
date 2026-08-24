@@ -130,9 +130,7 @@ public:
     PlcOperationResult writePlcPhotoDistance(std::uint32_t photoDistance);
     PlcOperationResult writePlcResultValue(std::uint8_t value);
 
-    QImage renderPreviewFrame(
-        const cv::Mat &image,
-        bool includeTissueOverlay);
+    QImage renderPreviewFrame(const cv::Mat &image);
 
     DetectionRuntimeReadiness prepareDetection(DetectionMode mode) const;
     bool startDetection(

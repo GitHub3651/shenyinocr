@@ -132,30 +132,17 @@ void drawTissueEllipse(
 }
 }
 
-// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
-void InspectionPresentationRenderer::clear()
+// 函数说明：renderRawFrame 函数把原图转换为界面图像，不绘制检测覆盖层。
+QImage InspectionPresentationRenderer::renderRawFrame(
+    const cv::Mat &image)
 {
-    m_state = InspectionPresentationRenderState();
+    return renderDetectionFrame(image, DetectionOverlay());
 }
 
-// 函数说明：installDetectionResult 函数实现名称所表示的处理步骤。
-void InspectionPresentationRenderer::installDetectionResult(
-    const DetectionResult &result)
-{
-    clear();
-    m_state.overlay = result.overlay;
-}
-
-// 函数说明：state 函数实现名称所表示的处理步骤。
-const InspectionPresentationRenderState &InspectionPresentationRenderer::state() const
-{
-    return m_state;
-}
-
-// 函数说明：renderFrame 函数执行对应事件或业务处理。
-QImage InspectionPresentationRenderer::renderFrame(
+// 函数说明：renderDetectionFrame 函数只绘制与本次图像同时传入的检测覆盖层。
+QImage InspectionPresentationRenderer::renderDetectionFrame(
     const cv::Mat &image,
-    bool includeTissueOverlay) const
+    const DetectionOverlay &overlay)
 {
     if (image.empty()) {
         return QImage();
@@ -184,7 +171,7 @@ QImage InspectionPresentationRenderer::renderFrame(
         static_cast<int>(1.5 * dynamicScale));
 
     for (const DetectionOverlayPolygon &polygon :
-         m_state.overlay.polygons) {
+         overlay.polygons) {
         if (polygon.role == QLatin1String("character")) {
             drawCharacter(
                 displayImage,
@@ -196,7 +183,7 @@ QImage InspectionPresentationRenderer::renderFrame(
     }
 
     for (const DetectionOverlayPolygon &polygon :
-         m_state.overlay.polygons) {
+         overlay.polygons) {
         if (polygon.role == QLatin1String("tracking")) {
             drawPolygon(displayImage, polygon.points,
                         cv::Scalar(255, 0, 0), boxThickness);
@@ -217,11 +204,8 @@ QImage InspectionPresentationRenderer::renderFrame(
         }
     }
 
-    if (includeTissueOverlay) {
-        for (const DetectionOverlayEllipse &ellipse :
-             m_state.overlay.ellipses) {
-            drawTissueEllipse(displayImage, ellipse);
-        }
+    for (const DetectionOverlayEllipse &ellipse : overlay.ellipses) {
+        drawTissueEllipse(displayImage, ellipse);
     }
 
     const QImage rendered(

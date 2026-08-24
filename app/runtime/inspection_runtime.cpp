@@ -4,6 +4,8 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/inspection_runtime.h"
 
+#include "runtime/inspection_presentation_renderer.h"
+
 #include <QDebug>
 #include <QMetaObject>
 #include <QUuid>
@@ -318,12 +320,9 @@ bool InspectionRuntime::requiresPlcForRun() const
     return m_resultService->requiresPlcForRun();
 }
 
-QImage InspectionRuntime::renderPreviewFrame(
-    const cv::Mat &image,
-    bool includeTissueOverlay)
+QImage InspectionRuntime::renderPreviewFrame(const cv::Mat &image)
 {
-    return m_resultService->renderPreviewFrame(
-                image, includeTissueOverlay);
+    return InspectionPresentationRenderer::renderRawFrame(image);
 }
 
 // 函数说明：connectPlc 函数建立或断开对应外部连接。
