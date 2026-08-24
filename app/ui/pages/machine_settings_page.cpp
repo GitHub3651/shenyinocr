@@ -437,6 +437,16 @@ void MachineSettingsPage::registerGlobalSetting(
         if (!m_settingsService) {
             return;
         }
+        if (key == QStringLiteral("image.save_mode")
+                && m_view.comboBox_imageSaveRange->currentIndex() != 0
+                && m_view.lineEdit_imageSavePath->text().trimmed().isEmpty()) {
+            QMessageBox::warning(
+                        it.value().editor,
+                        QStringLiteral("提示"),
+                        QStringLiteral("启用存图前，请先选择图像保存路径。"));
+            restoreAppliedValue(key);
+            return;
+        }
         AppSettings candidate = m_settingsService->current();
         copyUiValuesTo(candidate, QStringList() << key);
         const OperationResult saved =

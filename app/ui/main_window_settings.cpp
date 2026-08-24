@@ -78,13 +78,13 @@ void MainWindow::updateImageSaveOptionsVisibility()
         ui->comboBox_imageSaveContent->setVisible(saveImages);
     }
     if (ui->label_imageSavePath) {
-        ui->label_imageSavePath->setVisible(saveImages);
+        ui->label_imageSavePath->setVisible(true);
     }
     if (ui->lineEdit_imageSavePath) {
-        ui->lineEdit_imageSavePath->setVisible(saveImages);
+        ui->lineEdit_imageSavePath->setVisible(true);
     }
     if (ui->pushButton_browseImageSavePath) {
-        ui->pushButton_browseImageSavePath->setVisible(saveImages);
+        ui->pushButton_browseImageSavePath->setVisible(true);
     }
     if (ui->groupBox_imageSaving) {
         ui->groupBox_imageSaving->updateGeometry();
