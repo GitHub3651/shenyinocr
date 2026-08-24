@@ -36,8 +36,6 @@ DetectionResult TissueDetectionPipeline::toDetectionResult(
     result.presentationText = result.recognizedText;
     result.hasPresentationText = true;
     result.diagnostic = QString::fromStdString(tissueResult.message);
-    result.elapsedMs = static_cast<double>(
-                tissueResult.processingTimeMs);
 
     if (tissueResult.rollFound) {
         DetectionOverlayEllipse outer;

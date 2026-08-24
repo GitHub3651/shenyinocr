@@ -42,7 +42,6 @@ struct DetectionModeDescriptor
     bool showRoiWarningOnCancelled;
     bool saveRawOnly;
     bool saveNotEvaluatedAsNg;
-    int elapsedDecimals;
 };
 
 const QVector<DetectionModeDescriptor> &detectionModeDescriptors();

@@ -5,9 +5,9 @@
 #pragma once
 
 #include <QMetaType>
-#include <QDateTime>
 #include <QString>
 #include <opencv2/opencv.hpp>
+#include <chrono>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -27,7 +27,7 @@ struct FrameData {
     ProductKey productKey;
     quint64 frameNumber = 0;
     int cameraIndex = 0;
-    QDateTime timestampUtc;
+    std::chrono::steady_clock::time_point processingStartedAt;
     cv::Mat originalImage;
 };
 
@@ -70,7 +70,6 @@ struct DetectionResult {
     QString templateName;
     QString diagnostic;
     DetectionOverlay overlay;
-    double elapsedMs = 0.0;
     bool hasPresentationText = false;
     bool updatesTemplateName = false;
     bool clearImageLabelRects = false;
@@ -78,7 +77,6 @@ struct DetectionResult {
     bool clearRoiWarningOnCompleted = false;
     bool saveRawOnly = false;
     bool saveNotEvaluatedAsNg = true;
-    int elapsedDecimals = 0;
 };
 
 struct DetectionCompletion {
@@ -99,14 +97,14 @@ inline std::shared_ptr<const FrameData> makeFrameData(
     const ProductKey &productKey,
     quint64 frameNumber,
     int cameraIndex,
-    const QDateTime &timestampUtc,
+    std::chrono::steady_clock::time_point processingStartedAt,
     const cv::Mat &originalImage)
 {
     std::shared_ptr<FrameData> frame(new FrameData);
     frame->productKey = productKey;
     frame->frameNumber = frameNumber;
     frame->cameraIndex = cameraIndex;
-    frame->timestampUtc = timestampUtc;
+    frame->processingStartedAt = processingStartedAt;
     frame->originalImage = originalImage.clone();
     return frame;
 }
@@ -120,7 +118,6 @@ struct DetectionPose {
     float angleDeg = 0.0f;
     float score = 0.0f;
     int wordTemplateIndex = -1;
-    double trackingElapsedMs = 0.0;
 };
 
 Q_DECLARE_METATYPE(DetectionPose)

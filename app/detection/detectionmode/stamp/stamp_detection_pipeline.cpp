@@ -9,8 +9,6 @@
 
 #include <QRegularExpression>
 
-#include <chrono>
-
 namespace {
 
 // 函数说明：countTargetCharacters 函数读取、等待或计算对应的数据。
@@ -84,8 +82,6 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
         return output;
     }
 
-    const std::chrono::high_resolution_clock::time_point start =
-            std::chrono::high_resolution_clock::now();
     const OrientedDateRoi oriented =
             DetectionRoiGeometry::prepareOrientedDateRoi(
                 item.frame->originalImage,
@@ -137,11 +133,6 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
                     "喷码与钢印"
                     "均合格");
     }
-    result.elapsedMs = static_cast<double>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::high_resolution_clock::now() - start)
-                .count());
-
     const auto appendPolygon = [&result](
             const QString &role,
             const std::vector<cv::Point> &points,

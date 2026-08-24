@@ -13,7 +13,6 @@
 #include "engines/ocr/ocr_engine.h"
 
 #include <QStringList>
-#include <chrono>
 #include <string>
 
 namespace {
@@ -86,7 +85,6 @@ void applyDescriptorPolicy(
     result->clearRoiWarningOnCompleted = descriptor.showRoiWarningOnCancelled;
     result->saveRawOnly = descriptor.saveRawOnly;
     result->saveNotEvaluatedAsNg = descriptor.saveNotEvaluatedAsNg;
-    result->elapsedDecimals = descriptor.elapsedDecimals;
 }
 
 void setTemplatePresentation(
@@ -124,7 +122,8 @@ std::shared_ptr<const FrameData> preprocessFrame(
         return std::shared_ptr<const FrameData>();
     }
     return makeFrameData(source->productKey, source->frameNumber,
-                         source->cameraIndex, source->timestampUtc, image);
+                         source->cameraIndex,
+                         source->processingStartedAt, image);
 }
 
 } // namespace
@@ -220,11 +219,8 @@ DetectionPipelineCreationResult DetectionRegistry::create(
             const std::shared_ptr<const FrameData> &source) {
             const std::shared_ptr<const FrameData> frame = preprocessFrame(source, preprocess);
             if (!frame) return DetectionCompletion();
-            const auto started = std::chrono::high_resolution_clock::now();
-            TissueRollResult output = pipeline->detect(frame->originalImage);
-            output.processingTimeMs = static_cast<int>(
-                        std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::high_resolution_clock::now() - started).count());
+            const TissueRollResult output = pipeline->detect(
+                        frame->originalImage);
             DetectionResult result = TissueDetectionPipeline::toDetectionResult(output);
             applyDescriptorPolicy(descriptor, &result);
             return completeWith(frame, result);

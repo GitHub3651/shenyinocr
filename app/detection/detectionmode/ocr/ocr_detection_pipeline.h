@@ -34,8 +34,7 @@ public:
             IOcrEngine &ocrEngine) const;
     static DetectionResult toDetectionResult(
             const OcrDetectionResult &ocrResult,
-            const DetectionPose &pose,
-            double elapsedMs);
+            const DetectionPose &pose);
 };
 
 #endif // DETECTION_OCR_OCR_DETECTION_PIPELINE_H

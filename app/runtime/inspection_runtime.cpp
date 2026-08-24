@@ -8,6 +8,7 @@
 #include <QMetaObject>
 #include <QUuid>
 
+#include <chrono>
 #include <stdexcept>
 
 // 一次正式运行的不可变快照只属于InspectionRuntime实现，不暴露为公共模块。
@@ -457,16 +458,17 @@ bool InspectionRuntime::startDetection(
 std::shared_ptr<const FrameData> InspectionRuntime::acceptFrame(
     const cv::Mat &image,
     quint64 frameNumber,
-    int cameraIndex,
-    const QDateTime &timestampUtc)
+    int cameraIndex)
 {
+    if (image.empty()) {
+        return std::shared_ptr<const FrameData>();
+    }
+    const std::chrono::steady_clock::time_point processingStartedAt =
+            std::chrono::steady_clock::now();
     bool droppedAfterFault = false;
     std::shared_ptr<const FrameData> frame;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (image.empty()) {
-            return frame;
-        }
         if (m_state == InspectionRuntimeState::Fault) {
             ++m_faultSnapshot.postFaultDroppedFrameCount;
             droppedAfterFault = true;
@@ -481,9 +483,7 @@ std::shared_ptr<const FrameData> InspectionRuntime::acceptFrame(
                         productKey,
                         frameNumber > 0 ? frameNumber : productKey.sequence,
                         cameraIndex,
-                        timestampUtc.isValid()
-                            ? timestampUtc
-                            : QDateTime::currentDateTimeUtc(),
+                        processingStartedAt,
                         image);
             m_acceptedFrames[productKey.sequence] = frame;
             m_products[productKey.sequence] = ProductProgress::Accepted;

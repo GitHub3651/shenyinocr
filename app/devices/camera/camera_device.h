@@ -4,8 +4,6 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
-#include <QDateTime>
-
 #include <opencv2/core.hpp>
 
 #include <cstdint>
@@ -75,7 +73,6 @@ enum class CameraTriggerMode
 struct CameraFrame
 {
     std::uint64_t sequence = 0;
-    QDateTime timestampUtc;
     cv::Mat image;
 };
 

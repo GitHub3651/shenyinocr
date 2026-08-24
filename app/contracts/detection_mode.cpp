@@ -12,23 +12,23 @@ const QVector<DetectionModeDescriptor> &descriptors()
         { DetectionMode::Stamp, "stamp", "stamp_detection", "刚印检测",
           "stamp", "无法启动钢印检测工作线程。",
           DetectionTrackingKind::SingleTemplate, true, true, false,
-          true, true, false, false, 0 },
+          true, true, false, false },
         { DetectionMode::Word, "word", "word_detection", "字库匹配",
           "word", "无法启动字库检测工作线程。",
           DetectionTrackingKind::MultipleTemplates, true, true, false,
-          true, false, false, false, 0 },
+          true, false, false, false },
         { DetectionMode::Ocr, "ocr", "ocr_detection", "深度 OCR",
           "OCR", "无法启动深度OCR检测工作线程。",
           DetectionTrackingKind::SingleTemplate, true, false, false,
-          false, false, true, true, 0 },
+          false, false, true, true },
         { DetectionMode::Tissue, "tissue", "tissue_detection", "纸巾检测",
           "tissue", "无法启动纸巾检测工作线程。",
           DetectionTrackingKind::WholeFrame, false, false, false,
-          false, false, false, true, 0 },
+          false, false, false, true },
         { DetectionMode::BarcodeWord, "barcodeWord", "barcode_word_detection",
           "二维码+三期", "barcode-word", "无法启动二维码+三期检测工作线程。",
           DetectionTrackingKind::MultipleTemplates,
-          true, true, true, true, false, false, false, 2 }
+          true, true, true, true, false, false, false }
     };
     return values;
 }

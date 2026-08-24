@@ -127,8 +127,6 @@ private:
         DetectionCompletion completion;
         ResultSaveOptions saveOptions;
         std::function<InspectionPresentation()> preparePresentation;
-        std::function<void(InspectionPresentation *)>
-                finalizePresentation;
     };
 
     DetectionCompletion acceptCompletion(
@@ -147,9 +145,6 @@ private:
         const ProductKey &productKey);
     void resetPlcPulse();
     void enterPlcFault(const QString &diagnostic);
-
-    static qint64 presentationElapsedMs(
-        const DetectionCompletion &completion);
 
     InspectionRuntime &m_runtime;
     mutable std::mutex m_mutex;

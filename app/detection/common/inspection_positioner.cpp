@@ -6,8 +6,6 @@
 
 #include "detection/common/template_pose_selector.h"
 
-#include <chrono>
-
 // 函数说明：configure 函数更新或应用对应的配置和状态。
 bool InspectionPositioner::configure(
     DetectionTrackingKind trackingKind,
@@ -61,8 +59,6 @@ DetectionPose InspectionPositioner::locate(const cv::Mat &image) const
         return DetectionPose();
     }
 
-    const std::chrono::steady_clock::time_point started =
-            std::chrono::steady_clock::now();
     cv::Mat gray;
     cv::Mat smallGray;
     if (!m_templates.front().matcher.prepareFrame(
@@ -91,9 +87,5 @@ DetectionPose InspectionPositioner::locate(const cv::Mat &image) const
                     state.name,
                     state.barcodePolygon);
     }
-    DetectionPose pose = selector.selection().pose;
-    pose.trackingElapsedMs =
-            std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - started).count();
-    return pose;
+    return selector.selection().pose;
 }

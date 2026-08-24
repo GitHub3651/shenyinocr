@@ -141,8 +141,7 @@ public:
     std::shared_ptr<const FrameData> acceptFrame(
         const cv::Mat &image,
         quint64 frameNumber = 0,
-        int cameraIndex = 0,
-        const QDateTime &timestampUtc = QDateTime());
+        int cameraIndex = 0);
     DetectionCompletion complete(
         const std::shared_ptr<const FrameData> &frame,
         const DetectionResult &result);

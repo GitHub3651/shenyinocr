@@ -8,8 +8,6 @@
 #include "detection/common/detection_roi_geometry.h"
 #include "engines/barcode/barcode_decoder.h"
 
-#include <chrono>
-
 // 函数说明：detect 函数执行对应事件或业务处理。
 BarcodeWordDetectionResult BarcodeWordDetectionPipeline::detect(
         bool barcodeIsReadable,
@@ -57,16 +55,6 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         return output;
     }
 
-    const std::chrono::high_resolution_clock::time_point start =
-            std::chrono::high_resolution_clock::now();
-    const auto elapsedMs = [&start, &item]() {
-        return item.pose.trackingElapsedMs
-                + static_cast<double>(
-                    std::chrono::duration_cast<
-                        std::chrono::milliseconds>(
-                            std::chrono::high_resolution_clock::now()
-                            - start).count());
-    };
     const auto appendPolygon = [&result](
             const QString &role,
             const std::vector<cv::Point> &points,
@@ -80,14 +68,13 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         polygon.score = score;
         result.overlay.polygons.push_back(polygon);
     };
-    const auto finishNg = [&output, &result, &elapsedMs](
+    const auto finishNg = [&output, &result](
             const QString &reason) {
         output.reason = reason;
         result.status = DetectionStatus::Completed;
         result.verdict = AlgorithmVerdict::Ng;
         result.recognizedText = output.barcode.text;
         result.diagnostic = reason;
-        result.elapsedMs = elapsedMs();
     };
 
     if (!item.pose.valid) {
@@ -251,7 +238,6 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
 
     result = output.wordOutput.detectionResult;
     result.modeId = detectionModeUiId(DetectionMode::BarcodeWord);
-    result.elapsedMs = elapsedMs();
     output.dateState = output.barcodeWordResult.dateIsOk
             ? QStringLiteral("正确")
             : QStringLiteral("错误");

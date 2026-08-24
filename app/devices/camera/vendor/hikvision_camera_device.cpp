@@ -6,8 +6,6 @@
 
 #include "MvCameraControl.h"
 
-#include <QDateTime>
-
 #include <opencv2/imgproc.hpp>
 
 #include <chrono>
@@ -148,7 +146,6 @@ struct HikvisionCameraDevice::Impl
         }
 
         CameraFrame frame;
-        frame.timestampUtc = QDateTime::currentDateTimeUtc();
         frame.image = image;
 
         std::lock_guard<std::mutex> lock(self->mutex);

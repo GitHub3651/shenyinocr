@@ -32,7 +32,6 @@ struct TissueRollResult
     bool rollFound = false;
     int imageWidth = 0;
     int imageHeight = 0;
-    int processingTimeMs = 0;
     TissueRollItem roll;
     std::string message;
 };

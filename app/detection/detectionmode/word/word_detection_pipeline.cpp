@@ -9,8 +9,6 @@
 
 #include <QRegularExpression>
 
-#include <chrono>
-
 namespace {
 
 // 函数说明：parseTargetUnits 函数校验、转换或恢复对应数据。
@@ -87,18 +85,12 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
                     thresholdPercent);
     }
 
-    const std::chrono::high_resolution_clock::time_point prepareStart =
-            std::chrono::high_resolution_clock::now();
     const OrientedDateRoi oriented =
             DetectionRoiGeometry::prepareOrientedDateRoi(
                 item.frame->originalImage,
                 item.pose,
                 20);
-    const double prepareElapsedMs = static_cast<double>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::high_resolution_clock::now()
-                    - prepareStart).count());
-    WordDetectionWorkOutput output = detectPreparedDateRoi(
+    return detectPreparedDateRoi(
                 item,
                 oriented,
                 targetText,
@@ -106,10 +98,6 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
                 preparedTemplates,
                 templateTargetIndexes,
                 thresholdPercent);
-    if (output.detectionResult.status == DetectionStatus::Completed) {
-        output.detectionResult.elapsedMs += prepareElapsedMs;
-    }
-    return output;
 }
 
 // 函数说明：detectPreparedDateRoi 函数执行对应事件或业务处理。
@@ -139,13 +127,10 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
         result.diagnostic = QStringLiteral(
                     "未找到字库"
                     "定位区域");
-        result.elapsedMs = item.pose.trackingElapsedMs;
         output.reason = result.diagnostic;
         return output;
     }
 
-    const std::chrono::high_resolution_clock::time_point start =
-            std::chrono::high_resolution_clock::now();
     if (!oriented.valid) {
         result.diagnostic = QStringLiteral(
                     "日期ROI无效或"
@@ -244,10 +229,6 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
             : AlgorithmVerdict::Ng;
     result.recognizedText = output.detectedUnits.join(QString());
     result.diagnostic = output.reason;
-    result.elapsedMs = static_cast<double>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::high_resolution_clock::now() - start)
-                .count());
 
     const auto appendPolygon = [&result](
             const QString &role,

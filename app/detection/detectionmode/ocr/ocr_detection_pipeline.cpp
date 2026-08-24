@@ -7,7 +7,6 @@
 #include "detection/common/detection_roi_geometry.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cctype>
 
 namespace {
@@ -75,8 +74,6 @@ DetectionResult OcrDetectionPipeline::detect(
         const std::string &targetText,
         IOcrEngine &ocrEngine) const
 {
-    const std::chrono::high_resolution_clock::time_point start =
-            std::chrono::high_resolution_clock::now();
     OrientedDateRoi oriented;
     if (item.isValid() && item.hasPose) {
         oriented = DetectionRoiGeometry::prepareOrientedDateRoi(
@@ -90,10 +87,6 @@ DetectionResult OcrDetectionPipeline::detect(
         invalidResult.status = DetectionStatus::Cancelled;
         invalidResult.diagnostic = QStringLiteral(
                     "OCR date ROI is invalid");
-        invalidResult.elapsedMs = static_cast<double>(
-                    std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::high_resolution_clock::now() - start)
-                    .count());
         return invalidResult;
     }
 
@@ -102,21 +95,15 @@ DetectionResult OcrDetectionPipeline::detect(
                 croppedImage,
                 targetText,
                 ocrEngine);
-    const double elapsedMs = static_cast<double>(
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::high_resolution_clock::now() - start)
-                .count());
     return toDetectionResult(
                 ocrResult,
-                item.pose,
-                elapsedMs);
+                item.pose);
 }
 
 // 函数说明：toDetectionResult 函数校验、转换或恢复对应数据。
 DetectionResult OcrDetectionPipeline::toDetectionResult(
         const OcrDetectionResult &ocrResult,
-        const DetectionPose &pose,
-        double elapsedMs)
+        const DetectionPose &pose)
 {
     DetectionResult result;
     result.modeId = detectionModeUiId(DetectionMode::Ocr);
@@ -134,7 +121,6 @@ DetectionResult OcrDetectionPipeline::toDetectionResult(
                    "OCR文本与目标完全一致")
                : QStringLiteral(
                    "OCR文本与目标不一致"));
-    result.elapsedMs = elapsedMs;
 
     const auto appendPolygon = [&result](
         const QString &role,

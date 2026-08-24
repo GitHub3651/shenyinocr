@@ -13,7 +13,7 @@
 #include <QStringList>
 #include <QThread>
 
-#include <algorithm>
+#include <chrono>
 
 namespace {
 
@@ -335,9 +335,6 @@ ResultServiceProcessOutcome ResultService::process(
         if (request.preparePresentation) {
             presentation = request.preparePresentation();
         }
-        if (request.finalizePresentation) {
-            request.finalizePresentation(&presentation);
-        }
     }
 
     outcome.imageSaveRequested =
@@ -354,6 +351,12 @@ ResultServiceProcessOutcome ResultService::process(
     if (m_runtime.state() != InspectionRuntimeState::Fault) {
         requestPlc(outcome.plcAction, request.completion.frame->productKey);
     }
+    const double processingElapsedMs =
+            std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now()
+                - request.completion.frame->processingStartedAt).count();
+    presentation.elapsedText = QStringLiteral("检测耗时 %1 ms")
+            .arg(processingElapsedMs, 0, 'f', 2);
     outcome.presentationAccepted = m_runtime.publishPresentation(presentation);
     return outcome;
 }
@@ -503,20 +506,6 @@ void ResultService::enterPlcFault(const QString &diagnostic)
                 diagnostic);
 }
 
-// 函数说明：presentationElapsedMs 函数执行对应事件或业务处理。
-qint64 ResultService::presentationElapsedMs(
-    const DetectionCompletion &completion)
-{
-    qint64 elapsedMs = static_cast<qint64>(
-                completion.result.elapsedMs + 0.5);
-    if (!completion.frame || !completion.frame->timestampUtc.isValid()) {
-        return elapsedMs;
-    }
-    return (std::max)(elapsedMs,
-        completion.frame->timestampUtc.msecsTo(
-            QDateTime::currentDateTimeUtc()));
-}
-
 void ResultService::handleCompletion(
     const DetectionCompletion &completion)
 {
@@ -564,15 +553,6 @@ void ResultService::handleCompletion(
                 accepted.result.updatesTemplateName;
         presentation.templateName = accepted.result.templateName;
         return presentation;
-    };
-    request.finalizePresentation = [accepted](
-        InspectionPresentation *presentation) {
-        const qint64 elapsed = presentationElapsedMs(accepted);
-        presentation->elapsedText = accepted.result.elapsedDecimals > 0
-                ? QStringLiteral("检测耗时 %1 ms").arg(
-                    static_cast<double>(elapsed), 0, 'f',
-                    accepted.result.elapsedDecimals)
-                : QStringLiteral("检测耗时 %1 毫秒").arg(elapsed);
     };
     process(request);
 }
