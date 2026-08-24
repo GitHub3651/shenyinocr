@@ -333,7 +333,6 @@ TemplateEditorViewBindings MainWindow::templateEditorViewBindings() const
     view.comboBox_imageRotation = ui->comboBox_imageRotation;
     view.comboBox_detectionMode = ui->comboBox_detectionMode;
     view.comboBox_colorChannel = ui->comboBox_colorChannel;
-    view.lineEdit_currentTemplateName = ui->lineEdit_currentTemplateName;
     view.pushButton_editCharacterTemplates = ui->pushButton_editCharacterTemplates;
     view.pushButton_applyTargetText = ui->pushButton_applyTargetText;
     view.pushButton_applyBatchTargetText = ui->pushButton_applyBatchTargetText;
@@ -407,7 +406,6 @@ void MainWindow::initializePages()
     m_machineSettingsPage->clearAllDirty();
     m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
-    m_templateEditorPage->updateCurrentTemplateName();
 
     QTimer::singleShot(1000, this, [this]() {
         const QString targetIp = ui->lineEdit_plcIpAddress->text();

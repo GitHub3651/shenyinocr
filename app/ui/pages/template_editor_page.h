@@ -35,7 +35,6 @@ struct TemplateEditorViewBindings
     QComboBox *comboBox_detectionMode = nullptr;
     QComboBox *comboBox_imageRotation = nullptr;
     QComboBox *comboBox_colorChannel = nullptr;
-    QLineEdit *lineEdit_currentTemplateName = nullptr;
     QPushButton *pushButton_editCharacterTemplates = nullptr;
     QPushButton *pushButton_applyTargetText = nullptr;
     QPushButton *pushButton_applyBatchTargetText = nullptr;
@@ -85,7 +84,6 @@ public:
     void handlePreviewFrame(quint64 sessionId, const cv::Mat &image);
     void handlePreviewFailure(quint64 sessionId, const QString &reason);
 
-    void updateCurrentTemplateName();
     void updateTemplateGuideText(const QString &title,
                                  const QString &body);
     void hideTemplateGuide();
@@ -111,7 +109,6 @@ public:
     void applyBatchImageThreshold();
 
     PreparedTemplateSnapshot activePreparedTemplate() const;
-    void setCurrentTemplateNameVisible(bool visible);
 
 private:
     QWidget *dialogParent() const;
@@ -163,7 +160,6 @@ private:
     CaptureState m_captureState = CaptureState::Idle;
     quint64 m_previewSessionId = 0;
     cv::Mat m_lastPreviewFrame;
-    bool m_currentTemplateNameVisible = false;
     bool m_selectedTemplateInvalid = false;
     QWidget *m_currentTemplateEditWidget = nullptr;
     QLabel *m_currentTemplateEditLabel = nullptr;
@@ -173,7 +169,6 @@ private:
     QLabel *m_templateGuideTitleLabel = nullptr;
     QLabel *m_templateGuideBodyLabel = nullptr;
     QPushButton *m_manualCharacterCropButton = nullptr;
-    QString m_currentTemplateDisplayName;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;
     QString m_targetTextLabelText;

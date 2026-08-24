@@ -37,6 +37,12 @@ struct InspectionPageViewBindings
     QToolButton *toolButton_stopInspection = nullptr;
 };
 
+enum class InspectionClearScope
+{
+    ImageMetadata,
+    AllDetectionData
+};
+
 // 组件说明：InspectionPage 组件负责对应界面区域的显示和用户交互。
 class InspectionPage
 {
@@ -52,7 +58,7 @@ public:
     void present(const InspectionPresentation &presentation);
     void setStatistics(const DetectionResultStatistics &statistics);
     void presentPreviewImage(const QImage &image);
-    void clearResultView();
+    void clearInspectionView(InspectionClearScope scope);
     void clearTransientView();
     void applyOperationState(
         OperationUiState requestedState,

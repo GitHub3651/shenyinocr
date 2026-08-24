@@ -617,10 +617,6 @@ bool TemplateEditorPage::loadTemplateAtIndex(
         m_templateService->setActivePreparedTemplate(
                     PreparedTemplateSnapshot());
         m_selectedTemplateInvalid = true;
-        m_currentTemplateDisplayName = templateName
-                + QStringLiteral("（状态异常）");
-        m_currentTemplateNameVisible = true;
-        updateCurrentTemplateName();
         hideTemplateGuide();
         if (m_callbacks.updateOperationUiState) {
             m_callbacks.updateOperationUiState();
@@ -654,9 +650,6 @@ bool TemplateEditorPage::loadTemplateAtIndex(
     } else {
         hideTemplateGuide();
     }
-    m_currentTemplateDisplayName = templateName;
-    m_currentTemplateNameVisible = true;
-    updateCurrentTemplateName();
     clearTemplateDirty();
     return true;
 }
@@ -686,10 +679,7 @@ void TemplateEditorPage::clearTemplateState()
     m_templateService->cancel();
     m_templateService->setActivePreparedTemplate(
                 PreparedTemplateSnapshot());
-    m_currentTemplateDisplayName.clear();
-    m_currentTemplateNameVisible = false;
     m_selectedTemplateInvalid = false;
-    updateCurrentTemplateName();
     clearTemplateDirty();
     hideTemplateGuide();
 }
@@ -1303,24 +1293,6 @@ void TemplateEditorPage::applyTemplateSettingsToUi(
 PreparedTemplateSnapshot TemplateEditorPage::activePreparedTemplate() const
 {
     return m_templateService->activePreparedTemplate();
-}
-
-void TemplateEditorPage::setCurrentTemplateNameVisible(bool visible)
-{
-    m_currentTemplateNameVisible = visible;
-    updateCurrentTemplateName();
-}
-
-void TemplateEditorPage::updateCurrentTemplateName()
-{
-    if (!m_view.lineEdit_currentTemplateName) {
-        return;
-    }
-    m_view.lineEdit_currentTemplateName->setVisible(
-                m_currentTemplateNameVisible);
-    m_view.lineEdit_currentTemplateName->setText(
-                m_currentTemplateNameVisible
-                ? m_currentTemplateDisplayName : QString());
 }
 
 void TemplateEditorPage::setupTemplateGuide()

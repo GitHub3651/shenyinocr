@@ -121,10 +121,10 @@ void InspectionPage::present(const InspectionPresentation &presentation)
     setLabelTextIfChanged(
                 m_view.label_recognitionText,
                 presentation.recognitionText);
-    if (presentation.updatesTemplateName
-            && m_view.lineEdit_currentTemplateName) {
+    if (m_view.lineEdit_currentTemplateName) {
         m_view.lineEdit_currentTemplateName->setText(
-                    presentation.templateName);
+                    presentation.updatesTemplateName
+                    ? presentation.templateName : QString());
     }
     setStatistics(presentation.statistics);
     if (m_view.lineEdit_detectionDuration) {
@@ -155,19 +155,30 @@ void InspectionPage::presentPreviewImage(const QImage &image)
     if (image.isNull() || !m_view.imageLabel_inspection) {
         return;
     }
+    clearInspectionView(InspectionClearScope::ImageMetadata);
     m_view.imageLabel_inspection->setScaledContents(false);
     m_view.imageLabel_inspection->setAlignment(Qt::AlignCenter);
     m_view.imageLabel_inspection->setAutoFitPixmap(QPixmap::fromImage(image));
 }
 
-void InspectionPage::clearResultView()
+void InspectionPage::clearInspectionView(InspectionClearScope scope)
 {
     setLabelTextIfChanged(m_view.label_verdictResult, QString());
     setLabelTextIfChanged(m_view.label_recognitionText, QString());
     if (m_view.lineEdit_detectionDuration) {
         m_view.lineEdit_detectionDuration->clear();
     }
+    if (m_view.lineEdit_currentTemplateName) {
+        m_view.lineEdit_currentTemplateName->clear();
+    }
     setStyleProperty(m_view.label_verdictResult, "verdict", QStringLiteral("idle"));
+
+    if (scope == InspectionClearScope::AllDetectionData) {
+        m_view.imageLabel_inspection->clear();
+        m_view.lineEdit_totalCount->clear();
+        m_view.lineEdit_ngCount->clear();
+        m_view.lineEdit_passRate->clear();
+    }
 }
 
 void InspectionPage::clearTransientView()

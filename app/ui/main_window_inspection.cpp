@@ -184,7 +184,8 @@ void MainWindow::finishInspectionStopUi(
     if (result.issue == StopInspectionIssue::RuntimeFault
             || result.issue
                == StopInspectionIssue::FaultReconciliationFailed) {
-        m_inspectionPage->clearResultView();
+        m_inspectionPage->clearInspectionView(
+                    InspectionClearScope::ImageMetadata);
         presentInspectionFault();
         if (!result.error.diagnostic.isEmpty()) {
             QMessageBox::critical(
@@ -196,7 +197,8 @@ void MainWindow::finishInspectionStopUi(
     }
 
     if (result.recoveredFault) {
-        m_inspectionPage->clearResultView();
+        m_inspectionPage->clearInspectionView(
+                    InspectionClearScope::ImageMetadata);
         restoreNormalFaultUi();
     }
     if (!result.reconciliationSummary.isEmpty()) {
@@ -515,20 +517,12 @@ void MainWindow::on_toolButton_closeCamera_clicked()
                     closeResult.error.userMessage);
         return;
     }
-    // 清空文本并将文本置0
-    ui->label_verdictResult->clear();
     m_templateEditorPage->cancelTemplateDrawing();
     imageLabel->clear();
-    ui->imageLabel_inspection->clear();
-    ui->lineEdit_totalCount->clear();
-    ui->lineEdit_ngCount->clear();
-    //    ui->ocrResult->clear();
-    ui->label_recognitionText->clear();
-    ui->lineEdit_detectionDuration->clear();
+    m_inspectionPage->clearInspectionView(
+                InspectionClearScope::AllDetectionData);
     resetTemplateCaptureState();
-    if (m_inspectionPage) {
-        m_inspectionPage->clearDetectionRoiWarning(QString());
-    }
+    m_inspectionPage->clearDetectionRoiWarning(QString());
     ui->label_runtimeStatus->setText("相机已关闭");
     updateOperationUiState();
 }
@@ -538,7 +532,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
     m_templateEditorPage->refreshTemplateDirty();
-    m_templateEditorPage->updateCurrentTemplateName();
 
     StartInspectionCommand command;
     command.unappliedChanges = m_settingsEditState.dirtyNames();
@@ -576,16 +569,11 @@ void MainWindow::on_toolButton_startInspection_clicked()
                     result.details.join(QStringLiteral("\n")));
     }
     m_templateEditorPage->cancelTemplateDrawing();
-    if (m_inspectionPage) {
-        m_inspectionPage->clearDetectionRoiWarning(QString());
-    }
+    m_inspectionPage->clearDetectionRoiWarning(QString());
     if (result.acquisitionKind
             == InspectionAcquisitionDto::HardwareTrigger) {
-        ui->imageLabel_inspection->clear();
-        ui->lineEdit_totalCount->clear();
-        ui->lineEdit_ngCount->clear();
-        ui->label_recognitionText->clear();
-        ui->lineEdit_detectionDuration->clear();
+        m_inspectionPage->clearInspectionView(
+                    InspectionClearScope::AllDetectionData);
     }
     ui->label_runtimeStatus->setText(
                 result.acquisitionKind
