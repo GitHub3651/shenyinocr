@@ -100,6 +100,7 @@ private slots:
 
 
     void on_pushButton_applyCameraGain_clicked();
+    void on_pushButton_clearSoftwareData_clicked();
 
 private:
     void initializePages();
@@ -129,7 +130,6 @@ private:
     void updateImageSaveOptionsVisibility();
     void updateTissueRoughnessUiVisibility();
     void setupSoftwareSettingsPage();
-    void clearCurrentSoftwareData();
     void restoreDefaultMachineSettings();
     void resetTemplateCaptureState();
     void updateOperationUiState();

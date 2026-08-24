@@ -1,5 +1,5 @@
-// 文件作用：本文件用于组织机器设置读取、保存、默认恢复和软件数据清理用例。
-// 主要职责：组织机器设置读取、保存、默认恢复和软件数据清理用例。
+// 文件作用：本文件用于组织机器设置读取、保存和默认恢复用例。
+// 主要职责：组织机器设置读取、保存和默认恢复用例。
 // 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
@@ -31,7 +31,6 @@ public:
         const QStringList &paths,
         const QString &directoryPath);
     OperationResult saveTissueThreshold(double value);
-    OperationResult clearSettings();
     QString applicationDataRoot() const;
 
 private:

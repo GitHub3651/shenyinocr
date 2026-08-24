@@ -1,5 +1,5 @@
-// 文件作用：本文件用于组织机器设置读取、保存、默认恢复和软件数据清理用例。
-// 主要职责：组织机器设置读取、保存、默认恢复和软件数据清理用例。
+// 文件作用：本文件用于组织机器设置读取、保存和默认恢复用例。
+// 主要职责：组织机器设置读取、保存和默认恢复用例。
 // 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/settings_application_service.h"
@@ -44,12 +44,6 @@ OperationResult SettingsApplicationService::commitAppliedHardwareSettings(
         return storeFailure(error);
     }
     return OperationResult::accepted();
-}
-
-// 函数说明：clearSettings 函数停止流程、清理状态或释放对应资源。
-OperationResult SettingsApplicationService::clearSettings()
-{
-    return saveConfiguration(AppSettings::defaults());
 }
 
 // 函数说明：applicationDataRoot 函数实现名称所表示的处理步骤。

@@ -103,7 +103,6 @@ public:
     void setSoftwareDataDirectoryEditor(QLineEdit *editor);
 
     void initialize(const AppSettings &settings);
-    bool clear(QString *errorMessage);
     AppSettings defaultsForHardwareState(
         bool cameraOpen,
         bool plcConnected) const;

@@ -15,6 +15,9 @@
 #include "ui/pages/template_editor_page.h"
 
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QString>
 #include <QMessageBox>
 #include <QPushButton>
@@ -161,11 +164,7 @@ void MainWindow::setupSoftwareSettingsPage()
     }
 
     ui->pushButton_clearSoftwareData->setToolTip(
-                "只清除当前 Windows 用户的软件公共界面设置，不删除产品模板、识别图片、授权文件或日志。");
-    connect(ui->pushButton_clearSoftwareData,
-            &QPushButton::clicked,
-            this,
-            &MainWindow::clearCurrentSoftwareData);
+                "删除当前 Windows 用户的软件设置文件并关闭软件，不删除产品模板、识别图片、授权文件或日志。");
 
     ui->pushButton_restoreDefaultSettings->setToolTip(
                 "将软件公共界面设置恢复为默认值，不删除产品模板、识别图片、授权文件或日志。");
@@ -175,12 +174,13 @@ void MainWindow::setupSoftwareSettingsPage()
             &MainWindow::restoreDefaultMachineSettings);
 }
 
-void MainWindow::clearCurrentSoftwareData()
+void MainWindow::on_pushButton_clearSoftwareData_clicked()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
                 this,
                 "清空当前软件数据",
-                "将清空当前 Windows 用户保存的软件界面设置和路径记录，并恢复默认设置。\n\n"
+                "将删除当前 Windows 用户保存的软件设置。\n\n"
+                "下次启动将使用默认设置。\n"
                 "产品模板、识别图片、授权文件和日志不会被删除。\n\n"
                 "是否继续？",
                 QMessageBox::Yes | QMessageBox::No,
@@ -189,23 +189,24 @@ void MainWindow::clearCurrentSoftwareData()
         return;
     }
 
-    QString errorMessage;
-    if (!m_machineSettingsPage
-            || !m_machineSettingsPage->clear(&errorMessage)) {
-        showParameterCritical("严重警告", QString("清空软件公共数据失败：\n%1").arg(errorMessage));
+    const QString settingsPath = QDir(
+                m_settingsApplicationService->applicationDataRoot())
+            .filePath(QStringLiteral("settings/app_settings.json"));
+    QFile settingsFile(settingsPath);
+    if (settingsFile.exists() && !settingsFile.remove()) {
+        showParameterCritical(
+                    "删除失败",
+                    QString("无法删除软件设置：\n%1")
+                    .arg(settingsFile.errorString()));
         return;
     }
 
-    m_templateEditorPage->clearTemplateState();
-    m_templateEditorPage->setCurrentTemplateNameVisible(false);
-    m_templateEditorPage->updateCurrentTemplateName();
-    if (m_templateEditorPage) {
-        m_templateEditorPage->cancelTemplateDrawing();
-    }
-    m_machineSettingsPage->clearAllDirty();
-    m_templateEditorPage->clearTemplateDirty();
-    updateOperationUiState();
-    showParameterInfo("提示", "当前软件公共数据已清空，界面已恢复默认设置。");
+    QMessageBox::information(
+                this,
+                "软件即将关闭",
+                "当前软件设置已经删除。\n\n"
+                "软件将立即关闭，下次启动时将使用默认设置。");
+    QCoreApplication::quit();
 }
 
 void MainWindow::restoreDefaultMachineSettings()

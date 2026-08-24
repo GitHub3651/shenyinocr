@@ -308,23 +308,6 @@ void MachineSettingsPage::initialize(
     applyToUi(settings);
 }
 
-bool MachineSettingsPage::clear(QString *errorMessage)
-{
-    const OperationResult cleared = m_settingsService
-            ? m_settingsService->clearSettings()
-            : OperationResult::rejected(
-                QStringLiteral("MACHINE_SETTINGS_SERVICE_MISSING"),
-                QStringLiteral("机器设置服务不可用。"));
-    if (!cleared.isSuccess()) {
-        if (errorMessage) {
-            *errorMessage = cleared.error.userMessage;
-        }
-        return false;
-    }
-    applyToUi(m_settingsService->current());
-    return true;
-}
-
 AppSettings MachineSettingsPage::defaultsForHardwareState(
     bool cameraOpen,
     bool plcConnected) const
