@@ -4,8 +4,6 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "character_template_matcher.h"
 
-#include <QDebug>
-
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
@@ -79,7 +77,6 @@ CharacterMatchResult CharacterGlyphMatcher::match(
 {
     CharacterMatchResult result;
     if (!preparedTemplates.isValid() || targetImage.empty()) {
-        qDebug() << "[ERROR] Templates or target image is empty, cannot proceed with matching.";
         return result;
     }
 
@@ -210,9 +207,6 @@ CharacterMatchResult CharacterGlyphMatcher::match(
             allMatchLocations[bestTemplateIndex].push_back(bestRect);
             allMatchScores[bestTemplateIndex].push_back(bestScore);
             selectedLocations.push_back(bestRect);
-        } else {
-            qDebug() << "[INFO] No non-overlapping match found for target index:"
-                     << targetIndex;
         }
     }
 

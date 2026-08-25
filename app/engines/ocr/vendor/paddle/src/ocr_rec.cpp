@@ -24,7 +24,6 @@ namespace PaddleOCR {
 		cv::Mat crop_img;
 		cv::Mat resize_img;
 
-		std::cout << "The predicted text is :" << std::endl;
 		int index = 0;
 		for (int i = boxes.size() - 1; i >= 0; i--) {
 			crop_img = GetRotateCropImage(srcimg, boxes[i]);
@@ -87,10 +86,8 @@ namespace PaddleOCR {
 			score /= count;
 			std::string str;
 			for (int i = 0; i < str_res.size(); i++) {
-				std::cout << str_res[i];
 				str += str_res[i];
 			}
-			std::cout << "\tscore: " << score << std::endl;
 			list_str.push_back(str);
 		}
 	}
@@ -253,7 +250,6 @@ std::vector<std::pair<std::string, cv::Rect>> CRNNRecognizer::RunOCR(std::vector
         cv::Mat crop_img;
         cv::Mat resize_img;
 
-        std::cout << "The predicted text is :" << std::endl;
         int index = 0;
         std::vector<std::pair<std::string, cv::Rect>> vtsresstr;
         std::vector<std::string> str_res;
@@ -318,16 +314,10 @@ std::vector<std::pair<std::string, cv::Rect>> CRNNRecognizer::RunOCR(std::vector
             }
             score /= count;
             cv::String tmpstr;
-            //for (int i = 0; i < str_res.size(); i++) {
-            //    tmpstr += str_res[i];
-            //    std::cout << tmpstr;
-            //}
             for (int i = index; i < str_res.size(); i++) {
                 tmpstr += str_res[i];
-                std::cout << tmpstr;
             }
             index = str_res.size();
-            std::cout << "\tscore: " << score << std::endl;
             std::pair<std::string, cv::Rect> tmppair;
             tmppair.first = tmpstr;
             tmppair.second = tmprect;

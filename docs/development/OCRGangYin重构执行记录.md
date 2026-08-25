@@ -1582,3 +1582,19 @@
 - [x] 2026-08-20用户确认《OCRGangYin模板方案完全替换计划》第十二节统一运行门禁全部通过，包括Qt Creator Run qmake、Rebuild及人工回归。阶段8影响的50项由`迁移中`恢复为`已验证`，当前90个正式功能ID状态为`已验证87/已确认删除3`，其他状态均为0。Agent按约束没有运行或间接触发qmake、编译、测试目标或主程序；真实PLC现场项继续单独保持待验，不以本次软件侧验证代替。
 - [x] 2026-08-20用户首次Qt Creator Rebuild报告模板编辑编译失败：`InitialTemplateAssets::trackingImageRect`被误声明为`QRect`，但生产者`TemplateGeometryResult`、边界字段访问和`cv::Mat::operator()`均使用`cv::Rect`。现已在唯一编辑合同中改为`cv::Rect`，同时移除两个OpenCV鼠标回调未使用参数名；用户报告的297～315行和704行错误由同一类型边界修复覆盖。修复后静态核对为错误类型用法0、qmake 152项缺失0/重复0、Recipe生产命中0、资源差异0、`git diff --check`通过；用户重新Rebuild并完成后续验证，统一门禁已经通过。用户开始验证后暂存区为104项，本次最终收口只更新验证记录和功能状态，随后精确暂存阶段8差异并创建唯一的本地提交。
 - [x] 用户验证通过后的最终提交前门禁再次通过：磁盘代码148项、qmake代码登记148项，缺失和重复均为0；`app/recipes`不存在，生产代码Recipe/配方、旧设置服务、旧持久化路径、禁止包装与重复保存入口均为0；资源差异0；82个当前差异文本文件严格UTF-8并有末尾换行；功能状态为`已验证87/已确认删除3`；`git diff --check HEAD`与104项`git diff --cached --check`均通过，未暂存和未跟踪文件均为0。暂存清单中的Recipe命名路径全部是计划内删除项，不包含阶段8范围外用户文件；随后创建阶段8唯一的本地提交，不自动推送。
+
+## 日志系统重新设计（2026-08-25，代码完成待统一验证）
+
+- [x] 实施基线为分支`codex/ocrgangyin-refactor`、HEAD `cc8549c`；开始时生产代码和暂存区干净，仅计划索引修改及未跟踪日志方案文档属于本任务计划资产。实施过程未执行`git add`、提交、推送、合并、变基或历史改写。
+- [x] 原位重写`ApplicationLogger`为同步直接写盘底座：每次启动创建`<exe>/logs/ShengYin_yyyyMMdd_HHmmss_zzz_pid_part.log`，UTF-8无BOM，同一格式化行写文件和`stderr`；INFO不逐条刷新，WARN/ERROR/FATAL立即刷新，正常退出刷新关闭。
+- [x] 固定完成32 MiB分卷、90天保留、1024 MiB总量和新卷992 MiB预留；启动和换卷前只清理严格匹配的新格式正常日志，名称不匹配文件永不删除。旧`<exe>/log`、`app_log`、BOM探测、`legacy_`改名、旧日志续写和迁移路径均已清零。
+- [x] 新增且只新增`app.startup/app.runtime/app.device/app.detection/app.template/app.ui`六个类别；生产日志全部改为INFO/WARN/ERROR语义，`qDebug/qCDebug`及`[INFO]/[WARN]/[ERROR]/[FATAL]`字符串伪级别均为0，不增加DEBUG日志级别或Debug构建要求。
+- [x] 业务日志已接入启动/设置、Run启停/Fault、相机、PLC、单帧最终摘要、存图和关键UI操作。根据用户首轮Release实测完成紧凑化：删除正常`frame.received`和Worker/采集等内部成功步骤；最终摘要不显示逐帧累计统计、RunId、sequence、帧号及存图/PLC/呈现内部布尔状态，固定保留模式、判定和完整耗时，模板、最终跟踪分数、识别结果按有值追加，NG或异常才追加原因；统计集中到`run.stopped`，纯算法候选、坐标、条码尝试和OCR候选置信度不记录。
+- [x] 根据用户实测反馈将日志时间简化为本地时间`yyyy-MM-dd HH:mm:ss.zzz`，删除ISO格式中的`T`和`+08:00`等时区后缀；日志文件名、保留策略和业务字段不变。
+- [x] Paddle配置逐项、OCR逐字符/分数和条码逐策略输出已删除，生产`std::cout`为0；字符匹配非法输入和目标索引内层“无非重叠匹配”日志均删除，必要失败原因只随最终检测结果输出。
+- [x] Windows崩溃记录已与正常日志分离为`crash_yyyyMMdd_HHmmss_zzz_pid.txt`，独立保留90天且不计入正常日志1024 MiB；`ApplicationLogger::appendCrashInformation()`及正常日志互斥锁依赖已删除，不增加恢复、minidump或额外容量算法。
+- [x] Agent静态门禁通过：旧日志与旧接口禁用符号、生产DEBUG调用、Paddle`std::cout`和字符串伪级别均为0；六个类别声明/定义各6且唯一；工程清单唯一登记新增头源；`git diff --check`通过，暂存区为空。按项目约束未运行或间接触发qmake、编译、测试程序、主程序、真实相机/PLC、长时间运行或隔离崩溃验证。
+- [x] 第二轮业务日志精简已一次性实施：启动/相机/Run同步重复事件删除，单帧移除`total/ng`并统一稳定模式名，正常停止取消与过期完成不逐帧告警，`run.stopped`集中输出Run计数和现有累计统计；存图重复失败收口且持续磁盘失败只记录首次详细ERROR。
+- [x] 模板恢复、保存、选择更新、应用和取景已补齐最终成功/失败事件；设置成功日志增加可读`key/value`，`image.save_path`不再逐字符输出成功日志。为覆盖模板选择对话框内唯一可见的保存失败边界，计划内调用链扩张到`template_selection_dialog.cpp`，未新增代码文件或日志框架。
+- [x] 第二轮静态门禁通过：计划列出的禁止事件全部为0；`frame.completed`不含累计统计或内部标识，`run.stopped`包含`accepted/completed/cancelled/total/ng`；裸内部状态数字和固定无意义布尔字段为0；Logger底座、类别、保留、崩溃处理和工程清单无第二轮行为修改，`git diff --check`通过。既有暂存和未暂存资产保持原状，未执行暂存、提交、qmake、构建、测试程序或主程序。
+- [ ] 等待用户在Qt Creator使用Release统一执行Run qmake、Rebuild和第12.3节人工验证；通过前`SYS-004/005`保持`迁移中`，不把静态证据写成运行通过。

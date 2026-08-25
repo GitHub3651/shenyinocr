@@ -10,6 +10,7 @@
 #include "ui/main_window.h"
 #include "ui_main_window.h"
 #include "contracts/detection_mode.h"
+#include "system_support/logging/log_categories.h"
 #include "ui/pages/inspection_page.h"
 #include "ui/pages/machine_settings_page.h"
 #include "ui/pages/template_editor_page.h"
@@ -23,7 +24,6 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QSignalBlocker>
-#include <QDebug>
 
 #include <cstdint>
 
@@ -299,6 +299,11 @@ void MainWindow::setupDetectModeChangeTracking()
                         m_settingsApplicationService
                         ->saveConfiguration(candidate);
                 if (!saved.isSuccess()) {
+                    qCCritical(logUi).noquote()
+                            << QStringLiteral(
+                                "event=settings.save_failed key=detect.mode value=%1 code=%2 reason=%3")
+                               .arg(nextModeId, saved.error.code,
+                                    saved.error.userMessage);
                     m_machineSettingsPage->restoreAppliedValue(
                                 QStringLiteral("detect.mode"));
                     m_currentDetectModeId = previousModeId;
@@ -309,6 +314,15 @@ void MainWindow::setupDetectModeChangeTracking()
                                 .arg(saved.error.userMessage));
                     return;
                 }
+                DetectionMode savedMode;
+                const QString savedModeId = detectionModeFromUiId(
+                            nextModeId, &savedMode)
+                        ? detectionModeId(savedMode)
+                        : nextModeId;
+                qCInfo(logUi).noquote()
+                        << QStringLiteral(
+                            "event=settings.saved key=detect.mode value=%1")
+                           .arg(savedModeId);
                 resetTemplateCaptureState();
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
@@ -334,6 +348,11 @@ bool MainWindow::saveAppliedHardwareSettings(
     if (saved.isSuccess()) {
         return true;
     }
+    qCWarning(logUi).noquote()
+            << QStringLiteral(
+                "event=settings.save_failed keys=%1 code=%2 reason=%3")
+               .arg(keys.join(QStringLiteral(",")),
+                    saved.error.code, saved.error.userMessage);
     showParameterWarning(
                 QStringLiteral("配置保存失败"),
                 QStringLiteral(
@@ -359,6 +378,22 @@ bool MainWindow::applyCameraExposureValue(
     }
     if (!result.success && errorMessage) {
         *errorMessage = result.diagnostic;
+    }
+    if (!result.success) {
+        qCWarning(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.exposure_rejected requested=%1 nativeCode=%2 reason=%3")
+                   .arg(exposureValue)
+                   .arg(result.nativeErrorCode)
+                   .arg(result.diagnostic);
+    } else {
+        qCInfo(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.exposure_applied requested=%1 actual=%2 range=%3-%4")
+                   .arg(exposureValue)
+                   .arg(result.actualValue)
+                   .arg(result.minimumValue)
+                   .arg(result.maximumValue);
     }
     return result.success;
 }
@@ -405,6 +440,12 @@ bool MainWindow::applyCameraGainFromUi(
     const CameraParameterResultDto result =
             m_inspectionApplicationService->applyCameraGain(gainValue);
     if (!result.success) {
+        qCWarning(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.gain_rejected requested=%1 nativeCode=%2 reason=%3")
+                   .arg(gainValue)
+                   .arg(result.nativeErrorCode)
+                   .arg(result.diagnostic);
         if (errors) errors->append(result.diagnostic);
         if (showSuccessMessage) {
             showParameterWarning("提示", result.diagnostic);
@@ -412,6 +453,13 @@ bool MainWindow::applyCameraGainFromUi(
         m_machineSettingsPage->restoreAppliedValue("camera.gain");
         return false;
     }
+    qCInfo(logDevice).noquote()
+            << QStringLiteral(
+                "event=camera.gain_applied requested=%1 actual=%2 range=%3-%4")
+               .arg(gainValue)
+               .arg(result.actualValue)
+               .arg(result.minimumValue)
+               .arg(result.maximumValue);
     const bool persisted = saveAppliedHardwareSettings(
                 QStringList() << "camera.gain");
     if (showSuccessMessage && persisted) {
@@ -662,6 +710,12 @@ void MainWindow::on_pushButton_applyColorChannel_clicked()
     const OperationResult saved =
             m_settingsApplicationService->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
+        qCCritical(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.save_failed key=image.color_channel value=%1 code=%2 reason=%3")
+                   .arg(m_machineSettingsPage->settingValueText(
+                            QStringLiteral("image.color_channel")),
+                        saved.error.code, saved.error.userMessage);
         m_machineSettingsPage->restoreAppliedValues(keys);
         showParameterCritical(
                     QStringLiteral("严重警告"),
@@ -670,6 +724,11 @@ void MainWindow::on_pushButton_applyColorChannel_clicked()
         return;
     }
     m_machineSettingsPage->refreshDirty(keys);
+    qCInfo(logUi).noquote()
+            << QStringLiteral(
+                "event=settings.saved key=image.color_channel value=%1")
+               .arg(m_machineSettingsPage->settingValueText(
+                        QStringLiteral("image.color_channel")));
     showParameterInfo("提示", "颜色通道设置成功");
 }
 

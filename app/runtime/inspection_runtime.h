@@ -100,7 +100,7 @@ public:
     void rollbackStart();
     bool beginStop();
     void waitForStop();
-    void finishStop();
+    void finishStop(bool writeRunSummary = true);
 
     bool enterFault(
         InspectionFaultReason reason,

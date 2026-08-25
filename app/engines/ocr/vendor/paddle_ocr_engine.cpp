@@ -8,7 +8,7 @@
 #include "engines/ocr/vendor/paddle/include/ocr_det.h"
 #include "engines/ocr/vendor/paddle/include/ocr_rec.h"
 
-#include <QDebug>
+#include "system_support/logging/log_categories.h"
 
 // 组件说明：PaddleOcrEngine 组件提供对应识别或解码能力的统一实现。
 struct PaddleOcrEngine::Impl
@@ -25,9 +25,6 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
 {
     m_impl->config.reset(
                 new PaddleOCR::OCRConfig(configPath.toStdString()));
-    m_impl->config->PrintConfigInfo();
-    qDebug().noquote() << QString::fromWCharArray(
-                    L"2. config.txt 读取完毕");
 
     const PaddleOCR::OCRConfig &config = *m_impl->config;
     m_impl->detector.reset(
@@ -45,10 +42,6 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                     config.visualize,
                     config.use_tensorrt,
                     config.use_fp16));
-    qDebug().noquote() << QString::fromWCharArray(
-                    L"3. DBDetector 模型加载"
-                    L"完毕");
-
     if (config.use_angle_cls) {
         m_impl->classifier.reset(
                     new PaddleOCR::Classifier(
@@ -61,9 +54,6 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                         config.cls_thresh,
                         config.use_tensorrt,
                         config.use_fp16));
-        qDebug().noquote() << QString::fromWCharArray(
-                        L"4. Classifier 角度分类"
-                        L"模型加载完毕");
     }
 
     m_impl->recognizer.reset(
@@ -77,9 +67,16 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
                     config.char_list_file,
                     config.use_tensorrt,
                     config.use_fp16));
-    qDebug().noquote() << QString::fromWCharArray(
-                    L"5. CRNNRecognizer 模型加载"
-                    L"完毕");
+    qCInfo(logDevice).noquote()
+            << QStringLiteral(
+                "event=ocr.engine_loaded config=%1 classifier=%2 useGpu=%3")
+               .arg(configPath)
+               .arg(config.use_angle_cls
+                    ? QStringLiteral("enabled")
+                    : QStringLiteral("disabled"))
+               .arg(config.use_gpu
+                    ? QStringLiteral("enabled")
+                    : QStringLiteral("disabled"));
 }
 
 PaddleOcrEngine::~PaddleOcrEngine() = default;

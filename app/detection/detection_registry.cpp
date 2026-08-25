@@ -206,7 +206,6 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         return creation;
     }
 
-    creation.workerLogName = QString::fromUtf8(descriptor.workerLogName);
     creation.startFailureMessage = QString::fromUtf8(
                 descriptor.startFailureMessage);
     const FramePreprocessSettings preprocess = request.framePreprocess;

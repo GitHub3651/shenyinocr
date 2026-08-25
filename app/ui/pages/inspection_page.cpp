@@ -6,9 +6,9 @@
 
 #include "ui/presenters/inspection_fault_presenter.h"
 #include "ui/widgets/image_label.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QAbstractButton>
-#include <QDebug>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -350,7 +350,9 @@ void InspectionPage::showDetectionRoiWarning()
                 L"识别区域超出原图范围，"
                 L"请点击【停止识别】，"
                 L"然后重新选择或制作模板。");
-    qWarning().noquote() << "[DETECTION_ROI]" << warningText;
+    qCWarning(logDetection).noquote()
+            << QStringLiteral("event=detection.roi_invalid reason=%1")
+               .arg(warningText);
     if (m_view.label_runtimeStatus) {
         m_view.label_runtimeStatus->setWordWrap(true);
         m_view.label_runtimeStatus->setText(warningText);
@@ -400,7 +402,6 @@ void InspectionPage::reportImageSaveFailure(
                         L"\n最近错误：%1")
                     .arg(m_latestImageSaveError);
         }
-        qWarning().noquote() << "[IMAGE_SAVE]" << warningText;
         if (m_view.label_runtimeStatus) {
             m_view.label_runtimeStatus->setWordWrap(true);
             m_view.label_runtimeStatus->setText(warningText);

@@ -110,6 +110,7 @@ public:
 
     void copyUiValuesTo(AppSettings &settings,
                         const QStringList &keys) const;
+    QString settingValueText(const QString &key) const;
     void refreshDirty(const QString &key);
     void refreshDirty(const QStringList &keys);
     void refreshAllDirty();

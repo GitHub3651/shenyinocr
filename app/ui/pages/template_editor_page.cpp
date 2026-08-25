@@ -4,6 +4,7 @@
 #include "application/inspection_application_service.h"
 #include "application/settings_application_service.h"
 #include "contracts/detection_mode.h"
+#include "system_support/logging/log_categories.h"
 #include "ui/controllers/settings_edit_state.h"
 #include "ui/dialogs/character_template_editor_dialog.h"
 #include "ui/dialogs/template_selection_dialog.h"
@@ -351,18 +352,30 @@ TemplateEditorPage::CaptureState TemplateEditorPage::captureState() const
     return m_captureState;
 }
 
-bool TemplateEditorPage::stopTemplatePreview()
+bool TemplateEditorPage::stopTemplatePreview(bool writeLog)
 {
     if (m_captureState != CaptureState::Previewing) {
         return true;
     }
     ++m_previewSessionId;
-    return m_inspectionService->stopTemplatePreview().isSuccess();
+    const OperationResult result = m_inspectionService->stopTemplatePreview();
+    if (writeLog) {
+        if (result.isSuccess()) {
+            qCInfo(logTemplate).noquote()
+                    << "event=template.preview_stopped";
+        } else {
+            qCWarning(logTemplate).noquote()
+                    << QStringLiteral(
+                        "event=template.preview_stop_failed code=%1 reason=%2")
+                       .arg(result.error.code, result.error.userMessage);
+        }
+    }
+    return result.isSuccess();
 }
 
-void TemplateEditorPage::resetTemplateCaptureState()
+void TemplateEditorPage::resetTemplateCaptureState(bool writePreviewStopLog)
 {
-    if (!stopTemplatePreview()) {
+    if (!stopTemplatePreview(writePreviewStopLog)) {
         return;
     }
     ++m_previewSessionId;
@@ -383,6 +396,10 @@ bool TemplateEditorPage::startTemplatePreview()
                 m_view.comboBox_colorChannel
                 ? m_view.comboBox_colorChannel->currentIndex() : 0);
     if (!result.isSuccess()) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=template.preview_start_failed code=%1 reason=%2")
+                   .arg(result.error.code, result.error.userMessage);
         showWarning(QStringLiteral("实时取景失败"),
                     result.error.userMessage.isEmpty()
                     ? QStringLiteral("实时取景线程启动失败。")
@@ -397,6 +414,8 @@ bool TemplateEditorPage::startTemplatePreview()
     if (m_callbacks.updateOperationUiState) {
         m_callbacks.updateOperationUiState();
     }
+    qCInfo(logTemplate).noquote()
+            << "event=template.preview_started";
     return true;
 }
 
@@ -475,7 +494,10 @@ void TemplateEditorPage::handlePreviewFailure(
             || sessionId != m_previewSessionId) {
         return;
     }
-    resetTemplateCaptureState();
+    qCWarning(logTemplate).noquote()
+            << QStringLiteral("event=template.preview_failed reason=%1")
+               .arg(reason);
+    resetTemplateCaptureState(false);
     cancelTemplateDrawing();
     showWarning(QStringLiteral("实时取景失败"), reason);
 }
@@ -624,6 +646,11 @@ bool TemplateEditorPage::loadTemplateAtIndex(
         if (showMessage) {
             showWarning(QStringLiteral("模板加载失败"), errorMessage);
         }
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=template.apply_failed name=%1 path=%2 reason=%3")
+                   .arg(templateName,
+                        QDir::toNativeSeparators(path), errorMessage);
         return false;
     }
     m_selectedTemplateInvalid = false;
@@ -638,6 +665,11 @@ bool TemplateEditorPage::loadTemplateAtIndex(
                         QStringLiteral("模板可以继续编辑，但目前不能用于检测：\n%1")
                         .arg(errorMessage));
         }
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=template.apply_failed name=%1 path=%2 reason=%3")
+                   .arg(templateName,
+                        QDir::toNativeSeparators(path), errorMessage);
         prepared.reset();
     }
     m_templateService->setActivePreparedTemplate(prepared);
@@ -651,27 +683,56 @@ bool TemplateEditorPage::loadTemplateAtIndex(
         hideTemplateGuide();
     }
     clearTemplateDirty();
+    if (prepared) {
+        qCInfo(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=template.applied name=%1 path=%2")
+                   .arg(templateName, QDir::toNativeSeparators(path));
+    }
     return true;
 }
 
 void TemplateEditorPage::restoreTemplatesForMode(
         const QString &modeId, bool showMessage)
 {
-    Q_UNUSED(modeId)
     refreshCurrentTemplateEditor();
     DetectionMode mode;
     if (!detectionModeFromUiId(currentDetectModeId(), &mode)) {
         clearTemplateState();
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.restore_failed mode=%1 reason=invalid_mode")
+                   .arg(modeId.trimmed().isEmpty()
+                        ? QStringLiteral("-") : modeId.trimmed());
         return;
     }
+    const QString stableMode = detectionModeId(mode);
     if (mode == DetectionMode::Tissue) {
         clearTemplateState();
+        qCInfo(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.restored mode=%1 count=0")
+                   .arg(stableMode);
         return;
     }
-    loadTemplateAtIndex(
+    const int count = currentModeTemplatePaths().size();
+    const bool loaded = loadTemplateAtIndex(
                 m_currentTemplateEditComboBox
                 ? m_currentTemplateEditComboBox->currentIndex() : -1,
                 showMessage);
+    if (loaded || count == 0) {
+        qCInfo(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.restored mode=%1 count=%2")
+                   .arg(stableMode)
+                   .arg(count);
+    } else {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.restore_failed mode=%1 count=%2 reason=selected_template_invalid")
+                   .arg(stableMode)
+                   .arg(count);
+    }
 }
 
 void TemplateEditorPage::clearTemplateState()
@@ -720,10 +781,19 @@ void TemplateEditorPage::removeCurrentTemplate()
                 << m_currentTemplateEditComboBox
                    ->itemData(index).toString());
     if (!saved.isSuccess()) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.selection_update_failed mode=%1 reason=%2")
+                   .arg(detectionModeId(mode), saved.error.userMessage);
         showCritical(QStringLiteral("移除失败"), saved.error.userMessage);
         return;
     }
     restoreTemplatesForMode(currentDetectModeId(), false);
+    qCInfo(logTemplate).noquote()
+            << QStringLiteral(
+                "event=templates.selection_updated mode=%1 count=%2")
+               .arg(detectionModeId(mode))
+               .arg(currentModeTemplatePaths().size());
 }
 
 void TemplateEditorPage::saveCurrentTemplate()
@@ -943,9 +1013,16 @@ void TemplateEditorPage::saveCurrentTemplate()
     PreparedTemplateSnapshot prepared;
     if (!m_templateService->save(
             target, false, &prepared, &errorMessage)) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=template.save_failed name=%1 path=%2 reason=%3")
+                   .arg(name, QDir::toNativeSeparators(target), errorMessage);
         showCritical(QStringLiteral("模板保存失败"), errorMessage);
         return;
     }
+    qCInfo(logTemplate).noquote()
+            << QStringLiteral("event=template.saved name=%1 path=%2")
+               .arg(name, QDir::toNativeSeparators(target));
     QStringList paths = currentModeTemplatePaths();
     if (isMultiTemplateMode(mode)) {
         if (!paths.contains(target, Qt::CaseInsensitive)) {
@@ -1014,11 +1091,22 @@ bool TemplateEditorPage::saveCurrentDraft(bool showSuccessMessage)
     if (!m_templateService->save(
             m_templateService->currentDirectoryPath(), true,
             &prepared, &errorMessage)) {
+        const QString path = m_templateService->currentDirectoryPath();
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=template.save_failed name=%1 path=%2 reason=%3")
+                   .arg(QFileInfo(path).fileName(),
+                        QDir::toNativeSeparators(path), errorMessage);
         showCritical(QStringLiteral("模板保存失败"), errorMessage);
         return false;
     }
     m_templateService->setActivePreparedTemplate(prepared);
     refreshTemplateDirty();
+    const QString path = m_templateService->currentDirectoryPath();
+    qCInfo(logTemplate).noquote()
+            << QStringLiteral("event=template.saved name=%1 path=%2")
+               .arg(QFileInfo(path).fileName(),
+                    QDir::toNativeSeparators(path));
     if (showSuccessMessage) {
         showInfo(QStringLiteral("保存成功"),
                  QStringLiteral("当前模板已更新。"));

@@ -5,13 +5,13 @@
 #include "ui/pages/machine_settings_page.h"
 
 #include "system_support/machine_settings_policy.h"
+#include "system_support/logging/log_categories.h"
 #include "contracts/detection_mode.h"
 #include "ui/controllers/settings_edit_state.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDesktopServices>
-#include <QDebug>
 #include <QDir>
 #include <QDoubleValidator>
 #include <QEvent>
@@ -367,7 +367,8 @@ void MachineSettingsPage::applyToUi(
             && !settings.rightPanelSplitterState.isEmpty()
             && !m_view.splitter_mainContent->restoreState(
                 settings.rightPanelSplitterState)) {
-        qWarning("[UI_SETTINGS] invalid right panel splitter state");
+        qCWarning(logUi).noquote()
+                << "event=ui.splitter_state_invalid";
     }
     if (m_view.splitter_mainContent) {
         const int handleHeight = m_view.splitter_mainContent
@@ -452,12 +453,24 @@ void MachineSettingsPage::registerGlobalSetting(
         const OperationResult saved =
                 m_settingsService->saveConfiguration(candidate);
         if (!saved.isSuccess()) {
+            qCCritical(logUi).noquote()
+                    << QStringLiteral(
+                        "event=settings.save_failed key=%1 code=%2 reason=%3")
+                       .arg(key, saved.error.code,
+                            saved.error.userMessage);
             restoreAppliedValue(key);
             QMessageBox::critical(
                         it.value().editor,
                         QStringLiteral("严重警告"),
                         QStringLiteral("当前界面设置保存失败：\n%1")
                         .arg(saved.error.userMessage));
+        } else {
+            if (key != QStringLiteral("image.save_path")) {
+                qCInfo(logUi).noquote()
+                        << QStringLiteral(
+                            "event=settings.saved key=%1 value=%2")
+                           .arg(key, settingValueText(key));
+            }
         }
     };
 
@@ -726,6 +739,45 @@ void MachineSettingsPage::copyUiValuesTo(
     }
 }
 
+QString MachineSettingsPage::settingValueText(const QString &key) const
+{
+    const auto it = m_bindings.constFind(key);
+    if (it == m_bindings.constEnd() || !it.value().editor) {
+        return QStringLiteral("-");
+    }
+    if (QComboBox *comboBox =
+            qobject_cast<QComboBox *>(it.value().editor)) {
+        QString value = comboBox->currentData().toString().trimmed();
+        if (value.isEmpty()) {
+            value = comboBox->currentText().trimmed();
+        }
+        if (key == QStringLiteral("detect.mode")) {
+            const DetectionModeDescriptor *descriptor =
+                    detectionModeDescriptorFromUiId(value);
+            if (descriptor) {
+                value = QString::fromLatin1(descriptor->modeId);
+            }
+        }
+        return value.isEmpty() ? QStringLiteral("-") : value;
+    }
+    if (QCheckBox *checkBox =
+            qobject_cast<QCheckBox *>(it.value().editor)) {
+        return checkBox->isChecked()
+                ? QStringLiteral("enabled")
+                : QStringLiteral("disabled");
+    }
+    if (QSpinBox *spinBox =
+            qobject_cast<QSpinBox *>(it.value().editor)) {
+        return QString::number(spinBox->value());
+    }
+    if (QLineEdit *lineEdit =
+            qobject_cast<QLineEdit *>(it.value().editor)) {
+        const QString value = lineEdit->text().trimmed();
+        return value.isEmpty() ? QStringLiteral("-") : value;
+    }
+    return QStringLiteral("-");
+}
+
 void MachineSettingsPage::restoreUnappliedMachineSettings()
 {
     restoreAppliedValues(QStringList()
@@ -887,6 +939,11 @@ void MachineSettingsPage::applyTissueRoughnessThreshold()
     const OperationResult saved =
             m_settingsService->saveTissueThreshold(value);
     if (!saved.isSuccess()) {
+        qCCritical(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.save_failed key=tissue.roughness_threshold value=%1 code=%2 reason=%3")
+                   .arg(value, 0, 'f', 3)
+                   .arg(saved.error.code, saved.error.userMessage);
         restoreAppliedValue("tissue.roughness_threshold");
         QMessageBox::critical(
                     m_view.lineEdit_tissueRoughnessThreshold,
@@ -895,6 +952,10 @@ void MachineSettingsPage::applyTissueRoughnessThreshold()
         return;
     }
     refreshDirty("tissue.roughness_threshold");
+    qCInfo(logUi).noquote()
+            << QStringLiteral(
+                "event=settings.saved key=tissue.roughness_threshold value=%1")
+               .arg(value, 0, 'f', 3);
     QMessageBox::information(
                 m_view.lineEdit_tissueRoughnessThreshold,
                 QStringLiteral("成功"),

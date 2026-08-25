@@ -13,6 +13,7 @@
 #include "ui/pages/inspection_page.h"
 #include "ui/pages/machine_settings_page.h"
 #include "ui/pages/template_editor_page.h"
+#include "system_support/logging/log_categories.h"
 
 
 #include <QTimer>
@@ -29,7 +30,6 @@
 #include <QTextEdit>
 #include <QCloseEvent>
 #include <QApplication>
-#include <QDebug>
 
 #include <limits>
 
@@ -68,6 +68,19 @@ void MainWindow::restoreNormalFaultUi()
 void MainWindow::presentStartFailure(
     const StartInspectionResult &result)
 {
+    QString summary = QStringLiteral(
+                "event=run.start_failed code=%1 reason=%2")
+            .arg(result.error.code, result.error.userMessage);
+    if (!result.error.diagnostic.trimmed().isEmpty()) {
+        summary += QStringLiteral(" diagnostic=%1")
+                .arg(result.error.diagnostic.trimmed());
+    }
+    if (!result.details.isEmpty()) {
+        summary += QStringLiteral(" details=%1")
+                .arg(result.details.join(QStringLiteral(";")));
+    }
+    qCWarning(logRuntime).noquote()
+            << summary;
     if (result.error.code == QStringLiteral(
                 "INSPECTION_START_EXECUTION_FAILED")
             || result.error.code == QStringLiteral(
@@ -144,6 +157,19 @@ void MainWindow::presentStartFailure(
 void MainWindow::finishInspectionStopUi(
     const StopInspectionResult &result)
 {
+    if (!result.isAccepted()) {
+        QString summary = QStringLiteral("event=run.stop_incomplete");
+        if (!result.error.code.trimmed().isEmpty()) {
+            summary += QStringLiteral(" code=%1")
+                    .arg(result.error.code.trimmed());
+        }
+        summary += QStringLiteral(" reason=%1")
+                .arg(result.error.userMessage.trimmed().isEmpty()
+                     ? result.reconciliationSummary
+                     : result.error.userMessage);
+        qCWarning(logRuntime).noquote()
+                << summary;
+    }
     if (result.issue
             == StopInspectionIssue::AcquisitionStillStopping) {
         ui->label_runtimeStatus->setText("停止中，请稍后再关闭相机");
@@ -422,8 +448,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
     const OperationResult saved =
             m_settingsApplicationService->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
-        qWarning() << "[MACHINE_SETTINGS] splitter state save failed:"
-                   << saved.error.userMessage;
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=ui.splitter_state_save_failed code=%1 reason=%2")
+                   .arg(saved.error.code, saved.error.userMessage);
     }
     event->accept();
 }
@@ -447,7 +475,9 @@ void MainWindow::on_pushButton_browseImageSavePath_clicked()
 
     ui->lineEdit_imageSavePath->setText(dirPath);
     updateSaveDirButtonText();
-    qDebug() << "save file path:" << dirPath;
+    qCInfo(logUi).noquote()
+            << QStringLiteral("event=image_save.directory_selected path=%1")
+               .arg(QDir::toNativeSeparators(dirPath));
 }
 
 
@@ -460,9 +490,14 @@ void MainWindow::on_pushButton_resetTotalCount_clicked()
     const OperationResult result =
             m_inspectionApplicationService->resetStatistics();
     if (!result.isSuccess()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=statistics.reset_failed context=user code=%1 reason=%2")
+                   .arg(result.error.code, result.error.userMessage);
         showParameterWarning(QStringLiteral("提示"), result.error.userMessage);
     } else if (m_runtime) {
         m_inspectionPage->setStatistics(m_runtime->statistics());
+        qCInfo(logRuntime).noquote() << "event=statistics.reset context=user";
     }
 }
 
@@ -474,9 +509,14 @@ void MainWindow::on_pushButton_resetNgCount_clicked()
     const OperationResult result =
             m_inspectionApplicationService->resetNgCount();
     if (!result.isSuccess()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=statistics.ng_reset_failed code=%1 reason=%2")
+                   .arg(result.error.code, result.error.userMessage);
         showParameterWarning(QStringLiteral("提示"), result.error.userMessage);
     } else if (m_runtime) {
         m_inspectionPage->setStatistics(m_runtime->statistics());
+        qCInfo(logRuntime).noquote() << "event=statistics.ng_reset";
     }
 }
 
@@ -492,6 +532,11 @@ void MainWindow::on_pushButton_applyImageRotation_clicked()
     const OperationResult saved =
             m_settingsApplicationService->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
+        qCCritical(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.save_failed key=image.rotation value=%1 code=%2 reason=%3")
+                   .arg(candidate.imageRotationId)
+                   .arg(saved.error.code, saved.error.userMessage);
         m_machineSettingsPage->restoreAppliedValues(keys);
         showParameterCritical(
                     QStringLiteral("严重警告"),
@@ -500,6 +545,10 @@ void MainWindow::on_pushButton_applyImageRotation_clicked()
         return;
     }
     m_machineSettingsPage->refreshDirty(keys);
+    qCInfo(logUi).noquote()
+            << QStringLiteral(
+                "event=settings.saved key=image.rotation value=%1")
+               .arg(candidate.imageRotationId);
     showParameterInfo("提示", "旋转角度设置成功");
 }
 
@@ -511,6 +560,11 @@ void MainWindow::on_toolButton_closeCamera_clicked()
     const OperationResult closeResult =
             m_inspectionApplicationService->closeCamera();
     if (!closeResult.isSuccess()) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=camera.close_rejected code=%1 reason=%2")
+                   .arg(closeResult.error.code,
+                        closeResult.error.userMessage);
         QMessageBox::warning(
                     this,
                     "警告",
@@ -550,6 +604,8 @@ void MainWindow::on_toolButton_startInspection_clicked()
         confirmBox.setDefaultButton(cancelButton);
         confirmBox.exec();
         if (confirmBox.clickedButton() != continueButton) {
+            qCInfo(logRuntime).noquote()
+                    << "event=run.start_cancelled reason=unapplied_settings";
             return;
         }
         restoreUnappliedSettingsFromApplied();
@@ -594,6 +650,11 @@ void MainWindow::on_toolButton_openCamera_clicked()
 
     if (!result.operation.isSuccess()
             && result.camera.isSuccess()) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=camera.open_rejected code=%1 reason=%2")
+                   .arg(result.operation.error.code,
+                        result.operation.error.userMessage);
         QMessageBox::warning(
                     this,
                     QStringLiteral("提示"),
@@ -611,7 +672,6 @@ void MainWindow::on_toolButton_openCamera_clicked()
     else{
     saveAppliedHardwareSettings(
                 QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
-    qDebug()<<"opencamera，plc connect success";
     }
     updateOperationUiState();
 
@@ -655,7 +715,7 @@ void MainWindow::on_toolButton_openCamera_clicked()
     const QString openMessage = openResult.adjustmentMessage.isEmpty()
             ? QString("相机打开成功！")
             : QString("相机打开成功！\n\n%1")
-              .arg(openResult.adjustmentMessage);
+               .arg(openResult.adjustmentMessage);
     QMessageBox::information(this, "提示", openMessage);
 }
 
@@ -672,11 +732,16 @@ void MainWindow::on_pushButton_resetRejectQueue_clicked()
     const OperationResult result =
             m_inspectionApplicationService->clearPendingDelayedNgRequests();
     if (!result.isSuccess()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=plc.reject_queue_reset_failed code=%1 reason=%2")
+                   .arg(result.error.code, result.error.userMessage);
         QMessageBox::warning(
                     this, QStringLiteral("提示"),
                     result.error.userMessage);
         return;
     }
+    qCInfo(logRuntime).noquote() << "event=plc.reject_queue_reset";
     QMessageBox::information(this, "提示", "剔除队列已清空！");
 }
 
@@ -685,8 +750,8 @@ void MainWindow::initStyle()
 {
     QFile file(QStringLiteral(":/qss/app_theme.qss"));
     if (!file.open(QFile::ReadOnly)) {
-        qWarning().noquote()
-                << QStringLiteral("[UI_STYLE] 无法读取正式样式资源：:/qss/app_theme.qss");
+        qCWarning(logUi).noquote()
+                << "event=ui.style_load_failed path=:/qss/app_theme.qss";
         return;
     }
 

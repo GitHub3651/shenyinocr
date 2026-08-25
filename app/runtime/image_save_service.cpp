@@ -4,8 +4,9 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/image_save_service.h"
 
+#include "system_support/logging/log_categories.h"
+
 #include <QDir>
-#include <QDebug>
 #include <QFileInfo>
 
 #include <exception>
@@ -182,7 +183,12 @@ bool ImageSaveService::writeImage(
         }
         return false;
     }
-    qDebug() << "[IMAGE_SAVE] saved" << item.filePath;
+    qCInfo(logRuntime).noquote()
+            << QStringLiteral(
+                "event=image_save.completed path=%1 format=%2 bytes=%3")
+               .arg(QDir::toNativeSeparators(item.filePath))
+               .arg(QString::fromLatin1(item.format))
+               .arg(QFileInfo(item.filePath).size());
     return true;
 }
 
@@ -242,6 +248,13 @@ void ImageSaveService::workerLoop()
         }
         m_spaceAvailable.notify_one();
         if (failed) {
+            if (totalFailed == 1) {
+                qCCritical(logRuntime).noquote()
+                        << QStringLiteral(
+                            "event=image_save.failed totalFailed=%1 reason=%2")
+                           .arg(totalFailed)
+                           .arg(latestError);
+            }
             emit taskFailed(totalFailed, latestError);
         }
     }

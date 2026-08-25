@@ -16,6 +16,7 @@
 #include "ui/pages/inspection_page.h"
 #include "ui/pages/machine_settings_page.h"
 #include "ui/pages/template_editor_page.h"
+#include "system_support/logging/log_categories.h"
 
 
 #include <QTimer>
@@ -28,7 +29,6 @@
 #include <QScrollArea>
 #include <QSplitterHandle>
 #include <QTextOption>
-#include <QDebug>
 
 /**
  * @brief MainWindow构造函数
@@ -221,7 +221,6 @@ MainWindow::MainWindow(
         updateOperationUiState();
     },
     Qt::QueuedConnection);
-    qDebug() << "MainWindow shell constructed";
 }
 
 InspectionPageViewBindings MainWindow::inspectionPageViewBindings() const
@@ -386,8 +385,11 @@ void MainWindow::initializePages()
     const OperationResult resetResult =
             m_inspectionApplicationService->resetStatistics();
     if (!resetResult.isSuccess()) {
-        qWarning() << "初始化统计清零被拒绝："
-                   << resetResult.error.code;
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=statistics.reset_failed context=startup code=%1 reason=%2")
+                   .arg(resetResult.error.code,
+                        resetResult.error.userMessage);
     } else {
         m_inspectionPage->setStatistics(m_runtime->statistics());
     }
@@ -446,8 +448,6 @@ void MainWindow::initializePages()
  */
 MainWindow::~MainWindow()
 {
-    qDebug() << "MainWindow destructor called";
-
     resetTemplateCaptureState();
     m_inspectionApplicationService->shutdown();
 
@@ -457,5 +457,4 @@ MainWindow::~MainWindow()
     delete ui;
     ui = nullptr;
 
-    qDebug() << "MainWindow destroyed";
 }

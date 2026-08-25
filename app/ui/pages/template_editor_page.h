@@ -78,8 +78,8 @@ public:
     CaptureState captureState() const;
     bool startTemplatePreview();
     bool freezeTemplatePreview();
-    bool stopTemplatePreview();
-    void resetTemplateCaptureState();
+    bool stopTemplatePreview(bool writeLog = true);
+    void resetTemplateCaptureState(bool writePreviewStopLog = true);
     void handleTemplateCaptureButton();
     void handlePreviewFrame(quint64 sessionId, const cv::Mat &image);
     void handlePreviewFailure(quint64 sessionId, const QString &reason);

@@ -53,15 +53,4 @@ OCRConfig::LoadConfig(const std::string &config_path) {
   return dict;
 }
 
-void OCRConfig::PrintConfigInfo() {
-
-  qDebug() << "=======Paddle OCR inference config======";
-      for (auto iter = config_map_.begin(); iter != config_map_.end(); iter++) {
-          // 将 std::string 转换为 QString
-          qDebug() << QString::fromStdString(iter->first) << " : " << QString::fromStdString(iter->second);
-      }
-      qDebug() << "=======End of Paddle OCR inference config======";
-
-}
-
 } // namespace PaddleOCR

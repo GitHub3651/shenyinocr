@@ -4,9 +4,10 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "barcode_decoder_adapter.h"
 
+#include "system_support/logging/log_categories.h"
+
 #include <QByteArray>
 #include <QCoreApplication>
-#include <QDebug>
 #include <QDir>
 #include <QElapsedTimer>
 
@@ -93,6 +94,11 @@ bool BarcodeDecoderAdapter::ensureLoaded()
                     L"错误码=%2）")
                 .arg(decoderPath)
                 .arg(static_cast<qulonglong>(loadError));
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=barcode.dll_load_failed path=%1 nativeCode=%2")
+                   .arg(decoderPath)
+                   .arg(static_cast<qulonglong>(loadError));
         return false;
     }
 
@@ -109,6 +115,10 @@ bool BarcodeDecoderAdapter::ensureLoaded()
                     L"二维码解码DLL"
                     L"缺少接口：%1")
                 .arg(decoderPath);
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=barcode.dll_interface_missing path=%1")
+                   .arg(decoderPath);
         FreeLibrary(module);
         return false;
     }
@@ -128,10 +138,10 @@ bool BarcodeDecoderAdapter::ensureLoaded()
                 versionBuffer.constData(),
                 std::min(versionResult, versionBuffer.size()))
             : QStringLiteral("unknown");
-    qDebug() << "[BARCODE_WORD] Decoder DLL loaded:"
-             << decoderPath
-             << "version:"
-             << decoderVersion;
+    qCInfo(logDevice).noquote()
+            << QStringLiteral(
+                "event=barcode.dll_loaded path=%1 version=%2")
+               .arg(decoderPath, decoderVersion);
     return true;
 }
 
@@ -297,17 +307,15 @@ BarcodeReadResult BarcodeDecoderAdapter::decode(
 
     BarcodeReadResult result;
     int attemptCount = 0;
-    QString lastAttemptName;
-    unsigned int lastOptionFlags = BARCODE_DECODER_OPTION_NONE;
 
     const auto budgetAvailable = [&]() {
         return elapsedMilliseconds(timer) < maxDecodeTimeMs;
     };
 
     const auto runAttempt = [&](const cv::Mat &candidate,
-                                unsigned int optionFlags,
-                                int strategyId,
-                                const QString &attemptName,
+                                 unsigned int optionFlags,
+                                 int strategyId,
+                                 const QString &,
                                 double scaleX,
                                 double scaleY,
                                 double offsetX,
@@ -329,8 +337,6 @@ BarcodeReadResult BarcodeDecoderAdapter::decode(
                     options.formatMask,
                     optionFlags);
         ++attemptCount;
-        lastAttemptName = attemptName;
-        lastOptionFlags = optionFlags;
         result.elapsedMs = elapsedMilliseconds(timer);
 
         if (result.readable
@@ -346,13 +352,6 @@ BarcodeReadResult BarcodeDecoderAdapter::decode(
             }
         }
 
-        if (result.readable && attemptCount > 1) {
-            qDebug() << "[BARCODE_DECODE]"
-                     << "fallbackSuccess=" << attemptName
-                     << "optionFlags=" << optionFlags
-                     << "attempts=" << attemptCount
-                     << "elapsedMs=" << result.elapsedMs;
-        }
         if (result.readable && successfulStrategyId) {
             *successfulStrategyId = strategyId;
         }
@@ -680,12 +679,5 @@ BarcodeReadResult BarcodeDecoderAdapter::decode(
                 .arg(attemptCount);
     }
 
-    qDebug() << "[BARCODE_DECODE]"
-             << "readable=" << result.readable
-             << "attempts=" << attemptCount
-             << "lastAttempt=" << lastAttemptName
-             << "lastOptionFlags=" << lastOptionFlags
-             << "elapsedMs=" << result.elapsedMs
-             << "status=" << static_cast<int>(result.status);
     return result;
 }

@@ -5,8 +5,8 @@
 #include "runtime/inspection_runtime.h"
 
 #include "runtime/inspection_presentation_renderer.h"
+#include "system_support/logging/log_categories.h"
 
-#include <QDebug>
 #include <QMetaObject>
 #include <QUuid>
 
@@ -45,6 +45,46 @@ struct InspectionRunContext
     const double tissueRoughnessThreshold;
     const FramePreprocessSettings framePreprocess;
 };
+
+namespace {
+
+QString faultReasonName(InspectionFaultReason reason)
+{
+    switch (reason) {
+    case InspectionFaultReason::None:
+        return QStringLiteral("none");
+    case InspectionFaultReason::CameraDisconnected:
+        return QStringLiteral("camera_disconnected");
+    case InspectionFaultReason::PlcDisconnected:
+        return QStringLiteral("plc_disconnected");
+    case InspectionFaultReason::HardTriggerQueueOverflow:
+        return QStringLiteral("hard_trigger_queue_overflow");
+    case InspectionFaultReason::ProductIdentityAmbiguous:
+        return QStringLiteral("product_identity_ambiguous");
+    case InspectionFaultReason::RuntimeInvariantViolation:
+        return QStringLiteral("runtime_invariant_violation");
+    }
+    return QStringLiteral("unknown");
+}
+
+QString plcRunSettingFieldName(InspectionPlcRunSettingField field)
+{
+    switch (field) {
+    case InspectionPlcRunSettingField::None:
+        return QStringLiteral("none");
+    case InspectionPlcRunSettingField::RejectTime:
+        return QStringLiteral("reject_time");
+    case InspectionPlcRunSettingField::RejectDistance:
+        return QStringLiteral("reject_distance");
+    case InspectionPlcRunSettingField::PhotoTime:
+        return QStringLiteral("photo_time");
+    case InspectionPlcRunSettingField::PhotoDistance:
+        return QStringLiteral("photo_distance");
+    }
+    return QStringLiteral("unknown");
+}
+
+} // namespace
 
 // 函数说明：InspectionRuntime 构造函数创建组件并初始化其依赖和初始状态。
 InspectionRuntime::InspectionRuntime(
@@ -123,10 +163,20 @@ bool InspectionRuntime::commitStart()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Starting
-            || !m_detectionWorkerActive.load()) {
+            || !m_detectionWorkerActive.load()
+            || !m_runContext) {
         return false;
     }
     m_state = InspectionRuntimeState::Running;
+    qCInfo(logRuntime).noquote()
+            << QStringLiteral(
+                "event=run.started mode=%1 templates=%2 trigger=%3 saveMode=%4")
+               .arg(detectionModeId(m_runContext->mode))
+               .arg(m_runContext->preparedTemplates.size())
+               .arg(m_runContext->machineSettings.triggerEnabled
+                    ? QStringLiteral("hardware")
+                    : QStringLiteral("software"))
+               .arg(m_runContext->machineSettings.imageSaveModeId);
     return true;
 }
 
@@ -142,7 +192,7 @@ void InspectionRuntime::rollbackStart()
     }
     requestDetectionWorkerStop();
     waitForDetectionWorkerStop();
-    finishStop();
+    finishStop(false);
 }
 
 // 函数说明：beginStop 函数创建、准备或启动对应流程。
@@ -175,16 +225,29 @@ void InspectionRuntime::waitForStop()
 }
 
 // 函数说明：finishStop 函数实现名称所表示的处理步骤。
-void InspectionRuntime::finishStop()
+void InspectionRuntime::finishStop(bool writeRunSummary)
 {
     m_uiCompletionMailbox.cancel();
     m_wakePosted.store(false);
+    const DetectionResultStatistics statistics = m_resultService->statistics();
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state != InspectionRuntimeState::Fault) {
+        const quint64 acceptedCount = m_acceptedProductSequence;
+        const quint64 completedCount = m_completedProductCount;
         m_state = InspectionRuntimeState::Idle;
         m_runContext.reset();
         m_products.clear();
         m_acceptedFrames.clear();
+        if (writeRunSummary) {
+            qCInfo(logRuntime).noquote()
+                    << QStringLiteral(
+                        "event=run.stopped accepted=%1 completed=%2 cancelled=%3 total=%4 ng=%5")
+                       .arg(acceptedCount)
+                       .arg(completedCount)
+                       .arg(acceptedCount - completedCount)
+                       .arg(statistics.totalCount)
+                       .arg(statistics.ngCount);
+        }
     }
 }
 
@@ -194,6 +257,7 @@ bool InspectionRuntime::enterFault(
     const QString &diagnostic,
     const QDateTime &occurredAtUtc)
 {
+    InspectionFaultSnapshot enteredFault;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (reason == InspectionFaultReason::None
@@ -215,8 +279,16 @@ bool InspectionRuntime::enterFault(
                 ? occurredAtUtc.toUTC()
                 : QDateTime::currentDateTimeUtc();
         m_state = InspectionRuntimeState::Fault;
+        enteredFault = m_faultSnapshot;
     }
 
+    qCCritical(logRuntime).noquote()
+            << QStringLiteral(
+                "event=run.fault reason=%1 accepted=%2 completed=%3 diagnostic=%4")
+               .arg(faultReasonName(enteredFault.reason))
+               .arg(enteredFault.acceptedProductCount)
+               .arg(enteredFault.completedProductCount)
+               .arg(enteredFault.diagnostic);
     m_resultService->recordSystemFault();
     m_uiCompletionMailbox.cancel();
     m_wakePosted.store(false);
@@ -257,6 +329,7 @@ bool InspectionRuntime::acknowledgeFault()
     m_faultSnapshot = InspectionFaultSnapshot();
     m_state = InspectionRuntimeState::Idle;
     m_runContext.reset();
+    qCInfo(logRuntime).noquote() << "event=run.fault_acknowledged";
     return true;
 }
 
@@ -331,25 +404,57 @@ PlcOperationResult InspectionRuntime::connectPlc(
     int rack,
     int slot)
 {
-    return m_plcController
+    const PlcOperationResult result = m_plcController
             ? m_plcController->connectTo(address, rack, slot)
             : PlcOperationResult(-1);
+    if (result.isSuccess()) {
+        qCInfo(logDevice).noquote()
+                << QStringLiteral(
+                    "event=plc.connected address=%1 rack=%2 slot=%3")
+                   .arg(address).arg(rack).arg(slot);
+    } else {
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=plc.connect_failed address=%1 rack=%2 slot=%3 nativeCode=%4")
+                   .arg(address).arg(rack).arg(slot)
+                   .arg(result.nativeErrorCode);
+    }
+    return result;
 }
 
 // 函数说明：disconnectPlc 函数建立或断开对应外部连接。
 PlcOperationResult InspectionRuntime::disconnectPlc()
 {
-    return m_plcController
+    const PlcOperationResult result = m_plcController
             ? m_plcController->disconnect()
             : PlcOperationResult(-1);
+    if (result.isSuccess()) {
+        qCInfo(logDevice).noquote() << "event=plc.disconnected";
+    } else {
+        qCCritical(logDevice).noquote()
+                << QStringLiteral("event=plc.disconnect_failed nativeCode=%1")
+                   .arg(result.nativeErrorCode);
+    }
+    return result;
 }
 
 // 函数说明：writePlcTriggerMode 函数保存或发布对应的数据和资源。
 PlcOperationResult InspectionRuntime::writePlcTriggerMode(int modeIndex)
 {
-    return m_plcController
+    const PlcOperationResult result = m_plcController
             ? m_plcController->writeTriggerMode(modeIndex)
             : PlcOperationResult(-1);
+    if (result.isSuccess()) {
+        qCInfo(logDevice).noquote()
+                << QStringLiteral("event=plc.trigger_mode_written value=%1")
+                   .arg(modeIndex);
+    } else {
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=plc.trigger_mode_write_failed value=%1 nativeCode=%2")
+                   .arg(modeIndex).arg(result.nativeErrorCode);
+    }
+    return result;
 }
 
 // 函数说明：applyPlcRunSettings 函数更新或应用对应的配置和状态。
@@ -357,11 +462,30 @@ InspectionPlcRunSettingsResult InspectionRuntime::applyPlcRunSettings(
     const InspectionPlcRunSettings &settings)
 {
     if (m_plcController) {
-        return m_plcController->applyRunSettings(settings);
+        const InspectionPlcRunSettingsResult result =
+                m_plcController->applyRunSettings(settings);
+        if (result.isSuccess()) {
+            qCInfo(logDevice).noquote()
+                    << QStringLiteral(
+                        "event=plc.run_settings_written rejectTime=%1 rejectDistance=%2 photoTime=%3 photoDistance=%4")
+                       .arg(settings.rejectTime)
+                       .arg(settings.rejectDistance)
+                       .arg(settings.photoTime)
+                       .arg(settings.photoDistance);
+        } else {
+            qCCritical(logDevice).noquote()
+                    << QStringLiteral(
+                        "event=plc.run_settings_write_failed field=%1 nativeCode=%2")
+                       .arg(plcRunSettingFieldName(result.failedField))
+                       .arg(result.operation.nativeErrorCode);
+        }
+        return result;
     }
     InspectionPlcRunSettingsResult result;
     result.failedField = InspectionPlcRunSettingField::RejectTime;
     result.operation = PlcOperationResult(-1);
+    qCCritical(logDevice).noquote()
+            << "event=plc.run_settings_write_failed field=reject_time nativeCode=-1";
     return result;
 }
 
@@ -369,17 +493,40 @@ InspectionPlcRunSettingsResult InspectionRuntime::applyPlcRunSettings(
 PlcOperationResult InspectionRuntime::writePlcPhotoDistance(
     std::uint32_t photoDistance)
 {
-    return m_plcController
+    const PlcOperationResult result = m_plcController
             ? m_plcController->writePhotoDistance(photoDistance)
             : PlcOperationResult(-1);
+    if (result.isSuccess()) {
+        qCInfo(logDevice).noquote()
+                << QStringLiteral("event=plc.photo_distance_written value=%1")
+                   .arg(photoDistance);
+    } else {
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=plc.photo_distance_write_failed value=%1 nativeCode=%2")
+                   .arg(photoDistance).arg(result.nativeErrorCode);
+    }
+    return result;
 }
 
 // 函数说明：writePlcResultValue 函数保存或发布对应的数据和资源。
 PlcOperationResult InspectionRuntime::writePlcResultValue(std::uint8_t value)
 {
-    return m_plcController
+    const PlcOperationResult result = m_plcController
             ? m_plcController->writeResultValue(value)
             : PlcOperationResult(-1);
+    if (result.isSuccess()) {
+        qCInfo(logDevice).noquote()
+                << QStringLiteral("event=plc.result_written value=%1")
+                   .arg(static_cast<int>(value));
+    } else {
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=plc.result_write_failed value=%1 nativeCode=%2")
+                   .arg(static_cast<int>(value))
+                   .arg(result.nativeErrorCode);
+    }
+    return result;
 }
 
 // 函数说明：prepareDetection 函数创建、准备或启动对应流程。
@@ -447,9 +594,6 @@ bool InspectionRuntime::startDetection(
         m_detectionWorkerActive.store(true);
         m_resultService->configureRun(resultConfiguration);
     }
-    qDebug() << "[DETECTION_WORKER]" << creation.workerLogName
-             << "worker started queueCapacity="
-             << static_cast<qulonglong>(worker->queueCapacity());
     return true;
 }
 
@@ -583,9 +727,6 @@ void InspectionRuntime::waitForDetectionWorkerStop()
         return;
     }
     worker->wait();
-    qDebug() << "[DETECTION_WORKER] worker stopped processed="
-             << worker->processedFrameCount()
-             << "cancelled=" << worker->cancelledFrameCount();
     std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
     if (m_detectionWorker == worker) {
         m_detectionWorker.reset();
@@ -646,6 +787,10 @@ bool InspectionRuntime::publishPresentation(
     const InspectionPresentation &presentation)
 {
     if (!m_uiCompletionMailbox.submit(presentation)) {
+        if (state() == InspectionRuntimeState::Running) {
+            qCCritical(logRuntime).noquote()
+                    << "event=presentation.submit_failed";
+        }
         return false;
     }
     bool expected = false;
@@ -658,6 +803,10 @@ bool InspectionRuntime::publishPresentation(
                 Qt::QueuedConnection)) {
         m_wakePosted.store(false);
         m_uiCompletionMailbox.cancel();
+        if (state() == InspectionRuntimeState::Running) {
+            qCCritical(logRuntime).noquote()
+                    << "event=presentation.dispatch_failed";
+        }
         return false;
     }
     return true;

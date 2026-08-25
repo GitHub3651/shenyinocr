@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <iostream>
-#include <ostream>
 #include <vector>
 
 #include <engines/ocr/vendor/paddle/include/utility.h>
+#include "system_support/logging/log_categories.h"
 
 namespace PaddleOCR {
 
@@ -29,8 +28,9 @@ std::vector<std::string> Utility::ReadDict(const std::string &path) {
       m_vec.push_back(line);
     }
   } else {
-    std::cout << "no such label file: " << path << ", exit the program..."
-              << std::endl;
+    qCCritical(logDevice).noquote()
+            << QStringLiteral("event=ocr.label_file_missing path=%1")
+               .arg(QString::fromStdString(path));
     exit(1);
   }
   return m_vec;
@@ -53,8 +53,6 @@ std::vector<std::string> Utility::ReadDict(const std::string &path) {
 //  }
 
 //  cv::imwrite("./ocr_vis.png", img_vis);
-//  std::cout << "The detection visualized image saved in ./ocr_vis.png"
-//            << std::endl;
 //}
 
 } // namespace PaddleOCR

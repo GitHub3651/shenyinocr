@@ -3,6 +3,7 @@
 
 #include "application/settings_application_service.h"
 #include "application/template_application_service.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QDialogButtonBox>
 #include <QDir>
@@ -180,6 +181,11 @@ void TemplateSelectionDialog::removeCheckedTemplates()
     const OperationResult result = m_settingsService->removeTemplatePaths(
                 m_mode, paths);
     if (!result.isSuccess()) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.selection_update_failed mode=%1 reason=%2")
+                   .arg(detectionModeId(m_mode),
+                        result.error.userMessage);
         QMessageBox::critical(
                     this, QStringLiteral("移除失败"),
                     result.error.userMessage.isEmpty()
@@ -193,6 +199,11 @@ void TemplateSelectionDialog::removeCheckedTemplates()
         }
     }
     updateRemoveButtonState();
+    qCInfo(logTemplate).noquote()
+            << QStringLiteral(
+                "event=templates.selection_updated mode=%1 count=%2")
+               .arg(detectionModeId(m_mode))
+               .arg(m_tree->topLevelItemCount());
 }
 
 void TemplateSelectionDialog::addPath(const QString &path)
@@ -242,6 +253,10 @@ void TemplateSelectionDialog::updateRemoveButtonState()
 void TemplateSelectionDialog::saveAndAccept()
 {
     if (!m_settingsService) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.selection_update_failed mode=%1 reason=service_unavailable")
+                   .arg(detectionModeId(m_mode));
         QMessageBox::critical(this, QStringLiteral("模板选择保存失败"),
                               QStringLiteral("设置服务不可用。"));
         return;
@@ -249,6 +264,11 @@ void TemplateSelectionDialog::saveAndAccept()
     const OperationResult result = m_settingsService->saveTemplatePaths(
                 m_mode, templatePaths());
     if (!result.isSuccess()) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=templates.selection_update_failed mode=%1 reason=%2")
+                   .arg(detectionModeId(m_mode),
+                        result.error.userMessage);
         QMessageBox::critical(
                     this, QStringLiteral("模板选择保存失败"),
                     result.error.userMessage.isEmpty()
@@ -256,5 +276,10 @@ void TemplateSelectionDialog::saveAndAccept()
                     : result.error.userMessage);
         return;
     }
+    qCInfo(logTemplate).noquote()
+            << QStringLiteral(
+                "event=templates.selection_updated mode=%1 count=%2")
+               .arg(detectionModeId(m_mode))
+               .arg(templatePaths().size());
     accept();
 }

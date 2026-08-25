@@ -20,7 +20,6 @@
 #include <ostream>
 #include <string>
 #include <vector>
-#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QString>
@@ -119,8 +118,6 @@ public:
   bool use_tensorrt = false;
 
   bool use_fp16 = false;
-
-  void PrintConfigInfo();
 
 private:
   // Load configuration

@@ -5,8 +5,7 @@
 #include "runtime/camera_session.h"
 
 #include "runtime/inspection_runtime.h"
-
-#include <QDebug>
+#include "system_support/logging/log_categories.h"
 
 #include <algorithm>
 #include <chrono>
@@ -46,6 +45,21 @@ bool integerRange(
     *minimum = static_cast<int>(roundedMinimum);
     *maximum = static_cast<int>(roundedMaximum);
     return true;
+}
+
+QString cameraFrameStatusName(CameraFrameStatus status)
+{
+    switch (status) {
+    case CameraFrameStatus::FrameReady:
+        return QStringLiteral("frame_ready");
+    case CameraFrameStatus::Timeout:
+        return QStringLiteral("timeout");
+    case CameraFrameStatus::Interrupted:
+        return QStringLiteral("interrupted");
+    case CameraFrameStatus::DeviceError:
+        return QStringLiteral("device_error");
+    }
+    return QStringLiteral("unknown");
 }
 
 } // namespace
@@ -101,16 +115,25 @@ InspectionCameraOpenResult CameraSession::openFirst(
     if (!result.isSuccess()) {
         output.issue = InspectionCameraOpenIssue::DeviceError;
         output.diagnostic = QStringLiteral("相机异常。");
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.enumerate_failed nativeCode=%1")
+                   .arg(result.nativeErrorCode);
         return output;
     }
     if (output.deviceCount <= 0) {
         output.issue = InspectionCameraOpenIssue::DeviceNotFound;
+        qCWarning(logDevice).noquote() << "event=camera.not_found count=0";
         return output;
     }
     result = m_cameraDevice->openFirst();
     if (!result.isSuccess()) {
         output.issue = InspectionCameraOpenIssue::DeviceOpenFailed;
         output.diagnostic = QStringLiteral("相机异常。");
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.open_failed nativeCode=%1")
+                   .arg(result.nativeErrorCode);
         return output;
     }
     result = m_cameraDevice->setTriggerMode(CameraTriggerMode::Software);
@@ -120,6 +143,10 @@ InspectionCameraOpenResult CameraSession::openFirst(
         output.diagnostic = cameraErrorText(
                     QStringLiteral("相机切换软件触发失败"),
                     result.nativeErrorCode);
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.initialize_failed step=trigger_mode nativeCode=%1")
+                   .arg(result.nativeErrorCode);
         return output;
     }
 
@@ -132,6 +159,11 @@ InspectionCameraOpenResult CameraSession::openFirst(
         m_cameraDevice->close();
         output.issue = InspectionCameraOpenIssue::ExposureFailed;
         output.diagnostic = exposure.diagnostic;
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.initialize_failed step=exposure nativeCode=%1 reason=%2")
+                   .arg(exposure.nativeErrorCode)
+                   .arg(exposure.diagnostic);
         return output;
     }
     CameraSettings openTiming;
@@ -143,6 +175,10 @@ InspectionCameraOpenResult CameraSession::openFirst(
         output.diagnostic = cameraErrorText(
                     QStringLiteral("相机触发延时初始化失败"),
                     result.nativeErrorCode);
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.initialize_failed step=trigger_delay nativeCode=%1")
+                   .arg(result.nativeErrorCode);
         return output;
     }
     result = m_cameraDevice->startGrabbing();
@@ -152,6 +188,10 @@ InspectionCameraOpenResult CameraSession::openFirst(
         output.diagnostic = cameraErrorText(
                     QStringLiteral("相机启动抓图失败"),
                     result.nativeErrorCode);
+        qCCritical(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.initialize_failed step=start_grabbing nativeCode=%1")
+                   .arg(result.nativeErrorCode);
         return output;
     }
     {
@@ -163,20 +203,42 @@ InspectionCameraOpenResult CameraSession::openFirst(
     output.exposureMaximum = exposure.maximumValue;
     output.exposureAdjusted = output.appliedExposure != savedExposure;
     output.adjustmentMessage = adjustmentMessage;
+    QString summary = QStringLiteral(
+                "event=camera.opened devices=%1 exposure=%2")
+            .arg(output.deviceCount)
+            .arg(output.appliedExposure);
+    if (output.exposureAdjusted) {
+        summary += QStringLiteral(
+                    " requestedExposure=%1 exposureRange=%2-%3")
+                .arg(savedExposure)
+                .arg(output.exposureMinimum)
+                .arg(output.exposureMaximum);
+    }
+    qCInfo(logDevice).noquote() << summary;
     return output;
 }
 
 // 函数说明：close 函数停止流程、清理状态或释放对应资源。
 void CameraSession::close()
 {
+    const bool wasOpen = isOpen();
     m_intentionalStop = true;
     m_captureWorker.stop();
-    m_cameraDevice->close();
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_open = false;
-    m_prepared = false;
-    m_preview = false;
-    m_currentImage.release();
+    const CameraResult closed = m_cameraDevice->close();
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_open = false;
+        m_prepared = false;
+        m_preview = false;
+        m_currentImage.release();
+    }
+    if (closed.isSuccess() && wasOpen) {
+        qCInfo(logDevice).noquote() << "event=camera.closed";
+    } else if (!closed.isSuccess()) {
+        qCWarning(logDevice).noquote()
+                << QStringLiteral("event=camera.close_failed nativeCode=%1")
+                   .arg(closed.nativeErrorCode);
+    }
 }
 
 // 函数说明：queryExposureRange 函数读取、等待或计算对应的数据。
@@ -583,20 +645,28 @@ void CameraSession::handleCaptureError(
 {
     const CameraSessionCallbacks callbacks = callbacksSnapshot();
     if (m_preview) {
+        const QString reason = status == CameraFrameStatus::Timeout
+                ? QStringLiteral(
+                    "连续3次等待相机图像超时，请检查相机连接和触发设置。")
+                : cameraErrorText(
+                    QStringLiteral("模板实时取景失败"),
+                    nativeErrorCode);
+        qCWarning(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.preview_failed status=%1 nativeCode=%2 reason=%3")
+                   .arg(cameraFrameStatusName(status))
+                   .arg(nativeErrorCode)
+                   .arg(reason);
         if (callbacks.previewFailed) {
-            const QString reason = status == CameraFrameStatus::Timeout
-                    ? QStringLiteral(
-                        "连续3次等待相机图像超时，请检查相机连接和触发设置。")
-                    : cameraErrorText(
-                        QStringLiteral("模板实时取景失败"),
-                        nativeErrorCode);
             callbacks.previewFailed(m_previewSessionId, reason);
         }
         return;
     }
-    qWarning() << "[CAMERA_CAPTURE] formal capture stopped:"
-               << static_cast<int>(status)
-               << nativeErrorCode;
+    qCCritical(logDevice).noquote()
+            << QStringLiteral(
+                "event=camera.capture_failed status=%1 nativeCode=%2")
+               .arg(cameraFrameStatusName(status))
+               .arg(nativeErrorCode);
     if (callbacks.enterFault) {
         callbacks.enterFault(
                     InspectionFaultReason::CameraDisconnected,
@@ -615,6 +685,12 @@ void CameraSession::handleCaptureStopped()
     const bool preview = m_preview;
     m_preview = false;
     if (!m_intentionalStop) {
+        qCWarning(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.capture_stopped_unexpected context=%1")
+                   .arg(preview
+                        ? QStringLiteral("preview")
+                        : QStringLiteral("inspection"));
         const CameraSessionCallbacks callbacks = callbacksSnapshot();
         if (callbacks.captureStopped) {
             callbacks.captureStopped(preview);
@@ -641,13 +717,13 @@ void CameraSession::submitFrame(
     if (!frame) {
         return;
     }
-
     if (!m_configuration.hardwareTriggerEnabled) {
         const bool accepted = m_runtime->submitDetectionFrame(frame);
-        if (!accepted) {
-            qDebug() << "[DETECTION_WORKER] software frame rejected"
-                     << frame->productKey.runId
-                     << frame->productKey.sequence;
+        if (!accepted
+                && m_runtime->state() == InspectionRuntimeState::Running) {
+            qCWarning(logDetection).noquote()
+                    << QStringLiteral(
+                        "event=frame.rejected trigger=software reason=worker_unavailable");
         }
         return;
     }
@@ -655,18 +731,26 @@ void CameraSession::submitFrame(
     const DetectionWorkSubmissionResult submission =
             m_runtime->trySubmitDetectionFrame(frame);
     if (submission == DetectionWorkSubmissionResult::QueueFull) {
+        qCCritical(logDetection).noquote()
+                << QStringLiteral(
+                    "event=frame.rejected trigger=hardware reason=queue_full capacity=%1")
+                   .arg(static_cast<qulonglong>(
+                            m_runtime->detectionWorkerQueueCapacity()));
         const CameraSessionCallbacks callbacks = callbacksSnapshot();
         if (callbacks.enterFault) {
             callbacks.enterFault(
                         InspectionFaultReason::HardTriggerQueueOverflow,
                         QStringLiteral(
-                            "硬触发 FIFO 无法接收产品 %1/%2，队列容量 %3。")
-                        .arg(frame->productKey.runId)
-                        .arg(frame->productKey.sequence)
+                            "硬触发 FIFO 无法接收新图像，队列容量 %1。")
                         .arg(static_cast<qulonglong>(
                             m_runtime
                             ->detectionWorkerQueueCapacity())));
         }
+    } else if (submission == DetectionWorkSubmissionResult::NotRunning
+               && m_runtime->state() == InspectionRuntimeState::Running) {
+        qCWarning(logDetection).noquote()
+                << QStringLiteral(
+                    "event=frame.rejected trigger=hardware reason=worker_unavailable");
     }
 }
 

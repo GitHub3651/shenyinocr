@@ -8,6 +8,7 @@
 #include "startup/single_instance_guard.h"
 #include "system_support/crash/windows_crash_handler.h"
 #include "system_support/logging/application_logger.h"
+#include "system_support/logging/log_categories.h"
 
 #include "engines/barcode/vendor/barcode_decoder_adapter.h"
 #include "devices/camera/vendor/hikvision_camera_device.h"
@@ -26,8 +27,6 @@
 
 #include <QApplication>
 #include <QCoreApplication>
-#include <QDate>
-#include <QDebug>
 #include <QDir>
 #include <QLibraryInfo>
 #include <QMessageBox>
@@ -41,6 +40,19 @@
 #include <opencv2/core.hpp>
 
 namespace {
+
+QString settingsLoadStatusName(AppSettingsLoadStatus status)
+{
+    switch (status) {
+    case AppSettingsLoadStatus::Loaded:
+        return QStringLiteral("loaded");
+    case AppSettingsLoadStatus::FirstRun:
+        return QStringLiteral("first_run");
+    case AppSettingsLoadStatus::ResetRequired:
+        return QStringLiteral("reset_required");
+    }
+    return QStringLiteral("unknown");
+}
 
 // 函数说明：showRuntimeGuardExitMessage 函数实现名称所表示的处理步骤。
 void showRuntimeGuardExitMessage(const QString &message)
@@ -137,15 +149,22 @@ int ApplicationStartup::run(int argc, char *argv[])
 
     const QString applicationDirectory =
             QCoreApplication::applicationDirPath();
-    if (ApplicationLogger::install(applicationDirectory)) {
-        qDebug() << "Logging to"
-                 << QDir(ApplicationLogger::logDirectoryPath())
-                    .filePath(QStringLiteral("app_log_%1.txt").arg(
-                        QDate::currentDate().toString(
-                            QStringLiteral("yyyy-MM-dd"))));
-    } else {
-        qWarning() << "Failed to initialize application logging";
+    QString loggingError;
+    if (!ApplicationLogger::start(&loggingError)) {
+        qCWarning(logStartup).noquote()
+                << QStringLiteral("event=log.start_failed reason=%1")
+                   .arg(loggingError);
     }
+    const QString applicationVersion = application.applicationVersion()
+            .trimmed().isEmpty()
+            ? QStringLiteral("unknown")
+            : application.applicationVersion().trimmed();
+    qCInfo(logStartup).noquote()
+            << QStringLiteral(
+                "event=app.start version=%1 build=Release pid=%2 executable=%3")
+               .arg(applicationVersion)
+               .arg(QCoreApplication::applicationPid())
+               .arg(QCoreApplication::applicationFilePath());
     WindowsCrashHandler::install();
 
     int result = 0;
@@ -154,10 +173,15 @@ int ApplicationStartup::run(int argc, char *argv[])
                 QStandardPaths::writableLocation(
                     QStandardPaths::AppDataLocation);
         if (applicationDataRoot.trimmed().isEmpty()) {
+            qCCritical(logStartup).noquote()
+                    << "event=settings.directory_unavailable";
             QMessageBox::critical(
                         nullptr,
                         QStringLiteral("设置错误"),
                         QStringLiteral("无法确定当前用户的应用数据目录。"));
+            qCInfo(logStartup).noquote()
+                    << "event=app.stop result=-1 reason=settings_directory_unavailable";
+            ApplicationLogger::stop();
             return -1;
         }
         const std::shared_ptr<AppSettingsStore> settingsStore(
@@ -185,27 +209,57 @@ int ApplicationStartup::run(int argc, char *argv[])
                                             &settingsError)) {
                         settingsStatus = AppSettingsLoadStatus::Loaded;
                     } else {
+                        qCCritical(logStartup).noquote()
+                                << QStringLiteral(
+                                    "event=settings.reset_failed code=%1 reason=%2")
+                                   .arg(settingsError.code,
+                                        settingsError.userMessage);
                         QMessageBox::critical(
                                     nullptr,
                                     QStringLiteral("设置清空失败"),
                                     settingsError.userMessage
                                     + QStringLiteral("\n\n")
                                     + settingsError.code);
+                        qCInfo(logStartup).noquote()
+                                << "event=app.stop result=-1 reason=settings_reset_failed";
+                        ApplicationLogger::stop();
                         return -1;
                     }
                 } else {
+                    qCWarning(logStartup).noquote()
+                            << "event=settings.reset_cancelled";
+                    qCInfo(logStartup).noquote()
+                            << "event=app.stop result=-1 reason=settings_reset_cancelled";
+                    ApplicationLogger::stop();
                     return -1;
                 }
             } else {
+            qCCritical(logStartup).noquote()
+                    << QStringLiteral(
+                        "event=settings.load_failed code=%1 reason=%2")
+                       .arg(settingsError.code, settingsError.userMessage);
             QMessageBox::critical(
                         nullptr,
                         QStringLiteral("设置文件损坏"),
                         settingsError.userMessage
                         + QStringLiteral("\n\n")
                         + settingsError.code);
+            qCInfo(logStartup).noquote()
+                    << "event=app.stop result=-1 reason=settings_load_failed";
+            ApplicationLogger::stop();
             return -1;
             }
         }
+        qCInfo(logStartup).noquote()
+                << QStringLiteral(
+                    "event=settings.loaded status=%1 root=%2 mode=%3 trigger=%4 saveMode=%5")
+                   .arg(settingsLoadStatusName(settingsStatus))
+                   .arg(QDir::toNativeSeparators(applicationDataRoot))
+                   .arg(startupSettings.detectModeId)
+                   .arg(startupSettings.triggerEnabled
+                        ? QStringLiteral("hardware")
+                        : QStringLiteral("software"))
+                   .arg(startupSettings.imageSaveModeId);
         const std::shared_ptr<TemplateStore> templateStore(
                     new TemplateStore);
         const std::shared_ptr<SettingsApplicationService> settingsService(
@@ -262,15 +316,20 @@ int ApplicationStartup::run(int argc, char *argv[])
                     new TemplateApplicationService(
                         templateStore,
                         barcodeDecoder));
+        qCInfo(logStartup).noquote()
+                << "event=services.assembled camera=hikvision plc=snap7 ocr=paddle barcode=vendor";
         MainWindow window(
                     inspectionService,
                     runtime.get(),
                     settingsService,
                     templateService);
         window.showMaximized();
+        qCInfo(logStartup).noquote() << "event=app.ready";
         result = application.exec();
     }
 
-    ApplicationLogger::shutdown();
+    qCInfo(logStartup).noquote()
+            << QStringLiteral("event=app.stop result=%1").arg(result);
+    ApplicationLogger::stop();
     return result;
 }

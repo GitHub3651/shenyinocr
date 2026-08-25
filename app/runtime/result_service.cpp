@@ -4,11 +4,12 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/result_service.h"
 
+#include "contracts/detection_mode.h"
 #include "runtime/inspection_presentation_renderer.h"
 #include "runtime/inspection_runtime.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QDateTime>
-#include <QDebug>
 #include <QDir>
 #include <QMetaObject>
 #include <QThread>
@@ -60,6 +61,58 @@ DetectionVerdictViewStyle verdictStyle(AlgorithmVerdict verdict)
     return verdict == AlgorithmVerdict::Ok
             ? DetectionVerdictViewStyle::Correct
             : DetectionVerdictViewStyle::Error;
+}
+
+QString verdictName(AlgorithmVerdict verdict)
+{
+    switch (verdict) {
+    case AlgorithmVerdict::Ok:
+        return QStringLiteral("OK");
+    case AlgorithmVerdict::Ng:
+        return QStringLiteral("NG");
+    case AlgorithmVerdict::NotEvaluated:
+        return QStringLiteral("NOT_EVALUATED");
+    }
+    return QStringLiteral("UNKNOWN");
+}
+
+QString stableModeId(const QString &value)
+{
+    const QString trimmed = value.trimmed();
+    if (trimmed.isEmpty()) {
+        return QStringLiteral("-");
+    }
+    const DetectionModeDescriptor *descriptor =
+            detectionModeDescriptorFromUiId(trimmed);
+    if (!descriptor) {
+        descriptor = detectionModeDescriptorFromId(trimmed);
+    }
+    return descriptor
+            ? QString::fromLatin1(descriptor->modeId)
+            : trimmed;
+}
+
+QString imageSaveSubmitStatusName(ImageSaveSubmitStatus status)
+{
+    switch (status) {
+    case ImageSaveSubmitStatus::Accepted:
+        return QStringLiteral("accepted");
+    case ImageSaveSubmitStatus::InvalidTask:
+        return QStringLiteral("invalid_task");
+    case ImageSaveSubmitStatus::Stopping:
+        return QStringLiteral("stopping");
+    }
+    return QStringLiteral("unknown");
+}
+
+QString finalScoreText(const DetectionResult &result)
+{
+    for (const DetectionOverlayPolygon &polygon : result.overlay.polygons) {
+        if (polygon.role == QLatin1String("tracking")) {
+            return QString::number(polygon.score, 'f', 3);
+        }
+    }
+    return QString();
 }
 
 } // namespace
@@ -230,9 +283,14 @@ DetectionCompletion ResultService::acceptCompletion(
 {
     const DetectionCompletion accepted = m_runtime.complete(
                 completion.frame, completion.result);
-    if (!accepted.isValid()) {
-        qDebug() << "[DETECTION_WORKER] stale completion ignored"
-                 << completion.result.modeId;
+    const InspectionRuntimeState state = m_runtime.state();
+    if (!accepted.isValid()
+            && (state == InspectionRuntimeState::Starting
+                || state == InspectionRuntimeState::Running)) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=frame.completion_ignored mode=%1 reason=stale_or_invalid")
+                   .arg(stableModeId(completion.result.modeId));
     }
     return accepted;
 }
@@ -351,6 +409,36 @@ void ResultService::process(const ProcessRequest &request)
     presentation.elapsedText = QStringLiteral("检测耗时 %1 ms")
             .arg(processingElapsedMs, 0, 'f', 2);
     m_runtime.publishPresentation(presentation);
+    const DetectionResult &result = request.completion.result;
+    QString summary = QStringLiteral(
+                "event=frame.completed mode=%1 result=%2 ms=%3")
+            .arg(stableModeId(result.modeId))
+            .arg(verdictName(result.verdict))
+            .arg(processingElapsedMs, 0, 'f', 2);
+    const QString templateName = result.templateName.trimmed();
+    if (!templateName.isEmpty()
+            && templateName != QLatin1String("--")) {
+        summary += QStringLiteral(" template=%1")
+                .arg(templateName);
+    }
+    const QString finalScore = finalScoreText(result);
+    if (!finalScore.isEmpty()) {
+        summary += QStringLiteral(" score=%1").arg(finalScore);
+    }
+    if (!result.recognizedText.trimmed().isEmpty()) {
+        summary += QStringLiteral(" text=%1")
+                .arg(result.recognizedText.trimmed());
+    }
+    if (result.verdict != AlgorithmVerdict::Ok
+            && !result.diagnostic.trimmed().isEmpty()) {
+        summary += QStringLiteral(" reason=%1")
+                .arg(result.diagnostic.trimmed());
+    }
+    if (result.status == DetectionStatus::SystemFault) {
+        qCCritical(logDetection).noquote() << summary;
+    } else {
+        qCInfo(logDetection).noquote() << summary;
+    }
 }
 
 // 函数说明：submitImageSave 函数执行对应事件或业务处理。
@@ -360,11 +448,16 @@ bool ResultService::submitImageSave(
     const QImage &annotatedImage) const
 {
     if (!m_imageSaveService) {
+        qCCritical(logRuntime).noquote()
+                << "event=image_save.submit_failed reason=service_unavailable";
         return false;
     }
     const ResultSaveOptions &options = request.saveOptions;
     if (options.layout == ResultSaveLayout::AnnotatedAndRaw
             && options.rootDirectory.trimmed().isEmpty()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=image_save.submit_failed reason=empty_directory");
         return false;
     }
 
@@ -372,6 +465,7 @@ bool ResultService::submitImageSave(
     const QString resultName = resultDirectoryName(saveAction);
     ImageSaveTask task;
     task.productKey = request.completion.frame->productKey;
+    bool annotatedImageMissing = false;
     if (options.layout == ResultSaveLayout::RawOnly) {
         task.items.push_back(saveItem(
             QImage(),
@@ -390,6 +484,7 @@ bool ResultService::submitImageSave(
                 || options.imageContentModeIndex == 2;
         if (saveAnnotated) {
             if (annotatedImage.isNull()) {
+                annotatedImageMissing = true;
                 m_runtime.publishImageSaveFailure(
                             0,
                             QStringLiteral("未采集到标注图像。"));
@@ -414,8 +509,32 @@ bool ResultService::submitImageSave(
                 options.quality));
         }
     }
-    return !task.items.empty()
-            && m_imageSaveService->submit(task).isAccepted();
+    if (task.items.empty()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=image_save.submit_failed reason=%1")
+                   .arg(annotatedImageMissing
+                        ? QStringLiteral("empty_annotated_image")
+                        : QStringLiteral("no_items"));
+        return false;
+    }
+    if (annotatedImageMissing) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=image_save.partial reason=empty_annotated_image items=%1")
+                   .arg(static_cast<qulonglong>(task.items.size()));
+    }
+    const ImageSaveSubmitResult submitted =
+            m_imageSaveService->submit(task);
+    if (!submitted.isAccepted()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=image_save.submit_failed status=%1 items=%2")
+                   .arg(imageSaveSubmitStatusName(submitted.status))
+                   .arg(static_cast<qulonglong>(task.items.size()));
+        return false;
+    }
+    return true;
 }
 
 // 函数说明：requestPlc 函数实现名称所表示的处理步骤。
@@ -507,6 +626,16 @@ void ResultService::handleCompletion(
     }
 
     if (accepted.result.status == DetectionStatus::Cancelled) {
+        if (m_runtime.state() == InspectionRuntimeState::Running) {
+            QString summary = QStringLiteral(
+                        "event=frame.cancelled mode=%1")
+                    .arg(stableModeId(accepted.result.modeId));
+            if (!accepted.result.diagnostic.trimmed().isEmpty()) {
+                summary += QStringLiteral(" reason=%1")
+                        .arg(accepted.result.diagnostic.trimmed());
+            }
+            qCWarning(logDetection).noquote() << summary;
+        }
         m_runtime.claimResult(accepted.frame->productKey);
         if (accepted.result.showRoiWarningOnCancelled) {
             m_runtime.publishRoiWarning(true);

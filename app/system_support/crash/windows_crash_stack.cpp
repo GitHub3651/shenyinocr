@@ -10,9 +10,6 @@
 #include <comdef.h>
 #include <Wbemidl.h>
 
-//#include<base/constants.h>
-#include "qdebug.h"
-
 // 函数说明：WindowsCrashStack 构造函数创建组件并初始化其依赖和初始状态。
 WindowsCrashStack::WindowsCrashStack(PEXCEPTION_POINTERS pException)
 {

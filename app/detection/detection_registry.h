@@ -38,7 +38,6 @@ struct DetectionPipelineCreationResult
     DetectionExecutor executor;
     QString errorMessage;
     QString startFailureMessage;
-    QString workerLogName;
 
     bool isAccepted() const
     {

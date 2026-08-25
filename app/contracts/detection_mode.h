@@ -32,7 +32,6 @@ struct DetectionModeDescriptor
     const char *modeId;
     const char *uiId;
     const char *displayName;
-    const char *workerLogName;
     const char *startFailureMessage;
     DetectionTrackingKind trackingKind;
     bool requiresTargetText;

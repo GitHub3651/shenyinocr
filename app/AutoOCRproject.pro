@@ -47,6 +47,7 @@ SOURCES += \
     system_support/settings/app_settings_store.cpp \
     system_support/license/license_codec.cpp \
     system_support/logging/application_logger.cpp \
+    system_support/logging/log_categories.cpp \
     system_support/crash/windows_crash_stack.cpp \
     system_support/crash/windows_crash_handler.cpp \
     startup/runtime_guard.cpp \
@@ -122,6 +123,7 @@ HEADERS += \
     system_support/settings/app_settings_store.h \
     system_support/license/license_codec.h \
     system_support/logging/application_logger.h \
+    system_support/logging/log_categories.h \
     system_support/crash/windows_crash_stack.h \
     system_support/crash/windows_crash_handler.h \
     startup/runtime_guard.h \
