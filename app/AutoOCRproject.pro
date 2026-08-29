@@ -64,7 +64,7 @@ SOURCES += \
     runtime/frame_queue.cpp \
     runtime/detection_worker.cpp \
     detection/detection_registry.cpp \
-    detection/detection_template_snapshot.cpp \
+    detection/multi_template_runtime_snapshot.cpp \
     runtime/result_presentation_mailbox.cpp \
     runtime/inspection_plc_controller.cpp \
     runtime/inspection_runtime.cpp \
@@ -144,7 +144,7 @@ HEADERS += \
     runtime/frame_queue.h \
     runtime/detection_worker.h \
     detection/detection_registry.h \
-    detection/detection_template_snapshot.h \
+    detection/multi_template_runtime_snapshot.h \
     application/template_editor_contract.h \
     runtime/result_presentation_mailbox.h \
     runtime/inspection_plc_controller.h \

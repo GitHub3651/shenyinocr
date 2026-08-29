@@ -30,7 +30,7 @@ BarcodeWordDetectionResult BarcodeWordDetectionPipeline::detect(
 // 函数说明：detect 函数执行对应事件或业务处理。
 BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         const DetectionWorkItem &item,
-        const QString &targetText,
+        const QStringList &targetUnits,
         const QString &templateName,
         const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
@@ -212,7 +212,7 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
     output.wordOutput = wordPipeline.detectPreparedDateRoi(
                 item,
                 oriented.date,
-                targetText,
+                targetUnits,
                 templateName,
                 preparedTemplates,
                 templateTargetIndexes,

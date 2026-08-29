@@ -9,6 +9,7 @@
 #include "detection/common/character_template_matcher.h"
 
 #include <QString>
+#include <QStringList>
 
 #include <opencv2/core.hpp>
 
@@ -57,13 +58,13 @@ public:
             cv::Mat &dateRoi,
             const cv::Mat &sourceImage,
             const std::vector<cv::Point> &datePoly,
-            const QString &targetText,
+            const QStringList &targetUnits,
             const CharacterMatchFunction &matchCharacters,
             const OverlapDetectionFunction &detectOverlap) const;
 
     StampDetectionWorkOutput detect(
             const DetectionWorkItem &item,
-            const QString &targetText,
+            const QStringList &targetUnits,
             const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,
             int thresholdPercent,

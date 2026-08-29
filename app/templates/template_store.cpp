@@ -583,12 +583,28 @@ bool loadCharacters(const QString &directory,
                               << QStringLiteral("*.jpeg"),
                 QDir::Files | QDir::NoSymLinks, QDir::Name);
     QVector<TemplateCharacterAsset> result;
+    const QRegularExpression validLetterStem(
+                R"(^(?:upper_[A-Z]|lower_[a-z])(?:\(\d+\))?$)");
+    const QRegularExpression legacyLetterStem(
+                R"(^[A-Za-z](?:\(\d+\))?$)");
     for (const QFileInfo &file : files) {
         TemplateCharacterAsset asset;
         asset.fileName = file.fileName();
-        asset.normalizedBaseName = file.completeBaseName()
-                .trimmed().toLower();
-        if (asset.normalizedBaseName.isEmpty()
+        asset.storageStem = file.completeBaseName().trimmed();
+        const bool letterStem = legacyLetterStem.match(
+                    asset.storageStem).hasMatch()
+                || asset.storageStem.startsWith(
+                    QStringLiteral("upper_"), Qt::CaseInsensitive)
+                || asset.storageStem.startsWith(
+                    QStringLiteral("lower_"), Qt::CaseInsensitive);
+        if (letterStem && !validLetterStem.match(
+                asset.storageStem).hasMatch()) {
+            return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
+                        QStringLiteral(
+                            "字母字符模板文件名无效，请重新分割并保存字符模板。"),
+                        file.fileName(), file.absoluteFilePath());
+        }
+        if (asset.storageStem.isEmpty()
                 || !readImage(file.absoluteFilePath(), cv::IMREAD_GRAYSCALE,
                               true, &asset.image, error)) {
             if (error && error->isEmpty()) {
@@ -946,22 +962,32 @@ bool TemplateStore::loadPrepared(const QString &directoryPath,
                               &editable.stampRingTemplate, error))) {
         return false;
     }
-    const bool characterMode = expectedMode == DetectionMode::Stamp
-            || expectedMode == DetectionMode::Word
-            || expectedMode == DetectionMode::BarcodeWord;
+    const bool characterMode = detectionModeDescriptor(
+                expectedMode).requiresCharacterTemplates;
     const bool charactersRequired = characterMode
             && !editable.settings.targetText.trimmed().isEmpty();
     if (!loadCharacters(directory, charactersRequired,
                         &editable.characterAssets, error)) {
         return false;
     }
-    const QString missingTarget = missingTemplateTargetUnit(
-                editable.settings, editable.characterAssets);
-    if (!missingTarget.isEmpty()) {
-        return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                    QStringLiteral("模板缺少目标文字所需字符：“%1”。")
-                    .arg(missingTarget),
-                    editable.settings.targetText, directory);
+    QStringList targetUnits;
+    if (characterMode) {
+        targetUnits = TemplateStore::templateTargetUnits(
+                    editable.settings.targetText);
+        if (!editable.settings.targetText.trimmed().isEmpty()
+                && targetUnits.isEmpty()) {
+            return fail(error, QStringLiteral("TEMPLATE_TARGET_INVALID"),
+                        QStringLiteral("目标文字不包含可检测字符。"),
+                        editable.settings.targetText, directory);
+        }
+        const QString missingTarget = missingTemplateTargetUnit(
+                    expectedMode, targetUnits, editable.characterAssets);
+        if (!missingTarget.isEmpty()) {
+            return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
+                        QStringLiteral("模板缺少目标文字所需字符：“%1”。")
+                        .arg(missingTarget),
+                        editable.settings.targetText, directory);
+        }
     }
     if (editable.trackingTemplate.cols
             != static_cast<int>(editable.settings.trackingRoi.width())
@@ -983,15 +1009,14 @@ bool TemplateStore::loadPrepared(const QString &directoryPath,
     candidate->datePolygon = cvPolygon(editable.settings.datePolygon);
     candidate->barcodePolygon = cvPolygon(editable.settings.barcodePolygon);
     candidate->stampPolygon = cvPolygon(editable.settings.stampPolygon);
+    candidate->targetUnits = targetUnits;
     for (const TemplateCharacterAsset &asset : editable.characterAssets) {
         candidate->characterAssets.push_back(asset);
     }
-    const QStringList targets = templateTargetUnits(
-                editable.settings.targetText);
-    for (int targetIndex = 0; targetIndex < targets.size(); ++targetIndex) {
+    for (int targetIndex = 0; targetIndex < targetUnits.size(); ++targetIndex) {
         for (const TemplateCharacterAsset &asset : editable.characterAssets) {
             if (!templateCharacterAssetMatchesTarget(
-                    asset.normalizedBaseName, targets.at(targetIndex))) {
+                    asset.storageStem, targetUnits.at(targetIndex))) {
                 continue;
             }
             candidate->characterTemplates.push_back(asset.image);
@@ -1089,7 +1114,7 @@ bool TemplateStore::save(const QString &directoryPath,
     return true;
 }
 
-QStringList templateTargetUnits(const QString &targetText)
+QStringList TemplateStore::templateTargetUnits(const QString &targetText)
 {
     QStringList units;
     const QRegularExpression expression(
@@ -1097,7 +1122,7 @@ QStringList templateTargetUnits(const QString &targetText)
     QRegularExpressionMatchIterator matches =
             expression.globalMatch(targetText);
     while (matches.hasNext()) {
-        const QString value = matches.next().captured(0).toLower();
+        const QString value = matches.next().captured(0);
         if (!value.isEmpty()) {
             units.append(value);
         }
@@ -1105,12 +1130,28 @@ QStringList templateTargetUnits(const QString &targetText)
     return units;
 }
 
+QString characterStorageStem(const QString &unit)
+{
+    const QString value = unit.trimmed();
+    if (value.size() != 1) {
+        return value;
+    }
+    const QChar character = value.at(0);
+    if (character >= QLatin1Char('A') && character <= QLatin1Char('Z')) {
+        return QStringLiteral("upper_") + character;
+    }
+    if (character >= QLatin1Char('a') && character <= QLatin1Char('z')) {
+        return QStringLiteral("lower_") + character;
+    }
+    return value;
+}
+
 bool templateCharacterAssetMatchesTarget(
-    const QString &normalizedBaseName,
+    const QString &storageStem,
     const QString &target)
 {
-    const QString base = normalizedBaseName.trimmed().toLower();
-    const QString expected = target.trimmed().toLower();
+    const QString base = storageStem.trimmed();
+    const QString expected = characterStorageStem(target);
     if (base == expected) {
         return true;
     }
@@ -1118,25 +1159,24 @@ bool templateCharacterAssetMatchesTarget(
         return false;
     }
     const QString suffix = base.mid(expected.size());
-    return suffix.startsWith(QLatin1Char('_'))
-            || suffix.startsWith(QLatin1Char('-'))
-            || suffix.startsWith(QLatin1Char('('));
+    static const QRegularExpression variantSuffix(
+                R"(^\(\d+\)$)");
+    return variantSuffix.match(suffix).hasMatch();
 }
 
 QString missingTemplateTargetUnit(
-    const TemplateSettings &settings,
+    DetectionMode mode,
+    const QStringList &targetUnits,
     const QVector<TemplateCharacterAsset> &characterAssets)
 {
-    if (settings.detectionMode != DetectionMode::Stamp
-            && settings.detectionMode != DetectionMode::Word
-            && settings.detectionMode != DetectionMode::BarcodeWord) {
+    if (!detectionModeDescriptor(mode).requiresCharacterTemplates) {
         return QString();
     }
-    for (const QString &target : templateTargetUnits(settings.targetText)) {
+    for (const QString &target : targetUnits) {
         bool matched = false;
         for (const TemplateCharacterAsset &asset : characterAssets) {
             if (templateCharacterAssetMatchesTarget(
-                    asset.normalizedBaseName, target)) {
+                    asset.storageStem, target)) {
                 matched = true;
                 break;
             }

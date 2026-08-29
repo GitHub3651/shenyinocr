@@ -1125,9 +1125,29 @@ void TemplateEditorPage::applyCurrentTargetText()
     EditableTemplate value = original;
     value.settings.targetText = m_view.textEdit_targetText
             ->toPlainText().trimmed();
-    const QString missingTarget = missingTemplateTargetUnit(
-                value.settings, value.characterAssets);
-    if (!missingTarget.isEmpty()) {
+    QString validationMessage;
+    if (detectionModeDescriptor(
+            value.settings.detectionMode).requiresCharacterTemplates) {
+        const QStringList targetUnits =
+                TemplateStore::templateTargetUnits(
+                    value.settings.targetText);
+        if (!value.settings.targetText.trimmed().isEmpty()
+                && targetUnits.isEmpty()) {
+            validationMessage = QStringLiteral(
+                        "目标文字不包含可检测字符。");
+        } else {
+            const QString missingTarget = missingTemplateTargetUnit(
+                        value.settings.detectionMode,
+                        targetUnits,
+                        value.characterAssets);
+            if (!missingTarget.isEmpty()) {
+                validationMessage = QStringLiteral(
+                            "模板缺少目标文字所需字符：“%1”。")
+                        .arg(missingTarget);
+            }
+        }
+    }
+    if (!validationMessage.isEmpty()) {
         {
             QSignalBlocker blocker(m_view.textEdit_targetText);
             m_view.textEdit_targetText->setPlainText(
@@ -1135,10 +1155,8 @@ void TemplateEditorPage::applyCurrentTargetText()
         }
         refreshTemplateDirty();
         showWarning(QStringLiteral("目标文字保存失败"),
-                    QStringLiteral(
-                        "模板缺少目标文字所需字符：“%1”。\n"
-                        "目标文字未保存，已恢复为原内容。")
-                    .arg(missingTarget));
+                    validationMessage + QStringLiteral(
+                        "\n目标文字未保存，已恢复为原内容。"));
         return;
     }
     QString errorMessage;

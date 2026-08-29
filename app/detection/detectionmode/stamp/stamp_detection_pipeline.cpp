@@ -7,42 +7,17 @@
 
 #include "detection/common/detection_roi_geometry.h"
 
-#include <QRegularExpression>
-
-namespace {
-
-// 函数说明：countTargetCharacters 函数读取、等待或计算对应的数据。
-int countTargetCharacters(const QString &targetText)
-{
-    const QRegularExpression expression(
-                R"(([\d[A-Za-z一-龥]\(\d+\))|(\d)|([A-Za-z])|([一-龥]))");
-    QRegularExpressionMatchIterator matches =
-            expression.globalMatch(targetText);
-
-    int count = 0;
-    while (matches.hasNext()) {
-        matches.next();
-        ++count;
-    }
-    if (count == 0 && !targetText.isEmpty()) {
-        count = targetText.length();
-    }
-    return count;
-}
-
-} // namespace
-
 // 函数说明：detect 函数执行对应事件或业务处理。
 StampDetectionResult StampDetectionPipeline::detect(
         cv::Mat &dateRoi,
         const cv::Mat &sourceImage,
         const std::vector<cv::Point> &datePoly,
-        const QString &targetText,
+        const QStringList &targetUnits,
         const CharacterMatchFunction &matchCharacters,
         const OverlapDetectionFunction &detectOverlap) const
 {
     StampDetectionResult result;
-    result.targetCharacterCount = countTargetCharacters(targetText);
+    result.targetCharacterCount = targetUnits.size();
     if (dateRoi.empty() || sourceImage.empty() || !matchCharacters) {
         return result;
     }
@@ -65,7 +40,7 @@ StampDetectionResult StampDetectionPipeline::detect(
 // 函数说明：detect 函数执行对应事件或业务处理。
 StampDetectionWorkOutput StampDetectionPipeline::detect(
         const DetectionWorkItem &item,
-        const QString &targetText,
+        const QStringList &targetUnits,
         const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent,
@@ -105,7 +80,7 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
                 dateRoi,
                 item.frame->originalImage,
                 item.pose.datePoly,
-                targetText,
+                targetUnits,
                 [matchResult](cv::Mat &) {
         return matchResult.detectedCount;
     },

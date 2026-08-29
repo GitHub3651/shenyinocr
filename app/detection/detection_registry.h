@@ -2,7 +2,7 @@
 #pragma once
 
 #include "contracts/detection_mode.h"
-#include "detection/detection_template_snapshot.h"
+#include "detection/multi_template_runtime_snapshot.h"
 #include "detection/common/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
 #include "templates/template_store.h"
@@ -25,7 +25,7 @@ struct DetectionRegistryRequest
 {
     DetectionMode mode = DetectionMode::Stamp;
     QVector<PreparedTemplateSnapshot> preparedTemplates;
-    DetectionTemplateSnapshot templateSnapshot;
+    MultiTemplateRuntimeSnapshot multiTemplateSnapshot;
     double tissueRoughnessThreshold = 6.0;
     FramePreprocessSettings framePreprocess;
 };

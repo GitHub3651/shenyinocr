@@ -427,12 +427,12 @@ StartInspectionResult InspectionApplicationService::start(
     if (hardwareTriggerEnabled) {
         m_runtime->resetStatistics();
     }
-    DetectionTemplateSnapshot templateSnapshot;
+    MultiTemplateRuntimeSnapshot multiTemplateSnapshot;
     if (detectionModeDescriptor(detectionMode).trackingKind
             == DetectionTrackingKind::MultipleTemplates) {
-        templateSnapshot = DetectionTemplateSnapshotBuilder::create(
+        multiTemplateSnapshot = MultiTemplateRuntimeSnapshotBuilder::create(
                     preparedTemplates);
-        if (!templateSnapshot.isValid()) {
+        if (!multiTemplateSnapshot.isValid()) {
             return rejectStart(
                         InspectionStartIssue::TemplatesMissing,
                         QStringLiteral("INSPECTION_TEMPLATE_SNAPSHOT_INVALID"),
@@ -442,7 +442,7 @@ StartInspectionResult InspectionApplicationService::start(
 
     const QString runId = m_runtime->beginStart(
                 settings, detectionMode, preparedTemplates,
-                templateSnapshot,
+                multiTemplateSnapshot,
                 settings.detectionSchemes.tissueRoughnessThreshold,
                 framePreprocessSettings(settings));
     if (runId.isEmpty()) {

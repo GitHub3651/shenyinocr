@@ -1,5 +1,5 @@
 // 文件作用：实现多模板定位和字符检测快照的构造。
-#include "detection/detection_template_snapshot.h"
+#include "detection/multi_template_runtime_snapshot.h"
 
 namespace {
 
@@ -15,13 +15,13 @@ std::vector<cv::Mat> cloneImages(const std::vector<cv::Mat> &images)
 
 }
 
-DetectionTemplateSnapshot DetectionTemplateSnapshotBuilder::create(
+MultiTemplateRuntimeSnapshot MultiTemplateRuntimeSnapshotBuilder::create(
     const QVector<PreparedTemplateSnapshot> &templates)
 {
-    DetectionTemplateSnapshot snapshot;
+    MultiTemplateRuntimeSnapshot snapshot;
     snapshot.trackingTemplates.reserve(
                 static_cast<std::size_t>(templates.size()));
-    snapshot.detectionTemplates.reserve(
+    snapshot.runtimeConfigs.reserve(
                 static_cast<std::size_t>(templates.size()));
 
     for (int sourceIndex = 0; sourceIndex < templates.size(); ++sourceIndex) {
@@ -30,7 +30,7 @@ DetectionTemplateSnapshot DetectionTemplateSnapshotBuilder::create(
             continue;
         }
         const int runtimeIndex = static_cast<int>(
-                    snapshot.detectionTemplates.size());
+                    snapshot.runtimeConfigs.size());
         WordTrackingTemplate tracking;
         tracking.name = source->displayName;
         tracking.templateIndex = runtimeIndex;
@@ -39,24 +39,24 @@ DetectionTemplateSnapshot DetectionTemplateSnapshotBuilder::create(
         tracking.datePoly = source->datePolygon;
         snapshot.trackingTemplates.push_back(tracking);
 
-        DetectionModeWorkerTemplate detection;
-        detection.templateName = source->displayName;
-        detection.targetText = source->settings.targetText;
-        detection.preparedTemplates = CharacterGlyphMatcher::prepare(
+        MultiTemplateRuntimeConfig runtimeConfig;
+        runtimeConfig.templateName = source->displayName;
+        runtimeConfig.targetUnits = source->targetUnits;
+        runtimeConfig.preparedTemplates = CharacterGlyphMatcher::prepare(
                     cloneImages(source->characterTemplates));
-        detection.templateTargetIndexes =
+        runtimeConfig.templateTargetIndexes =
                 source->characterTemplateTargetIndexes;
-        detection.thresholdPercent =
+        runtimeConfig.thresholdPercent =
                 source->settings.imageThresholdPercent;
-        detection.barcodeOptions.formatMask =
+        runtimeConfig.barcodeOptions.formatMask =
                 source->settings.barcodeParameters.formatMask;
-        detection.barcodeOptions.roiPaddingPercent =
+        runtimeConfig.barcodeOptions.roiPaddingPercent =
                 source->settings.barcodeParameters.roiPaddingPercent;
-        detection.barcodeOptions.maxDecodeTimeMs =
+        runtimeConfig.barcodeOptions.maxDecodeTimeMs =
                 source->settings.barcodeParameters.maxDecodeTimeMs;
-        detection.barcodeOptions.enableFallback =
+        runtimeConfig.barcodeOptions.enableFallback =
                 source->settings.barcodeParameters.enableFallback;
-        snapshot.detectionTemplates.push_back(detection);
+        snapshot.runtimeConfigs.push_back(runtimeConfig);
     }
     return snapshot;
 }

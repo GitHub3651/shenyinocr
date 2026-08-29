@@ -52,7 +52,7 @@ struct TemplateSettings
 struct TemplateCharacterAsset
 {
     QString fileName;
-    QString normalizedBaseName;
+    QString storageStem;
     cv::Mat image;
 };
 
@@ -77,6 +77,7 @@ struct PreparedTemplate
     std::vector<cv::Point2f> datePolygon;
     std::vector<cv::Point2f> barcodePolygon;
     std::vector<cv::Point2f> stampPolygon;
+    QStringList targetUnits;
     std::vector<TemplateCharacterAsset> characterAssets;
     std::vector<cv::Mat> characterTemplates;
     std::vector<int> characterTemplateTargetIndexes;
@@ -107,6 +108,8 @@ struct TemplateStoreError
 class TemplateStore
 {
 public:
+    static QStringList templateTargetUnits(const QString &targetText);
+
     TemplateSummary readSummary(
         const QString &directoryPath,
         DetectionMode expectedMode,
@@ -128,10 +131,11 @@ public:
               TemplateStoreError *error = nullptr) const;
 };
 
-QStringList templateTargetUnits(const QString &targetText);
+QString characterStorageStem(const QString &unit);
 bool templateCharacterAssetMatchesTarget(
-    const QString &normalizedBaseName,
+    const QString &storageStem,
     const QString &target);
 QString missingTemplateTargetUnit(
-    const TemplateSettings &settings,
+    DetectionMode mode,
+    const QStringList &targetUnits,
     const QVector<TemplateCharacterAsset> &characterAssets);

@@ -19,6 +19,8 @@
 ├─ template_ring.bmp             仅刚印检测
 └─ character_templates/          需要字符匹配的模式
    ├─ 0.png
+   ├─ upper_A.png
+   ├─ lower_a.png
    └─ ...
 ```
 
@@ -222,6 +224,8 @@ struct AppSettings {
 | `tracking_template.bmp` | 四种模板模式 | 必须存在、能解码且尺寸等于 `trackingRoi` 宽高 |
 | `template_ring.bmp` | 仅刚印 | 必须存在且能解码 |
 | `character_templates/*.(png/bmp/jpg/jpeg)` | 刚印、字库、二维码+三期 | 目标文字中的每个有效字符至少有一张可匹配图片 |
+
+ASCII 字母字符模板严格区分大小写：大写 `A` 使用 `upper_A.png`，小写 `a` 使用 `lower_a.png`；同字符变体仅使用 `upper_A(1).png`、`lower_a(1).png` 形式。旧 `A.png`、`a.png` 以及 `_`、`-` 变体不兼容、不迁移。数字和中文仍使用 `2.png`、`2(1).png`、`中.png` 等直接名称。该规则只改变字符资源文件名，不改变 `TemplateSettings` Schema 1。
 
 区域点集只来自 `template_settings.json.regions`，不读取其他校准文件。
 

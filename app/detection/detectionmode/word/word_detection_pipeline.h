@@ -47,12 +47,12 @@ public:
 
     WordDetectionResult detect(
             cv::Mat &dateRoi,
-            const QString &targetText,
+            const QStringList &targetUnits,
             const CharacterMatchFunction &matchCharacters) const;
 
     WordDetectionWorkOutput detect(
             const DetectionWorkItem &item,
-            const QString &targetText,
+            const QStringList &targetUnits,
             const QString &templateName,
             const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,
@@ -61,7 +61,7 @@ public:
     WordDetectionWorkOutput detectPreparedDateRoi(
             const DetectionWorkItem &item,
             const OrientedDateRoi &orientedDateRoi,
-            const QString &targetText,
+            const QStringList &targetUnits,
             const QString &templateName,
             const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,

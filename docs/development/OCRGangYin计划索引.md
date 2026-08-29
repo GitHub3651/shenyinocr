@@ -4,7 +4,7 @@
 
 本文只负责选择当前任务应读取的计划，不复制各计划的详细步骤、功能合同或验收清单。新增计划时更新本索引，不修改项目 Skill。
 
-更新时间：2026-08-25。
+更新时间：2026-08-29。
 
 ## 2. 权威顺序
 
@@ -40,6 +40,7 @@
 |---|---|---|---|
 | `OCRGangYin图像与检测信息生命周期绑定修复方案.md` | 已完成，用户统一验证通过 | 主图像与判定、识别内容、耗时、当前模板名称的同生命周期呈现 | 六个生产文件完成统一清理入口和旧写入删除；静态门禁及用户统一验证通过 |
 | `OCRGangYin应用运行时界面边界精简方案.md` | 架构设计已确认，待实施授权 | `application/contracts/runtime` 与 `ui` 的结果呈现边界、Runtime 内部组件隐藏和新增模式影响范围 | 已确认 Runtime 直连 UI 的结果数据链、数据 mailbox 和回调删除边界；未修改生产代码，未执行构建或人工验证 |
+| `OCRGangYin字符目标解析统一与大小写敏感支持方案.md` | 生产代码已实施，Release 构建通过，待人工回归 | ASCII 字母大小写敏感、`TemplateStore::templateTargetUnits()` 唯一解析、字符资产唯一命名及三种字符模式的值传递 | 单次解析、缺失校验复用、`MultiTemplateRuntimeSnapshot` / `MultiTemplateRuntimeConfig` / `StampRuntimeConfig` 和 Pipeline `targetUnits` 单一路径已落地；旧名称及兼容路径已删除 |
 
 上述方案在用户明确批准前不作为当前实施清单；若获批准，应先记录新的基线、工作区状态和与其他有效计划的交叉范围。
 

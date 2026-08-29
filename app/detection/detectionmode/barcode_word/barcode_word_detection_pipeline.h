@@ -9,6 +9,7 @@
 #include "detection/detectionmode/word/word_detection_pipeline.h"
 
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <vector>
@@ -72,7 +73,7 @@ public:
 
     BarcodeWordDetectionWorkOutput detect(
             const DetectionWorkItem &item,
-            const QString &targetText,
+            const QStringList &targetUnits,
             const QString &templateName,
             const PreparedCharacterTemplates &preparedTemplates,
             const std::vector<int> &templateTargetIndexes,

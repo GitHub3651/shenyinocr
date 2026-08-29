@@ -577,7 +577,8 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
         const QString boxName = box.name.trimmed();
         QString displayText = boxName.isEmpty() ? QStringLiteral("未命名") : boxName;
         if (!boxName.isEmpty()) {
-            const QString fileName = nextAvailableFileName(boxName, reservedFileNames);
+            const QString fileName = nextAvailableFileName(
+                        characterStorageStem(boxName), reservedFileNames);
             reservedFileNames.append(fileName);
             displayText += "\n" + fileName;
         }
@@ -645,7 +646,8 @@ void CharacterTemplateEditorDialog::refreshSaveNamePreviews()
             continue;
         }
 
-        const QString fileName = nextAvailableFileName(baseName, reservedFileNames);
+        const QString fileName = nextAvailableFileName(
+                    characterStorageStem(baseName), reservedFileNames);
         reservedFileNames.append(fileName);
         label->setText(QStringLiteral("将保存为：%1").arg(fileName));
     }
@@ -693,7 +695,8 @@ bool CharacterTemplateEditorDialog::saveTemplates()
     for (int index = 0; index < m_sortedBoxes.size(); ++index) {
         const QString name = m_nameEdits.at(index)->text().trimmed();
         const QString fileName =
-                nextAvailableFileName(name, reservedFileNames);
+                nextAvailableFileName(
+                    characterStorageStem(name), reservedFileNames);
         reservedFileNames.append(fileName);
         const QRect rect = m_sortedBoxes.at(index).rect
                 .normalized()

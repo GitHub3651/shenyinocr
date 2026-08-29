@@ -1598,3 +1598,13 @@
 - [x] 模板恢复、保存、选择更新、应用和取景已补齐最终成功/失败事件；设置成功日志增加可读`key/value`，`image.save_path`不再逐字符输出成功日志。为覆盖模板选择对话框内唯一可见的保存失败边界，计划内调用链扩张到`template_selection_dialog.cpp`，未新增代码文件或日志框架。
 - [x] 第二轮静态门禁通过：计划列出的禁止事件全部为0；`frame.completed`不含累计统计或内部标识，`run.stopped`包含`accepted/completed/cancelled/total/ng`；裸内部状态数字和固定无意义布尔字段为0；Logger底座、类别、保留、崩溃处理和工程清单无第二轮行为修改，`git diff --check`通过。既有暂存和未暂存资产保持原状，未执行暂存、提交、qmake、构建、测试程序或主程序。
 - [ ] 等待用户在Qt Creator使用Release统一执行Run qmake、Rebuild和第12.3节人工验证；通过前`SYS-004/005`保持`迁移中`，不把静态证据写成运行通过。
+
+## 字符目标解析统一与大小写敏感支持（2026-08-29，代码完成待人工回归）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `ec5b356`；开始时生产 `app/` 无差异，计划索引修改及两份未跟踪计划文档属于既有工作。本专项未执行 `git add`、提交、推送、合并、变基或历史改写，也未修改用户模板、图片、模型、DLL、翻译、样式、图标或 `.qrc`。
+- [x] `TemplateStore::templateTargetUnits()` 成为唯一字符目标解析实现并保留 ASCII 字母大小写；`PreparedTemplate::targetUnits` 只为钢印、字库、二维码＋三期填充。当前模板保存、批量更新和运行准备均通过 `requiresCharacterTemplates` 限定字符解析，非法目标和缺失字符校验复用同一次结果；OCR 完全跳过字符解析并继续传递原始 `targetText`。
+- [x] 字母资产唯一使用 `upper_A/lower_a` 及其 `(数字)` 变体；字符编辑器使用共享 `characterStorageStem()` 生成文件名，`TemplateCharacterAsset::storageStem` 保留实际大小写。旧 `A.png/a.png`、错误大小写和旧 `_/-` 匹配路径不再识别，不提供迁移、别名或回退。
+- [x] 多模板运行链直接更名为 `MultiTemplateRuntimeSnapshot`、`MultiTemplateRuntimeSnapshotBuilder`、`MultiTemplateRuntimeConfig` 和 `runtimeConfigs`；钢印运行链直接更名为 `StampRuntimeConfig`、`buildStampRuntimeConfig()`。旧文件、类型、字段和函数名均已删除，qmake 清单同步切换。
+- [x] `WordDetectionPipeline`、`StampDetectionPipeline`、`BarcodeWordDetectionPipeline` 只接收 `targetUnits`；删除 Word 本地解析器、Stamp 本地计数正则和两处字符串长度回退。目标数固定为 `targetUnits.size()`，共享 `CharacterGlyphMatcher`、阈值、IoU、钢印重叠 AND、二维码优先和外围结果链均未修改。
+- [x] 2026-08-29 Agent 验证：Qt 5.15.2 qmake 成功；VS2022 Developer Command Prompt 下 MSVC x64 Release 全量编译、链接及部署成功。构建仅出现项目既有 `/MD` 被 `/MT` 覆盖和 `LNK4098` 默认库冲突警告，无本专项编译或链接错误。
+- [ ] 等待用户按专项方案第 14 节验证 `AB12/ab12/Aa12` 文件名、旧字母模板拒绝、钢印/字库/二维码＋三期实际检测、纯数字回归和 OCR `---` 原始目标；通过前 `TPL-011、TPL-015、DET-002、DET-003、DET-006` 保持 `迁移中`。

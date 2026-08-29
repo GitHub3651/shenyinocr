@@ -17,33 +17,33 @@
 
 namespace {
 
-struct StampConfiguration
+struct StampRuntimeConfig
 {
-    QString targetText;
+    QStringList targetUnits;
     PreparedCharacterTemplates preparedTemplates;
     std::vector<int> templateTargetIndexes;
     int thresholdPercent = 0;
     StampDetectionPipeline::OverlapDetectionFunction detectOverlap;
 };
 
-bool buildStampConfiguration(
+bool buildStampRuntimeConfig(
     const PreparedTemplate &prepared,
-    StampConfiguration *configuration,
+    StampRuntimeConfig *runtimeConfig,
     QString *errorMessage)
 {
-    if (!configuration) {
+    if (!runtimeConfig) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("钢印运行模板不可用。");
         }
         return false;
     }
-    configuration->targetText = prepared.settings.targetText;
-    configuration->thresholdPercent = prepared.settings.imageThresholdPercent;
-    configuration->preparedTemplates = CharacterGlyphMatcher::prepare(
+    runtimeConfig->targetUnits = prepared.targetUnits;
+    runtimeConfig->thresholdPercent = prepared.settings.imageThresholdPercent;
+    runtimeConfig->preparedTemplates = CharacterGlyphMatcher::prepare(
                 prepared.characterTemplates);
-    configuration->templateTargetIndexes =
+    runtimeConfig->templateTargetIndexes =
             prepared.characterTemplateTargetIndexes;
-    if (!configuration->preparedTemplates.isValid()) {
+    if (!runtimeConfig->preparedTemplates.isValid()) {
         if (errorMessage) {
             *errorMessage = QStringLiteral("钢印字符模板或图像阈值无效。");
         }
@@ -62,7 +62,7 @@ bool buildStampConfiguration(
         }
         return false;
     }
-    configuration->detectOverlap = [overlap](
+    runtimeConfig->detectOverlap = [overlap](
         const cv::Mat &sourceImage,
         const std::vector<cv::Point> &datePoly) {
         const DetectResult detected = overlap->processImage(sourceImage, datePoly);
@@ -169,10 +169,10 @@ DetectionPipelineCreationResult DetectionRegistry::create(
     const PreparedTemplate *first = request.preparedTemplates.isEmpty()
             ? nullptr : request.preparedTemplates.first().get();
 
-    StampConfiguration stampConfiguration;
+    StampRuntimeConfig stampRuntimeConfig;
     if (request.mode == DetectionMode::Stamp
-            && !buildStampConfiguration(
-                *first, &stampConfiguration, &creation.errorMessage)) {
+            && !buildStampRuntimeConfig(
+                *first, &stampRuntimeConfig, &creation.errorMessage)) {
         return creation;
     }
     if (request.mode == DetectionMode::Ocr
@@ -182,7 +182,7 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         return creation;
     }
     if (descriptor.trackingKind == DetectionTrackingKind::MultipleTemplates
-            && !request.templateSnapshot.isValid()) {
+            && !request.multiTemplateSnapshot.isValid()) {
         creation.errorMessage = request.mode == DetectionMode::BarcodeWord
                 ? QStringLiteral("二维码+三期运行模板快照未准备。")
                 : QStringLiteral("字库运行模板快照未准备。");
@@ -199,7 +199,7 @@ DetectionPipelineCreationResult DetectionRegistry::create(
     const std::shared_ptr<InspectionPositioner> positioner(new InspectionPositioner);
     if (!positioner->configure(
                 descriptor.trackingKind,
-                request.templateSnapshot.trackingTemplates,
+                request.multiTemplateSnapshot.trackingTemplates,
                 first ? first->datePolygon : std::vector<cv::Point2f>(),
                 first ? first->trackingTemplate : cv::Mat())) {
         creation.errorMessage = QStringLiteral("运行定位资源初始化失败。");
@@ -253,17 +253,18 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         const std::shared_ptr<StampDetectionPipeline> pipeline(new StampDetectionPipeline);
         const QString templateName = first->displayName;
         creation.executor = [pipeline, positioner, preprocess, descriptor,
-                stampConfiguration, templateName](
+                stampRuntimeConfig, templateName](
             const std::shared_ptr<const FrameData> &source) {
             const std::shared_ptr<const FrameData> frame = preprocessFrame(source, preprocess);
             if (!frame) return DetectionCompletion();
             const DetectionPose pose = positioner->locate(frame->originalImage);
             StampDetectionWorkOutput output = pipeline->detect(
-                        makeDetectionWorkItem(frame, pose), stampConfiguration.targetText,
-                        stampConfiguration.preparedTemplates,
-                        stampConfiguration.templateTargetIndexes,
-                        stampConfiguration.thresholdPercent,
-                        stampConfiguration.detectOverlap);
+                        makeDetectionWorkItem(frame, pose),
+                        stampRuntimeConfig.targetUnits,
+                        stampRuntimeConfig.preparedTemplates,
+                        stampRuntimeConfig.templateTargetIndexes,
+                        stampRuntimeConfig.thresholdPercent,
+                        stampRuntimeConfig.detectOverlap);
             DetectionResult result = output.detectionResult;
             if (output.hasOverlapDetection && !output.stampResult.overlapIsOk) {
                 for (DetectionOverlayPolygon &polygon : result.overlay.polygons) {
@@ -277,12 +278,12 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         return creation;
     }
 
-    const std::shared_ptr<std::vector<DetectionModeWorkerTemplate> > templates(
-                new std::vector<DetectionModeWorkerTemplate>(
-                    request.templateSnapshot.detectionTemplates));
+    const std::shared_ptr<std::vector<MultiTemplateRuntimeConfig> > runtimeConfigs(
+                new std::vector<MultiTemplateRuntimeConfig>(
+                    request.multiTemplateSnapshot.runtimeConfigs));
     if (request.mode == DetectionMode::Word) {
         const std::shared_ptr<WordDetectionPipeline> pipeline(new WordDetectionPipeline);
-        creation.executor = [pipeline, positioner, preprocess, descriptor, templates](
+        creation.executor = [pipeline, positioner, preprocess, descriptor, runtimeConfigs](
             const std::shared_ptr<const FrameData> &source) {
             const std::shared_ptr<const FrameData> frame = preprocessFrame(source, preprocess);
             if (!frame) return DetectionCompletion();
@@ -290,15 +291,15 @@ DetectionPipelineCreationResult DetectionRegistry::create(
             const DetectionWorkItem item = makeDetectionWorkItem(frame, pose);
             WordDetectionWorkOutput output;
             if (!pose.valid) {
-                output = pipeline->detect(item, QString(), QString(),
+                output = pipeline->detect(item, QStringList(), QString(),
                                           PreparedCharacterTemplates(),
                                           std::vector<int>(), 0);
             } else if (pose.wordTemplateIndex >= 0
                        && pose.wordTemplateIndex
-                          < static_cast<int>(templates->size())) {
-                const DetectionModeWorkerTemplate &selected = templates->at(
+                          < static_cast<int>(runtimeConfigs->size())) {
+                const MultiTemplateRuntimeConfig &selected = runtimeConfigs->at(
                             static_cast<std::size_t>(pose.wordTemplateIndex));
-                output = pipeline->detect(item, selected.targetText,
+                output = pipeline->detect(item, selected.targetUnits,
                                           selected.templateName,
                                           selected.preparedTemplates,
                                           selected.templateTargetIndexes,
@@ -322,7 +323,7 @@ DetectionPipelineCreationResult DetectionRegistry::create(
     const std::shared_ptr<BarcodeWordDetectionPipeline> pipeline(
                 new BarcodeWordDetectionPipeline);
     IBarcodeDecoder *decoder = m_barcodeDecoder.get();
-    creation.executor = [pipeline, positioner, preprocess, descriptor, templates, decoder](
+    creation.executor = [pipeline, positioner, preprocess, descriptor, runtimeConfigs, decoder](
         const std::shared_ptr<const FrameData> &source) {
         const std::shared_ptr<const FrameData> frame = preprocessFrame(source, preprocess);
         if (!frame) return DetectionCompletion();
@@ -330,17 +331,17 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         const DetectionWorkItem item = makeDetectionWorkItem(frame, pose);
         BarcodeWordDetectionWorkOutput output;
         if (!pose.valid) {
-            output = pipeline->detect(item, QString(), QString(),
+            output = pipeline->detect(item, QStringList(), QString(),
                                       PreparedCharacterTemplates(),
                                       std::vector<int>(), 0,
                                       BarcodeDecodeOptions(),
                                       BarcodeWordDecodeStrategyState(), decoder);
         } else if (pose.wordTemplateIndex >= 0
                    && pose.wordTemplateIndex
-                      < static_cast<int>(templates->size())) {
-            DetectionModeWorkerTemplate &selected = templates->at(
+                      < static_cast<int>(runtimeConfigs->size())) {
+            MultiTemplateRuntimeConfig &selected = runtimeConfigs->at(
                         static_cast<std::size_t>(pose.wordTemplateIndex));
-            output = pipeline->detect(item, selected.targetText,
+            output = pipeline->detect(item, selected.targetUnits,
                                       selected.templateName,
                                       selected.preparedTemplates,
                                       selected.templateTargetIndexes,

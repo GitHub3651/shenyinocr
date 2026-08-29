@@ -7,7 +7,7 @@
 ```text
 detection/
 ├─ detection_registry.h/.cpp             五模式 Pipeline 装配
-├─ detection_template_snapshot.h/.cpp    多模板定位/字符运行快照
+├─ multi_template_runtime_snapshot.h/.cpp 多模板定位/字符运行快照
 ├─ common/
 │  ├─ frame_preprocessor.h/.cpp
 │  ├─ character_template_matcher.h/.cpp
@@ -38,7 +38,7 @@ FrameData
  → DetectionResult
 ```
 
-`DetectionTemplateSnapshot` 的定位条目和检测条目按同一个紧凑运行数组建立。运行下标只在本次启动期间访问对应条目，不持久化、不建立路径索引 Map。
+`MultiTemplateRuntimeSnapshot` 的 `trackingTemplates` 和 `runtimeConfigs` 按同一个紧凑运行数组建立。运行下标只在本次启动期间访问对应条目，不持久化、不建立路径索引 Map。字符目标由 `TemplateStore` 在准备阶段解析一次，运行配置和 Pipeline 只传递 `targetUnits`。
 
 `detection` 根目录只保留检测模块的装配入口和运行快照；跨模式算法放在
 `common`，具体模式算法放在 `detectionmode`。这样新增模式时只需新增一个

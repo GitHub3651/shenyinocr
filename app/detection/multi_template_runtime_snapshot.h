@@ -11,10 +11,10 @@
 
 #include <vector>
 
-struct DetectionModeWorkerTemplate
+struct MultiTemplateRuntimeConfig
 {
     QString templateName;
-    QString targetText;
+    QStringList targetUnits;
     PreparedCharacterTemplates preparedTemplates;
     std::vector<int> templateTargetIndexes;
     int thresholdPercent = 0;
@@ -22,21 +22,21 @@ struct DetectionModeWorkerTemplate
     BarcodeWordDecodeStrategyState decodeStrategy;
 };
 
-struct DetectionTemplateSnapshot
+struct MultiTemplateRuntimeSnapshot
 {
     std::vector<WordTrackingTemplate> trackingTemplates;
-    std::vector<DetectionModeWorkerTemplate> detectionTemplates;
+    std::vector<MultiTemplateRuntimeConfig> runtimeConfigs;
 
     bool isValid() const
     {
         return !trackingTemplates.empty()
-                && trackingTemplates.size() == detectionTemplates.size();
+                && trackingTemplates.size() == runtimeConfigs.size();
     }
 };
 
-class DetectionTemplateSnapshotBuilder
+class MultiTemplateRuntimeSnapshotBuilder
 {
 public:
-    static DetectionTemplateSnapshot create(
+    static MultiTemplateRuntimeSnapshot create(
         const QVector<PreparedTemplateSnapshot> &templates);
 };

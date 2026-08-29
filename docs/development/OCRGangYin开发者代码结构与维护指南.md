@@ -51,7 +51,7 @@ app/
 │  └─ template_store.h/.cpp
 ├─ detection/
 │  ├─ detection_registry.h/.cpp
-│  ├─ detection_template_snapshot.h/.cpp
+│  ├─ multi_template_runtime_snapshot.h/.cpp
 │  ├─ common/
 │  │  ├─ character_template_matcher.h/.cpp
 │  │  ├─ detection_roi_geometry.h
@@ -285,8 +285,8 @@ toolButton_selectTemplate
 |---|---|
 | `detection_registry.h` | 运行准备、创建请求和 Detection Executor 接口。 |
 | `detection_registry.cpp` | 五模式唯一 Pipeline 装配；运行资源只来自快照。 |
-| `detection_template_snapshot.h` | 多模板定位条目和检测条目。 |
-| `detection_template_snapshot.cpp` | 从有效 `PreparedTemplate` 构建紧凑同序运行数组并预编译字符模板。 |
+| `multi_template_runtime_snapshot.h` | 字库和二维码＋三期的多模板定位条目及同下标运行配置。 |
+| `multi_template_runtime_snapshot.cpp` | 从有效 `PreparedTemplate` 构建紧凑同序运行数组、复制 `targetUnits` 并预编译字符模板。 |
 | `common/frame_preprocessor.h/.cpp` | 旋转、通道转换等统一帧预处理。 |
 | `common/detection_roi_geometry.h` | ROI/多边形几何内联工具。 |
 | `common/character_template_matcher.h/.cpp` | 字符模板预编译和字形匹配；各模式不要复制。 |
@@ -424,7 +424,7 @@ toolButton_selectTemplate
 
 重点检查：
 
-- `DetectionTemplateSnapshotBuilder` 是否仍生成紧凑同序数组；
+- `MultiTemplateRuntimeSnapshotBuilder` 是否仍生成紧凑同序的 `trackingTemplates` 与 `runtimeConfigs`；
 - `InspectionPositioner` 是否仍评价全部模板；
 - `TemplatePoseSelector` 是否只在严格更高分时替换；
 - Registry 是否用命中下标访问同一检测条目。

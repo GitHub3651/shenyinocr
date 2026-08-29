@@ -238,15 +238,31 @@ bool TemplateApplicationService::updateTemplates(
             continue;
         }
         update(&value.settings);
-        const QString missingTarget = missingTemplateTargetUnit(
-                    value.settings, value.characterAssets);
-        if (!missingTarget.isEmpty()) {
-            failures.append(
-                        QStringLiteral(
-                            "%1\n%2\n模板缺少目标文字所需字符：“%3”。")
-                        .arg(QFileInfo(path).fileName(), path,
-                             missingTarget));
-            continue;
+        if (detectionModeDescriptor(
+                value.settings.detectionMode).requiresCharacterTemplates) {
+            const QStringList targetUnits =
+                    TemplateStore::templateTargetUnits(
+                        value.settings.targetText);
+            if (!value.settings.targetText.trimmed().isEmpty()
+                    && targetUnits.isEmpty()) {
+                failures.append(
+                            QStringLiteral(
+                                "%1\n%2\n目标文字不包含可检测字符。")
+                            .arg(QFileInfo(path).fileName(), path));
+                continue;
+            }
+            const QString missingTarget = missingTemplateTargetUnit(
+                        value.settings.detectionMode,
+                        targetUnits,
+                        value.characterAssets);
+            if (!missingTarget.isEmpty()) {
+                failures.append(
+                            QStringLiteral(
+                                "%1\n%2\n模板缺少目标文字所需字符：“%3”。")
+                            .arg(QFileInfo(path).fileName(), path,
+                                 missingTarget));
+                continue;
+            }
         }
         if (!m_store->save(path, value, true, &error)) {
             failures.append(
@@ -327,8 +343,8 @@ bool TemplateApplicationService::stageCharacterAssets(
         }
         TemplateCharacterAsset asset;
         asset.fileName = fileName;
-        asset.normalizedBaseName = QFileInfo(fileName)
-                .completeBaseName().trimmed().toLower();
+        asset.storageStem = QFileInfo(fileName)
+                .completeBaseName().trimmed();
         asset.image = image;
         assets.append(asset);
     }

@@ -22,7 +22,7 @@ struct InspectionRunContext
         const AppSettings &machineSettingsValue,
         DetectionMode modeValue,
         const QVector<PreparedTemplateSnapshot> &preparedTemplatesValue,
-        const DetectionTemplateSnapshot &templateSnapshotValue,
+        const MultiTemplateRuntimeSnapshot &multiTemplateSnapshotValue,
         double tissueRoughnessThresholdValue,
         const FramePreprocessSettings &framePreprocessValue)
         : runId(runIdValue),
@@ -30,7 +30,7 @@ struct InspectionRunContext
           machineSettings(machineSettingsValue),
           mode(modeValue),
           preparedTemplates(preparedTemplatesValue),
-          templateSnapshot(templateSnapshotValue),
+          multiTemplateSnapshot(multiTemplateSnapshotValue),
           tissueRoughnessThreshold(tissueRoughnessThresholdValue),
           framePreprocess(framePreprocessValue)
     {
@@ -41,7 +41,7 @@ struct InspectionRunContext
     const AppSettings machineSettings;
     const DetectionMode mode;
     const QVector<PreparedTemplateSnapshot> preparedTemplates;
-    const DetectionTemplateSnapshot templateSnapshot;
+    const MultiTemplateRuntimeSnapshot multiTemplateSnapshot;
     const double tissueRoughnessThreshold;
     const FramePreprocessSettings framePreprocess;
 };
@@ -126,7 +126,7 @@ QString InspectionRuntime::beginStart(
     const AppSettings &machineSettings,
     DetectionMode mode,
     const QVector<PreparedTemplateSnapshot> &preparedTemplates,
-    const DetectionTemplateSnapshot &templateSnapshot,
+    const MultiTemplateRuntimeSnapshot &multiTemplateSnapshot,
     double tissueRoughnessThreshold,
     const FramePreprocessSettings &framePreprocess)
 {
@@ -145,7 +145,7 @@ QString InspectionRuntime::beginStart(
         machineSettings,
         mode,
         preparedTemplates,
-        templateSnapshot,
+        multiTemplateSnapshot,
         tissueRoughnessThreshold,
         framePreprocess));
     m_acceptedProductSequence = 0;
@@ -553,7 +553,8 @@ bool InspectionRuntime::startDetection(
         }
         request.mode = m_runContext->mode;
         request.preparedTemplates = m_runContext->preparedTemplates;
-        request.templateSnapshot = m_runContext->templateSnapshot;
+        request.multiTemplateSnapshot =
+                m_runContext->multiTemplateSnapshot;
         request.tissueRoughnessThreshold =
                 m_runContext->tissueRoughnessThreshold;
         request.framePreprocess = m_runContext->framePreprocess;

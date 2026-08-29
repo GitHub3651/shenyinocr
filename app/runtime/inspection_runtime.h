@@ -6,7 +6,7 @@
 
 #include "detection/common/detection_pose.h"
 #include "detection/common/frame_preprocessor.h"
-#include "detection/detection_template_snapshot.h"
+#include "detection/multi_template_runtime_snapshot.h"
 #include "templates/template_store.h"
 #include "runtime/detection_worker.h"
 #include "runtime/inspection_plc_controller.h"
@@ -93,7 +93,7 @@ public:
         const AppSettings &machineSettings,
         DetectionMode mode,
         const QVector<PreparedTemplateSnapshot> &preparedTemplates,
-        const DetectionTemplateSnapshot &templateSnapshot,
+        const MultiTemplateRuntimeSnapshot &multiTemplateSnapshot,
         double tissueRoughnessThreshold,
         const FramePreprocessSettings &framePreprocess);
     bool commitStart();

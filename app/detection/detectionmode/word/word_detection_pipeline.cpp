@@ -7,53 +7,15 @@
 
 #include "detection/common/detection_roi_geometry.h"
 
-#include <QRegularExpression>
-
-namespace {
-
-// 函数说明：parseTargetUnits 函数校验、转换或恢复对应数据。
-QStringList parseTargetUnits(const QString &targetText)
-{
-    QStringList units;
-    const QRegularExpression expression(
-                R"(([\d[A-Za-z一-龥]\(\d+\))|(\d)|([A-Za-z])|([一-龥]))");
-    QRegularExpressionMatchIterator matches =
-            expression.globalMatch(targetText);
-
-    while (matches.hasNext()) {
-        const QRegularExpressionMatch match = matches.next();
-        QString unit;
-        if (!match.captured(1).isEmpty()) {
-            unit = match.captured(1);
-        } else if (!match.captured(2).isEmpty()) {
-            unit = match.captured(2);
-        } else if (!match.captured(3).isEmpty()) {
-            unit = match.captured(3);
-        } else if (!match.captured(4).isEmpty()) {
-            unit = match.captured(4);
-        }
-
-        if (!unit.isEmpty()) {
-            units.append(unit.toLower());
-        }
-    }
-    return units;
-}
-
-} // namespace
-
 // 函数说明：detect 函数执行对应事件或业务处理。
 WordDetectionResult WordDetectionPipeline::detect(
         cv::Mat &dateRoi,
-        const QString &targetText,
+        const QStringList &targetUnits,
         const CharacterMatchFunction &matchCharacters) const
 {
     WordDetectionResult result;
-    result.targetUnits = parseTargetUnits(targetText);
+    result.targetUnits = targetUnits;
     result.targetCharacterCount = result.targetUnits.size();
-    if (result.targetCharacterCount == 0 && !targetText.isEmpty()) {
-        result.targetCharacterCount = targetText.length();
-    }
 
     if (dateRoi.empty() || !matchCharacters) {
         return result;
@@ -68,7 +30,7 @@ WordDetectionResult WordDetectionPipeline::detect(
 // 函数说明：detect 函数执行对应事件或业务处理。
 WordDetectionWorkOutput WordDetectionPipeline::detect(
         const DetectionWorkItem &item,
-        const QString &targetText,
+        const QStringList &targetUnits,
         const QString &templateName,
         const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
@@ -78,7 +40,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
         return detectPreparedDateRoi(
                     item,
                     OrientedDateRoi(),
-                    targetText,
+                    targetUnits,
                     templateName,
                     preparedTemplates,
                     templateTargetIndexes,
@@ -93,7 +55,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
     return detectPreparedDateRoi(
                 item,
                 oriented,
-                targetText,
+                targetUnits,
                 templateName,
                 preparedTemplates,
                 templateTargetIndexes,
@@ -104,7 +66,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
 WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
         const DetectionWorkItem &item,
         const OrientedDateRoi &oriented,
-        const QString &targetText,
+        const QStringList &targetUnits,
         const QString &templateName,
         const PreparedCharacterTemplates &preparedTemplates,
         const std::vector<int> &templateTargetIndexes,
@@ -148,7 +110,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
     cv::Mat dateRoi = oriented.croppedImage;
     output.wordResult = detect(
                 dateRoi,
-                targetText,
+                targetUnits,
                 [matchResult](cv::Mat &) {
         return matchResult.detectedCount;
     });
