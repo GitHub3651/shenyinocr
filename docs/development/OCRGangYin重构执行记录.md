@@ -1608,3 +1608,13 @@
 - [x] `WordDetectionPipeline`、`StampDetectionPipeline`、`BarcodeWordDetectionPipeline` 只接收 `targetUnits`；删除 Word 本地解析器、Stamp 本地计数正则和两处字符串长度回退。目标数固定为 `targetUnits.size()`，共享 `CharacterGlyphMatcher`、阈值、IoU、钢印重叠 AND、二维码优先和外围结果链均未修改。
 - [x] 2026-08-29 Agent 验证：Qt 5.15.2 qmake 成功；VS2022 Developer Command Prompt 下 MSVC x64 Release 全量编译、链接及部署成功。构建仅出现项目既有 `/MD` 被 `/MT` 覆盖和 `LNK4098` 默认库冲突警告，无本专项编译或链接错误。
 - [ ] 等待用户按专项方案第 14 节验证 `AB12/ab12/Aa12` 文件名、旧字母模板拒绝、钢印/字库/二维码＋三期实际检测、纯数字回归和 OCR `---` 原始目标；通过前 `TPL-011、TPL-015、DET-002、DET-003、DET-006` 保持 `迁移中`。
+
+## 正式产品失效安全 A2（2026-08-30，代码实施完成待统一验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `13dbd71c3cee1541dc91696254f5ad6135d3711d`；开始时生产代码未修改，工作区已有计划索引修改及未跟踪 A2 计划文档，实施过程未执行 `git add`、提交、推送、合并、变基或历史改写。
+- [x] A2-1 已删除 `DetectionStatus`、`AlgorithmVerdict::NotEvaluated`、`DetectionResult::status` 和 `saveNotEvaluatedAsNg`；`DetectionResult::verdict` 默认为 `Ng`，`DetectionCompletion::isValid()` 仍只校验帧、`ProductKey` 和图像有效性。
+- [x] A2-2 已修改钢印、OCR、字库、二维码+三期和纸巾 Pipeline：无定位/ROI 无效/OCR 空文本/二维码不可读或正常超时形成普通 NG；无效工作项、执行期引擎异常和内部错误抛标准异常进入 Worker Fault；二维码日期回调包装已删除。
+- [x] A2-3/A2-4 已修改 Registry 与 ResultService：字库和二维码+三期在 `pose.valid == true` 后模板下标非法抛 `std::logic_error`；合法 completion 只有一个 `process()` 出口；取消不再进入结果事务；Fault 不伪造 NG；二维码+三期最终 NG 原因统一追加到 `presentationText`。
+- [x] A2-5 已删除全部 ROI 专用警告字段、信号、函数、状态记忆及 MainWindow 连接；`label_runtimeStatus` 保留运行中、停止、Fault、模板制作和存图失败等既有状态。
+- [x] Agent 静态门禁通过：计划列出的旧状态、ROI 警告、日期包装和重复 `reason` 符号在生产代码中均为零；队列/Worker 生命周期 `Cancelled` 仍保留且不构造 `DetectionResult`；`git diff --check` 通过；未修改算法、Schema、UI 布局、PLC 协议或资源文件。
+- [ ] 待用户在 Qt Creator 执行 qmake、Clean/Rebuild 和五模式软触发回归，并使用真实硬触发、PLC、延迟 NG、引擎异常和现场 Fault 恢复完成第 6 节统一验收；在此之前 A2 保持“代码实施完成，待验证”。

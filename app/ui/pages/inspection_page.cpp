@@ -183,7 +183,6 @@ void InspectionPage::clearInspectionView(InspectionClearScope scope)
 
 void InspectionPage::clearTransientView()
 {
-    m_detectionRoiWarningActive = false;
     m_imageSaveWarningScheduled = false;
     if (m_view.label_runtimeStatus) {
         m_view.label_runtimeStatus->clear();
@@ -338,45 +337,6 @@ void InspectionPage::restoreNormalFaultStyle()
                 m_view.label_verdictResult,
                 "verdict",
                 QStringLiteral("idle"));
-}
-
-void InspectionPage::showDetectionRoiWarning()
-{
-    if (m_detectionRoiWarningActive) {
-        return;
-    }
-    m_detectionRoiWarningActive = true;
-    const QString warningText = QString::fromWCharArray(
-                L"识别区域超出原图范围，"
-                L"请点击【停止识别】，"
-                L"然后重新选择或制作模板。");
-    qCWarning(logDetection).noquote()
-            << QStringLiteral("event=detection.roi_invalid reason=%1")
-               .arg(warningText);
-    if (m_view.label_runtimeStatus) {
-        m_view.label_runtimeStatus->setWordWrap(true);
-        m_view.label_runtimeStatus->setText(warningText);
-        setStyleProperty(
-                    m_view.label_runtimeStatus,
-                    "uiState",
-                    QStringLiteral("warning"));
-    }
-}
-
-void InspectionPage::clearDetectionRoiWarning(
-    const QString &runningStatusText)
-{
-    if (!m_detectionRoiWarningActive) {
-        return;
-    }
-    m_detectionRoiWarningActive = false;
-    if (m_view.label_runtimeStatus && !runningStatusText.isEmpty()) {
-        m_view.label_runtimeStatus->setText(runningStatusText);
-        setStyleProperty(
-                    m_view.label_runtimeStatus,
-                    "uiState",
-                    QStringLiteral("running"));
-    }
 }
 
 void InspectionPage::reportImageSaveFailure(

@@ -11,25 +11,16 @@
 #include <QString>
 #include <QStringList>
 
-#include <functional>
 #include <vector>
 
 // 组件说明：IBarcodeDecoder 组件提供对应设备或检测能力的统一实现。
 class IBarcodeDecoder;
-
-// 组件说明：BarcodeWordDateDetectionResult 数据结构保存一次操作的结果、状态和错误信息。
-struct BarcodeWordDateDetectionResult
-{
-    bool resultProduced = false;
-    bool isOk = false;
-};
 
 // 组件说明：BarcodeWordDetectionResult 数据结构保存一次操作的结果、状态和错误信息。
 struct BarcodeWordDetectionResult
 {
     bool barcodeIsReadable = false;
     bool dateDetectionExecuted = false;
-    bool dateResultProduced = false;
     bool dateIsOk = false;
     bool isOk = false;
 };
@@ -55,7 +46,6 @@ struct BarcodeWordDetectionWorkOutput
     BarcodeWordDecodeStrategyState nextDecodeStrategy;
     QString barcodeState;
     QString dateState;
-    QString reason;
     bool barcodeRoiValid = false;
     bool dateRoiValid = false;
 };
@@ -64,13 +54,6 @@ struct BarcodeWordDetectionWorkOutput
 class BarcodeWordDetectionPipeline
 {
 public:
-    typedef std::function<BarcodeWordDateDetectionResult()>
-            DateDetectionFunction;
-
-    BarcodeWordDetectionResult detect(
-            bool barcodeIsReadable,
-            const DateDetectionFunction &detectDate) const;
-
     BarcodeWordDetectionWorkOutput detect(
             const DetectionWorkItem &item,
             const QStringList &targetUnits,

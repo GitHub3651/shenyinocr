@@ -28,7 +28,6 @@ DetectionResult TissueDetectionPipeline::toDetectionResult(
     result.verdict = tissueResult.isOk
             ? AlgorithmVerdict::Ok
             : AlgorithmVerdict::Ng;
-    result.status = DetectionStatus::Completed;
     result.recognizedText = tissueResult.rollFound
             ? QStringLiteral("粗糙度：%1")
               .arg(tissueResult.roll.roughnessScore, 0, 'f', 3)

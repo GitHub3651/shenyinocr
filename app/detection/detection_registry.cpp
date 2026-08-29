@@ -13,6 +13,7 @@
 #include "engines/ocr/ocr_engine.h"
 
 #include <QStringList>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -81,10 +82,7 @@ void applyDescriptorPolicy(
     if (!result) return;
     result->modeId = QLatin1String(descriptor.uiId);
     result->clearImageLabelRects = descriptor.clearImageLabelRects;
-    result->showRoiWarningOnCancelled = descriptor.showRoiWarningOnCancelled;
-    result->clearRoiWarningOnCompleted = descriptor.showRoiWarningOnCancelled;
     result->saveRawOnly = descriptor.saveRawOnly;
-    result->saveNotEvaluatedAsNg = descriptor.saveNotEvaluatedAsNg;
 }
 
 void setTemplatePresentation(
@@ -305,12 +303,7 @@ DetectionPipelineCreationResult DetectionRegistry::create(
                                           selected.templateTargetIndexes,
                                           selected.thresholdPercent);
             } else {
-                output.pose = pose;
-                output.detectionResult.modeId = detectionModeUiId(
-                            DetectionMode::Word);
-                output.detectionResult.status = DetectionStatus::Cancelled;
-                output.detectionResult.diagnostic = QStringLiteral(
-                            "Invalid word template index");
+                throw std::logic_error("Invalid word template index");
             }
             DetectionResult result = output.detectionResult;
             setTemplatePresentation(output.templateName, output.pose, &result);
@@ -350,12 +343,7 @@ DetectionPipelineCreationResult DetectionRegistry::create(
                                       selected.decodeStrategy, decoder);
             selected.decodeStrategy = output.nextDecodeStrategy;
         } else {
-            output.pose = pose;
-            output.detectionResult.modeId = detectionModeUiId(
-                        DetectionMode::BarcodeWord);
-            output.detectionResult.status = DetectionStatus::Cancelled;
-            output.detectionResult.diagnostic = QStringLiteral(
-                        "Invalid barcode-word template index");
+            throw std::logic_error("Invalid barcode-word template index");
         }
         DetectionResult result = output.detectionResult;
         setTemplatePresentation(output.templateName, output.pose, &result);
@@ -365,10 +353,10 @@ DetectionPipelineCreationResult DetectionRegistry::create(
             lines.append(QStringLiteral("二维码内容：%1").arg(output.barcode.text));
         }
         lines.append(QStringLiteral("日期：%1").arg(output.dateState));
-        if ((!output.barcodeWordResult.barcodeIsReadable
-             || !output.barcodeWordResult.dateDetectionExecuted)
-                && !output.reason.trimmed().isEmpty()) {
-            lines.append(QStringLiteral("原因：%1").arg(output.reason));
+        if (result.verdict == AlgorithmVerdict::Ng
+                && !result.diagnostic.trimmed().isEmpty()) {
+            lines.append(QStringLiteral("原因：%1")
+                         .arg(result.diagnostic));
         }
         result.presentationText = lines.join(QStringLiteral("\n"));
         result.hasPresentationText = true;

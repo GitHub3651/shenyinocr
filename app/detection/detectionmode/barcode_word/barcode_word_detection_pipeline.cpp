@@ -8,24 +8,8 @@
 #include "detection/common/detection_roi_geometry.h"
 #include "engines/barcode/barcode_decoder.h"
 
-// 函数说明：detect 函数执行对应事件或业务处理。
-BarcodeWordDetectionResult BarcodeWordDetectionPipeline::detect(
-        bool barcodeIsReadable,
-        const DateDetectionFunction &detectDate) const
-{
-    BarcodeWordDetectionResult result;
-    result.barcodeIsReadable = barcodeIsReadable;
-    if (!result.barcodeIsReadable || !detectDate) {
-        return result;
-    }
-
-    result.dateDetectionExecuted = true;
-    const BarcodeWordDateDetectionResult dateResult = detectDate();
-    result.dateResultProduced = dateResult.resultProduced;
-    result.dateIsOk = dateResult.isOk;
-    result.isOk = result.dateResultProduced && result.dateIsOk;
-    return result;
-}
+#include <algorithm>
+#include <stdexcept>
 
 // 函数说明：detect 函数执行对应事件或业务处理。
 BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
@@ -48,11 +32,10 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
 
     DetectionResult &result = output.detectionResult;
     result.modeId = detectionModeUiId(DetectionMode::BarcodeWord);
-    result.status = DetectionStatus::Cancelled;
     result.diagnostic = QStringLiteral(
                 "Invalid barcode-word detection work item");
     if (!item.isValid() || !item.hasPose) {
-        return output;
+        throw std::invalid_argument("Invalid barcode-word detection work item");
     }
 
     const auto appendPolygon = [&result](
@@ -70,8 +53,6 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
     };
     const auto finishNg = [&output, &result](
             const QString &reason) {
-        output.reason = reason;
-        result.status = DetectionStatus::Completed;
         result.verdict = AlgorithmVerdict::Ng;
         result.recognizedText = output.barcode.text;
         result.diagnostic = reason;
@@ -126,16 +107,26 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
                      "或超出图像范围"));
         return output;
     }
+    if (!output.dateRoiValid) {
+        finishNg(QStringLiteral(
+                     "日期检测区域无效"
+                     "或超出图像范围"));
+        return output;
+    }
 
     if (!decoder || !decoder->ensureLoaded()) {
         output.barcode.status = BarcodeReadStatus::DecoderUnavailable;
         output.barcode.errorReason = decoder
                 ? decoder->lastError()
                 : QStringLiteral("Barcode decoder is null");
+        if (output.barcode.errorReason.trimmed().isEmpty()) {
+            output.barcode.errorReason = QStringLiteral(
+                        "BarcodeDecoder.dll不可用");
+        }
         output.barcodeState = QStringLiteral(
                     "读码器不可用");
-        finishNg(QStringLiteral("BarcodeDecoder.dll不可用"));
-        return output;
+        throw std::runtime_error(
+                    output.barcode.errorReason.toStdString());
     }
 
     int successfulStrategyId = -1;
@@ -188,8 +179,18 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
             reason = QStringLiteral("二维码区域无效");
         } else if (output.barcode.status
                    == BarcodeReadStatus::InternalError) {
-            reason = QStringLiteral(
-                        "二维码解码器内部错误");
+            const QString diagnostic = output.barcode.errorReason.isEmpty()
+                    ? QStringLiteral("二维码解码器内部错误")
+                    : output.barcode.errorReason;
+            throw std::runtime_error(
+                        diagnostic.toStdString());
+        } else if (output.barcode.status
+                   == BarcodeReadStatus::DecoderUnavailable) {
+            const QString diagnostic = output.barcode.errorReason.isEmpty()
+                    ? QStringLiteral("BarcodeDecoder.dll不可用")
+                    : output.barcode.errorReason;
+            throw std::runtime_error(
+                        diagnostic.toStdString());
         } else {
             reason = QStringLiteral(
                         "二维码不可读或"
@@ -200,14 +201,6 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
     }
 
     output.barcodeState = QStringLiteral("可读");
-    if (!output.dateRoiValid) {
-        finishNg(QStringLiteral(
-                     "日期检测区域无效"
-                     "或超出图像范围"));
-        output.barcodeWordResult.barcodeIsReadable = true;
-        return output;
-    }
-
     const WordDetectionPipeline wordPipeline;
     output.wordOutput = wordPipeline.detectPreparedDateRoi(
                 item,
@@ -217,31 +210,17 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
                 preparedTemplates,
                 templateTargetIndexes,
                 thresholdPercent);
-    output.barcodeWordResult = detect(
-                true,
-                [&output]() {
-        BarcodeWordDateDetectionResult dateResult;
-        dateResult.resultProduced =
-                output.wordOutput.detectionResult.status
-                == DetectionStatus::Completed;
-        dateResult.isOk = dateResult.resultProduced
-                && output.wordOutput.detectionResult.verdict
-                == AlgorithmVerdict::Ok;
-        return dateResult;
-    });
-
-    if (!output.barcodeWordResult.dateResultProduced) {
-        finishNg(QStringLiteral(
-                     "日期检测未产生有效结果"));
-        return output;
-    }
+    output.barcodeWordResult.barcodeIsReadable = true;
+    output.barcodeWordResult.dateDetectionExecuted = true;
+    output.barcodeWordResult.dateIsOk =
+            output.wordOutput.detectionResult.verdict == AlgorithmVerdict::Ok;
+    output.barcodeWordResult.isOk = output.barcodeWordResult.dateIsOk;
 
     result = output.wordOutput.detectionResult;
     result.modeId = detectionModeUiId(DetectionMode::BarcodeWord);
     output.dateState = output.barcodeWordResult.dateIsOk
             ? QStringLiteral("正确")
             : QStringLiteral("错误");
-    output.reason = result.diagnostic;
 
     bool hasBarcodeOverlay = false;
     for (const DetectionOverlayPolygon &polygon :

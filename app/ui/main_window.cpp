@@ -197,23 +197,6 @@ MainWindow::MainWindow(
     Qt::QueuedConnection);
     connect(
         m_runtime,
-        &InspectionRuntime::roiWarningChanged,
-        this,
-        [this](bool active) {
-        if (active) {
-            m_inspectionPage->showDetectionRoiWarning();
-        } else {
-            m_inspectionPage->clearDetectionRoiWarning(
-                        operationUiState() == OperationUiState::Detecting
-                        ? (ui->checkBox_hardwareTriggerEnabled->isChecked()
-                           ? QStringLiteral("触发模式运行中")
-                           : QStringLiteral("软触发模式运行中"))
-                        : QString());
-        }
-    },
-    Qt::QueuedConnection);
-    connect(
-        m_runtime,
         &InspectionRuntime::faultSnapshotChanged,
         this,
         [this](const InspectionFaultSnapshot &snapshot) {

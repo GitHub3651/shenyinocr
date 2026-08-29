@@ -7,6 +7,8 @@
 
 #include "detection/common/detection_roi_geometry.h"
 
+#include <stdexcept>
+
 // 函数说明：detect 函数执行对应事件或业务处理。
 StampDetectionResult StampDetectionPipeline::detect(
         cv::Mat &dateRoi,
@@ -50,10 +52,15 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
     output.pose = item.pose;
     output.hasOverlapDetection = static_cast<bool>(detectOverlap);
     output.detectionResult.modeId = detectionModeUiId(DetectionMode::Stamp);
-    output.detectionResult.status = DetectionStatus::Cancelled;
     output.detectionResult.diagnostic =
             QStringLiteral("Invalid stamp detection work item");
     if (!item.isValid() || !item.hasPose) {
+        throw std::invalid_argument("Invalid stamp detection work item");
+    }
+
+    if (!item.pose.valid) {
+        output.detectionResult.verdict = AlgorithmVerdict::Ng;
+        output.detectionResult.diagnostic = QStringLiteral("未找到钢印定位区域");
         return output;
     }
 
@@ -63,6 +70,7 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
                 item.pose,
                 20);
     if (!oriented.valid) {
+        output.detectionResult.verdict = AlgorithmVerdict::Ng;
         output.detectionResult.diagnostic =
                 QStringLiteral("Invalid stamp date ROI");
         return output;
@@ -87,7 +95,6 @@ StampDetectionWorkOutput StampDetectionPipeline::detect(
                 detectOverlap);
 
     DetectionResult &result = output.detectionResult;
-    result.status = DetectionStatus::Completed;
     result.verdict = output.stampResult.isOk
             ? AlgorithmVerdict::Ok
             : AlgorithmVerdict::Ng;

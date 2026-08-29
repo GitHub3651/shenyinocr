@@ -32,15 +32,8 @@ struct FrameData {
 };
 
 enum class AlgorithmVerdict {
-    NotEvaluated,
     Ok,
     Ng
-};
-
-enum class DetectionStatus {
-    Completed,
-    SystemFault,
-    Cancelled
 };
 
 struct DetectionOverlayPolygon {
@@ -63,8 +56,7 @@ struct DetectionOverlay {
 
 struct DetectionResult {
     QString modeId;
-    AlgorithmVerdict verdict = AlgorithmVerdict::NotEvaluated;
-    DetectionStatus status = DetectionStatus::SystemFault;
+    AlgorithmVerdict verdict = AlgorithmVerdict::Ng;
     QString recognizedText;
     QString presentationText;
     QString templateName;
@@ -73,10 +65,7 @@ struct DetectionResult {
     bool hasPresentationText = false;
     bool updatesTemplateName = false;
     bool clearImageLabelRects = false;
-    bool showRoiWarningOnCancelled = false;
-    bool clearRoiWarningOnCompleted = false;
     bool saveRawOnly = false;
-    bool saveNotEvaluatedAsNg = true;
 };
 
 struct DetectionCompletion {

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <stdexcept>
 
 namespace {
 
@@ -75,16 +76,24 @@ DetectionResult OcrDetectionPipeline::detect(
         IOcrEngine &ocrEngine) const
 {
     OrientedDateRoi oriented;
-    if (item.isValid() && item.hasPose) {
-        oriented = DetectionRoiGeometry::prepareOrientedDateRoi(
-                    item.frame->originalImage,
-                    item.pose,
-                    0);
+    if (!item.isValid() || !item.hasPose) {
+        throw std::invalid_argument("Invalid OCR detection work item");
     }
+    if (!item.pose.valid) {
+        DetectionResult result;
+        result.modeId = detectionModeUiId(DetectionMode::Ocr);
+        result.verdict = AlgorithmVerdict::Ng;
+        result.diagnostic = QStringLiteral("未找到OCR定位区域");
+        return result;
+    }
+    oriented = DetectionRoiGeometry::prepareOrientedDateRoi(
+                item.frame->originalImage,
+                item.pose,
+                0);
     if (!oriented.valid) {
         DetectionResult invalidResult;
         invalidResult.modeId = detectionModeUiId(DetectionMode::Ocr);
-        invalidResult.status = DetectionStatus::Cancelled;
+        invalidResult.verdict = AlgorithmVerdict::Ng;
         invalidResult.diagnostic = QStringLiteral(
                     "OCR date ROI is invalid");
         return invalidResult;
@@ -110,7 +119,6 @@ DetectionResult OcrDetectionPipeline::toDetectionResult(
     result.verdict = ocrResult.isOk
             ? AlgorithmVerdict::Ok
             : AlgorithmVerdict::Ng;
-    result.status = DetectionStatus::Completed;
     result.recognizedText = QString::fromStdString(
                 ocrResult.recognizedText);
     result.diagnostic = ocrResult.recognizedText.empty()

@@ -1,6 +1,6 @@
 # OCRGangYin 开发者代码结构与维护指南
 
-状态：阶段 8 实现完成，等待用户统一验证
+状态：阶段 8 实现完成；A2 生产代码实施完成，等待用户统一验证
 范围：只列代码和工程文件，不列图片、模型、DLL、样式或翻译资源
 
 ## 1. 先用一句话理解架构
@@ -215,6 +215,14 @@ CameraSession/CaptureWorker
 ```
 
 字库和二维码+三期在 `InspectionPositioner` 中并行评价全部有效定位模板，`TemplatePoseSelector` 只在分数严格更高时替换最佳项。
+
+### 4.2.1 A2 结果与故障边界
+
+正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`；`DetectionStatus`、`NotEvaluated` 和取消/故障产品结果均已删除。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次统计、存图、PLC 和结果呈现事务，运行状态保持 Running。
+
+无效工作项、定位成功后模板下标越界、执行期 OCR/二维码引擎异常、预处理失败或无效 completion 不生成产品结果，由 `DetectionWorker::failureConsumer` 进入现有 Runtime Fault。队列取消只保留在 Worker/FrameQueue 生命周期层，不进入 `ResultService`。
+
+所有模式均不再发布 ROI 专用警告；`label_runtimeStatus` 只展示既有运行中、停止、Fault、模板制作和存图失败状态。二维码+三期的日期子检测直接读取字库 Pipeline 的 `DetectionResult::verdict`，最终 NG 原因统一来自 `DetectionResult::diagnostic`。
 
 ### 4.3 模板选择、编辑和保存
 

@@ -165,7 +165,6 @@ public:
 signals:
     void presentationReady(InspectionPresentation presentation);
     void imageSaveFailed(quint64 totalFailed, QString latestError);
-    void roiWarningChanged(bool active);
     void faultSnapshotChanged(InspectionFaultSnapshot snapshot);
 
 private:
@@ -176,7 +175,6 @@ private:
     void publishImageSaveFailure(
         quint64 totalFailed,
         const QString &latestError);
-    void publishRoiWarning(bool active);
 
 private slots:
     void drainPresentationMailbox();

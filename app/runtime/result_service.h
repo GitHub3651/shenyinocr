@@ -51,7 +51,6 @@ struct ResultSaveOptions
     QString format = QStringLiteral("png");
     int quality = -1;
     int imageContentModeIndex = 0;
-    bool saveNotEvaluatedAsNg = true;
 };
 
 // 组件说明：ResultServiceRunConfiguration 组件集中描述相关配置、规则和运行参数。

@@ -70,8 +70,6 @@ QString verdictName(AlgorithmVerdict verdict)
         return QStringLiteral("OK");
     case AlgorithmVerdict::Ng:
         return QStringLiteral("NG");
-    case AlgorithmVerdict::NotEvaluated:
-        return QStringLiteral("NOT_EVALUATED");
     }
     return QStringLiteral("UNKNOWN");
 }
@@ -390,10 +388,7 @@ void ResultService::process(const ProcessRequest &request)
     presentation.templateName = request.completion.result.templateName;
 
     const bool imageSaveRequested =
-            saveAction != DetectionResultSaveAction::DoNotSave
-            && (request.completion.result.verdict
-                != AlgorithmVerdict::NotEvaluated
-                || request.saveOptions.saveNotEvaluatedAsNg);
+            saveAction != DetectionResultSaveAction::DoNotSave;
     if (imageSaveRequested) {
         submitImageSave(request, saveAction, presentation.image);
     }
@@ -434,11 +429,7 @@ void ResultService::process(const ProcessRequest &request)
         summary += QStringLiteral(" reason=%1")
                 .arg(result.diagnostic.trimmed());
     }
-    if (result.status == DetectionStatus::SystemFault) {
-        qCCritical(logDetection).noquote() << summary;
-    } else {
-        qCInfo(logDetection).noquote() << summary;
-    }
+    qCInfo(logDetection).noquote() << summary;
 }
 
 // 函数说明：submitImageSave 函数执行对应事件或业务处理。
@@ -625,27 +616,6 @@ void ResultService::handleCompletion(
         return;
     }
 
-    if (accepted.result.status == DetectionStatus::Cancelled) {
-        if (m_runtime.state() == InspectionRuntimeState::Running) {
-            QString summary = QStringLiteral(
-                        "event=frame.cancelled mode=%1")
-                    .arg(stableModeId(accepted.result.modeId));
-            if (!accepted.result.diagnostic.trimmed().isEmpty()) {
-                summary += QStringLiteral(" reason=%1")
-                        .arg(accepted.result.diagnostic.trimmed());
-            }
-            qCWarning(logDetection).noquote() << summary;
-        }
-        m_runtime.claimResult(accepted.frame->productKey);
-        if (accepted.result.showRoiWarningOnCancelled) {
-            m_runtime.publishRoiWarning(true);
-        }
-        return;
-    }
-    if (accepted.result.clearRoiWarningOnCompleted) {
-        m_runtime.publishRoiWarning(false);
-    }
-
     ProcessRequest request;
     request.completion = accepted;
     {
@@ -655,7 +625,5 @@ void ResultService::handleCompletion(
     request.saveOptions.layout = accepted.result.saveRawOnly
             ? ResultSaveLayout::RawOnly
             : ResultSaveLayout::AnnotatedAndRaw;
-    request.saveOptions.saveNotEvaluatedAsNg =
-            accepted.result.saveNotEvaluatedAsNg;
     process(request);
 }

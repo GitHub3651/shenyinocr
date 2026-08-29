@@ -38,9 +38,7 @@ struct DetectionModeDescriptor
     bool requiresCharacterTemplates;
     bool requiresBarcodeDecoder;
     bool clearImageLabelRects;
-    bool showRoiWarningOnCancelled;
     bool saveRawOnly;
-    bool saveNotEvaluatedAsNg;
 };
 
 const QVector<DetectionModeDescriptor> &detectionModeDescriptors();

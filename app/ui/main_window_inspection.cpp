@@ -576,7 +576,6 @@ void MainWindow::on_toolButton_closeCamera_clicked()
     m_inspectionPage->clearInspectionView(
                 InspectionClearScope::AllDetectionData);
     resetTemplateCaptureState();
-    m_inspectionPage->clearDetectionRoiWarning(QString());
     ui->label_runtimeStatus->setText("相机已关闭");
     updateOperationUiState();
 }
@@ -625,7 +624,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
                     result.details.join(QStringLiteral("\n")));
     }
     m_templateEditorPage->cancelTemplateDrawing();
-    m_inspectionPage->clearDetectionRoiWarning(QString());
     if (result.acquisitionKind
             == InspectionAcquisitionDto::HardwareTrigger) {
         m_inspectionPage->clearInspectionView(

@@ -820,11 +820,6 @@ void InspectionRuntime::publishImageSaveFailure(
     emit imageSaveFailed(totalFailed, latestError);
 }
 
-void InspectionRuntime::publishRoiWarning(bool active)
-{
-    emit roiWarningChanged(active);
-}
-
 void InspectionRuntime::drainPresentationMailbox()
 {
     m_wakePosted.store(false);

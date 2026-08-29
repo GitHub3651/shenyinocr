@@ -640,10 +640,6 @@ void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 
 void MainWindow::on_toolButton_stopInspection_clicked()
 {
-    if (m_inspectionPage) {
-        m_inspectionPage->clearDetectionRoiWarning(QString());
-    }
-
     const RuntimeSnapshot before =
             m_inspectionApplicationService->runtimeSnapshot();
     StopInspectionCommand command;

@@ -69,8 +69,6 @@ public:
     bool confirmFaultRecovery(
         const InspectionFaultSnapshot &snapshot) const;
     void restoreNormalFaultStyle();
-    void showDetectionRoiWarning();
-    void clearDetectionRoiWarning(const QString &runningStatusText);
     void reportImageSaveFailure(
         quint64 totalFailed,
         const QString &latestError);
@@ -80,7 +78,6 @@ private:
     InspectionPageViewBindings m_view;
     QTimer *m_templateAttentionTimer = nullptr;
     bool *m_templateAttentionOn = nullptr;
-    bool m_detectionRoiWarningActive = false;
     quint64 m_imageSaveFailedCount = 0;
     QString m_latestImageSaveError;
     bool m_imageSaveWarningScheduled = false;

@@ -12,6 +12,18 @@
 - `已确认删除`：用户明确同意，且已记录影响。
 - 证据缩写：`S`=已在基线HEAD完成源码/UI/工程静态核对；`T`=已有离线测试源码、等待Qt Creator执行；`U`=等待用户从原入口、真实设备或固定样本确认；`P`=升级计划明确延期。
 
+## 正式产品失效安全 A2（2026-08-30，代码实施完成待统一验证）
+
+A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEvaluated`、二维码日期结果回调包装和所有 ROI 专用警告链路。无定位、ROI 无效、OCR 空文本、二维码不可读/正常超时均形成普通 NG；执行期引擎异常、有效定位后的非法模板下标、预处理失败和无效 completion 进入现有 Runtime Fault，不伪造产品 NG。`label_runtimeStatus` 不再显示 ROI 无效提示，仍保留运行中、停止、Fault、模板制作和存图失败等既有状态。
+
+| A2 范围 | 当前唯一正式路径 | 本轮代码证据 | 待用户统一验证 |
+|---|---|---|---|
+| 结果契约与五种 Pipeline | `DetectionResult` 仅 `AlgorithmVerdict::Ok/Ng`；五种 Pipeline 明确区分普通 NG 与异常抛出 | A2-1/A2-2 已完成；旧状态符号静态零引用 | Qt Creator qmake、Clean/Rebuild、五模式软触发 OK/NG、无定位/ROI 边界 |
+| Registry、ResultService 与 Fault | 合法 completion 只有一个 `process()` 出口；Fault 复用 Worker→Runtime 主链；取消只在队列/生命周期层 | A2-3/A2-4 已完成；无取消结果事务和无 ROI 发布调用 | OCR/二维码引擎异常、模板下标越界、预处理失败、延迟 NG 顺序 |
+| ROI 与 UI 警告 | 所有模式 ROI 无效只形成 NG，不更新 `label_runtimeStatus`；其他存图、模板制作和 Fault 提示保留 | A2-5 已完成；ROI 警告符号、信号、方法和主窗口连接均为零 | 软/硬触发连续运行时状态显示，存图失败与 Fault 提示不回归 |
+
+本表新增 A2 条目在用户统一验证通过前保持“迁移中/待验证”语义；Agent 未执行 Qt Creator 构建、真实相机、PLC 或机械现场验证。
+
 ## 阶段8：产品配方完全替换（2026-08-20，用户统一验证通过）
 
 本轮从 `b7721f0` 开始，彻底删除 ProductRecipe、RecipeStore、配方 UUID、发布/重发和 AppData `recipes` 生产路径，改为唯一 `app_settings.json` 加外部模板文件夹。实际受影响功能为 `SYS-007、SYS-010、UI-001..002、SET-001..013、TPL-001..016、DET-001..008、CAM-003..004、RUN-001..006、RES-005`，共50项。2026-08-20用户确认《OCRGangYin模板方案完全替换计划》第十二节统一验证全部通过，这50项恢复为`已验证`；其他37项继续保留原验证结论，`MC-001..003`继续为`已确认删除`。

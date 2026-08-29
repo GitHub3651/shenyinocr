@@ -7,6 +7,8 @@
 
 #include "detection/common/detection_roi_geometry.h"
 
+#include <stdexcept>
+
 // 函数说明：detect 函数执行对应事件或业务处理。
 WordDetectionResult WordDetectionPipeline::detect(
         cv::Mat &dateRoi,
@@ -36,7 +38,10 @@ WordDetectionWorkOutput WordDetectionPipeline::detect(
         const std::vector<int> &templateTargetIndexes,
         int thresholdPercent) const
 {
-    if (!item.isValid() || !item.hasPose || !item.pose.valid) {
+    if (!item.isValid() || !item.hasPose) {
+        throw std::invalid_argument("Invalid word detection work item");
+    }
+    if (!item.pose.valid) {
         return detectPreparedDateRoi(
                     item,
                     OrientedDateRoi(),
@@ -77,14 +82,12 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
     output.templateName = templateName;
     DetectionResult &result = output.detectionResult;
     result.modeId = detectionModeUiId(DetectionMode::Word);
-    result.status = DetectionStatus::Cancelled;
     result.diagnostic = QStringLiteral("Invalid word detection work item");
     if (!item.isValid() || !item.hasPose) {
-        return output;
+        throw std::invalid_argument("Invalid word detection work item");
     }
 
     if (!item.pose.valid) {
-        result.status = DetectionStatus::Completed;
         result.verdict = AlgorithmVerdict::Ng;
         result.diagnostic = QStringLiteral(
                     "未找到字库"
@@ -94,6 +97,7 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
     }
 
     if (!oriented.valid) {
+        result.verdict = AlgorithmVerdict::Ng;
         result.diagnostic = QStringLiteral(
                     "日期ROI无效或"
                     "超出原图范围");
@@ -185,7 +189,6 @@ WordDetectionWorkOutput WordDetectionPipeline::detectPreparedDateRoi(
                 .arg(output.missingUnits.join(QStringLiteral(", ")));
     }
 
-    result.status = DetectionStatus::Completed;
     result.verdict = output.wordResult.isOk
             ? AlgorithmVerdict::Ok
             : AlgorithmVerdict::Ng;
