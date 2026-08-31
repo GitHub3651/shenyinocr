@@ -6,18 +6,191 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>760</width>
-    <height>330</height>
+    <width>1200</width>
+    <height>600</height>
    </rect>
   </property>
+  <property name="minimumSize">
+   <size>
+    <width>720</width>
+    <height>560</height>
+   </size>
+  </property>
   <property name="windowTitle">
-   <string>LicenseTool</string>
+   <string>软件授权工具</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">QWidget#Widget {
+    background-color: #f5f7fa;
+    color: #303133;
+    font-family: &quot;Microsoft YaHei&quot;, &quot;Segoe UI&quot;, sans-serif;
+    font-size: 14px;
+}
+
+QLabel {
+    background: transparent;
+}
+
+QLabel#titleLabel {
+    color: #1f2d3d;
+    font-size: 24px;
+    font-weight: 700;
+}
+
+QLabel#subtitleLabel {
+    color: #909399;
+    font-size: 13px;
+}
+
+QLabel#generateSectionLabel,
+QLabel#readSectionLabel {
+    color: #1677d2;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 2px 0;
+}
+
+QLabel#expiresLabel,
+QLabel#outputLabel,
+QLabel#datLabel,
+QLabel#licenseInfoLabel {
+    color: #606266;
+    font-weight: 600;
+}
+
+QLineEdit,
+QDateEdit,
+QTextEdit {
+    min-height: 36px;
+    background-color: #ffffff;
+    color: #303133;
+    border: 1px solid #dcdfe6;
+    border-radius: 5px;
+    padding: 5px 10px;
+    selection-background-color: #409eff;
+    selection-color: #ffffff;
+}
+
+QLineEdit:focus,
+QDateEdit:focus,
+QTextEdit:focus {
+    border-color: #409eff;
+}
+
+QTextEdit {
+    background-color: #fbfbfc;
+}
+
+QPushButton {
+    min-height: 36px;
+    background-color: #ffffff;
+    color: #303133;
+    border: 1px solid #dcdfe6;
+    border-radius: 5px;
+    padding: 0 16px;
+    font-weight: 600;
+}
+
+QPushButton:hover {
+    background-color: #ecf5ff;
+    border-color: #409eff;
+    color: #1677d2;
+}
+
+QPushButton:pressed {
+    background-color: #d9ecff;
+    border-color: #1677d2;
+}
+
+QPushButton#generateButton,
+QPushButton#readDatButton {
+    background-color: #1677d2;
+    color: #ffffff;
+    border-color: #1677d2;
+}
+
+QPushButton#generateButton:hover,
+QPushButton#readDatButton:hover {
+    background-color: #409eff;
+    color: #ffffff;
+    border-color: #409eff;
+}
+
+QPushButton#generateButton:pressed,
+QPushButton#readDatButton:pressed {
+    background-color: #0f5fae;
+    border-color: #0f5fae;
+}
+
+QLabel#statusLabel {
+    color: #1677d2;
+    background-color: #f0f7ff;
+    border: 1px solid #d9ecff;
+    border-radius: 5px;
+    padding: 9px 12px;
+}
+
+QFrame#line {
+    color: #e4e7ed;
+}</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="spacing">
+    <number>12</number>
+   </property>
+   <property name="leftMargin">
+    <number>24</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>24</number>
+   </property>
+   <property name="bottomMargin">
+    <number>22</number>
+   </property>
+   <item>
+    <layout class="QVBoxLayout" name="headerLayout">
+     <property name="spacing">
+      <number>2</number>
+     </property>
+     <item>
+      <widget class="QLabel" name="titleLabel">
+       <property name="text">
+        <string>软件授权工具</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="subtitleLabel">
+       <property name="text">
+        <string>生成与查看主程序使用的 license.ini</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="generateSectionLabel">
+     <property name="text">
+      <string>生成授权文件</string>
+     </property>
+    </widget>
+   </item>
    <item>
     <layout class="QFormLayout" name="formLayout">
      <property name="fieldGrowthPolicy">
       <enum>QFormLayout::ExpandingFieldsGrow</enum>
+     </property>
+     <property name="labelAlignment">
+      <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+     </property>
+     <property name="horizontalSpacing">
+      <number>14</number>
+     </property>
+     <property name="verticalSpacing">
+      <number>10</number>
      </property>
      <item row="0" column="0">
       <widget class="QLabel" name="expiresLabel">
@@ -28,6 +201,12 @@
      </item>
      <item row="0" column="1">
       <widget class="QDateEdit" name="expiresEdit">
+       <property name="maximumSize">
+        <size>
+         <width>240</width>
+         <height>16777215</height>
+        </size>
+       </property>
        <property name="displayFormat">
         <string>yyyy-MM-dd</string>
        </property>
@@ -53,7 +232,7 @@
          <property name="minimumSize">
           <size>
            <width>96</width>
-           <height>0</height>
+           <height>38</height>
           </size>
          </property>
          <property name="text">
@@ -69,8 +248,17 @@
     <layout class="QHBoxLayout" name="actionLayout">
      <item>
       <widget class="QLabel" name="statusLabel">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>38</height>
+        </size>
+       </property>
        <property name="text">
         <string>请选择有效期并生成 license.ini。</string>
+       </property>
+       <property name="wordWrap">
+        <bool>true</bool>
        </property>
       </widget>
      </item>
@@ -91,8 +279,8 @@
       <widget class="QPushButton" name="generateButton">
        <property name="minimumSize">
         <size>
-         <width>96</width>
-         <height>0</height>
+         <width>112</width>
+         <height>38</height>
         </size>
        </property>
        <property name="text">
@@ -108,7 +296,14 @@
       <enum>QFrame::HLine</enum>
      </property>
      <property name="frameShadow">
-      <enum>QFrame::Sunken</enum>
+      <enum>QFrame::Plain</enum>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="readSectionLabel">
+     <property name="text">
+      <string>查看授权文件</string>
      </property>
     </widget>
    </item>
@@ -116,6 +311,15 @@
     <layout class="QFormLayout" name="readFormLayout">
      <property name="fieldGrowthPolicy">
       <enum>QFormLayout::ExpandingFieldsGrow</enum>
+     </property>
+     <property name="labelAlignment">
+      <set>Qt::AlignRight|Qt::AlignTop|Qt::AlignTrailing</set>
+     </property>
+     <property name="horizontalSpacing">
+      <number>14</number>
+     </property>
+     <property name="verticalSpacing">
+      <number>10</number>
      </property>
      <item row="0" column="0">
       <widget class="QLabel" name="datLabel">
@@ -134,7 +338,7 @@
          <property name="minimumSize">
           <size>
            <width>96</width>
-           <height>0</height>
+           <height>38</height>
           </size>
          </property>
          <property name="text">
@@ -147,7 +351,7 @@
          <property name="minimumSize">
           <size>
            <width>96</width>
-           <height>0</height>
+           <height>38</height>
           </size>
          </property>
          <property name="text">
@@ -166,14 +370,14 @@
      </item>
      <item row="1" column="1">
       <widget class="QTextEdit" name="licenseInfoEdit">
-       <property name="readOnly">
-        <bool>true</bool>
-       </property>
        <property name="minimumSize">
         <size>
          <width>0</width>
-         <height>140</height>
+         <height>48</height>
         </size>
+       </property>
+       <property name="readOnly">
+        <bool>true</bool>
        </property>
       </widget>
      </item>
