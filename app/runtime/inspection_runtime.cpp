@@ -122,7 +122,6 @@ InspectionRuntime::~InspectionRuntime()
 {
     requestDetectionWorkerStop();
     waitForDetectionWorkerStop();
-    shutdownResultExport();
 }
 
 // 函数说明：createRunId 函数创建、准备或启动对应流程。
@@ -742,21 +741,9 @@ const ResultExportClient &InspectionRuntime::resultExportClient() const
     return *m_resultExportClient;
 }
 
-bool InspectionRuntime::resultExportReady() const
-{
-    return m_resultExportClient && m_resultExportClient->startupReady();
-}
-
 bool InspectionRuntime::resultExportEnabled() const
 {
     return m_resultService && m_resultService->resultExportEnabled();
-}
-
-void InspectionRuntime::shutdownResultExport()
-{
-    if (m_resultExportClient) {
-        m_resultExportClient->shutdown();
-    }
 }
 
 // 函数说明：requestDetectionWorkerStop 函数实现名称所表示的处理步骤。

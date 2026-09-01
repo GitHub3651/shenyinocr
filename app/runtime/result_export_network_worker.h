@@ -24,7 +24,7 @@ public slots:
 signals:
     void connected();
     void disconnected(QString reason);
-    void ackReceived(QString id);
+    void ackReceived();
     void pongReceived(double roundTripMs);
     void failed(QString reason);
 

@@ -161,19 +161,11 @@ public:
     void requestResultExportConnect(const QString &ip, quint16 port);
     void requestResultExportConnectionCheck();
     void requestResultExportDisconnect();
-    void synchronizeResultExportOutbox();
-    void abandonResultExportOutbox();
-    bool hasPendingResultExport() const;
     int pendingResultExportCount() const;
-    bool clearResultExportOutbox(QString *errorMessage = nullptr);
-    bool discardResultExportOutboxForShutdown(
-        QString *errorMessage = nullptr);
-    void shutdownResultExport();
     RuntimeSnapshot runtimeSnapshot() const;
 
 signals:
     void runtimeSnapshotChanged(RuntimeSnapshot snapshot);
-    void resultExportOutboxDispositionRequired(int count);
     void templatePreviewFrameReady(quint64 sessionId, cv::Mat image);
     void templatePreviewFailed(quint64 sessionId, QString reason);
     void captureStopped(bool preview);

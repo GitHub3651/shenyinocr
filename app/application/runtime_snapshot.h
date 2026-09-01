@@ -30,9 +30,6 @@ struct RuntimeSnapshot
     QStringList activeTemplatePaths;
     ResultExportConnectionState resultExportConnectionState =
             ResultExportConnectionState::Disconnected;
-    bool resultExportStartupReady = false;
-    bool resultExportDispositionPending = false;
-    int resultExportPendingCount = 0;
     double resultExportRoundTripMs = -1.0;
     bool resultExportEnabled = false;
 

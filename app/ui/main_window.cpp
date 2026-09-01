@@ -154,27 +154,6 @@ MainWindow::MainWindow(
         updateResultExportUi(snapshot);
         updateOperationUiState();
     });
-    connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::resultExportOutboxDispositionRequired,
-            this,
-            [this](int count) {
-        QMessageBox box(this);
-        box.setIcon(QMessageBox::Warning);
-        box.setWindowTitle(QStringLiteral("发现当前进程待发送记录"));
-        box.setText(QStringLiteral("当前进程有 %1 条待发送二维码结果。")
-                    .arg(count));
-        QPushButton *synchronize = box.addButton(
-                    QStringLiteral("同步历史记录"), QMessageBox::AcceptRole);
-        QPushButton *abandon = box.addButton(
-                    QStringLiteral("放弃历史记录"), QMessageBox::DestructiveRole);
-        box.setDefaultButton(synchronize);
-        box.exec();
-        if (box.clickedButton() == synchronize) {
-            m_inspectionApplicationService->synchronizeResultExportOutbox();
-        } else if (box.clickedButton() == abandon) {
-            m_inspectionApplicationService->abandonResultExportOutbox();
-        }
-    }, Qt::QueuedConnection);
 
     // UI 文件中已经是 ImageLabel，直接使用。
     imageLabel = ui->imageLabel_inspection;
@@ -487,34 +466,21 @@ void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
             == ResultExportConnectionState::Connecting;
     const bool checking = snapshot.resultExportConnectionState
             == ResultExportConnectionState::Checking;
-    const bool syncing = snapshot.resultExportConnectionState
-            == ResultExportConnectionState::Syncing;
     if (!connected) {
         m_resultExportAutoEnableApplied = false;
         m_resultExportUserEnabled = false;
     } else if (!m_resultExportAutoEnableApplied
-               && snapshot.state != ApplicationRuntimeState::Fault
-               && !snapshot.resultExportDispositionPending) {
+               && snapshot.state != ApplicationRuntimeState::Fault) {
         m_resultExportUserEnabled = true;
         m_resultExportAutoEnableApplied = true;
     }
     QString status = QStringLiteral("● 已断开");
     QString statusUiState = QStringLiteral("offline");
-    if (!snapshot.resultExportStartupReady) {
-        status = QStringLiteral("● 远程传输：本地队列不可用");
-        statusUiState = QStringLiteral("error");
-    } else if (snapshot.resultExportDispositionPending) {
-        status = QStringLiteral("● 远程传输：%1 条历史结果待处理")
-                .arg(snapshot.resultExportPendingCount);
-        statusUiState = QStringLiteral("attention");
-    } else if (connecting) {
+    if (connecting) {
         status = QStringLiteral("● 正在连接…");
         statusUiState = QStringLiteral("working");
     } else if (checking) {
         status = QStringLiteral("● 正在检查…");
-        statusUiState = QStringLiteral("working");
-    } else if (syncing) {
-        status = QStringLiteral("● 正在同步历史结果…");
         statusUiState = QStringLiteral("working");
     } else if (connected) {
         status = snapshot.resultExportRoundTripMs >= 0.0
@@ -536,19 +502,16 @@ void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
         ui->resultExportStatus->update();
     }
     const bool canEdit = !busy && !connected && !connecting
-            && !checking && !syncing;
-    ui->resultExportIp->setEnabled(canEdit && snapshot.resultExportStartupReady);
-    ui->resultExportPort->setEnabled(canEdit && snapshot.resultExportStartupReady);
-    ui->resultExportConnect->setEnabled(!busy && snapshot.resultExportStartupReady
-                                        && !snapshot.resultExportDispositionPending
-                                        && !connecting && !checking && !syncing);
+            && !checking;
+    ui->resultExportIp->setEnabled(canEdit);
+    ui->resultExportPort->setEnabled(canEdit);
+    ui->resultExportConnect->setEnabled(!busy && !connecting && !checking);
     ui->resultExportDisconnect->setEnabled(!busy
                                            && snapshot.resultExportConnectionState
                                            != ResultExportConnectionState::Disconnected);
     const bool enableAvailable = !busy
             && snapshot.state != ApplicationRuntimeState::Fault
-            && connected
-            && !snapshot.resultExportDispositionPending;
+            && connected;
     {
         QSignalBlocker blocker(ui->resultExportEnable);
         ui->resultExportEnable->setChecked(m_resultExportUserEnabled

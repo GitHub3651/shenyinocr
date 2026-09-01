@@ -351,32 +351,26 @@ void ResultService::process(const ProcessRequest &request)
         std::lock_guard<std::mutex> lock(m_mutex);
         exportEnabled = m_runConfiguration.resultExport.enabled;
     }
+    ResultExportRecord exportRecord;
     if (exportEnabled) {
-        ResultExportRecord record;
-        record.id = productKey.runId
+        exportRecord.id = productKey.runId
                 + QStringLiteral(":")
                 + QString::number(productKey.sequence);
-        record.eventTimeUtc = QDateTime::currentDateTimeUtc();
-        record.overallOk = request.completion.result.verdict
+        exportRecord.eventTimeUtc = QDateTime::currentDateTimeUtc();
+        exportRecord.overallOk = request.completion.result.verdict
                 == AlgorithmVerdict::Ok;
-        record.qrContent = record.overallOk
+        exportRecord.qrContent = exportRecord.overallOk
                 ? request.completion.result.qrContent
                 : QString();
-        QString exportError;
-        if (!m_runtime.resultExportClient().enqueue(record, &exportError)) {
-            m_runtime.enterFault(
-                        InspectionFaultReason::ResultExportUnavailable,
-                        exportError.isEmpty()
-                        ? QStringLiteral("结果传输本地队列写入失败。")
-                        : exportError);
-            return;
-        }
     }
     if (!m_runtime.finalizeResultClaim(productKey)) {
         m_runtime.enterFault(
                     InspectionFaultReason::RuntimeInvariantViolation,
                     QStringLiteral("产品结果正式认领状态提交失败。"));
         return;
+    }
+    if (exportEnabled) {
+        m_runtime.resultExportClient().enqueue(exportRecord);
     }
 
     ProductKey delayedProduct;

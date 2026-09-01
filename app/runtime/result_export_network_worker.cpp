@@ -183,7 +183,7 @@ void ResultExportNetworkWorker::processLine(const QByteArray &line)
         }
         m_ackTimer->stop();
         m_waitingAckId.clear();
-        emit ackReceived(id);
+        emit ackReceived();
         return;
     }
     if (object.value(QStringLiteral("pong")).toBool(false)) {

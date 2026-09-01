@@ -301,19 +301,6 @@ InspectionApplicationService::InspectionApplicationService(
             this,
             [this](ResultExportConnectionState) { publishSnapshot(); },
             Qt::QueuedConnection);
-    connect(&m_runtime->resultExportClient(),
-            &ResultExportClient::pendingCountChanged,
-            this,
-            [this](int) { publishSnapshot(); },
-            Qt::QueuedConnection);
-    connect(&m_runtime->resultExportClient(),
-            &ResultExportClient::outboxDispositionRequired,
-            this,
-            [this](int count) {
-        publishSnapshot();
-        emit resultExportOutboxDispositionRequired(count);
-    },
-            Qt::QueuedConnection);
     CameraSessionCallbacks callbacks;
     callbacks.previewFrameReady = [this](
             quint64 sessionId,
@@ -376,20 +363,13 @@ StartInspectionResult InspectionApplicationService::start(
     }
     if (detectionMode == DetectionMode::BarcodeWord
             && command.resultExportEnabled) {
-        if (!m_runtime->resultExportReady()) {
-            return rejectStart(
-                        InspectionStartIssue::RuntimeBusy,
-                        QStringLiteral("RESULT_EXPORT_UNAVAILABLE"),
-                        QStringLiteral("结果传输本地队列不可用，请先处理后重启程序。"));
-        }
         const ResultExportConnectionState exportState =
                 m_runtime->resultExportClient().connectionState();
-        if (exportState != ResultExportConnectionState::Connected
-                || m_runtime->resultExportClient().outboxDispositionPending()) {
+        if (exportState != ResultExportConnectionState::Connected) {
             return rejectStart(
                         InspectionStartIssue::RuntimeBusy,
                         QStringLiteral("RESULT_EXPORT_NOT_CONNECTED"),
-                        QStringLiteral("请先连接结果接收端并完成当前进程待发送记录处置。"));
+                        QStringLiteral("请先连接结果接收端。"));
         }
     }
     const QStringList selectedPaths =
@@ -634,13 +614,12 @@ StopInspectionResult InspectionApplicationService::stop(
                == InspectionFaultReason::ResultExportUnavailable
             && (m_runtime->resultExportClient().connectionState()
                 != ResultExportConnectionState::Connected
-                || m_runtime->resultExportClient().hasPending()
-                || m_runtime->resultExportClient().outboxDispositionPending())) {
+                || m_runtime->resultExportClient().pendingCount() > 0)) {
         result.issue = StopInspectionIssue::FaultConfirmationRequired;
         result.error.code = QStringLiteral(
                     "RESULT_EXPORT_RECOVERY_INCOMPLETE");
         result.error.userMessage = QStringLiteral(
-                    "请先恢复 TCP，并同步完成或明确放弃当前进程待发送记录。" );
+                    "请先恢复 TCP，并等待待确认记录发送完成。" );
         result.snapshot = runtimeSnapshot();
         return result;
     }
@@ -1250,49 +1229,9 @@ void InspectionApplicationService::requestResultExportDisconnect()
     publishSnapshot();
 }
 
-void InspectionApplicationService::synchronizeResultExportOutbox()
-{
-    m_runtime->resultExportClient().requestSynchronizeOutbox();
-    publishSnapshot();
-}
-
-void InspectionApplicationService::abandonResultExportOutbox()
-{
-    m_runtime->resultExportClient().requestAbandonOutbox();
-    publishSnapshot();
-}
-
-bool InspectionApplicationService::hasPendingResultExport() const
-{
-    return m_runtime->resultExportClient().hasPending();
-}
-
 int InspectionApplicationService::pendingResultExportCount() const
 {
     return m_runtime->resultExportClient().pendingCount();
-}
-
-bool InspectionApplicationService::clearResultExportOutbox(
-    QString *errorMessage)
-{
-    const bool cleared = m_runtime->resultExportClient()
-            .clearOutbox(errorMessage);
-    publishSnapshot();
-    return cleared;
-}
-
-bool InspectionApplicationService::discardResultExportOutboxForShutdown(
-    QString *errorMessage)
-{
-    const bool removed = m_runtime->resultExportClient()
-            .discardOutboxForShutdown(errorMessage);
-    publishSnapshot();
-    return removed;
-}
-
-void InspectionApplicationService::shutdownResultExport()
-{
-    m_runtime->shutdownResultExport();
 }
 
 // 函数说明：enterFault 函数实现名称所表示的处理步骤。
@@ -1317,11 +1256,6 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
     snapshot.activeTemplatePaths = m_activeTemplatePaths;
     snapshot.resultExportConnectionState =
             m_runtime->resultExportClient().connectionState();
-    snapshot.resultExportStartupReady = m_runtime->resultExportReady();
-    snapshot.resultExportDispositionPending =
-            m_runtime->resultExportClient().outboxDispositionPending();
-    snapshot.resultExportPendingCount =
-            m_runtime->resultExportClient().pendingCount();
     snapshot.resultExportRoundTripMs =
             m_runtime->resultExportClient().roundTripMs();
     snapshot.resultExportEnabled = m_runtime->resultExportEnabled();

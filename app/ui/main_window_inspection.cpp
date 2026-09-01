@@ -449,29 +449,13 @@ void MainWindow::closeEvent(QCloseEvent *event)
                     this,
                     QStringLiteral("未发送二维码结果"),
                     QStringLiteral("当前有 %1 条二维码结果尚未发送完成。\n\n"
-                                   "确认退出将清空当前进程 outbox，这些记录不会在下次启动补发。")
+                                   "确认退出将丢失这些记录。")
                     .arg(pendingExport),
                     QMessageBox::Ok | QMessageBox::Cancel,
                     QMessageBox::Cancel);
         if (choice != QMessageBox::Ok) {
             event->ignore();
             return;
-        }
-        QString removeError;
-        if (!m_inspectionApplicationService
-                ->discardResultExportOutboxForShutdown(&removeError)) {
-            qCWarning(logUi).noquote()
-                    << QStringLiteral("event=result_export.shutdown_delete_failed reason=%1")
-                       .arg(removeError);
-        }
-    } else {
-        QString removeError;
-        m_inspectionApplicationService
-                ->discardResultExportOutboxForShutdown(&removeError);
-        if (!removeError.isEmpty()) {
-            qCWarning(logUi).noquote()
-                    << QStringLiteral("event=result_export.shutdown_delete_failed reason=%1")
-                       .arg(removeError);
         }
     }
 
