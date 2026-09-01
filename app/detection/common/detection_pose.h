@@ -58,6 +58,7 @@ struct DetectionResult {
     QString modeId;
     AlgorithmVerdict verdict = AlgorithmVerdict::Ng;
     QString recognizedText;
+    QString qrContent;
     QString presentationText;
     QString templateName;
     QString diagnostic;

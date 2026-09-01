@@ -75,6 +75,7 @@ QGroupBox#groupBox_productionStatistics::title {
 }
 
 QGroupBox#groupBox_currentTemplateSettings,
+QGroupBox#groupBox_resultExport,
 QGroupBox#groupBox_templateCreation,
 QGroupBox#groupBox_detectionMode,
 QGroupBox#groupBox_imageSaving,
@@ -525,6 +526,34 @@ QPushButton#pushButton_resetNgCount:disabled {
 }
 
 /* 10. 运行状态与判定 */
+QLabel#resultExportStatus {
+    background-color: transparent;
+    color: #909399;
+    border: none;
+    padding: 0;
+    font-weight: 600;
+}
+
+QLabel#resultExportStatus[uiState="offline"] {
+    color: #909399;
+}
+
+QLabel#resultExportStatus[uiState="working"] {
+    color: #1677d2;
+}
+
+QLabel#resultExportStatus[uiState="online"] {
+    color: #529b2e;
+}
+
+QLabel#resultExportStatus[uiState="attention"] {
+    color: #e6a23c;
+}
+
+QLabel#resultExportStatus[uiState="error"] {
+    color: #d93025;
+}
+
 QLabel#label_runtimeStatus {
     background-color: #eef1f6;
     color: #606266;

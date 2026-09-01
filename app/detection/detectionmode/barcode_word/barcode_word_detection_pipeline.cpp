@@ -218,6 +218,7 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
 
     result = output.wordOutput.detectionResult;
     result.modeId = detectionModeUiId(DetectionMode::BarcodeWord);
+    result.qrContent = output.barcode.text;
     output.dateState = output.barcodeWordResult.dateIsOk
             ? QStringLiteral("正确")
             : QStringLiteral("错误");

@@ -42,6 +42,9 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
     case InspectionFaultReason::RuntimeInvariantViolation:
         reasonText = QStringLiteral("检测运行约束被破坏");
         break;
+    case InspectionFaultReason::ResultExportUnavailable:
+        reasonText = QStringLiteral("二维码结果传输不可用");
+        break;
     case InspectionFaultReason::None:
         break;
     }

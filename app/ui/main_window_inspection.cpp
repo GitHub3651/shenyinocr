@@ -313,6 +313,7 @@ void MainWindow::updateOperationUiState()
     }
     const RuntimeSnapshot runtime =
             m_inspectionApplicationService->runtimeSnapshot();
+    updateResultExportUi(runtime);
     OperationUiContext context;
     context.state = operationUiState();
     context.cameraOpen = runtime.cameraOpen;
@@ -431,6 +432,47 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if (m_applicationExitInProgress) {
         event->accept();
         return;
+    }
+
+    const RuntimeSnapshot beforeShutdown =
+            m_inspectionApplicationService->runtimeSnapshot();
+    if (beforeShutdown.state == ApplicationRuntimeState::Starting
+            || beforeShutdown.state == ApplicationRuntimeState::Running
+            || beforeShutdown.state == ApplicationRuntimeState::Stopping) {
+        m_inspectionApplicationService->shutdown();
+    }
+
+    const int pendingExport =
+            m_inspectionApplicationService->pendingResultExportCount();
+    if (pendingExport > 0) {
+        const QMessageBox::StandardButton choice = QMessageBox::warning(
+                    this,
+                    QStringLiteral("未发送二维码结果"),
+                    QStringLiteral("当前有 %1 条二维码结果尚未发送完成。\n\n"
+                                   "确认退出将清空当前进程 outbox，这些记录不会在下次启动补发。")
+                    .arg(pendingExport),
+                    QMessageBox::Ok | QMessageBox::Cancel,
+                    QMessageBox::Cancel);
+        if (choice != QMessageBox::Ok) {
+            event->ignore();
+            return;
+        }
+        QString removeError;
+        if (!m_inspectionApplicationService
+                ->discardResultExportOutboxForShutdown(&removeError)) {
+            qCWarning(logUi).noquote()
+                    << QStringLiteral("event=result_export.shutdown_delete_failed reason=%1")
+                       .arg(removeError);
+        }
+    } else {
+        QString removeError;
+        m_inspectionApplicationService
+                ->discardResultExportOutboxForShutdown(&removeError);
+        if (!removeError.isEmpty()) {
+            qCWarning(logUi).noquote()
+                    << QStringLiteral("event=result_export.shutdown_delete_failed reason=%1")
+                       .arg(removeError);
+        }
     }
 
     m_applicationExitInProgress = true;
@@ -588,6 +630,7 @@ void MainWindow::on_toolButton_startInspection_clicked()
 
     StartInspectionCommand command;
     command.unappliedChanges = m_settingsEditState.dirtyNames();
+    command.resultExportEnabled = m_resultExportUserEnabled;
     StartInspectionResult result =
             m_inspectionApplicationService->start(command);
     if (result.issue

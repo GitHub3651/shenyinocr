@@ -908,9 +908,9 @@
               <property name="geometry">
                <rect>
                 <x>0</x>
-                <y>-264</y>
+                <y>-561</y>
                 <width>585</width>
-                <height>680</height>
+                <height>915</height>
                </rect>
               </property>
               <layout class="QGridLayout" name="gridLayout_detectionSettings">
@@ -961,7 +961,7 @@
                           <enum>QFrame::NoFrame</enum>
                          </property>
                          <property name="text">
-                          <string>当前编辑模板：</string>
+                          <string>当前编辑模板</string>
                          </property>
                         </widget>
                        </item>
@@ -1008,7 +1008,7 @@
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
-                        <height>42</height>
+                        <height>50</height>
                        </size>
                       </property>
                       <property name="text">
@@ -1063,6 +1063,9 @@
                     </item>
                     <item row="1" column="0">
                      <widget class="QLabel" name="label_targetText">
+                      <property name="enabled">
+                       <bool>true</bool>
+                      </property>
                       <property name="text">
                        <string>目标字符内容:</string>
                       </property>
@@ -1193,6 +1196,136 @@
                   </widget>
                  </item>
                  <item>
+                  <widget class="QGroupBox" name="groupBox_resultExport">
+                   <property name="title">
+                    <string>二维码结果传输</string>
+                   </property>
+                   <layout class="QFormLayout" name="formLayout_resultExport">
+                    <item row="0" column="0" colspan="2">
+                     <widget class="QCheckBox" name="resultExportEnable">
+                      <property name="text">
+                       <string>启用二维码结果传输</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item row="1" column="0" colspan="2">
+                     <layout class="QFormLayout" name="formLayout_resultExportEndpoint">
+                      <item row="0" column="0">
+                       <widget class="QLabel" name="label_resultExportIp">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="text">
+                         <string>接收电脑 IP</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="0" column="1">
+                       <widget class="QLineEdit" name="resultExportIp">
+                        <property name="minimumSize">
+                         <size>
+                          <width>0</width>
+                          <height>50</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>192.168.10.20</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="1">
+                       <widget class="QSpinBox" name="resultExportPort">
+                        <property name="minimumSize">
+                         <size>
+                          <width>0</width>
+                          <height>50</height>
+                         </size>
+                        </property>
+                        <property name="minimum">
+                         <number>1</number>
+                        </property>
+                        <property name="maximum">
+                         <number>65535</number>
+                        </property>
+                        <property name="value">
+                         <number>35680</number>
+                        </property>
+                       </widget>
+                      </item>
+                      <item row="1" column="0">
+                       <widget class="QLabel" name="label_resultExportPort">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="text">
+                         <string>TCP 端口</string>
+                        </property>
+                       </widget>
+                      </item>
+                     </layout>
+                    </item>
+                    <item row="2" column="0" colspan="2">
+                     <layout class="QHBoxLayout" name="horizontalLayout_resultExportConnection" stretch="5,5,3">
+                      <item>
+                       <widget class="QPushButton" name="resultExportConnect">
+                        <property name="minimumSize">
+                         <size>
+                          <width>0</width>
+                          <height>50</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>连接远程接收端</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QPushButton" name="resultExportDisconnect">
+                        <property name="minimumSize">
+                         <size>
+                          <width>0</width>
+                          <height>50</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>断开连接</string>
+                        </property>
+                       </widget>
+                      </item>
+                      <item>
+                       <widget class="QLabel" name="resultExportStatus">
+                        <property name="sizePolicy">
+                         <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
+                          <horstretch>0</horstretch>
+                          <verstretch>0</verstretch>
+                         </sizepolicy>
+                        </property>
+                        <property name="minimumSize">
+                         <size>
+                          <width>0</width>
+                          <height>50</height>
+                         </size>
+                        </property>
+                        <property name="text">
+                         <string>● 已断开</string>
+                        </property>
+                        <property name="alignment">
+                         <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                        </property>
+                       </widget>
+                      </item>
+                     </layout>
+                    </item>
+                   </layout>
+                  </widget>
+                 </item>
+                 <item>
                   <widget class="QGroupBox" name="groupBox_templateCreation">
                    <property name="title">
                     <string>模板制作</string>
@@ -1203,7 +1336,7 @@
                       <property name="minimumSize">
                        <size>
                         <width>0</width>
-                        <height>42</height>
+                        <height>50</height>
                        </size>
                       </property>
                       <property name="text">

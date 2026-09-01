@@ -34,11 +34,9 @@ namespace Ui {
 class MainWindow;
 }
 
-class QLabel;
 class QComboBox;
 class QFrame;
 class QDialog;
-class QPushButton;
 class QLineEdit;
 class QTimer;
 class QCloseEvent;
@@ -101,6 +99,9 @@ private slots:
 
     void on_pushButton_applyCameraGain_clicked();
     void on_pushButton_clearSoftwareData_clicked();
+    void on_resultExportConnect_clicked();
+    void on_resultExportDisconnect_clicked();
+    void on_resultExportEnable_toggled(bool enabled);
 
 private:
     void initializePages();
@@ -162,6 +163,8 @@ private:
     bool m_applicationExitInProgress = false;
     std::unique_ptr<InspectionPage> m_inspectionPage;
     bool m_faultAlarmPresented = false;
+    bool m_resultExportUserEnabled = false;
+    bool m_resultExportAutoEnableApplied = false;
 
     // ========== 定时器 ==========
     QTimer *m_plcHealthTimer = nullptr; ///< 运行中PLC连接监视
@@ -175,6 +178,7 @@ private:
     void applyMachineSettingsToUi(const AppSettings &settings);
     void setupNonPersistentDefaults();  ///< 设置不属于公共配置的初始值
     void initStyle();  // 声明后才能在 cpp 中实现和调用
+    void updateResultExportUi(const RuntimeSnapshot &snapshot);
 };
 
 #endif // OCRGANGYIN_UI_MAIN_WINDOW_H

@@ -28,6 +28,7 @@
 #include <QFrame>
 #include <QScrollArea>
 #include <QSplitterHandle>
+#include <QStyle>
 #include <QTextOption>
 
 /**
@@ -50,6 +51,8 @@ MainWindow::MainWindow(
       imageLabel(nullptr)
 {
     ui->setupUi(this);
+    ui->resultExportIp->setText(machineSettings().resultExportReceiverIp);
+    ui->resultExportPort->setValue(machineSettings().resultExportReceiverPort);
     initStyle();
 
     // 检测信息区域允许被分隔条压缩；空间不足时只在该区域内部滚动。
@@ -147,9 +150,31 @@ MainWindow::MainWindow(
     connect(m_inspectionApplicationService.get(),
             &InspectionApplicationService::runtimeSnapshotChanged,
             this,
-            [this](const RuntimeSnapshot &) {
+            [this](const RuntimeSnapshot &snapshot) {
+        updateResultExportUi(snapshot);
         updateOperationUiState();
     });
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::resultExportOutboxDispositionRequired,
+            this,
+            [this](int count) {
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Warning);
+        box.setWindowTitle(QStringLiteral("发现当前进程待发送记录"));
+        box.setText(QStringLiteral("当前进程有 %1 条待发送二维码结果。")
+                    .arg(count));
+        QPushButton *synchronize = box.addButton(
+                    QStringLiteral("同步历史记录"), QMessageBox::AcceptRole);
+        QPushButton *abandon = box.addButton(
+                    QStringLiteral("放弃历史记录"), QMessageBox::DestructiveRole);
+        box.setDefaultButton(synchronize);
+        box.exec();
+        if (box.clickedButton() == synchronize) {
+            m_inspectionApplicationService->synchronizeResultExportOutbox();
+        } else if (box.clickedButton() == abandon) {
+            m_inspectionApplicationService->abandonResultExportOutbox();
+        }
+    }, Qt::QueuedConnection);
 
     // UI 文件中已经是 ImageLabel，直接使用。
     imageLabel = ui->imageLabel_inspection;
@@ -391,6 +416,7 @@ void MainWindow::initializePages()
     m_machineSettingsPage->clearAllDirty();
     m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
+    updateResultExportUi(m_inspectionApplicationService->runtimeSnapshot());
 
     QTimer::singleShot(1000, this, [this]() {
         const QString targetIp = ui->lineEdit_plcIpAddress->text();
@@ -440,4 +466,126 @@ MainWindow::~MainWindow()
     delete ui;
     ui = nullptr;
 
+}
+
+void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
+{
+    DetectionMode mode = DetectionMode::Word;
+    const bool barcodeMode = detectionModeFromUiId(
+                machineSettings().detectModeId, &mode)
+            && mode == DetectionMode::BarcodeWord;
+    ui->groupBox_resultExport->setVisible(barcodeMode);
+    if (!barcodeMode) {
+        return;
+    }
+    const bool busy = snapshot.state == ApplicationRuntimeState::Starting
+            || snapshot.state == ApplicationRuntimeState::Running
+            || snapshot.state == ApplicationRuntimeState::Stopping;
+    const bool connected = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Connected;
+    const bool connecting = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Connecting;
+    const bool checking = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Checking;
+    const bool syncing = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Syncing;
+    if (!connected) {
+        m_resultExportAutoEnableApplied = false;
+        m_resultExportUserEnabled = false;
+    } else if (!m_resultExportAutoEnableApplied
+               && snapshot.state != ApplicationRuntimeState::Fault
+               && !snapshot.resultExportDispositionPending) {
+        m_resultExportUserEnabled = true;
+        m_resultExportAutoEnableApplied = true;
+    }
+    QString status = QStringLiteral("● 已断开");
+    QString statusUiState = QStringLiteral("offline");
+    if (!snapshot.resultExportStartupReady) {
+        status = QStringLiteral("● 远程传输：本地队列不可用");
+        statusUiState = QStringLiteral("error");
+    } else if (snapshot.resultExportDispositionPending) {
+        status = QStringLiteral("● 远程传输：%1 条历史结果待处理")
+                .arg(snapshot.resultExportPendingCount);
+        statusUiState = QStringLiteral("attention");
+    } else if (connecting) {
+        status = QStringLiteral("● 正在连接…");
+        statusUiState = QStringLiteral("working");
+    } else if (checking) {
+        status = QStringLiteral("● 正在检查…");
+        statusUiState = QStringLiteral("working");
+    } else if (syncing) {
+        status = QStringLiteral("● 正在同步历史结果…");
+        statusUiState = QStringLiteral("working");
+    } else if (connected) {
+        status = snapshot.resultExportRoundTripMs >= 0.0
+                ? QStringLiteral("● 已连接 · %1 ms")
+                  .arg(snapshot.resultExportRoundTripMs, 0, 'f', 2)
+                : QStringLiteral("● 已连接");
+        statusUiState = QStringLiteral("online");
+    }
+    ui->resultExportStatus->setText(status);
+    if (ui->resultExportStatus->property("uiState").toString()
+            != statusUiState) {
+        ui->resultExportStatus->setProperty("uiState", statusUiState);
+        if (ui->resultExportStatus->style()) {
+            ui->resultExportStatus->style()->unpolish(
+                        ui->resultExportStatus);
+            ui->resultExportStatus->style()->polish(
+                        ui->resultExportStatus);
+        }
+        ui->resultExportStatus->update();
+    }
+    const bool canEdit = !busy && !connected && !connecting
+            && !checking && !syncing;
+    ui->resultExportIp->setEnabled(canEdit && snapshot.resultExportStartupReady);
+    ui->resultExportPort->setEnabled(canEdit && snapshot.resultExportStartupReady);
+    ui->resultExportConnect->setEnabled(!busy && snapshot.resultExportStartupReady
+                                        && !snapshot.resultExportDispositionPending
+                                        && !connecting && !checking && !syncing);
+    ui->resultExportDisconnect->setEnabled(!busy
+                                           && snapshot.resultExportConnectionState
+                                           != ResultExportConnectionState::Disconnected);
+    const bool enableAvailable = !busy
+            && snapshot.state != ApplicationRuntimeState::Fault
+            && connected
+            && !snapshot.resultExportDispositionPending;
+    {
+        QSignalBlocker blocker(ui->resultExportEnable);
+        ui->resultExportEnable->setChecked(m_resultExportUserEnabled
+                                           && enableAvailable);
+    }
+    ui->resultExportEnable->setEnabled(enableAvailable);
+}
+
+void MainWindow::on_resultExportConnect_clicked()
+{
+    const RuntimeSnapshot snapshot = m_inspectionApplicationService->runtimeSnapshot();
+    if (snapshot.resultExportConnectionState == ResultExportConnectionState::Connected) {
+        m_inspectionApplicationService->requestResultExportConnectionCheck();
+        return;
+    }
+    AppSettings candidate = m_settingsApplicationService->current();
+    candidate.resultExportReceiverIp = ui->resultExportIp->text().trimmed();
+    candidate.resultExportReceiverPort = ui->resultExportPort->value();
+    const OperationResult saved = m_settingsApplicationService
+            ->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        showParameterWarning(QStringLiteral("结果传输设置保存失败"),
+                             saved.error.userMessage);
+        return;
+    }
+    m_inspectionApplicationService->requestResultExportConnect(
+                candidate.resultExportReceiverIp,
+                static_cast<quint16>(candidate.resultExportReceiverPort));
+}
+
+void MainWindow::on_resultExportDisconnect_clicked()
+{
+    m_resultExportUserEnabled = false;
+    m_inspectionApplicationService->requestResultExportDisconnect();
+}
+
+void MainWindow::on_resultExportEnable_toggled(bool enabled)
+{
+    m_resultExportUserEnabled = enabled;
 }

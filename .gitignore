@@ -1,9 +1,9 @@
 # Build, deployment and archival directories
-/build/
+**/build/
 /build-*/
 /dist/
 /archive/
-/output/
+**/output/
 
 # Transitional former worktree. It is removed after .git moves to the root.
 /Autoadd/

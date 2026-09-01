@@ -195,41 +195,24 @@ int ApplicationStartup::run(int argc, char *argv[])
                                  &settingsError)) {
             if (settingsError.code
                     == QLatin1String("SETTINGS_RESET_REQUIRED")) {
-                const QMessageBox::StandardButton choice =
-                        QMessageBox::question(
-                            nullptr,
-                            QStringLiteral("旧设置需要清空"),
-                            settingsError.userMessage
-                            + QStringLiteral("\n\n清空后将使用默认设置，是否继续？"),
-                            QMessageBox::Yes | QMessageBox::No,
-                            QMessageBox::No);
-                if (choice == QMessageBox::Yes) {
-                    startupSettings = AppSettings::defaults();
-                    if (settingsStore->save(startupSettings,
-                                            &settingsError)) {
-                        settingsStatus = AppSettingsLoadStatus::Loaded;
-                    } else {
-                        qCCritical(logStartup).noquote()
-                                << QStringLiteral(
-                                    "event=settings.reset_failed code=%1 reason=%2")
-                                   .arg(settingsError.code,
-                                        settingsError.userMessage);
-                        QMessageBox::critical(
-                                    nullptr,
-                                    QStringLiteral("设置清空失败"),
-                                    settingsError.userMessage
-                                    + QStringLiteral("\n\n")
-                                    + settingsError.code);
-                        qCInfo(logStartup).noquote()
-                                << "event=app.stop result=-1 reason=settings_reset_failed";
-                        ApplicationLogger::stop();
-                        return -1;
-                    }
+                startupSettings = AppSettings::defaults();
+                if (settingsStore->save(startupSettings,
+                                        &settingsError)) {
+                    settingsStatus = AppSettingsLoadStatus::Loaded;
                 } else {
-                    qCWarning(logStartup).noquote()
-                            << "event=settings.reset_cancelled";
+                    qCCritical(logStartup).noquote()
+                            << QStringLiteral(
+                                "event=settings.reset_failed code=%1 reason=%2")
+                               .arg(settingsError.code,
+                                    settingsError.userMessage);
+                    QMessageBox::critical(
+                                nullptr,
+                                QStringLiteral("设置清空失败"),
+                                settingsError.userMessage
+                                + QStringLiteral("\n\n")
+                                + settingsError.code);
                     qCInfo(logStartup).noquote()
-                            << "event=app.stop result=-1 reason=settings_reset_cancelled";
+                            << "event=app.stop result=-1 reason=settings_reset_failed";
                     ApplicationLogger::stop();
                     return -1;
                 }

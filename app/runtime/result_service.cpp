@@ -275,6 +275,12 @@ void ResultService::shutdown()
     }
 }
 
+bool ResultService::resultExportEnabled() const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_runConfiguration.resultExport.enabled;
+}
+
 // 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
 DetectionCompletion ResultService::acceptCompletion(
     const DetectionCompletion &completion)
@@ -336,6 +342,40 @@ void ResultService::process(const ProcessRequest &request)
     }
 
     if (!m_runtime.claimResult(request.completion.frame->productKey)) {
+        return;
+    }
+
+    const ProductKey productKey = request.completion.frame->productKey;
+    bool exportEnabled = false;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        exportEnabled = m_runConfiguration.resultExport.enabled;
+    }
+    if (exportEnabled) {
+        ResultExportRecord record;
+        record.id = productKey.runId
+                + QStringLiteral(":")
+                + QString::number(productKey.sequence);
+        record.eventTimeUtc = QDateTime::currentDateTimeUtc();
+        record.overallOk = request.completion.result.verdict
+                == AlgorithmVerdict::Ok;
+        record.qrContent = record.overallOk
+                ? request.completion.result.qrContent
+                : QString();
+        QString exportError;
+        if (!m_runtime.resultExportClient().enqueue(record, &exportError)) {
+            m_runtime.enterFault(
+                        InspectionFaultReason::ResultExportUnavailable,
+                        exportError.isEmpty()
+                        ? QStringLiteral("结果传输本地队列写入失败。")
+                        : exportError);
+            return;
+        }
+    }
+    if (!m_runtime.finalizeResultClaim(productKey)) {
+        m_runtime.enterFault(
+                    InspectionFaultReason::RuntimeInvariantViolation,
+                    QStringLiteral("产品结果正式认领状态提交失败。"));
         return;
     }
 

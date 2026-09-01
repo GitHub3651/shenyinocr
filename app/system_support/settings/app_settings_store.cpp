@@ -10,6 +10,8 @@
 #include <QJsonParseError>
 #include <QSaveFile>
 #include <QSet>
+#include <QHostAddress>
+#include <QAbstractSocket>
 
 #include <cmath>
 #include <limits>
@@ -297,6 +299,18 @@ bool validateSettings(const AppSettings &settings,
                     QStringLiteral("启用存图时必须选择绝对输出目录。"),
                     QStringLiteral("imageSaving.outputDirectory invalid."));
     }
+    QHostAddress receiverAddress;
+    if (settings.resultExportReceiverIp.trimmed().isEmpty()
+            || !receiverAddress.setAddress(
+                settings.resultExportReceiverIp.trimmed())
+            || receiverAddress.protocol() != QAbstractSocket::IPv4Protocol
+            || settings.resultExportReceiverPort < 1
+            || settings.resultExportReceiverPort > 65535) {
+        return fail(error,
+                    QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
+                    QStringLiteral("结果接收端地址或端口无效。"),
+                    QStringLiteral("resultExport receiver invalid."));
+    }
     if (!validTemplatePath(settings.templateSaveDirectory)) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
@@ -430,6 +444,12 @@ QJsonObject settingsToJson(const AppSettings &settings)
     detectionSchemes.insert(QStringLiteral("tissue"), tissue);
     detectionSchemes.insert(QStringLiteral("barcodeWord"), barcodeWord);
 
+    QJsonObject resultExport;
+    resultExport.insert(QStringLiteral("receiverIp"),
+                        settings.resultExportReceiverIp);
+    resultExport.insert(QStringLiteral("receiverPort"),
+                        settings.resultExportReceiverPort);
+
     QJsonObject root;
     root.insert(QStringLiteral("schemaVersion"), settings.schemaVersion);
     root.insert(QStringLiteral("camera"), camera);
@@ -438,6 +458,7 @@ QJsonObject settingsToJson(const AppSettings &settings)
     root.insert(QStringLiteral("imageSaving"), imageSaving);
     root.insert(QStringLiteral("ui"), ui);
     root.insert(QStringLiteral("detectionSchemes"), detectionSchemes);
+    root.insert(QStringLiteral("resultExport"), resultExport);
     return root;
 }
 
@@ -463,7 +484,7 @@ bool settingsFromJson(const QJsonObject &root,
 {
     AppSettings candidate;
     QJsonObject camera, inspection, plc, connection, process, addresses;
-    QJsonObject imageSaving, ui, detectionSchemes;
+    QJsonObject imageSaving, ui, detectionSchemes, resultExport;
     QJsonObject stamp, word, ocr, tissue, barcodeWord;
     if (!hasOnlyKeys(root,
                      QStringList() << QStringLiteral("schemaVersion")
@@ -472,7 +493,8 @@ bool settingsFromJson(const QJsonObject &root,
                                    << QStringLiteral("plc")
                                    << QStringLiteral("imageSaving")
                                    << QStringLiteral("ui")
-                                   << QStringLiteral("detectionSchemes"),
+                                   << QStringLiteral("detectionSchemes")
+                                   << QStringLiteral("resultExport"),
                      QStringLiteral("root"), error)
             || !readInt(root, "schemaVersion", &candidate.schemaVersion, error)
             || !readObject(root, "camera", &camera, error)
@@ -484,6 +506,7 @@ bool settingsFromJson(const QJsonObject &root,
             || !readObject(root, "imageSaving", &imageSaving, error)
             || !readObject(root, "ui", &ui, error)
             || !readObject(root, "detectionSchemes", &detectionSchemes, error)
+            || !readObject(root, "resultExport", &resultExport, error)
             || !readObject(detectionSchemes, "stamp", &stamp, error)
             || !readObject(detectionSchemes, "word", &word, error)
             || !readObject(detectionSchemes, "ocr", &ocr, error)
@@ -538,6 +561,10 @@ bool settingsFromJson(const QJsonObject &root,
                                           << QStringLiteral("rightPanelSplitterStateBase64")
                                           << QStringLiteral("templateSaveDirectory"),
                             QStringLiteral("ui"), error)
+            || !hasOnlyKeys(resultExport,
+                            QStringList() << QStringLiteral("receiverIp")
+                                          << QStringLiteral("receiverPort"),
+                            QStringLiteral("resultExport"), error)
             || !hasOnlyKeys(detectionSchemes,
                             QStringList() << QStringLiteral("stamp")
                                           << QStringLiteral("word")
@@ -606,6 +633,10 @@ bool settingsFromJson(const QJsonObject &root,
             || !readInt(imageSaving, "jpegQuality", &candidate.imageJpegQuality, error)
             || !readString(ui, "selectedDetectionMode", &selectedModeId, error)
             || !readString(ui, "rightPanelSplitterStateBase64", &splitter, error)
+            || !readString(resultExport, "receiverIp",
+                           &candidate.resultExportReceiverIp, error)
+            || !readInt(resultExport, "receiverPort",
+                        &candidate.resultExportReceiverPort, error)
             || !readString(stamp, "templatePath",
                            &candidate.detectionSchemes.stampTemplatePath, error)
             || !readStringList(word, "templatePaths",
@@ -723,7 +754,7 @@ bool AppSettingsStore::load(AppSettings *settings,
     if (schemaVersion != AppSettings::CurrentSchemaVersion) {
         *status = AppSettingsLoadStatus::ResetRequired;
         return fail(error, QStringLiteral("SETTINGS_RESET_REQUIRED"),
-                    QStringLiteral("旧版设置与当前版本不兼容，需要确认后清空。"),
+                    QStringLiteral("旧版设置与当前版本不兼容。"),
                     QStringLiteral("schemaVersion=%1").arg(schemaVersion));
     }
 

@@ -326,6 +326,8 @@ void MainWindow::setupDetectModeChangeTracking()
                 resetTemplateCaptureState();
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
+                updateResultExportUi(
+                            m_inspectionApplicationService->runtimeSnapshot());
                 m_templateEditorPage->cancelTemplateDrawing();
                 if (previousModeId != nextModeId) {
                     m_templateEditorPage->clearTemplateState();
@@ -674,6 +676,8 @@ void MainWindow::on_toolButton_stopInspection_clicked()
 void MainWindow::applyMachineSettingsToUi(
     const AppSettings &settings)
 {
+    ui->resultExportIp->setText(settings.resultExportReceiverIp);
+    ui->resultExportPort->setValue(settings.resultExportReceiverPort);
     if (m_machineSettingsPage) {
         m_machineSettingsPage->applyToUi(settings);
     }

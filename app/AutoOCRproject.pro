@@ -1,4 +1,4 @@
-QT       += core gui
+QT       += core gui network
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -69,6 +69,8 @@ SOURCES += \
     runtime/inspection_plc_controller.cpp \
     runtime/inspection_runtime.cpp \
     runtime/result_service.cpp \
+    runtime/result_export_client.cpp \
+    runtime/result_export_network_worker.cpp \
     runtime/image_save_service.cpp \
     detection/common/character_template_matcher.cpp \
     detection/common/frame_preprocessor.cpp \
@@ -113,6 +115,8 @@ HEADERS += \
     ui/dialogs/character_template_editor_dialog.h \
     contracts/inspection_presentation.h \
     runtime/result_service.h \
+    runtime/result_export_client.h \
+    runtime/result_export_network_worker.h \
     ui/pages/inspection_page.h \
     ui/pages/machine_settings_page.h \
     ui/controllers/operation_ui_policy.h \

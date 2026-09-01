@@ -63,6 +63,8 @@ QString faultReasonName(InspectionFaultReason reason)
         return QStringLiteral("product_identity_ambiguous");
     case InspectionFaultReason::RuntimeInvariantViolation:
         return QStringLiteral("runtime_invariant_violation");
+    case InspectionFaultReason::ResultExportUnavailable:
+        return QStringLiteral("result_export_unavailable");
     }
     return QStringLiteral("unknown");
 }
@@ -94,12 +96,25 @@ InspectionRuntime::InspectionRuntime(
     : QObject(nullptr),
       m_runIdFactory(runIdFactory),
       m_plcController(plcController),
-      m_detectionRegistry(detectionRegistry)
+      m_detectionRegistry(detectionRegistry),
+      m_resultExportClient(new ResultExportClient)
 {
     if (!m_detectionRegistry) {
         throw std::invalid_argument("DetectionRegistry is required");
     }
     m_resultService.reset(new ResultService(*this));
+    connect(m_resultExportClient.get(),
+            &ResultExportClient::transportFailure,
+            this,
+            [this](const QString &diagnostic) {
+        if (m_resultService
+                && m_resultService->resultExportEnabled()
+                && (state() == InspectionRuntimeState::Running
+                    || state() == InspectionRuntimeState::Stopping)) {
+            enterFault(InspectionFaultReason::ResultExportUnavailable,
+                       diagnostic);
+        }
+    });
 }
 
 // 函数说明：~InspectionRuntime 析构函数按生命周期要求释放组件持有的资源。
@@ -107,6 +122,7 @@ InspectionRuntime::~InspectionRuntime()
 {
     requestDetectionWorkerStop();
     waitForDetectionWorkerStop();
+    shutdownResultExport();
 }
 
 // 函数说明：createRunId 函数创建、准备或启动对应流程。
@@ -696,8 +712,51 @@ bool InspectionRuntime::claimResult(const ProductKey &productKey)
             || product->second != ProductProgress::AlgorithmCompleted) {
         return false;
     }
+    product->second = ProductProgress::Claimed;
+    return true;
+}
+
+bool InspectionRuntime::finalizeResultClaim(const ProductKey &productKey)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!belongsToCurrentRun(productKey)) {
+        return false;
+    }
+    const std::map<quint64, ProductProgress>::iterator product =
+            m_products.find(productKey.sequence);
+    if (product == m_products.end()
+            || product->second != ProductProgress::Claimed) {
+        return false;
+    }
     m_products.erase(product);
     return true;
+}
+
+ResultExportClient &InspectionRuntime::resultExportClient()
+{
+    return *m_resultExportClient;
+}
+
+const ResultExportClient &InspectionRuntime::resultExportClient() const
+{
+    return *m_resultExportClient;
+}
+
+bool InspectionRuntime::resultExportReady() const
+{
+    return m_resultExportClient && m_resultExportClient->startupReady();
+}
+
+bool InspectionRuntime::resultExportEnabled() const
+{
+    return m_resultService && m_resultService->resultExportEnabled();
+}
+
+void InspectionRuntime::shutdownResultExport()
+{
+    if (m_resultExportClient) {
+        m_resultExportClient->shutdown();
+    }
 }
 
 // 函数说明：requestDetectionWorkerStop 函数实现名称所表示的处理步骤。
