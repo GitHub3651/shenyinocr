@@ -741,11 +741,6 @@ const ResultExportClient &InspectionRuntime::resultExportClient() const
     return *m_resultExportClient;
 }
 
-bool InspectionRuntime::resultExportEnabled() const
-{
-    return m_resultService && m_resultService->resultExportEnabled();
-}
-
 // 函数说明：requestDetectionWorkerStop 函数实现名称所表示的处理步骤。
 void InspectionRuntime::requestDetectionWorkerStop()
 {

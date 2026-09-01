@@ -237,6 +237,8 @@ void MainWindow::restoreDefaultMachineSettings()
     candidate.imageSaveTypeId = editableDefaults.imageSaveTypeId;
     candidate.imageSavePath = editableDefaults.imageSavePath;
     candidate.triggerEnabled = editableDefaults.triggerEnabled;
+    candidate.resultExportReceiverIp = editableDefaults.resultExportReceiverIp;
+    candidate.resultExportReceiverPort = editableDefaults.resultExportReceiverPort;
     const OperationResult saved =
             m_settingsApplicationService->saveConfiguration(candidate);
     if (!saved.isSuccess()) {

@@ -27,6 +27,7 @@
 #include <QSizePolicy>
 #include <QFrame>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSplitterHandle>
 #include <QStyle>
 #include <QTextOption>
@@ -53,6 +54,11 @@ MainWindow::MainWindow(
     ui->setupUi(this);
     ui->resultExportIp->setText(machineSettings().resultExportReceiverIp);
     ui->resultExportPort->setValue(machineSettings().resultExportReceiverPort);
+    {
+        QSignalBlocker blocker(ui->resultExportEnable);
+        ui->resultExportEnable->setChecked(
+                    machineSettings().resultExportEnabled);
+    }
     initStyle();
 
     // 检测信息区域允许被分隔条压缩；空间不足时只在该区域内部滚动。
@@ -466,14 +472,6 @@ void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
             == ResultExportConnectionState::Connecting;
     const bool checking = snapshot.resultExportConnectionState
             == ResultExportConnectionState::Checking;
-    if (!connected) {
-        m_resultExportAutoEnableApplied = false;
-        m_resultExportUserEnabled = false;
-    } else if (!m_resultExportAutoEnableApplied
-               && snapshot.state != ApplicationRuntimeState::Fault) {
-        m_resultExportUserEnabled = true;
-        m_resultExportAutoEnableApplied = true;
-    }
     QString status = QStringLiteral("● 已断开");
     QString statusUiState = QStringLiteral("offline");
     if (connecting) {
@@ -510,13 +508,7 @@ void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
                                            && snapshot.resultExportConnectionState
                                            != ResultExportConnectionState::Disconnected);
     const bool enableAvailable = !busy
-            && snapshot.state != ApplicationRuntimeState::Fault
-            && connected;
-    {
-        QSignalBlocker blocker(ui->resultExportEnable);
-        ui->resultExportEnable->setChecked(m_resultExportUserEnabled
-                                           && enableAvailable);
-    }
+            && snapshot.state != ApplicationRuntimeState::Fault;
     ui->resultExportEnable->setEnabled(enableAvailable);
 }
 
@@ -544,11 +536,21 @@ void MainWindow::on_resultExportConnect_clicked()
 
 void MainWindow::on_resultExportDisconnect_clicked()
 {
-    m_resultExportUserEnabled = false;
     m_inspectionApplicationService->requestResultExportDisconnect();
 }
 
 void MainWindow::on_resultExportEnable_toggled(bool enabled)
 {
-    m_resultExportUserEnabled = enabled;
+    AppSettings candidate = m_settingsApplicationService->current();
+    candidate.resultExportEnabled = enabled;
+    const OperationResult saved = m_settingsApplicationService
+            ->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        QSignalBlocker blocker(ui->resultExportEnable);
+        ui->resultExportEnable->setChecked(
+                    m_settingsApplicationService->current()
+                    .resultExportEnabled);
+        showParameterWarning(QStringLiteral("结果传输设置保存失败"),
+                             saved.error.userMessage);
+    }
 }

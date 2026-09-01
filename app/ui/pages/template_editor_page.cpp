@@ -524,7 +524,6 @@ void TemplateEditorPage::setupCurrentTemplateEditor()
                     m_currentTemplateEditLabel->sizeHint().width(),
                     m_view.label_targetText->sizeHint().width());
         m_currentTemplateEditLabel->setFixedWidth(sharedLabelWidth);
-        m_view.label_targetText->setFixedWidth(sharedLabelWidth);
     }
     connect(m_currentTemplateEditComboBox,
             static_cast<void (QComboBox::*)(int)>(

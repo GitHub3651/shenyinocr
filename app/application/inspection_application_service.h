@@ -29,7 +29,6 @@ enum class InspectionFaultReason;
 struct StartInspectionCommand
 {
     QStringList unappliedChanges;
-    bool resultExportEnabled = false;
 };
 
 // 组件说明：StartInspectionResult 数据结构保存一次操作的结果、状态和错误信息。

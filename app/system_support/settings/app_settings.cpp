@@ -136,7 +136,8 @@ AppSettings::AppSettings()
       plcPhotoDistanceOffset(924),
       plcPhotoTimeOffset(982),
       plcRejectDistanceOffset(920),
-      plcRejectTimeOffset(980)
+      plcRejectTimeOffset(980),
+      resultExportEnabled(false)
 {
     resultExportReceiverIp = QStringLiteral("192.168.10.20");
     resultExportReceiverPort = 35680;
@@ -227,6 +228,7 @@ bool operator==(const AppSettings &left,
             && left.plcRejectTimeOffset == right.plcRejectTimeOffset
             && left.rightPanelSplitterState == right.rightPanelSplitterState
             && left.templateSaveDirectory == right.templateSaveDirectory
+            && left.resultExportEnabled == right.resultExportEnabled
             && left.resultExportReceiverIp == right.resultExportReceiverIp
             && left.resultExportReceiverPort == right.resultExportReceiverPort
             && left.detectionSchemes == right.detectionSchemes;

@@ -31,7 +31,6 @@ struct RuntimeSnapshot
     ResultExportConnectionState resultExportConnectionState =
             ResultExportConnectionState::Disconnected;
     double resultExportRoundTripMs = -1.0;
-    bool resultExportEnabled = false;
 
     // 函数说明：isInspectionBusy 函数检查相关状态并返回判断结果。
     bool isInspectionBusy() const

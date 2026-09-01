@@ -19,6 +19,8 @@ AppSettings MachineSettingsPolicy::defaultsForHardwareState(
     editable.colorChannelId = defaults.colorChannelId;
     editable.imageRotationId = defaults.imageRotationId;
     editable.triggerEnabled = defaults.triggerEnabled;
+    editable.resultExportReceiverIp = defaults.resultExportReceiverIp;
+    editable.resultExportReceiverPort = defaults.resultExportReceiverPort;
     editable.detectionSchemes.tissueRoughnessThreshold =
             defaults.detectionSchemes.tissueRoughnessThreshold;
     if (cameraOpen) {

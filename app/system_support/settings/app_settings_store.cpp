@@ -1,4 +1,4 @@
-// 文件作用：实现 AppSettings Schema 2 的唯一磁盘入口。
+// 文件作用：实现 AppSettings Schema 4 的唯一磁盘入口。
 #include "system_support/settings/app_settings_store.h"
 
 #include <QDir>
@@ -90,6 +90,25 @@ bool readString(const QJsonObject &parent,
                     .arg(QLatin1String(key)));
     }
     *value = field.toString();
+    return true;
+}
+
+bool readBool(const QJsonObject &parent,
+              const char *key,
+              bool *value,
+              AppSettingsStoreError *error)
+{
+    const QJsonValue field = parent.value(QLatin1String(key));
+    if (!field.isBool()) {
+        return fail(error,
+                    field.isUndefined()
+                    ? QStringLiteral("SETTINGS_FIELD_MISSING")
+                    : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
+                    QStringLiteral("设置文件缺少布尔字段或字段类型不正确。"),
+                    QStringLiteral("Expected bool: %1")
+                    .arg(QLatin1String(key)));
+    }
+    *value = field.toBool();
     return true;
 }
 
@@ -445,6 +464,8 @@ QJsonObject settingsToJson(const AppSettings &settings)
     detectionSchemes.insert(QStringLiteral("barcodeWord"), barcodeWord);
 
     QJsonObject resultExport;
+    resultExport.insert(QStringLiteral("enabled"),
+                        settings.resultExportEnabled);
     resultExport.insert(QStringLiteral("receiverIp"),
                         settings.resultExportReceiverIp);
     resultExport.insert(QStringLiteral("receiverPort"),
@@ -562,7 +583,8 @@ bool settingsFromJson(const QJsonObject &root,
                                           << QStringLiteral("templateSaveDirectory"),
                             QStringLiteral("ui"), error)
             || !hasOnlyKeys(resultExport,
-                            QStringList() << QStringLiteral("receiverIp")
+                            QStringList() << QStringLiteral("enabled")
+                                          << QStringLiteral("receiverIp")
                                           << QStringLiteral("receiverPort"),
                             QStringLiteral("resultExport"), error)
             || !hasOnlyKeys(detectionSchemes,
@@ -633,6 +655,8 @@ bool settingsFromJson(const QJsonObject &root,
             || !readInt(imageSaving, "jpegQuality", &candidate.imageJpegQuality, error)
             || !readString(ui, "selectedDetectionMode", &selectedModeId, error)
             || !readString(ui, "rightPanelSplitterStateBase64", &splitter, error)
+            || !readBool(resultExport, "enabled",
+                         &candidate.resultExportEnabled, error)
             || !readString(resultExport, "receiverIp",
                            &candidate.resultExportReceiverIp, error)
             || !readInt(resultExport, "receiverPort",

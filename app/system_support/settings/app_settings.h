@@ -28,7 +28,7 @@ bool operator!=(const DetectionSchemes &left,
 
 struct AppSettings
 {
-    static const int CurrentSchemaVersion = 3;
+    static const int CurrentSchemaVersion = 4;
 
     AppSettings();
 
@@ -68,6 +68,7 @@ struct AppSettings
 
     QByteArray rightPanelSplitterState;
     QString templateSaveDirectory;
+    bool resultExportEnabled;
     QString resultExportReceiverIp;
     int resultExportReceiverPort;
     DetectionSchemes detectionSchemes;

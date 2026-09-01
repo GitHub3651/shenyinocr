@@ -163,8 +163,6 @@ private:
     bool m_applicationExitInProgress = false;
     std::unique_ptr<InspectionPage> m_inspectionPage;
     bool m_faultAlarmPresented = false;
-    bool m_resultExportUserEnabled = false;
-    bool m_resultExportAutoEnableApplied = false;
 
     // ========== 定时器 ==========
     QTimer *m_plcHealthTimer = nullptr; ///< 运行中PLC连接监视

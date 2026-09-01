@@ -614,7 +614,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
 
     StartInspectionCommand command;
     command.unappliedChanges = m_settingsEditState.dirtyNames();
-    command.resultExportEnabled = m_resultExportUserEnabled;
     StartInspectionResult result =
             m_inspectionApplicationService->start(command);
     if (result.issue

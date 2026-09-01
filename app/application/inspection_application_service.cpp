@@ -71,8 +71,7 @@ CameraSessionCaptureConfiguration cameraConfiguration(
 
 // 函数说明：resultConfiguration 函数实现名称所表示的处理步骤。
 ResultServiceRunConfiguration resultConfiguration(
-    const AppSettings &settings,
-    bool resultExportEnabled)
+    const AppSettings &settings)
 {
     ResultServiceRunConfiguration configuration;
     configuration.imageSaveModeIndex =
@@ -87,7 +86,7 @@ ResultServiceRunConfiguration resultConfiguration(
             appSettingsImageSaveTypeIds().indexOf(
                 settings.imageSaveTypeId);
     DetectionMode mode = DetectionMode::Word;
-    configuration.resultExport.enabled = resultExportEnabled
+    configuration.resultExportEnabled = settings.resultExportEnabled
             && detectionModeFromUiId(settings.detectModeId, &mode)
             && mode == DetectionMode::BarcodeWord;
     return configuration;
@@ -362,14 +361,15 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringLiteral("应用设置中的检测模式无效。"));
     }
     if (detectionMode == DetectionMode::BarcodeWord
-            && command.resultExportEnabled) {
+            && settings.resultExportEnabled) {
         const ResultExportConnectionState exportState =
                 m_runtime->resultExportClient().connectionState();
         if (exportState != ResultExportConnectionState::Connected) {
             return rejectStart(
                         InspectionStartIssue::RuntimeBusy,
                         QStringLiteral("RESULT_EXPORT_NOT_CONNECTED"),
-                        QStringLiteral("请先连接结果接收端。"));
+                        QStringLiteral(
+                            "已启用二维码结果传输，但结果接收端未连接，请先连接后再开始识别。"));
         }
     }
     const QStringList selectedPaths =
@@ -534,7 +534,7 @@ StartInspectionResult InspectionApplicationService::start(
 
     QString executionError;
     if (!m_runtime->startDetection(
-                resultConfiguration(settings, command.resultExportEnabled),
+                resultConfiguration(settings),
                 &executionError)) {
         m_cameraSession->stopInspection();
         m_cameraSession->restorePreviewReady(
@@ -1258,7 +1258,6 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
             m_runtime->resultExportClient().connectionState();
     snapshot.resultExportRoundTripMs =
             m_runtime->resultExportClient().roundTripMs();
-    snapshot.resultExportEnabled = m_runtime->resultExportEnabled();
     return snapshot;
 }
 

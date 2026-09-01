@@ -21,11 +21,6 @@ enum class ResultExportConnectionState
 
 Q_DECLARE_METATYPE(ResultExportConnectionState)
 
-struct ResultExportRunConfiguration
-{
-    bool enabled = false;
-};
-
 struct ResultExportRecord
 {
     QString id;

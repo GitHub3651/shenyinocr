@@ -150,7 +150,6 @@ public:
 
     ResultExportClient &resultExportClient();
     const ResultExportClient &resultExportClient() const;
-    bool resultExportEnabled() const;
 
     bool isDetectionWorkerActive() const;
     std::size_t detectionWorkerQueueCapacity() const;

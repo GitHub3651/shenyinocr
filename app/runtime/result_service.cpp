@@ -7,6 +7,7 @@
 #include "contracts/detection_mode.h"
 #include "runtime/inspection_presentation_renderer.h"
 #include "runtime/inspection_runtime.h"
+#include "runtime/result_export_client.h"
 #include "system_support/logging/log_categories.h"
 
 #include <QDateTime>
@@ -278,7 +279,7 @@ void ResultService::shutdown()
 bool ResultService::resultExportEnabled() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    return m_runConfiguration.resultExport.enabled;
+    return m_runConfiguration.resultExportEnabled;
 }
 
 // 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
@@ -349,7 +350,7 @@ void ResultService::process(const ProcessRequest &request)
     bool exportEnabled = false;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        exportEnabled = m_runConfiguration.resultExport.enabled;
+        exportEnabled = m_runConfiguration.resultExportEnabled;
     }
     ResultExportRecord exportRecord;
     if (exportEnabled) {
