@@ -13,7 +13,6 @@
 #include "detection/detection_registry.h"
 #include "runtime/result_presentation_mailbox.h"
 #include "runtime/result_service.h"
-#include "runtime/result_export_client.h"
 #include "system_support/settings/app_settings.h"
 
 #include <QDateTime>
@@ -51,7 +50,7 @@ enum class InspectionFaultReason
     HardTriggerQueueOverflow,
     ProductIdentityAmbiguous,
     RuntimeInvariantViolation,
-    ResultExportUnavailable
+    BarcodeCsvUnavailable
 };
 
 Q_DECLARE_METATYPE(InspectionFaultReason)
@@ -148,9 +147,6 @@ public:
     bool claimResult(const ProductKey &productKey);
     bool finalizeResultClaim(const ProductKey &productKey);
 
-    ResultExportClient &resultExportClient();
-    const ResultExportClient &resultExportClient() const;
-
     bool isDetectionWorkerActive() const;
     std::size_t detectionWorkerQueueCapacity() const;
     bool submitDetectionFrame(
@@ -212,7 +208,6 @@ private:
 
     std::shared_ptr<InspectionPlcController> m_plcController;
     std::shared_ptr<DetectionRegistry> m_detectionRegistry;
-    std::unique_ptr<ResultExportClient> m_resultExportClient;
     std::unique_ptr<ResultService> m_resultService;
 
     mutable std::mutex m_detectionWorkerMutex;

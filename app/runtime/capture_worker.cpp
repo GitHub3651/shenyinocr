@@ -4,12 +4,15 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/capture_worker.h"
 
+#include <chrono>
 #include <stdexcept>
+#include <thread>
 
 namespace {
 
 constexpr int kHardwareFrameWaitSliceMs = 1000;
 constexpr int kSoftwareFrameWaitTimeoutMs = 500;
+constexpr int kSoftwareTriggerIntervalMs = 150;
 
 } // namespace
 
@@ -127,6 +130,12 @@ void CaptureWorker::run()
         consecutiveFailures = 0;
         if (m_callbacks.frameReady) {
             m_callbacks.frameReady(frame.frame);
+        }
+        if (m_mode == CaptureMode::SoftwareTrigger
+                && !m_stopRequested.load()) {
+            std::this_thread::sleep_for(
+                        std::chrono::milliseconds(
+                            kSoftwareTriggerIntervalMs));
         }
     }
 

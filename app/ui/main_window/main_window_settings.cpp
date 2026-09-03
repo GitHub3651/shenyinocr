@@ -178,8 +178,9 @@ void MainWindow::restoreDefaultMachineSettings()
     candidate.imageSaveTypeId = editableDefaults.imageSaveTypeId;
     candidate.imageSavePath = editableDefaults.imageSavePath;
     candidate.triggerEnabled = editableDefaults.triggerEnabled;
-    candidate.resultExportReceiverIp = editableDefaults.resultExportReceiverIp;
-    candidate.resultExportReceiverPort = editableDefaults.resultExportReceiverPort;
+    candidate.barcodeCsvEnabled = editableDefaults.barcodeCsvEnabled;
+    candidate.barcodeCsvOutputDirectory =
+            editableDefaults.barcodeCsvOutputDirectory;
     const OperationResult saved =
             m_settingsApplicationService->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
@@ -267,7 +268,7 @@ void MainWindow::setupDetectModeChangeTracking()
                 m_templateEditorPage->resetTemplateCaptureState();
                 m_currentDetectModeId = nextModeId;
                 updateTissueRoughnessUiVisibility();
-                updateResultExportUi(
+                updateBarcodeCsvUi(
                             m_inspectionApplicationService->runtimeSnapshot());
                 m_templateEditorPage->cancelTemplateDrawing();
                 if (previousModeId != nextModeId) {
@@ -617,8 +618,13 @@ void MainWindow::on_toolButton_stopInspection_clicked()
 void MainWindow::applyMachineSettingsToUi(
     const AppSettings &settings)
 {
-    m_detectionSettingsUi->resultExportIp->setText(settings.resultExportReceiverIp);
-    m_detectionSettingsUi->resultExportPort->setValue(settings.resultExportReceiverPort);
+    m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
+                settings.barcodeCsvOutputDirectory);
+    {
+        QSignalBlocker blocker(m_detectionSettingsUi->barcodeCsvEnable);
+        m_detectionSettingsUi->barcodeCsvEnable->setChecked(
+                    settings.barcodeCsvEnabled);
+    }
     m_machineSettingsPage->applyToUi(settings);
     m_currentDetectModeId = m_templateEditorPage->currentDetectModeId();
     m_templateEditorPage->restoreTemplatesForMode(

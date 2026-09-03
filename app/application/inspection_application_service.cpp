@@ -11,6 +11,7 @@
 #include "runtime/inspection_runtime.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QFileInfo>
 #include <QVector>
 
@@ -71,7 +72,8 @@ CameraSessionCaptureConfiguration cameraConfiguration(
 
 // 函数说明：resultConfiguration 函数实现名称所表示的处理步骤。
 ResultServiceRunConfiguration resultConfiguration(
-    const AppSettings &settings)
+    const AppSettings &settings,
+    DetectionMode detectionMode)
 {
     ResultServiceRunConfiguration configuration;
     configuration.imageSaveModeIndex =
@@ -85,10 +87,12 @@ ResultServiceRunConfiguration resultConfiguration(
     configuration.saveOptions.imageContentModeIndex =
             appSettingsImageSaveTypeIds().indexOf(
                 settings.imageSaveTypeId);
-    DetectionMode mode = DetectionMode::Word;
-    configuration.resultExportEnabled = settings.resultExportEnabled
-            && detectionModeFromUiId(settings.detectModeId, &mode)
-            && mode == DetectionMode::BarcodeWord;
+    configuration.barcodeCsvEnabled = settings.barcodeCsvEnabled
+            && detectionMode == DetectionMode::BarcodeWord;
+    configuration.barcodeCsvOutputDirectory =
+            configuration.barcodeCsvEnabled
+            ? settings.barcodeCsvOutputDirectory
+            : QString();
     return configuration;
 }
 
@@ -179,8 +183,8 @@ QString faultReasonText(InspectionFaultReason reason)
         return QStringLiteral("产品身份无法唯一确定");
     case InspectionFaultReason::RuntimeInvariantViolation:
         return QStringLiteral("检测运行约束被破坏");
-    case InspectionFaultReason::ResultExportUnavailable:
-        return QStringLiteral("二维码结果传输不可用");
+    case InspectionFaultReason::BarcodeCsvUnavailable:
+        return QStringLiteral("二维码 CSV 写入不可用");
     case InspectionFaultReason::None:
         break;
     }
@@ -295,11 +299,6 @@ InspectionApplicationService::InspectionApplicationService(
     qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
     qRegisterMetaType<InspectionFaultReason>(
                 "InspectionFaultReason");
-    connect(&m_runtime->resultExportClient(),
-            &ResultExportClient::connectionStateChanged,
-            this,
-            [this](ResultExportConnectionState) { publishSnapshot(); },
-            Qt::QueuedConnection);
     CameraSessionCallbacks callbacks;
     callbacks.previewFrameReady = [this](
             quint64 sessionId,
@@ -361,16 +360,15 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringLiteral("应用设置中的检测模式无效。"));
     }
     if (detectionMode == DetectionMode::BarcodeWord
-            && settings.resultExportEnabled) {
-        const ResultExportConnectionState exportState =
-                m_runtime->resultExportClient().connectionState();
-        if (exportState != ResultExportConnectionState::Connected) {
-            return rejectStart(
-                        InspectionStartIssue::RuntimeBusy,
-                        QStringLiteral("RESULT_EXPORT_NOT_CONNECTED"),
-                        QStringLiteral(
-                            "已启用二维码结果传输，但结果接收端未连接，请先连接后再开始识别。"));
-        }
+            && settings.barcodeCsvEnabled
+            && !QDir().mkpath(settings.barcodeCsvOutputDirectory)) {
+        return rejectStart(
+                    InspectionStartIssue::None,
+                    QStringLiteral("BARCODE_CSV_DIRECTORY_UNAVAILABLE"),
+                    QStringLiteral(
+                        "二维码 CSV 输出目录不可用，请重新选择可写入的本机目录。"),
+                    QStringList(),
+                    settings.barcodeCsvOutputDirectory);
     }
     const QStringList selectedPaths =
             settings.detectionSchemes.templatePaths(detectionMode);
@@ -534,7 +532,7 @@ StartInspectionResult InspectionApplicationService::start(
 
     QString executionError;
     if (!m_runtime->startDetection(
-                resultConfiguration(settings),
+                resultConfiguration(settings, detectionMode),
                 &executionError)) {
         m_cameraSession->stopInspection();
         m_cameraSession->restorePreviewReady(
@@ -606,20 +604,6 @@ StopInspectionResult InspectionApplicationService::stop(
                     "INSPECTION_FAULT_CONFIRMATION_REQUIRED");
         result.error.userMessage = QStringLiteral(
                     "需要操作员确认后才能解除故障锁定。");
-        result.snapshot = runtimeSnapshot();
-        return result;
-    }
-    if (recoveringFault
-            && m_runtime->faultSnapshot().reason
-               == InspectionFaultReason::ResultExportUnavailable
-            && (m_runtime->resultExportClient().connectionState()
-                != ResultExportConnectionState::Connected
-                || m_runtime->resultExportClient().pendingCount() > 0)) {
-        result.issue = StopInspectionIssue::FaultConfirmationRequired;
-        result.error.code = QStringLiteral(
-                    "RESULT_EXPORT_RECOVERY_INCOMPLETE");
-        result.error.userMessage = QStringLiteral(
-                    "请先恢复 TCP，并等待待确认记录发送完成。" );
         result.snapshot = runtimeSnapshot();
         return result;
     }
@@ -1209,31 +1193,6 @@ void InspectionApplicationService::checkPlcHealth()
                 QStringLiteral("运行中 PLC 连接状态已断开。"));
 }
 
-void InspectionApplicationService::requestResultExportConnect(
-    const QString &ip,
-    quint16 port)
-{
-    m_runtime->resultExportClient().requestConnect(ip, port);
-    publishSnapshot();
-}
-
-void InspectionApplicationService::requestResultExportConnectionCheck()
-{
-    m_runtime->resultExportClient().requestConnectionCheck();
-    publishSnapshot();
-}
-
-void InspectionApplicationService::requestResultExportDisconnect()
-{
-    m_runtime->resultExportClient().requestDisconnect();
-    publishSnapshot();
-}
-
-int InspectionApplicationService::pendingResultExportCount() const
-{
-    return m_runtime->resultExportClient().pendingCount();
-}
-
 // 函数说明：enterFault 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::enterFault(
     InspectionFaultReason reason,
@@ -1254,10 +1213,6 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
     snapshot.plcConnected = m_runtime->isPlcConnected();
     snapshot.runId = m_runtime->runId();
     snapshot.activeTemplatePaths = m_activeTemplatePaths;
-    snapshot.resultExportConnectionState =
-            m_runtime->resultExportClient().connectionState();
-    snapshot.resultExportRoundTripMs =
-            m_runtime->resultExportClient().roundTripMs();
     return snapshot;
 }
 

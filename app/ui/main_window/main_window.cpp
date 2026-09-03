@@ -26,12 +26,13 @@
 
 #include <QTimer>
 #include <QCheckBox>
-#include <QLabel>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QPushButton>
 #include <QString>
 #include <QMessageBox>
 #include <QSignalBlocker>
-#include <QStyle>
 #include <QTextOption>
 #include <QToolButton>
 
@@ -67,14 +68,12 @@ MainWindow::MainWindow(
     ui->stackedWidget_rightDrawer->setCurrentWidget(ui->page_inspectionInfo);
     ui->toolButton_showInspectionInfo->setChecked(true);
 
-    m_detectionSettingsUi->resultExportIp->setText(
-                machineSettings().resultExportReceiverIp);
-    m_detectionSettingsUi->resultExportPort->setValue(
-                machineSettings().resultExportReceiverPort);
+    m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
+                machineSettings().barcodeCsvOutputDirectory);
     {
-        QSignalBlocker blocker(m_detectionSettingsUi->resultExportEnable);
-        m_detectionSettingsUi->resultExportEnable->setChecked(
-                    machineSettings().resultExportEnabled);
+        QSignalBlocker blocker(m_detectionSettingsUi->barcodeCsvEnable);
+        m_detectionSettingsUi->barcodeCsvEnable->setChecked(
+                    machineSettings().barcodeCsvEnabled);
     }
     initStyle();
     initializePages();
@@ -123,7 +122,7 @@ MainWindow::MainWindow(
             &InspectionApplicationService::runtimeSnapshotChanged,
             this,
             [this](const RuntimeSnapshot &snapshot) {
-        updateResultExportUi(snapshot);
+        updateBarcodeCsvUi(snapshot);
         updateOperationUiState();
     });
 
@@ -251,15 +250,12 @@ void MainWindow::initializePages()
     connect(m_detectionSettingsUi->pushButton_applyPhotoDistance,
             &QPushButton::clicked,
             this, &MainWindow::on_pushButton_applyPhotoDistance_clicked);
-    connect(m_detectionSettingsUi->resultExportConnect,
+    connect(m_detectionSettingsUi->barcodeCsvBrowseDirectory,
             &QPushButton::clicked,
-            this, &MainWindow::on_resultExportConnect_clicked);
-    connect(m_detectionSettingsUi->resultExportDisconnect,
-            &QPushButton::clicked,
-            this, &MainWindow::on_resultExportDisconnect_clicked);
-    connect(m_detectionSettingsUi->resultExportEnable,
+            this, &MainWindow::on_barcodeCsvBrowseDirectory_clicked);
+    connect(m_detectionSettingsUi->barcodeCsvEnable,
             &QCheckBox::toggled,
-            this, &MainWindow::on_resultExportEnable_toggled);
+            this, &MainWindow::on_barcodeCsvEnable_toggled);
 
     connect(m_imageSettingsUi->pushButton_browseImageSavePath,
             &QPushButton::clicked,
@@ -332,7 +328,7 @@ void MainWindow::initializePages()
     m_machineSettingsPage->clearAllDirty();
     m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
-    updateResultExportUi(m_inspectionApplicationService->runtimeSnapshot());
+    updateBarcodeCsvUi(m_inspectionApplicationService->runtimeSnapshot());
 
     QTimer::singleShot(1000, this, [this]() {
         const QString targetIp =
@@ -379,102 +375,65 @@ MainWindow::~MainWindow()
 
 }
 
-void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
+void MainWindow::updateBarcodeCsvUi(const RuntimeSnapshot &snapshot)
 {
     DetectionMode mode = DetectionMode::Word;
     const bool barcodeMode = detectionModeFromUiId(
                 machineSettings().detectModeId, &mode)
             && mode == DetectionMode::BarcodeWord;
-    m_detectionSettingsUi->groupBox_resultExport->setVisible(barcodeMode);
+    m_detectionSettingsUi->groupBox_barcodeCsv->setVisible(barcodeMode);
     if (!barcodeMode) {
         return;
     }
-    const bool busy = snapshot.state == ApplicationRuntimeState::Starting
-            || snapshot.state == ApplicationRuntimeState::Running
-            || snapshot.state == ApplicationRuntimeState::Stopping;
-    const bool connected = snapshot.resultExportConnectionState
-            == ResultExportConnectionState::Connected;
-    const bool connecting = snapshot.resultExportConnectionState
-            == ResultExportConnectionState::Connecting;
-    const bool checking = snapshot.resultExportConnectionState
-            == ResultExportConnectionState::Checking;
-    QString status = QStringLiteral("● 已断开");
-    QString statusUiState = QStringLiteral("offline");
-    if (connecting) {
-        status = QStringLiteral("● 正在连接…");
-        statusUiState = QStringLiteral("working");
-    } else if (checking) {
-        status = QStringLiteral("● 正在检查…");
-        statusUiState = QStringLiteral("working");
-    } else if (connected) {
-        status = snapshot.resultExportRoundTripMs >= 0.0
-                ? QStringLiteral("● 已连接 · %1 ms")
-                  .arg(snapshot.resultExportRoundTripMs, 0, 'f', 2)
-                : QStringLiteral("● 已连接");
-        statusUiState = QStringLiteral("online");
-    }
-    m_detectionSettingsUi->resultExportStatus->setText(status);
-    if (m_detectionSettingsUi->resultExportStatus->property("uiState").toString()
-            != statusUiState) {
-        m_detectionSettingsUi->resultExportStatus->setProperty("uiState", statusUiState);
-        m_detectionSettingsUi->resultExportStatus->style()->unpolish(
-                    m_detectionSettingsUi->resultExportStatus);
-        m_detectionSettingsUi->resultExportStatus->style()->polish(
-                    m_detectionSettingsUi->resultExportStatus);
-        m_detectionSettingsUi->resultExportStatus->update();
-    }
-    const bool canEdit = !busy && !connected && !connecting
-            && !checking;
-    m_detectionSettingsUi->resultExportIp->setEnabled(canEdit);
-    m_detectionSettingsUi->resultExportPort->setEnabled(canEdit);
-    m_detectionSettingsUi->resultExportConnect->setEnabled(!busy && !connecting && !checking);
-    m_detectionSettingsUi->resultExportDisconnect->setEnabled(!busy
-                                           && snapshot.resultExportConnectionState
-                                           != ResultExportConnectionState::Disconnected);
-    const bool enableAvailable = !busy
-            && snapshot.state != ApplicationRuntimeState::Fault;
-    m_detectionSettingsUi->resultExportEnable->setEnabled(enableAvailable);
+    const bool canEdit = !snapshot.isInspectionBusy();
+    m_detectionSettingsUi->barcodeCsvEnable->setEnabled(canEdit);
+    m_detectionSettingsUi->barcodeCsvBrowseDirectory->setEnabled(canEdit);
 }
 
-void MainWindow::on_resultExportConnect_clicked()
+void MainWindow::on_barcodeCsvBrowseDirectory_clicked()
 {
-    const RuntimeSnapshot snapshot = m_inspectionApplicationService->runtimeSnapshot();
-    if (snapshot.resultExportConnectionState == ResultExportConnectionState::Connected) {
-        m_inspectionApplicationService->requestResultExportConnectionCheck();
+    const QString currentDirectory =
+            machineSettings().barcodeCsvOutputDirectory;
+    const QString selectedDirectory = QFileDialog::getExistingDirectory(
+                this,
+                QStringLiteral("选择二维码 CSV 输出目录"),
+                currentDirectory.isEmpty()
+                ? QStringLiteral("C:/")
+                : currentDirectory,
+                QFileDialog::ShowDirsOnly
+                | QFileDialog::DontUseNativeDialog);
+    if (selectedDirectory.isEmpty()) {
         return;
     }
+
     AppSettings candidate = m_settingsApplicationService->current();
-    candidate.resultExportReceiverIp = m_detectionSettingsUi->resultExportIp->text().trimmed();
-    candidate.resultExportReceiverPort = m_detectionSettingsUi->resultExportPort->value();
+    candidate.barcodeCsvOutputDirectory = QDir::cleanPath(
+                QFileInfo(selectedDirectory).absoluteFilePath());
     const OperationResult saved = m_settingsApplicationService
             ->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
-        showParameterWarning(QStringLiteral("结果传输设置保存失败"),
+        m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
+                    machineSettings().barcodeCsvOutputDirectory);
+        showParameterWarning(QStringLiteral("二维码 CSV 设置保存失败"),
                              saved.error.userMessage);
         return;
     }
-    m_inspectionApplicationService->requestResultExportConnect(
-                candidate.resultExportReceiverIp,
-                static_cast<quint16>(candidate.resultExportReceiverPort));
+    m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
+                candidate.barcodeCsvOutputDirectory);
 }
 
-void MainWindow::on_resultExportDisconnect_clicked()
-{
-    m_inspectionApplicationService->requestResultExportDisconnect();
-}
-
-void MainWindow::on_resultExportEnable_toggled(bool enabled)
+void MainWindow::on_barcodeCsvEnable_toggled(bool enabled)
 {
     AppSettings candidate = m_settingsApplicationService->current();
-    candidate.resultExportEnabled = enabled;
+    candidate.barcodeCsvEnabled = enabled;
     const OperationResult saved = m_settingsApplicationService
             ->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
-        QSignalBlocker blocker(m_detectionSettingsUi->resultExportEnable);
-        m_detectionSettingsUi->resultExportEnable->setChecked(
+        QSignalBlocker blocker(m_detectionSettingsUi->barcodeCsvEnable);
+        m_detectionSettingsUi->barcodeCsvEnable->setChecked(
                     m_settingsApplicationService->current()
-                    .resultExportEnabled);
-        showParameterWarning(QStringLiteral("结果传输设置保存失败"),
+                    .barcodeCsvEnabled);
+        showParameterWarning(QStringLiteral("二维码 CSV 设置保存失败"),
                              saved.error.userMessage);
     }
 }

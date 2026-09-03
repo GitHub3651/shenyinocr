@@ -60,7 +60,8 @@ struct ResultServiceRunConfiguration
     int imageSaveModeIndex = 0;
     int delayedNgOffset = 0;
     ResultSaveOptions saveOptions;
-    bool resultExportEnabled = false;
+    bool barcodeCsvEnabled = false;
+    QString barcodeCsvOutputDirectory;
 };
 
 // The only final-result transaction. It accepts one completed ProductKey,
@@ -94,7 +95,6 @@ public:
     void recordPostFaultDroppedFrame();
 
     void shutdown();
-    bool resultExportEnabled() const;
 
 private:
     // 组件说明：DelayedNgRequest 数据结构集中传递该流程需要的只读数据或回调。
@@ -125,6 +125,12 @@ private:
     bool requestPlc(
         DetectionPlcAction action,
         const ProductKey &productKey);
+    bool appendBarcodeCsvResult(
+        const DetectionResult &result,
+        const QString &outputDirectory,
+        QString *filePath,
+        QString *errorMessage) const;
+    static QString csvEscape(QString value);
     void resetPlcPulse();
     void enterPlcFault(const QString &diagnostic);
 

@@ -8,8 +8,6 @@
 #include <QStringList>
 #include <QMetaType>
 
-#include "runtime/result_export_client.h"
-
 // 组件说明：ApplicationRuntimeState 枚举列出该组件允许使用的稳定状态和选项。
 enum class ApplicationRuntimeState
 {
@@ -28,10 +26,6 @@ struct RuntimeSnapshot
     bool plcConnected = false;
     QString runId;
     QStringList activeTemplatePaths;
-    ResultExportConnectionState resultExportConnectionState =
-            ResultExportConnectionState::Disconnected;
-    double resultExportRoundTripMs = -1.0;
-
     // 函数说明：isInspectionBusy 函数检查相关状态并返回判断结果。
     bool isInspectionBusy() const
     {

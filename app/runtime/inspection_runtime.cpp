@@ -63,8 +63,8 @@ QString faultReasonName(InspectionFaultReason reason)
         return QStringLiteral("product_identity_ambiguous");
     case InspectionFaultReason::RuntimeInvariantViolation:
         return QStringLiteral("runtime_invariant_violation");
-    case InspectionFaultReason::ResultExportUnavailable:
-        return QStringLiteral("result_export_unavailable");
+    case InspectionFaultReason::BarcodeCsvUnavailable:
+        return QStringLiteral("barcode_csv_unavailable");
     }
     return QStringLiteral("unknown");
 }
@@ -96,25 +96,12 @@ InspectionRuntime::InspectionRuntime(
     : QObject(nullptr),
       m_runIdFactory(runIdFactory),
       m_plcController(plcController),
-      m_detectionRegistry(detectionRegistry),
-      m_resultExportClient(new ResultExportClient)
+      m_detectionRegistry(detectionRegistry)
 {
     if (!m_detectionRegistry) {
         throw std::invalid_argument("DetectionRegistry is required");
     }
     m_resultService.reset(new ResultService(*this));
-    connect(m_resultExportClient.get(),
-            &ResultExportClient::transportFailure,
-            this,
-            [this](const QString &diagnostic) {
-        if (m_resultService
-                && m_resultService->resultExportEnabled()
-                && (state() == InspectionRuntimeState::Running
-                    || state() == InspectionRuntimeState::Stopping)) {
-            enterFault(InspectionFaultReason::ResultExportUnavailable,
-                       diagnostic);
-        }
-    });
 }
 
 // 函数说明：~InspectionRuntime 析构函数按生命周期要求释放组件持有的资源。
@@ -729,16 +716,6 @@ bool InspectionRuntime::finalizeResultClaim(const ProductKey &productKey)
     }
     m_products.erase(product);
     return true;
-}
-
-ResultExportClient &InspectionRuntime::resultExportClient()
-{
-    return *m_resultExportClient;
-}
-
-const ResultExportClient &InspectionRuntime::resultExportClient() const
-{
-    return *m_resultExportClient;
 }
 
 // 函数说明：requestDetectionWorkerStop 函数实现名称所表示的处理步骤。

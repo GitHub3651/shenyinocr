@@ -889,4 +889,27 @@ settings</translation>
         <translation type="unfinished"></translation>
     </message>
 </context>
+<context>
+    <name>DetectionSettingsPage</name>
+    <message>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="308"/>
+        <source>二维码结果本机记录</source>
+        <translation>Local QR Code Results</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="314"/>
+        <source>启用本机 CSV 记录</source>
+        <translation>Enable local CSV recording</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="321"/>
+        <source>输出目录</source>
+        <translation>Output directory</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="349"/>
+        <source>选择目录</source>
+        <translation>Choose Directory</translation>
+    </message>
+</context>
 </TS>

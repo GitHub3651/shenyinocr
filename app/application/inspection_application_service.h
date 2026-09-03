@@ -157,10 +157,6 @@ public:
     OperationResult resetNgCount();
     OperationResult clearPendingDelayedNgRequests();
     void checkPlcHealth();
-    void requestResultExportConnect(const QString &ip, quint16 port);
-    void requestResultExportConnectionCheck();
-    void requestResultExportDisconnect();
-    int pendingResultExportCount() const;
     RuntimeSnapshot runtimeSnapshot() const;
 
 signals:

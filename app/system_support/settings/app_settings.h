@@ -27,7 +27,7 @@ bool operator!=(const DetectionSchemes &left,
 
 struct AppSettings
 {
-    static const int CurrentSchemaVersion = 5;
+    static const int CurrentSchemaVersion = 6;
 
     AppSettings();
 
@@ -66,9 +66,8 @@ struct AppSettings
     int plcRejectTimeOffset;
 
     QString templateSaveDirectory;
-    bool resultExportEnabled;
-    QString resultExportReceiverIp;
-    int resultExportReceiverPort;
+    bool barcodeCsvEnabled;
+    QString barcodeCsvOutputDirectory;
     DetectionSchemes detectionSchemes;
 
     static AppSettings defaults();

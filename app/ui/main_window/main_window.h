@@ -69,9 +69,8 @@ private slots:
     void on_pushButton_applyColorChannel_clicked();
     void on_pushButton_applyCameraGain_clicked();
     void on_pushButton_clearSoftwareData_clicked();
-    void on_resultExportConnect_clicked();
-    void on_resultExportDisconnect_clicked();
-    void on_resultExportEnable_toggled(bool enabled);
+    void on_barcodeCsvBrowseDirectory_clicked();
+    void on_barcodeCsvEnable_toggled(bool enabled);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -119,7 +118,7 @@ private:
     void applyMachineSettingsToUi(const AppSettings &settings);
     void setupNonPersistentDefaults();
     void initStyle();
-    void updateResultExportUi(const RuntimeSnapshot &snapshot);
+    void updateBarcodeCsvUi(const RuntimeSnapshot &snapshot);
 
     std::unique_ptr<Ui::MainWindow> ui;
     std::shared_ptr<InspectionApplicationService>

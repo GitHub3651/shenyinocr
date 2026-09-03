@@ -1650,3 +1650,15 @@
 - [x] 五个用户指定 SVG 已原位重命名为 `nav_*.svg`，直接登记到 `image.qrc` 并启用 Qt SVG 模块，不生成 PNG；正式 QSS 已增加导航、抽屉和绿色/红色实底白字判定样式，并删除失效 Splitter、Tab 和旧判定包装选择器。
 - [x] Agent 静态门禁通过：`main_window.ui`、`image.qrc` 和五个 SVG 均可解析；五页父子关系、唯一判定控件和资源路径正确；生产代码旧布局符号零引用，Schema 5 保留严格 `templateSaveDirectory` 与 `resultExport.enabled/receiverIp/receiverPort`；`git diff --check` 通过。按项目限制未运行或间接触发 qmake、构建、测试程序、主程序、真实相机/PLC 或人工交互验证。
 - [ ] 等待用户在 Qt Creator 执行 Run qmake、Clean、Rebuild，并按右侧导航方案第 18 节完成布局、导航、启动、Fault、判定、设置草稿、SVG 和 Schema 5 回归；通过前保持“代码已实施，待用户验证”。
+
+## 二维码结果本机 CSV 直写主程序替换（2026-09-03，代码实施完成待统一验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `4645617e54387a9dc3262e268abe6b68d82cc843`。开始时生产 `app/` 和暂存区无差异；计划索引修改及未跟踪的本机 CSV 方案文档属于本任务既有资产。实施过程未暂存、提交、推送、合并、变基或改写历史，也未修改 `tools/result_receiver/`。
+- [x] AppSettings 已一次性升级为严格 Schema 6，只使用 `barcodeCsv.enabled/outputDirectory`；默认关闭且目录为空，启用时要求非空绝对目录。旧 `resultExport`、接收端 IP、端口、Qt Network 地址校验和 Schema 5 读取均已删除，不提供迁移、别名、双写或兼容层。
+- [x] 二维码+三期设置页已原位替换为“启用本机 CSV 记录”、只读输出目录和选择按钮；目录与开关均直接保存到同一 AppSettings，保存失败恢复正式值。其他模式隐藏该组，Starting、Running、Stopping 和 Fault 期间禁用修改；恢复默认同时清空目录并关闭开关。
+- [x] 开始识别时仅在二维码+三期且启用的情况下调用 `QDir::mkpath()` 准备目录；未创建测试文件、未写探针、未预先打开当日 CSV。运行配置只冻结 `barcodeCsvEnabled/barcodeCsvOutputDirectory`，未增加包装类型或第二份状态。
+- [x] `ResultService::process()` 已在 `claimResult()` 后直接追加本机每日 `qr_results_YYYYMMDD.csv`，成功后才执行 `finalizeResultClaim()`；新文件或空文件写 UTF-8 BOM，无表头，OK 写二维码原文，整体 NG 写 `noQR`，单字段按 CSV 规则转义并逐产品执行一次 `flush()`。
+- [x] CSV 打开、写入或 flush 失败会先用 `qCCritical(logRuntime)` 记录文件和真实错误，再进入 `BarcodeCsvUnavailable` 通用 Fault 并立即返回；当前产品不继续正式提交、正常统计、存图、正常 PLC 或界面发布。已成功追加但后续正式提交失败的行不回滚、不补偿。
+- [x] 主程序已删除 ResultExportClient、ResultExportNetworkWorker 四个文件，以及 Runtime/Application/RuntimeSnapshot/UI/关闭流程中的 TCP、PING/PONG、ACK、内存 FIFO、连接状态、pending 查询和传输恢复链；qmake 已删除四个文件条目和 Qt Network 模块，QSS 与翻译已同步最终本机 CSV 界面。
+- [x] Agent 静态门禁通过：`app/` 中旧结果传输业务符号和 Qt Network 依赖为零，四个旧网络文件不存在；11 个 UI/翻译 XML 可解析；qmake 161 个源、头、UI、资源条目无缺失或重复；当前差异文本严格 UTF-8 且有末尾换行；`git diff --check` 通过；`tools/result_receiver/` 差异为零。按计划未运行或间接触发 qmake、构建、测试程序、主程序、接收端或真实设备。
+- [ ] 等待用户在 Qt Creator 使用 Release 执行 Run qmake、Clean、Rebuild，并按本机 CSV 方案第 14.2 节一次性验证 Schema 重置、设置保存、目录准备、OK/NG/转义/BOM/续写/跨日、写入失败 Fault、关闭和五模式回归；通过前保持“代码实施完成，待用户统一验证”。

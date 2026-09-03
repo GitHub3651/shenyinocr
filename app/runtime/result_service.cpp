@@ -7,11 +7,11 @@
 #include "contracts/detection_mode.h"
 #include "runtime/inspection_presentation_renderer.h"
 #include "runtime/inspection_runtime.h"
-#include "runtime/result_export_client.h"
 #include "system_support/logging/log_categories.h"
 
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QMetaObject>
 #include <QThread>
 
@@ -276,12 +276,6 @@ void ResultService::shutdown()
     }
 }
 
-bool ResultService::resultExportEnabled() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_runConfiguration.resultExportEnabled;
-}
-
 // 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
 DetectionCompletion ResultService::acceptCompletion(
     const DetectionCompletion &completion)
@@ -347,22 +341,32 @@ void ResultService::process(const ProcessRequest &request)
     }
 
     const ProductKey productKey = request.completion.frame->productKey;
-    bool exportEnabled = false;
+    bool barcodeCsvEnabled = false;
+    QString barcodeCsvOutputDirectory;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        exportEnabled = m_runConfiguration.resultExportEnabled;
+        barcodeCsvEnabled = m_runConfiguration.barcodeCsvEnabled;
+        barcodeCsvOutputDirectory =
+                m_runConfiguration.barcodeCsvOutputDirectory;
     }
-    ResultExportRecord exportRecord;
-    if (exportEnabled) {
-        exportRecord.id = productKey.runId
-                + QStringLiteral(":")
-                + QString::number(productKey.sequence);
-        exportRecord.eventTimeUtc = QDateTime::currentDateTimeUtc();
-        exportRecord.overallOk = request.completion.result.verdict
-                == AlgorithmVerdict::Ok;
-        exportRecord.qrContent = exportRecord.overallOk
-                ? request.completion.result.qrContent
-                : QString();
+    if (barcodeCsvEnabled) {
+        QString filePath;
+        QString errorMessage;
+        if (!appendBarcodeCsvResult(
+                    request.completion.result,
+                    barcodeCsvOutputDirectory,
+                    &filePath,
+                    &errorMessage)) {
+            qCCritical(logRuntime).noquote()
+                    << QStringLiteral(
+                        "event=barcode_csv.write_failed path=%1 error=%2")
+                       .arg(filePath, errorMessage);
+            m_runtime.enterFault(
+                        InspectionFaultReason::BarcodeCsvUnavailable,
+                        QStringLiteral("CSV 文件：%1；错误：%2")
+                        .arg(filePath, errorMessage));
+            return;
+        }
     }
     if (!m_runtime.finalizeResultClaim(productKey)) {
         m_runtime.enterFault(
@@ -370,10 +374,6 @@ void ResultService::process(const ProcessRequest &request)
                     QStringLiteral("产品结果正式认领状态提交失败。"));
         return;
     }
-    if (exportEnabled) {
-        m_runtime.resultExportClient().enqueue(exportRecord);
-    }
-
     ProductKey delayedProduct;
     if (consumeDueDelayedNgRequest(&delayedProduct)) {
         requestPlc(DetectionPlcAction::RequestNg, delayedProduct);
@@ -465,6 +465,65 @@ void ResultService::process(const ProcessRequest &request)
                 .arg(result.diagnostic.trimmed());
     }
     qCInfo(logDetection).noquote() << summary;
+}
+
+bool ResultService::appendBarcodeCsvResult(
+    const DetectionResult &result,
+    const QString &outputDirectory,
+    QString *filePath,
+    QString *errorMessage) const
+{
+    const QDateTime localNow = QDateTime::currentDateTime();
+    const QString path = QDir(outputDirectory).filePath(
+                QStringLiteral("qr_results_%1.csv")
+                .arg(localNow.date().toString(QStringLiteral("yyyyMMdd"))));
+    if (filePath) {
+        *filePath = path;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+
+    QByteArray bytes;
+    if (file.size() == 0) {
+        bytes.append("\xEF\xBB\xBF", 3);
+    }
+    const QString value = result.verdict == AlgorithmVerdict::Ok
+            ? result.qrContent
+            : QStringLiteral("noQR");
+    bytes.append(csvEscape(value).toUtf8());
+    bytes.append('\n');
+
+    if (file.write(bytes) != bytes.size()) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+    if (!file.flush()) {
+        if (errorMessage) {
+            *errorMessage = file.errorString();
+        }
+        return false;
+    }
+    return true;
+}
+
+QString ResultService::csvEscape(QString value)
+{
+    if (!value.contains(QLatin1Char(','))
+            && !value.contains(QLatin1Char('"'))
+            && !value.contains(QLatin1Char('\r'))
+            && !value.contains(QLatin1Char('\n'))) {
+        return value;
+    }
+    value.replace(QStringLiteral("\""), QStringLiteral("\"\""));
+    return QStringLiteral("\"") + value + QStringLiteral("\"");
 }
 
 // 函数说明：submitImageSave 函数执行对应事件或业务处理。

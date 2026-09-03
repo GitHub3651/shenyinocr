@@ -1,4 +1,4 @@
-QT       += core gui network svg
+QT       += core gui svg
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -71,8 +71,6 @@ SOURCES += \
     runtime/inspection_plc_controller.cpp \
     runtime/inspection_runtime.cpp \
     runtime/result_service.cpp \
-    runtime/result_export_client.cpp \
-    runtime/result_export_network_worker.cpp \
     runtime/image_save_service.cpp \
     detection/common/character_template_matcher.cpp \
     detection/common/frame_preprocessor.cpp \
@@ -119,8 +117,6 @@ HEADERS += \
     ui/main_window/template/character_editor/character_crop_label.h \
     contracts/inspection_presentation.h \
     runtime/result_service.h \
-    runtime/result_export_client.h \
-    runtime/result_export_network_worker.h \
     ui/main_window/inspection/inspection_page.h \
     ui/main_window/settings/machine_settings_page.h \
     ui/main_window/operation_ui_policy.h \

@@ -12,6 +12,19 @@
 - `已确认删除`：用户明确同意，且已记录影响。
 - 证据缩写：`S`=已在基线HEAD完成源码/UI/工程静态核对；`T`=已有离线测试源码、等待Qt Creator执行；`U`=等待用户从原入口、真实设备或固定样本确认；`P`=升级计划明确延期。
 
+## 二维码结果本机 CSV 直写（2026-09-03，代码实施完成待统一验证）
+
+二维码+三期的结果输出已从远程 TCP 发送替换为主程序本机每日 CSV 直接追加。本节是当前实现事实，覆盖后文历史条目中关于 `resultExport`、连接状态、ACK、内存 FIFO、传输 Fault 和退出待发送提示的描述；`tools/result_receiver/` 不在本轮范围内。
+
+| 范围 | 当前唯一正式路径 | 已删除的旧路径 | 待用户统一验证 |
+|---|---|---|---|
+| 设置与 UI | 严格 AppSettings Schema 6 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期页只保留启用、只读目录和选择目录 | `resultExport`、IP、端口、连接/断开、状态和延迟 UI | Schema 5 整体重置、目录与启用状态保存/恢复、未选目录时拒绝启用 |
+| 启动与运行配置 | 启用时开始识别只调用 `QDir::mkpath()` 准备目录；本轮配置冻结开关和目录；不创建测试文件或写探针 | TCP 已连接门禁、连接状态快照和专用 Fault 恢复门禁 | 目录可创建/不可创建、其他四模式无 CSV、运行中控件禁用 |
+| 正式结果事务 | `ResultService::process()` 在 `claimResult()` 后按本机日期追加 `qr_results_YYYYMMDD.csv`，成功后才 `finalizeResultClaim()`；OK 写二维码原文，整体 NG 写 `noQR` | 发送记录、ACK、内存队列及网络 Worker | BOM、无表头、转义、逐行 flush、同日续写和跨日新文件 |
+| 失败与关闭 | 打开、写入或 flush 失败记录 ERROR 并进入 `BarcodeCsvUnavailable` 通用 Fault；关闭流程无待发送数据 | `ResultExportUnavailable`、pending 查询和退出丢失提示 | 首件和运行中写入失败弹出 Fault、统计/PLC/呈现停止、确认后 Unconfirmed reconciliation |
+
+Agent 已完成旧业务符号、旧网络依赖、工程清单、UI/翻译 XML、UTF-8、末尾换行、`git diff --check` 和接收端零差异静态检查；未运行 qmake、构建、测试程序或主程序。
+
 ## 正式产品失效安全 A2（2026-08-30，代码实施完成待统一验证）
 
 A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEvaluated`、二维码日期结果回调包装和所有 ROI 专用警告链路。无定位、ROI 无效、OCR 空文本、二维码不可读/正常超时均形成普通 NG；执行期引擎异常、有效定位后的非法模板下标、预处理失败和无效 completion 进入现有 Runtime Fault，不伪造产品 NG。`label_runtimeStatus` 不再显示 ROI 无效提示，仍保留运行中、停止、Fault、模板制作和存图失败等既有状态。

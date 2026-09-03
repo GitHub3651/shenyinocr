@@ -300,7 +300,7 @@ void MainWindow::updateOperationUiState()
 {
     const RuntimeSnapshot runtime =
             m_inspectionApplicationService->runtimeSnapshot();
-    updateResultExportUi(runtime);
+    updateBarcodeCsvUi(runtime);
     OperationUiContext context;
     context.state = operationUiState();
     context.cameraOpen = runtime.cameraOpen;
@@ -406,23 +406,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
             || beforeShutdown.state == ApplicationRuntimeState::Running
             || beforeShutdown.state == ApplicationRuntimeState::Stopping) {
         m_inspectionApplicationService->shutdown();
-    }
-
-    const int pendingExport =
-            m_inspectionApplicationService->pendingResultExportCount();
-    if (pendingExport > 0) {
-        const QMessageBox::StandardButton choice = QMessageBox::warning(
-                    this,
-                    QStringLiteral("未发送二维码结果"),
-                    QStringLiteral("当前有 %1 条二维码结果尚未发送完成。\n\n"
-                                   "确认退出将丢失这些记录。")
-                    .arg(pendingExport),
-                    QMessageBox::Ok | QMessageBox::Cancel,
-                    QMessageBox::Cancel);
-        if (choice != QMessageBox::Ok) {
-            event->ignore();
-            return;
-        }
     }
 
     m_applicationExitInProgress = true;

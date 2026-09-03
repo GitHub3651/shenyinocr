@@ -36,8 +36,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>382</width>
-        <height>647</height>
+        <width>380</width>
+        <height>645</height>
        </rect>
       </property>
       <layout class="QGridLayout" name="gridLayout_inspectionInfoContent">
@@ -405,7 +405,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>40</height>
+              <height>50</height>
              </size>
             </property>
             <property name="text">
@@ -427,7 +427,7 @@
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>40</height>
+           <height>50</height>
           </size>
          </property>
          <property name="text">

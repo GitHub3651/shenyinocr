@@ -1,4 +1,4 @@
-// 文件作用：实现 AppSettings Schema 5 的唯一磁盘入口。
+// 文件作用：实现 AppSettings Schema 6 的唯一磁盘入口。
 #include "system_support/settings/app_settings_store.h"
 
 #include <QDir>
@@ -10,8 +10,6 @@
 #include <QJsonParseError>
 #include <QSaveFile>
 #include <QSet>
-#include <QHostAddress>
-#include <QAbstractSocket>
 
 #include <cmath>
 #include <limits>
@@ -318,17 +316,15 @@ bool validateSettings(const AppSettings &settings,
                     QStringLiteral("启用存图时必须选择绝对输出目录。"),
                     QStringLiteral("imageSaving.outputDirectory invalid."));
     }
-    QHostAddress receiverAddress;
-    if (settings.resultExportReceiverIp.trimmed().isEmpty()
-            || !receiverAddress.setAddress(
-                settings.resultExportReceiverIp.trimmed())
-            || receiverAddress.protocol() != QAbstractSocket::IPv4Protocol
-            || settings.resultExportReceiverPort < 1
-            || settings.resultExportReceiverPort > 65535) {
+    const QString barcodeCsvDirectory =
+            settings.barcodeCsvOutputDirectory.trimmed();
+    if ((settings.barcodeCsvEnabled && barcodeCsvDirectory.isEmpty())
+            || (!barcodeCsvDirectory.isEmpty()
+                && !QFileInfo(barcodeCsvDirectory).isAbsolute())) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("结果接收端地址或端口无效。"),
-                    QStringLiteral("resultExport receiver invalid."));
+                    QStringLiteral("启用本机 CSV 时必须选择绝对输出目录。"),
+                    QStringLiteral("barcodeCsv.outputDirectory invalid."));
     }
     if (!validTemplatePath(settings.templateSaveDirectory)) {
         return fail(error,
@@ -461,13 +457,11 @@ QJsonObject settingsToJson(const AppSettings &settings)
     detectionSchemes.insert(QStringLiteral("tissue"), tissue);
     detectionSchemes.insert(QStringLiteral("barcodeWord"), barcodeWord);
 
-    QJsonObject resultExport;
-    resultExport.insert(QStringLiteral("enabled"),
-                        settings.resultExportEnabled);
-    resultExport.insert(QStringLiteral("receiverIp"),
-                        settings.resultExportReceiverIp);
-    resultExport.insert(QStringLiteral("receiverPort"),
-                        settings.resultExportReceiverPort);
+    QJsonObject barcodeCsv;
+    barcodeCsv.insert(QStringLiteral("enabled"),
+                      settings.barcodeCsvEnabled);
+    barcodeCsv.insert(QStringLiteral("outputDirectory"),
+                      settings.barcodeCsvOutputDirectory);
 
     QJsonObject root;
     root.insert(QStringLiteral("schemaVersion"), settings.schemaVersion);
@@ -477,7 +471,7 @@ QJsonObject settingsToJson(const AppSettings &settings)
     root.insert(QStringLiteral("imageSaving"), imageSaving);
     root.insert(QStringLiteral("ui"), ui);
     root.insert(QStringLiteral("detectionSchemes"), detectionSchemes);
-    root.insert(QStringLiteral("resultExport"), resultExport);
+    root.insert(QStringLiteral("barcodeCsv"), barcodeCsv);
     return root;
 }
 
@@ -503,7 +497,7 @@ bool settingsFromJson(const QJsonObject &root,
 {
     AppSettings candidate;
     QJsonObject camera, inspection, plc, connection, process, addresses;
-    QJsonObject imageSaving, ui, detectionSchemes, resultExport;
+    QJsonObject imageSaving, ui, detectionSchemes, barcodeCsv;
     QJsonObject stamp, word, ocr, tissue, barcodeWord;
     if (!hasOnlyKeys(root,
                      QStringList() << QStringLiteral("schemaVersion")
@@ -513,7 +507,7 @@ bool settingsFromJson(const QJsonObject &root,
                                    << QStringLiteral("imageSaving")
                                    << QStringLiteral("ui")
                                    << QStringLiteral("detectionSchemes")
-                                   << QStringLiteral("resultExport"),
+                                   << QStringLiteral("barcodeCsv"),
                      QStringLiteral("root"), error)
             || !readInt(root, "schemaVersion", &candidate.schemaVersion, error)
             || !readObject(root, "camera", &camera, error)
@@ -525,7 +519,7 @@ bool settingsFromJson(const QJsonObject &root,
             || !readObject(root, "imageSaving", &imageSaving, error)
             || !readObject(root, "ui", &ui, error)
             || !readObject(root, "detectionSchemes", &detectionSchemes, error)
-            || !readObject(root, "resultExport", &resultExport, error)
+            || !readObject(root, "barcodeCsv", &barcodeCsv, error)
             || !readObject(detectionSchemes, "stamp", &stamp, error)
             || !readObject(detectionSchemes, "word", &word, error)
             || !readObject(detectionSchemes, "ocr", &ocr, error)
@@ -579,11 +573,10 @@ bool settingsFromJson(const QJsonObject &root,
                             QStringList() << QStringLiteral("selectedDetectionMode")
                                           << QStringLiteral("templateSaveDirectory"),
                             QStringLiteral("ui"), error)
-            || !hasOnlyKeys(resultExport,
+            || !hasOnlyKeys(barcodeCsv,
                             QStringList() << QStringLiteral("enabled")
-                                          << QStringLiteral("receiverIp")
-                                          << QStringLiteral("receiverPort"),
-                            QStringLiteral("resultExport"), error)
+                                          << QStringLiteral("outputDirectory"),
+                            QStringLiteral("barcodeCsv"), error)
             || !hasOnlyKeys(detectionSchemes,
                             QStringList() << QStringLiteral("stamp")
                                           << QStringLiteral("word")
@@ -641,12 +634,10 @@ bool settingsFromJson(const QJsonObject &root,
             || !readString(ui, "selectedDetectionMode", &selectedModeId, error)
             || !readString(ui, "templateSaveDirectory",
                            &candidate.templateSaveDirectory, error)
-            || !readBool(resultExport, "enabled",
-                         &candidate.resultExportEnabled, error)
-            || !readString(resultExport, "receiverIp",
-                           &candidate.resultExportReceiverIp, error)
-            || !readInt(resultExport, "receiverPort",
-                        &candidate.resultExportReceiverPort, error)
+            || !readBool(barcodeCsv, "enabled",
+                         &candidate.barcodeCsvEnabled, error)
+            || !readString(barcodeCsv, "outputDirectory",
+                           &candidate.barcodeCsvOutputDirectory, error)
             || !readString(stamp, "templatePath",
                            &candidate.detectionSchemes.stampTemplatePath, error)
             || !readStringList(word, "templatePaths",

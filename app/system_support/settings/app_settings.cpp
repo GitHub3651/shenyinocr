@@ -137,10 +137,8 @@ AppSettings::AppSettings()
       plcPhotoTimeOffset(982),
       plcRejectDistanceOffset(920),
       plcRejectTimeOffset(980),
-      resultExportEnabled(false)
+      barcodeCsvEnabled(false)
 {
-    resultExportReceiverIp = QStringLiteral("192.168.10.20");
-    resultExportReceiverPort = 35680;
 }
 
 QStringList appSettingsDetectionModeIds()
@@ -227,9 +225,9 @@ bool operator==(const AppSettings &left,
             && left.plcRejectDistanceOffset == right.plcRejectDistanceOffset
             && left.plcRejectTimeOffset == right.plcRejectTimeOffset
             && left.templateSaveDirectory == right.templateSaveDirectory
-            && left.resultExportEnabled == right.resultExportEnabled
-            && left.resultExportReceiverIp == right.resultExportReceiverIp
-            && left.resultExportReceiverPort == right.resultExportReceiverPort
+            && left.barcodeCsvEnabled == right.barcodeCsvEnabled
+            && left.barcodeCsvOutputDirectory
+               == right.barcodeCsvOutputDirectory
             && left.detectionSchemes == right.detectionSchemes;
 }
 
