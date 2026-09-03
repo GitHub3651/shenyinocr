@@ -240,22 +240,14 @@ TemplateEditorPage::TemplateEditorPage(
                 QString::fromWCharArray(
                     L"请输0到100之间的整数，单位：%"));
     connect(&m_inspectionService,
-            &InspectionApplicationService::templatePreviewFrameReady,
-            this, [this](quint64 sessionId, cv::Mat image) {
-        handlePreviewFrame(sessionId, image);
-    }, Qt::QueuedConnection);
-    connect(&m_inspectionService,
             &InspectionApplicationService::templatePreviewFailed,
-            this, [this](quint64 sessionId, const QString &reason) {
-        handlePreviewFailure(sessionId, reason);
-    }, Qt::QueuedConnection);
+            this, &TemplateEditorPage::handlePreviewFailure,
+            Qt::QueuedConnection);
     connect(&m_inspectionService,
             &InspectionApplicationService::captureStopped,
             this, [this](bool preview) {
         if (preview && m_captureState == CaptureState::Previewing) {
-            ++m_previewSessionId;
             m_captureState = CaptureState::Idle;
-            m_lastPreviewFrame.release();
             emit operationUiRefreshRequested();
         }
     }, Qt::QueuedConnection);
@@ -344,7 +336,6 @@ bool TemplateEditorPage::stopTemplatePreview(bool writeLog)
     if (m_captureState != CaptureState::Previewing) {
         return true;
     }
-    ++m_previewSessionId;
     const OperationResult result = m_inspectionService.stopTemplatePreview();
     if (writeLog) {
         if (result.isSuccess()) {
@@ -365,17 +356,13 @@ void TemplateEditorPage::resetTemplateCaptureState(bool writePreviewStopLog)
     if (!stopTemplatePreview(writePreviewStopLog)) {
         return;
     }
-    ++m_previewSessionId;
     m_captureState = CaptureState::Idle;
-    m_lastPreviewFrame.release();
     emit operationUiRefreshRequested();
 }
 
 bool TemplateEditorPage::startTemplatePreview()
 {
-    ++m_previewSessionId;
     const OperationResult result = m_inspectionService.startTemplatePreview(
-                m_previewSessionId,
                 m_imageSettingsUi.comboBox_imageRotation->currentIndex(),
                 m_imageSettingsUi.comboBox_colorChannel->currentIndex());
     if (!result.isSuccess()) {
@@ -391,7 +378,6 @@ bool TemplateEditorPage::startTemplatePreview()
     }
     cancelTemplateDrawing();
     m_captureState = CaptureState::Previewing;
-    m_lastPreviewFrame.release();
     showTemplateCaptureStatus(
                 QStringLiteral("实时取景中，调整产品位置后点击拍照并开始框选。"));
     emit operationUiRefreshRequested();
@@ -403,7 +389,7 @@ bool TemplateEditorPage::startTemplatePreview()
 bool TemplateEditorPage::freezeTemplatePreview()
 {
     if (m_captureState != CaptureState::Previewing
-            || m_lastPreviewFrame.empty()) {
+            || !m_inspectionService.hasCurrentCameraImage()) {
         showInfo(QStringLiteral("提示"),
                  QStringLiteral("相机尚未返回有效画面，请稍候再点击。"));
         return false;
@@ -413,9 +399,9 @@ bool TemplateEditorPage::freezeTemplatePreview()
                     QStringLiteral("实时取景尚未停止，请稍后重试。"));
         return false;
     }
+    const cv::Mat image = m_inspectionService.currentCameraImageClone();
     m_captureState = CaptureState::Frozen;
-    m_inspectionService.replaceCurrentCameraImage(m_lastPreviewFrame);
-    emit previewFramePresentationRequested(m_lastPreviewFrame);
+    emit previewFramePresentationRequested(image);
     DetectionMode mode = DetectionMode::Stamp;
     detectionModeFromUiId(currentDetectModeId(), &mode);
     clearBarcodeTemplateValidation();
@@ -450,23 +436,10 @@ void TemplateEditorPage::handleTemplateCaptureButton()
     startTemplatePreview();
 }
 
-void TemplateEditorPage::handlePreviewFrame(
-        quint64 sessionId, const cv::Mat &image)
-{
-    m_inspectionService.acknowledgeTemplatePreviewFrame(sessionId);
-    if (m_captureState != CaptureState::Previewing
-            || sessionId != m_previewSessionId || image.empty()) {
-        return;
-    }
-    m_lastPreviewFrame = image.clone();
-    emit previewFramePresentationRequested(m_lastPreviewFrame);
-}
-
 void TemplateEditorPage::handlePreviewFailure(
-        quint64 sessionId, const QString &reason)
+        const QString &reason)
 {
-    if (m_captureState != CaptureState::Previewing
-            || sessionId != m_previewSessionId) {
+    if (m_captureState != CaptureState::Previewing) {
         return;
     }
     qCWarning(logTemplate).noquote()

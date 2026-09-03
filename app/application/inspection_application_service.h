@@ -138,14 +138,11 @@ public:
     CameraParameterResultDto applyCameraExposure(int exposure);
     CameraParameterResultDto applyCameraGain(int gain);
     OperationResult startTemplatePreview(
-        quint64 sessionId,
         int rotationCode,
         int colorChannelCode);
     OperationResult stopTemplatePreview();
-    void acknowledgeTemplatePreviewFrame(quint64 sessionId);
     bool hasCurrentCameraImage() const;
     cv::Mat currentCameraImageClone() const;
-    void replaceCurrentCameraImage(const cv::Mat &image);
     bool isCameraOpen() const;
     void shutdown();
     void completeUnexpectedAcquisitionStop();
@@ -161,8 +158,8 @@ public:
 
 signals:
     void runtimeSnapshotChanged(RuntimeSnapshot snapshot);
-    void templatePreviewFrameReady(quint64 sessionId, cv::Mat image);
-    void templatePreviewFailed(quint64 sessionId, QString reason);
+    void templatePreviewFrameReady(cv::Mat image);
+    void templatePreviewFailed(QString reason);
     void captureStopped(bool preview);
 
 private:

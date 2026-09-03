@@ -49,8 +49,7 @@ public:
     bool stopTemplatePreview(bool writeLog = true);
     void resetTemplateCaptureState(bool writePreviewStopLog = true);
     void handleTemplateCaptureButton();
-    void handlePreviewFrame(quint64 sessionId, const cv::Mat &image);
-    void handlePreviewFailure(quint64 sessionId, const QString &reason);
+    void handlePreviewFailure(const QString &reason);
 
     void updateTemplateGuideText(const QString &title,
                                  const QString &body);
@@ -130,8 +129,6 @@ private:
     SettingsEditState &m_settingsEditState;
 
     CaptureState m_captureState = CaptureState::Idle;
-    quint64 m_previewSessionId = 0;
-    cv::Mat m_lastPreviewFrame;
     bool m_selectedTemplateInvalid = false;
     bool m_barcodeTemplateReadable = false;
     QRect m_validatedBarcodeRect;

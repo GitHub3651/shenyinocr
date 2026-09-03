@@ -300,15 +300,11 @@ InspectionApplicationService::InspectionApplicationService(
     qRegisterMetaType<InspectionFaultReason>(
                 "InspectionFaultReason");
     CameraSessionCallbacks callbacks;
-    callbacks.previewFrameReady = [this](
-            quint64 sessionId,
-            const cv::Mat &image) {
-        emit templatePreviewFrameReady(sessionId, image.clone());
+    callbacks.previewFrameReady = [this](const cv::Mat &image) {
+        emit templatePreviewFrameReady(image);
     };
-    callbacks.previewFailed = [this](
-            quint64 sessionId,
-            const QString &reason) {
-        emit templatePreviewFailed(sessionId, reason);
+    callbacks.previewFailed = [this](const QString &reason) {
+        emit templatePreviewFailed(reason);
     };
     callbacks.captureStopped = [this](bool preview) {
         emit captureStopped(preview);
@@ -990,7 +986,6 @@ InspectionApplicationService::applyCameraGain(int gain)
 
 // 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
 OperationResult InspectionApplicationService::startTemplatePreview(
-    quint64 sessionId,
     int rotationCode,
     int colorChannelCode)
 {
@@ -1024,7 +1019,7 @@ OperationResult InspectionApplicationService::startTemplatePreview(
             static_cast<FrameColorChannel>(colorChannelCode);
     QString errorMessage;
     if (!m_cameraSession->startPreview(
-            sessionId, settings, &errorMessage)) {
+            settings, &errorMessage)) {
         return OperationResult::rejected(
                     QStringLiteral("TEMPLATE_PREVIEW_START_FAILED"),
                     errorMessage.isEmpty()
@@ -1050,13 +1045,6 @@ OperationResult InspectionApplicationService::stopTemplatePreview()
                 QStringLiteral("实时取景线程尚未停止，请稍后重试。"));
 }
 
-// 函数说明：acknowledgeTemplatePreviewFrame 函数停止流程、清理状态或释放对应资源。
-void InspectionApplicationService::acknowledgeTemplatePreviewFrame(
-    quint64 sessionId)
-{
-    m_cameraSession->acknowledgePreviewFrame(sessionId);
-}
-
 // 函数说明：hasCurrentCameraImage 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::hasCurrentCameraImage() const
 {
@@ -1067,13 +1055,6 @@ bool InspectionApplicationService::hasCurrentCameraImage() const
 cv::Mat InspectionApplicationService::currentCameraImageClone() const
 {
     return m_cameraSession->currentImageClone();
-}
-
-// 函数说明：replaceCurrentCameraImage 函数更新或应用对应的配置和状态。
-void InspectionApplicationService::replaceCurrentCameraImage(
-    const cv::Mat &image)
-{
-    m_cameraSession->replaceCurrentImage(image);
 }
 
 // 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。

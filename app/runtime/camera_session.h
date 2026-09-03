@@ -117,8 +117,8 @@ struct CameraSessionCaptureConfiguration
 // 组件说明：CameraSessionCallbacks 数据结构集中传递该流程需要的只读数据或回调。
 struct CameraSessionCallbacks
 {
-    std::function<void(quint64, const cv::Mat &)> previewFrameReady;
-    std::function<void(quint64, const QString &)> previewFailed;
+    std::function<void(const cv::Mat &)> previewFrameReady;
+    std::function<void(const QString &)> previewFailed;
     std::function<void(bool)> captureStopped;
     std::function<void(InspectionFaultReason, const QString &)> enterFault;
 };
@@ -158,15 +158,12 @@ public:
         const PersistAdjustedExposure &persistAdjustedExposure);
 
     bool startPreview(
-        quint64 sessionId,
         const FramePreprocessSettings &settings,
         QString *errorMessage);
-    void acknowledgePreviewFrame(quint64 sessionId);
     bool stopPreview();
 
     bool hasCurrentImage() const;
     cv::Mat currentImageClone() const;
-    void replaceCurrentImage(const cv::Mat &image);
 
 private:
     InspectionCameraParameterResult parameterResult(
@@ -190,8 +187,6 @@ private:
     bool m_prepared = false;
     std::atomic<bool> m_preview{false};
     std::atomic<bool> m_intentionalStop{false};
-    std::atomic<quint64> m_previewSessionId{0};
-    std::atomic<bool> m_previewFramePending{false};
     mutable std::mutex m_mutex;
     CameraSessionCallbacks m_callbacks;
     cv::Mat m_currentImage;

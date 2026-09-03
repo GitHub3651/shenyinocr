@@ -240,6 +240,14 @@ void MainWindow::initializePages()
     connect(m_templateEditorPage.get(),
             &TemplateEditorPage::operationUiRefreshRequested,
             this, &MainWindow::updateOperationUiState);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::templatePreviewFrameReady,
+            this, [this](const cv::Mat &image) {
+        if (m_templateEditorPage->captureState()
+                == TemplateEditorPage::CaptureState::Previewing) {
+            presentTemplatePreviewFrame(image);
+        }
+    }, Qt::QueuedConnection);
     connect(m_templateEditorPage.get(),
             &TemplateEditorPage::previewFramePresentationRequested,
             this, &MainWindow::presentTemplatePreviewFrame);

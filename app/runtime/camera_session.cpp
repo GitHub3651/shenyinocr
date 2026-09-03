@@ -456,7 +456,6 @@ InspectionCameraRecoveryResult CameraSession::restorePreviewReady(
 
 // 函数说明：startPreview 函数创建、准备或启动对应流程。
 bool CameraSession::startPreview(
-    quint64 sessionId,
     const FramePreprocessSettings &settings,
     QString *errorMessage)
 {
@@ -480,8 +479,10 @@ bool CameraSession::startPreview(
         return false;
     }
     m_configuration.framePreprocess = settings;
-    m_previewSessionId = sessionId;
-    m_previewFramePending.store(false);
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_currentImage.release();
+    }
     m_preview = true;
     m_prepared = false;
     m_intentionalStop = false;
@@ -505,21 +506,12 @@ bool CameraSession::startPreview(
     return true;
 }
 
-// 函数说明：acknowledgePreviewFrame 函数停止流程、清理状态或释放对应资源。
-void CameraSession::acknowledgePreviewFrame(quint64 sessionId)
-{
-    if (sessionId == m_previewSessionId) {
-        m_previewFramePending.store(false);
-    }
-}
-
 // 函数说明：stopPreview 函数停止流程、清理状态或释放对应资源。
 bool CameraSession::stopPreview()
 {
     m_intentionalStop = true;
     m_captureWorker.stop();
     m_preview = false;
-    m_previewFramePending.store(false);
     return !m_captureWorker.isRunning();
 }
 
@@ -535,13 +527,6 @@ cv::Mat CameraSession::currentImageClone() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_currentImage.clone();
-}
-
-// 函数说明：replaceCurrentImage 函数更新或应用对应的配置和状态。
-void CameraSession::replaceCurrentImage(const cv::Mat &image)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_currentImage = image.clone();
 }
 
 // 函数说明：parameterResult 函数实现名称所表示的处理步骤。
@@ -618,7 +603,6 @@ InspectionCameraParameterResult CameraSession::applySavedExposure(
 // 函数说明：handleFrame 函数执行对应事件或业务处理。
 void CameraSession::handleFrame(const CameraFrame &frame)
 {
-    const CameraSessionCallbacks callbacks = callbacksSnapshot();
     if (m_preview) {
         cv::Mat image;
         if (!FramePreprocessor::transform(
@@ -627,10 +611,13 @@ void CameraSession::handleFrame(const CameraFrame &frame)
                     &image)) {
             return;
         }
-        replaceCurrentImage(image);
-        if (!m_previewFramePending.exchange(true)
-                && callbacks.previewFrameReady) {
-            callbacks.previewFrameReady(m_previewSessionId, image);
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_currentImage = image;
+        }
+        const CameraSessionCallbacks callbacks = callbacksSnapshot();
+        if (callbacks.previewFrameReady) {
+            callbacks.previewFrameReady(image);
         }
         return;
     }
@@ -658,7 +645,7 @@ void CameraSession::handleCaptureError(
                    .arg(nativeErrorCode)
                    .arg(reason);
         if (callbacks.previewFailed) {
-            callbacks.previewFailed(m_previewSessionId, reason);
+            callbacks.previewFailed(reason);
         }
         return;
     }
