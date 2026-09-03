@@ -106,6 +106,11 @@
         <file>qss/silvery.css</file>
         <file>qss/lightbluepro.css</file>
         <file>qss/app_theme.qss</file>
+        <file>svg/nav_inspection.svg</file>
+        <file>svg/nav_parameters.svg</file>
+        <file>svg/nav_image.svg</file>
+        <file>svg/nav_plc.svg</file>
+        <file>svg/nav_software.svg</file>
     </qresource>
     <qresource prefix="/logo"/>
 </RCC>

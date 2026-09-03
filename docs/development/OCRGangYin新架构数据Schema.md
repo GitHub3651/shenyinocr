@@ -1,6 +1,6 @@
 # OCRGangYin 数据 Schema（阶段 8）
 
-状态：实现完成，等待用户统一验证
+状态：AppSettings Schema 5 代码已实施，等待用户统一验证
 实现依据：`app/system_support/settings/app_settings*` 与 `app/templates/template_store*`
 
 ## 1. 数据边界
@@ -29,7 +29,7 @@
 - 纸巾检测不使用模板，粗糙度阈值直接写入 `app_settings.json`。
 - 旧格式不迁移、不兼容，也不作为缺字段时的回退来源。
 
-## 2. AppSettings Schema 2
+## 2. AppSettings Schema 5
 
 ### 2.1 唯一内存结构
 
@@ -43,8 +43,12 @@ struct DetectionSchemes {
 };
 
 struct AppSettings {
-    static const int CurrentSchemaVersion = 2;
+    static const int CurrentSchemaVersion = 5;
     // 已验证的整机和 UI 扁平成员
+    QString templateSaveDirectory;
+    bool resultExportEnabled;
+    QString resultExportReceiverIp;
+    int resultExportReceiverPort;
     DetectionSchemes detectionSchemes;
 };
 ```
@@ -55,7 +59,7 @@ struct AppSettings {
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 5,
   "camera": {
     "exposureMicroseconds": 800,
     "gain": 1,
@@ -97,7 +101,7 @@ struct AppSettings {
   },
   "ui": {
     "selectedDetectionMode": "word",
-    "rightPanelSplitterStateBase64": ""
+    "templateSaveDirectory": ""
   },
   "detectionSchemes": {
     "stamp": { "templatePath": "" },
@@ -105,6 +109,11 @@ struct AppSettings {
     "ocr": { "templatePath": "" },
     "tissue": { "roughnessThreshold": 6.0 },
     "barcodeWord": { "templatePaths": [] }
+  },
+  "resultExport": {
+    "enabled": false,
+    "receiverIp": "192.168.10.20",
+    "receiverPort": 35680
   }
 }
 ```
@@ -120,6 +129,7 @@ struct AppSettings {
 | `imageSaving.range` | `none`、`ngOnly`、`okOnly`、`all` |
 | `imageSaving.content` | `annotatedAndRaw`、`annotatedOnly`、`rawOnly` |
 | `ui.selectedDetectionMode` | `stamp`、`word`、`ocr`、`tissue`、`barcodeWord` |
+| `resultExport.enabled` | `true`、`false` |
 
 ### 2.4 detectionSchemes 规则
 
@@ -135,10 +145,10 @@ struct AppSettings {
 
 ### 2.5 严格读取和保存
 
-- 六个根字段和各分区字段都必须存在，未知字段、类型错误和约束错误会拒绝整个文件。
+- 八个根字段和各分区字段都必须存在，未知字段、类型错误和约束错误会拒绝整个文件。
 - 文件不存在时只在内存使用完整默认值，第一次保存时创建。
-- `schemaVersion != 2` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 2 原子替换。
-- 已是 Schema 2 但内容损坏时拒绝启动，不自动覆盖诊断证据。
+- `schemaVersion != 5` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 5 原子替换。
+- 已是 Schema 5 但内容损坏时拒绝启动，不自动覆盖诊断证据。
 - 所有写入统一经过 `AppSettingsStore::save()` 和 `QSaveFile`。
 - 模板路径或纸巾阈值保存从最新 `current` 复制候选，只改目标字段；不会提交或丢弃未应用的整机草稿。
 - “恢复默认设置”保留 `detectionSchemes`；“清空软件数据”原子写入完整默认 `AppSettings`，但不删除任何外部模板。

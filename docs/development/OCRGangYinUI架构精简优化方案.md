@@ -4,7 +4,7 @@
 
 - 文档用途：指导当前 UI 统一样式完成后的代码架构精简。
 - 编写日期：2026-08-21。
-- 最新修订：2026-08-21，按钢印真实检测语义修订批次 B，将旧“三步、两个矩形、一个多边形”方案替换为五模式 `ImageLabel` 绘图状态机与模板向导直接绑定方案，并明确只保留一个应用层 `TemplateDrawingInput`，不再增加重复的 UI 几何快照结构。
+- 最新修订：2026-08-21，按钢印真实检测语义修订批次 B，将旧“三步、两个矩形、一个多边形”方案替换为五模式 `InspectionImageCanvas` 绘图状态机与模板向导直接绑定方案，并明确只保留一个应用层 `TemplateDrawingInput`，不再增加重复的 UI 几何快照结构。
 - 当前基线：以实施开始时已经通过用户验证并提交的最新 UI 版本为准，不直接以本文编写时的未提交工作区作为实施基线。
 - 当前执行状态：批次 A 已由提交 `85d3b58` 独立收口；批次 B 已按修订后的五模式方案完成代码修复和 Agent 静态门禁，等待用户在 Qt Creator 构建、完成人工交互及真实钢印样本验证，未通过前不得提交。
 - 目标范围：`app/ui`、`app/startup/application_startup.cpp`、现有模板几何应用服务以及对应 qmake 清单。
@@ -20,7 +20,7 @@
 2. 三个 Page 创建后再通过 `attachPages()` 挂回 `MainWindow`。
 3. `MainWindow` 保留大量只转发给 Page 的一行函数。
 4. 稳定存在的界面控件仍有一部分在 C++ 中动态创建，Qt Designer 无法展示完整布局。
-5. 模板制作需要统一使用 Qt `ImageLabel`，并按检测模式切换绘图状态；刚印模式必须分别采集吸管口锚点、刚印多边形、日期锚点和日期多边形，不能复用同一个多边形。
+5. 模板制作需要统一使用 Qt `InspectionImageCanvas`，并按检测模式切换绘图状态；刚印模式必须分别采集吸管口锚点、刚印多边形、日期锚点和日期多边形，不能复用同一个多边形。
 
 最终优化方向不是继续拆文件，而是删除过渡胶水：
 
@@ -228,9 +228,9 @@ void MainWindow::on_pushButton_applyTargetText_clicked()
 
 QSplitter Handle 的自定义抓手属于运行时对象，可以继续留在 C++，不要求为了形式统一迁入 `.ui`。
 
-### 6.5 `ImageLabel` 缺少按模式区分的绘图状态
+### 6.5 `InspectionImageCanvas` 缺少按模式区分的绘图状态
 
-模板制作必须继续只使用 Qt 主界面的同一个 `ImageLabel`。原 OpenCV HighGUI 交互应保持删除，生产代码不得恢复：
+模板制作必须继续只使用 Qt 主界面的同一个 `InspectionImageCanvas`。原 OpenCV HighGUI 交互应保持删除，生产代码不得恢复：
 
 - `cv::namedWindow()`。
 - `cv::imshow()`。
@@ -259,11 +259,11 @@ STEP_DONE
 
 初版保存代码把唯一绿色多边形先转换为 `datePolygon`，随后又使用同一组点推导 `stampPolygon`，造成严重语义回归。无论用户把唯一多边形画在钢印上还是生产日期上，另一套检测区域都会错误。
 
-目标是让 `ImageLabel` 根据当前检测模式选择明确的绘图步骤、几何存储和显示内容；纸巾模式完全禁用模板绘图。`ImageLabel` 只负责鼠标/键盘交互、UI 坐标和框线显示，不负责提示文案、二维码业务校验、模板保存或检测算法。
+目标是让 `InspectionImageCanvas` 根据当前检测模式选择明确的绘图步骤、几何存储和显示内容；纸巾模式完全禁用模板绘图。`InspectionImageCanvas` 只负责鼠标/键盘交互、UI 坐标和框线显示，不负责提示文案、二维码业务校验、模板保存或检测算法。
 
 ### 6.6 模板向导连接仍经过 MainWindow 且使用字符串协议
 
-当前 `ImageLabel` 已经会在鼠标处理后发出模板向导事件，但接口为：
+当前 `InspectionImageCanvas` 已经会在鼠标处理后发出模板向导事件，但接口为：
 
 ```cpp
 signal_templateGuideEvent(QString eventName, int pointCount)
@@ -273,9 +273,9 @@ signal_templateGuideEvent(QString eventName, int pointCount)
 
 1. `"tracking_done"`、`"poly_point_added"` 等字符串没有编译期检查。
 2. Page 自有的模板绘图行为仍然经过 MainWindow 中转。
-3. `ImageLabel` 还保留无人消费的原始 `QMouseEvent*` 信号，容易让后续代码错误依赖底层鼠标事件。
+3. `InspectionImageCanvas` 还保留无人消费的原始 `QMouseEvent*` 信号，容易让后续代码错误依赖底层鼠标事件。
 
-模板向导不需要读取原始鼠标事件。`ImageLabel` 应内部消费 `mousePressEvent/mouseMoveEvent/mouseReleaseEvent/keyPressEvent`，只向 `TemplateEditorPage` 发出强类型的绘图进度事件；模板页再更新现有 `.ui` 中的向导标题和正文。
+模板向导不需要读取原始鼠标事件。`InspectionImageCanvas` 应内部消费 `mousePressEvent/mouseMoveEvent/mouseReleaseEvent/keyPressEvent`，只向 `TemplateEditorPage` 发出强类型的绘图进度事件；模板页再更新现有 `.ui` 中的向导标题和正文。
 
 ### 6.7 无效代码、重复状态和无效注释
 
@@ -524,7 +524,7 @@ MainWindow 保留：
 - 若必须改名，同一差异中同步修改 `.ui`、C++、QSS 和文档。
 - 不在迁移过程中新增内联样式。
 
-### 阶段 UI-4：`ImageLabel` 五模式绘图与模板向导绑定
+### 阶段 UI-4：`InspectionImageCanvas` 五模式绘图与模板向导绑定
 
 #### 性质与当前状态
 
@@ -541,7 +541,7 @@ UI-4 是批次 B，也是唯一明确改变模板绘图交互的阶段，必须�
 
 #### 五种模式的绘图流程
 
-| 检测模式 | `ImageLabel` 绘图步骤 | 需要保存的 UI 几何 | 显示建议 |
+| 检测模式 | `InspectionImageCanvas` 绘图步骤 | 需要保存的 UI 几何 | 显示建议 |
 |---|---|---|---|
 | 字库匹配 | 定位区域 → 文字检测多边形 | `trackingAnchorRect`、`datePolygon` | 蓝色定位框＋绿色文字区域 |
 | 深度 OCR | 定位区域 → OCR 检测多边形 | `trackingAnchorRect`、`datePolygon` | 蓝色定位框＋绿色 OCR 区域 |
@@ -594,9 +594,9 @@ datePolygon       = 原图生产日期多边形 - 生产日期定位锚点中心
 最终结果 = 字符匹配合格 && 不发生钢印/日期重叠
 ```
 
-#### `ImageLabel` 模式接口
+#### `InspectionImageCanvas` 模式接口
 
-`ImageLabel` 是项目内专用模板绘图控件，不需要再抽象成通用画布框架。建议用当前稳定的 `DetectionMode` 直接启动模式化绘图：
+`InspectionImageCanvas` 是项目内专用模板绘图控件，不需要再抽象成通用画布框架。建议用当前稳定的 `DetectionMode` 直接启动模式化绘图：
 
 ```cpp
 void beginTemplateDrawing(DetectionMode mode);
@@ -667,9 +667,9 @@ Tissue
 
 不新增 `DrawingStrategy` 子类、状态机框架、注册表或每模式独立 Widget。一个明确的 `switch (DetectionMode)` 和一个 `switch (DrawingStep)` 足以表达当前五种模式。
 
-#### `ImageLabel` 独立几何成员
+#### `InspectionImageCanvas` 独立几何成员
 
-当前单个 `m_secondaryRect` 和单个 `m_detectionPoly` 必须直接拆成 `ImageLabel` 的五个语义明确的私有成员，避免跨模式和跨区域复用：
+当前单个 `m_secondaryRect` 和单个 `m_detectionPoly` 必须直接拆成 `InspectionImageCanvas` 的五个语义明确的私有成员，避免跨模式和跨区域复用：
 
 ```cpp
 QRect m_trackingAnchorRect;
@@ -679,7 +679,7 @@ QPolygon m_datePolygon;
 QPolygon m_stampPolygon;
 ```
 
-`ImageLabel` 对模板页只提供对应的只读 getter：
+`InspectionImageCanvas` 对模板页只提供对应的只读 getter：
 
 ```cpp
 QRect trackingAnchorRect() const;
@@ -689,7 +689,7 @@ QPolygon datePolygon() const;
 QPolygon stampPolygon() const;
 ```
 
-不得再增加 `TemplateDrawingGeometry` 或其他内容相同的 UI 快照结构。`TemplateEditorPage` 只在完成校验或保存时读取这些 getter；`ImageLabel` 不依赖应用层的 `TemplateDrawingInput`，也不负责把显示坐标转换成原图坐标。
+不得再增加 `TemplateDrawingGeometry` 或其他内容相同的 UI 快照结构。`TemplateEditorPage` 只在完成校验或保存时读取这些 getter；`InspectionImageCanvas` 不依赖应用层的 `TemplateDrawingInput`，也不负责把显示坐标转换成原图坐标。
 
 几何清理规则：
 
@@ -714,21 +714,21 @@ QPolygon stampPolygon() const;
 
 颜色只用于区分同一图像中的区域角色，不在 C++ 拼接控件样式，也不修改正式 QSS 体系。
 
-#### 模板向导与 `ImageLabel` 的绑定
+#### 模板向导与 `InspectionImageCanvas` 的绑定
 
-模板向导需要和 `ImageLabel` 的绘图进度绑定，但不能让 `ImageLabel` 直接持有 `QFrame/QLabel` 或生成业务文案。
+模板向导需要和 `InspectionImageCanvas` 的绘图进度绑定，但不能让 `InspectionImageCanvas` 直接持有 `QFrame/QLabel` 或生成业务文案。
 
 正确方向是：
 
 ```text
-TemplateEditorPage -- beginTemplateDrawing(mode) --> ImageLabel
+TemplateEditorPage -- beginTemplateDrawing(mode) --> InspectionImageCanvas
 
-ImageLabel -- templateDrawingChanged(...) --> TemplateEditorPage
+InspectionImageCanvas -- templateDrawingChanged(...) --> TemplateEditorPage
 
 TemplateEditorPage -- setText/show/hide --> main_window.ui 中的模板向导
 ```
 
-原始 `QMouseEvent*` 不应跨出 `ImageLabel`。模板提示真正需要的不是鼠标坐标，而是以下语义事件：
+原始 `QMouseEvent*` 不应跨出 `InspectionImageCanvas`。模板提示真正需要的不是鼠标坐标，而是以下语义事件：
 
 ```cpp
 enum class DrawingEvent {
@@ -754,7 +754,7 @@ signals:
 
 ```cpp
 connect(imageLabel,
-        &ImageLabel::templateDrawingChanged,
+        &InspectionImageCanvas::templateDrawingChanged,
         this,
         &TemplateEditorPage::handleTemplateDrawingChanged);
 ```
@@ -773,7 +773,7 @@ mouseReleased(QMouseEvent *)
 
 #### 向导文字职责
 
-`TemplateEditorPage` 继续拥有全部中文标题、步骤文字、二维码失败提示和保存确认。`ImageLabel` 不负责：
+`TemplateEditorPage` 继续拥有全部中文标题、步骤文字、二维码失败提示和保存确认。`InspectionImageCanvas` 不负责：
 
 - 检测模式中文名称。
 - “步骤 1/4”等提示文案。
@@ -793,7 +793,7 @@ mouseReleased(QMouseEvent *)
 - Esc 清空并回到第一步。
 - 工作流完成后询问是否立即保存。
 
-二维码模式保持既有特殊行为：完成二维码矩形后由 `TemplateEditorPage` 调用现有即时解码校验；失败时保留定位锚点，只命令 `ImageLabel` 回到二维码步骤并清除二维码及后续日期区域。
+二维码模式保持既有特殊行为：完成二维码矩形后由 `TemplateEditorPage` 调用现有即时解码校验；失败时保留定位锚点，只命令 `InspectionImageCanvas` 回到二维码步骤并清除二维码及后续日期区域。
 
 #### 模式切换与重置
 
@@ -807,7 +807,7 @@ mouseReleased(QMouseEvent *)
 
 #### 坐标转换与保存输入
 
-`ImageLabel` 只保存显示坐标，不得读取模板 Schema，也不得自行计算原图相对坐标。显示坐标到原图坐标、KeepAspectRatio 留白偏移、边界裁剪和中心相对坐标继续由现有应用层模板几何能力负责。
+`InspectionImageCanvas` 只保存显示坐标，不得读取模板 Schema，也不得自行计算原图相对坐标。显示坐标到原图坐标、KeepAspectRatio 留白偏移、边界裁剪和中心相对坐标继续由现有应用层模板几何能力负责。
 
 现有 `TemplateGeometryService::buildGeometry()` 只能接收一个定位矩形、一个二维码矩形和一个日期多边形，无法正确消费钢印的两个锚点和两个多边形。建议在现有 `template_geometry_service.h/.cpp` 中增加输入结构，不新增新 Service 或代码文件：
 
@@ -822,19 +822,19 @@ struct TemplateDrawingInput {
 };
 ```
 
-这是本流程唯一新增的绘图几何输入结构。`TemplateEditorPage` 在完成校验或保存时，从 `ImageLabel` 的五个只读 getter 读取当前显示坐标，连同当前 `DetectionMode` 组装一个局部 `TemplateDrawingInput`，再传给 `TemplateApplicationService/TemplateGeometryService`。该对象不作为 Page 或 `ImageLabel` 的长期状态保存。
+这是本流程唯一新增的绘图几何输入结构。`TemplateEditorPage` 在完成校验或保存时，从 `InspectionImageCanvas` 的五个只读 getter 读取当前显示坐标，连同当前 `DetectionMode` 组装一个局部 `TemplateDrawingInput`，再传给 `TemplateApplicationService/TemplateGeometryService`。该对象不作为 Page 或 `InspectionImageCanvas` 的长期状态保存。
 
 固定调用关系为：
 
 ```text
-ImageLabel 五个私有几何成员
+InspectionImageCanvas 五个私有几何成员
     ↓ 只读 getter
 TemplateEditorPage 组装唯一 TemplateDrawingInput
     ↓
 TemplateGeometryService 转换并返回 TemplateGeometryResult
 ```
 
-不得同时维护 `TemplateDrawingGeometry` 与 `TemplateDrawingInput`，也不得让几何服务反向读取 `ImageLabel`。
+不得同时维护 `TemplateDrawingGeometry` 与 `TemplateDrawingInput`，也不得让几何服务反向读取 `InspectionImageCanvas`。
 
 现有几何服务根据模式一次返回：
 
@@ -859,9 +859,9 @@ stampPolygon
 
 #### 已保存几何的显示边界
 
-本批次必须保证当前模板制作草稿按模式正确显示。若现有功能需要在重新打开模板时恢复框线，则由 `TemplateEditorPage` 将已保存原图坐标反向转换为显示坐标，再一次性传给 `ImageLabel`；反向转换仍放在现有模板几何服务中。
+本批次必须保证当前模板制作草稿按模式正确显示。若现有功能需要在重新打开模板时恢复框线，则由 `TemplateEditorPage` 将已保存原图坐标反向转换为显示坐标，再一次性传给 `InspectionImageCanvas`；反向转换仍放在现有模板几何服务中。
 
-不得让 `ImageLabel` 直接读取模板目录或 `template_settings.json`。如果当前已验证功能并不包含“重新打开模板后恢复可编辑框线”，本批次不顺带增加该新功能，只保持已有模板图片和参数显示行为。
+不得让 `InspectionImageCanvas` 直接读取模板目录或 `template_settings.json`。如果当前已验证功能并不包含“重新打开模板后恢复可编辑框线”，本批次不顺带增加该新功能，只保持已有模板图片和参数显示行为。
 
 #### `TemplateEditorSupport` 收口
 
@@ -876,7 +876,7 @@ OpenCV 原生 UI 删除后，`template_editor_support.h/.cpp` 已经只剩页面
 
 - 不新增第二个图像控件、StampEditorDialog 或每模式独立窗口。
 - 不增加状态机框架、事件总线、GuideManager 或 DrawingManager。
-- 不让 `ImageLabel` 持有向导控件或模板应用服务。
+- 不让 `InspectionImageCanvas` 持有向导控件或模板应用服务。
 - 不通过原始鼠标事件在 Page 中重新实现绘图状态。
 - 不修改模板 Schema、AppSettings Schema、模板路径、算法、阈值、统计、PLC 或存图合同。
 - 不恢复 Recipe、旧模板兼容或 YAML 区域文件。
@@ -887,19 +887,19 @@ OpenCV 原生 UI 删除后，`template_editor_support.h/.cpp` 已经只剩页面
 | 文件 | 计划修改 |
 |---|---|
 | `app/startup/application_startup.cpp` | 删除三个 Page 的外部创建与回挂，只创建应用服务和 MainWindow |
-| `app/ui/main_window.h` | 删除组合公开接口、无调用转发和无效成员；增加 Page 私有所有权 |
-| `app/ui/main_window.cpp` | MainWindow 内部创建 Page，建立必要跨页面连接；UI-4 删除 `ImageLabel` 到模板页的绘图信号中转 |
-| `app/ui/main_window_settings.cpp` | 删除模板页一行转发和重复设置状态，保留真正跨页面协调 |
-| `app/ui/main_window_inspection.cpp` | 删除模板页一行转发和死状态，保留检测/PLC/退出协调 |
-| `app/ui/main_window.ui` | 接收固定模板编辑行、模板向导和可确认安全迁移的固定布局 |
-| `app/ui/pages/inspection_page.h/.cpp` | 收回检测页局部 UI 状态和按钮连接，不再接收 Startup 转发状态 |
-| `app/ui/pages/machine_settings_page.h/.cpp` | 收回 applying/updating 和保存路径编辑状态，删除外部 bool*/QString* |
-| `app/ui/pages/template_editor_page.h/.cpp` | 直接连接模板按钮和 `ImageLabel` 强类型绘图事件；按五模式生成向导、执行二维码校验，并从只读 getter 组装唯一的 `TemplateDrawingInput` 完成保存 |
+| `app/ui/main_window/main_window.h` | 删除组合公开接口、无调用转发和无效成员；增加 Page 私有所有权 |
+| `app/ui/main_window/main_window.cpp` | MainWindow 内部创建 Page，建立必要跨页面连接；UI-4 删除 `InspectionImageCanvas` 到模板页的绘图信号中转 |
+| `app/ui/main_window/main_window_settings.cpp` | 删除模板页一行转发和重复设置状态，保留真正跨页面协调 |
+| `app/ui/main_window/main_window_inspection.cpp` | 删除模板页一行转发和死状态，保留检测/PLC/退出协调 |
+| `app/ui/main_window/main_window.ui` | 保留主窗口骨架、主控区、右侧导航和五个页面根节点；固定内容分别位于五个页面 `.ui` |
+| `app/ui/main_window/inspection/inspection_page.h/.cpp` | 收回检测页局部 UI 状态和按钮连接，不再接收 Startup 转发状态 |
+| `app/ui/main_window/settings/machine_settings_page.h/.cpp` | 收回 applying/updating 和保存路径编辑状态，删除外部 bool*/QString* |
+| `app/ui/main_window/template/template_editor_page.h/.cpp` | 直接连接模板按钮和 `InspectionImageCanvas` 强类型绘图事件；按五模式生成向导、执行二维码校验，并从只读 getter 组装唯一的 `TemplateDrawingInput` 完成保存 |
 | `app/ui/pages/template_editor_support.h/.cpp` | 保持初版已完成的删除，不恢复 HighGUI 或只容纳页面私有小函数的 Support 文件 |
-| `app/ui/controllers/operation_ui_policy.*` | 保持统一状态规则，只删除确认无用的 API，不拆分新文件 |
-| `app/ui/controllers/settings_edit_state.*` | 保持统一未应用状态，不复制回 MainWindow/Page |
-| `app/ui/presenters/inspection_fault_presenter.*` | 保持故障呈现边界 |
-| `app/ui/widgets/image_label.*` | 按 `DetectionMode` 切换五模式绘图步骤；使用五个私有几何成员、对应只读 getter、模式化绘制和强类型进度事件；不新增几何快照结构，不承担提示文案、模板保存和检测业务 |
+| `app/ui/main_window/operation_ui_policy.*` | 保持统一状态规则，只删除确认无用的 API，不拆分新文件 |
+| `app/ui/main_window/settings/settings_edit_state.*` | 保持统一未应用状态，不复制回 MainWindow/Page |
+| `app/ui/main_window/inspection/inspection_fault_presenter.*` | 保持故障呈现边界 |
+| `app/ui/main_window/inspection_image_canvas.*` | 按 `DetectionMode` 切换五模式绘图步骤；使用五个私有几何成员、对应只读 getter、模式化绘制和强类型进度事件；不新增几何快照结构，不承担提示文案、模板保存和检测业务 |
 | `app/application/template_geometry_service.*` | 在现有文件中定义并接收唯一的 `TemplateDrawingInput`，统一转换两个锚点、二维码区域和两个独立多边形，不新增 Service |
 | `app/application/template_application_service.*` | 仅按现有门面转发新的几何输入/结果并继续填充现有模板草稿，不新增保存入口 |
 | `app/resource/qss/app_theme.qss` | 只在对象迁移确需时同步选择器，不进行第二轮主题重写 |
@@ -925,7 +925,7 @@ UI-1～UI-3 必须保持以下可观察行为完全不变：
 - Tooltip 禁用原因覆盖与恢复。
 - 所有正式视觉样式继续来自 `app_theme.qss`。
 
-UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `ImageLabel`，其中字库、OCR 和二维码保持已验证流程，钢印修复为两个锚点、两个独立多边形的四步流程。允许改变的是绘图载体、步骤状态和向导绑定；必须保持的是模板字段、坐标参考中心、资源文件、检测算法、阈值、统计、PLC、存图和结果语义。
+UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `InspectionImageCanvas`，其中字库、OCR 和二维码保持已验证流程，钢印修复为两个锚点、两个独立多边形的四步流程。允许改变的是绘图载体、步骤状态和向导绑定；必须保持的是模板字段、坐标参考中心、资源文件、检测算法、阈值、统计、PLC、存图和结果语义。
 
 钢印行为保持的准确含义不是保持当前错误三步实现，而是恢复检测算法一直需要的真实合同：
 
@@ -949,9 +949,9 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 - 为 Tooltip、QSS、状态属性新增 Manager 或配置文件。
 - 为绘图增加 DrawingManager、GuideManager、每模式 Strategy 子类、事件总线或第二个状态机框架。
 - 同时增加字段重复的 `TemplateDrawingGeometry` 和 `TemplateDrawingInput`，或增加其他只为搬运同一组几何数据的 UI 快照类型。
-- 让 `ImageLabel` 直接持有模板向导控件、显示中文业务文案、弹出 `QMessageBox` 或调用模板应用服务。
+- 让 `InspectionImageCanvas` 直接持有模板向导控件、显示中文业务文案、弹出 `QMessageBox` 或调用模板应用服务。
 - 把原始 `QMouseEvent*` 传给 `TemplateEditorPage` 后在 Page 中复制一套绘图状态判断。
-- 使用字符串事件名继续维持 `ImageLabel` 与模板向导之间的隐式协议。
+- 使用字符串事件名继续维持 `InspectionImageCanvas` 与模板向导之间的隐式协议。
 - 为减少行数删除 OperationUiPolicy、SettingsEditState 或 FaultPresenter 后复制逻辑。
 - 顺带修改检测算法、阈值、模板 Schema、AppSettings Schema、PLC时序或存图合同。
 - 删除图片、图标、旧主题 CSS/QSS、翻译、模型、DLL 或其他资源文件。
@@ -965,12 +965,12 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 | 初始化设置触发模式切换 | UI-2 | 使用 `QSignalBlocker`，不依赖共享 applying 指针 |
 | 图片保存路径出现两个正式值 | UI-1/UI-2 | 只保留 AppSettings 草稿，控件显示从该值刷新 |
 | 固定控件迁入 `.ui` 后布局变化 | UI-3 | 保持对象名、Layout stretch、minimumSize 和 sizePolicy，逐模式截图核对 |
-| 钢印两个多边形再次被混用 | UI-4 | `ImageLabel`、几何输入和保存结果都使用独立 `stampPolygon/datePolygon` 字段，禁止从其中一个推导另一个 |
+| 钢印两个多边形再次被混用 | UI-4 | `InspectionImageCanvas`、几何输入和保存结果都使用独立 `stampPolygon/datePolygon` 字段，禁止从其中一个推导另一个 |
 | 钢印两个锚点中心混淆 | UI-4 | `stampPolygon` 只减吸管口锚点中心，`datePolygon` 只减日期锚点中心，逐字段对照模板 JSON 和检测消费端 |
 | 显示坐标转换变化 | UI-4 | 冻结原图尺寸、控件尺寸、KeepAspectRatio 实际图像尺寸、留白偏移和边界裁剪样本，统一由现有几何服务转换 |
 | 模式切换遗留旧框线 | UI-4 | 每次进入新模式先清空全部临时几何；保存前按当前模式验证必需字段和非适用字段为空 |
 | 模板向导与绘图步骤不同步 | UI-4 | 只消费强类型步骤事件；初始、失败、Esc、二维码重试和工作流完成都由同一状态变化驱动 |
-| 向导连接重新绕过 MainWindow | UI-4 | `TemplateEditorPage` 直接连接 `ImageLabel`，MainWindow 只通知模式切换，不中转绘图事件 |
+| 向导连接重新绕过 MainWindow | UI-4 | `TemplateEditorPage` 直接连接 `InspectionImageCanvas`，MainWindow 只通知模式切换，不中转绘图事件 |
 | Qt 主线程仍被阻塞 | UI-4 | 生产 UI 中 `cv::waitKey/namedWindow/imshow` 零引用 |
 | 精简时误删状态防线 | 全阶段 | OperationUiPolicy 与应用服务底层命令校验均保留 |
 | 当前未提交 UI 样式差异混入 | UI-0 | 先验证和提交当前 UI，再建立新阶段基线 |
@@ -997,7 +997,7 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 - `template_editor_support.h/.cpp` 和 qmake 条目保持为零。
 - 旧 `SecondaryRegionMode`、`STEP_SECONDARY_RECT` 和只能表示一个多边形的旧状态为零。
 - `signal_templateGuideEvent(QString, int)` 及 `"tracking_done"/"poly_done"` 等字符串绘图协议为零。
-- MainWindow 对 `ImageLabel` 模板绘图事件的中转连接为零。
+- MainWindow 对 `InspectionImageCanvas` 模板绘图事件的中转连接为零。
 - 无消费者的 `mousePressed/mouseMoved/mouseReleased(QMouseEvent *)` 信号为零。
 - `TemplateDrawingGeometry` 及其他重复 UI 几何快照类型为零；应用层只保留唯一的 `TemplateDrawingInput`。
 - 保存代码中使用 `datePolygon` 推导 `stampPolygon` 的路径为零。
@@ -1068,7 +1068,7 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 
 一次性完成 UI-1、UI-2、UI-3，Agent 完成全部静态门禁后，由用户统一构建和人工验证。通过后创建一个本地提交。
 
-### 批次 B：`ImageLabel` 模式化绘图与向导绑定
+### 批次 B：`InspectionImageCanvas` 模式化绘图与向导绑定
 
 单独完成修订后的 UI-4。字库、OCR 和二维码流程只做状态显式化与强类型向导绑定，不改变既有步骤；钢印修复为两个锚点、两个独立多边形的四步流程。批次必须使用真实刚印模板和检测样本验证，通过后才能创建第二个本地提交。
 
@@ -1096,11 +1096,11 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 完成 UI-4 后：
 
 - 模板制作只使用一套 Qt UI。
-- 同一个 `ImageLabel` 按检测模式执行两步、三步、四步或禁用绘图，不再用一个通用多边形表达不同业务区域。
+- 同一个 `InspectionImageCanvas` 按检测模式执行两步、三步、四步或禁用绘图，不再用一个通用多边形表达不同业务区域。
 - 刚印框选不阻塞 Qt 事件循环，并正确保存吸管口锚点/钢印多边形和日期锚点/日期多边形。
-- 模板制作向导直接绑定 `ImageLabel` 的强类型绘图状态，不获取原始鼠标事件，也不经过 MainWindow 中转。
+- 模板制作向导直接绑定 `InspectionImageCanvas` 的强类型绘图状态，不获取原始鼠标事件，也不经过 MainWindow 中转。
 - `TemplateEditorPage` 继续统一拥有向导文案、二维码校验和保存确认。
-- `ImageLabel` 只通过五个私有几何成员和只读 getter 管理模板制作期间的 UI 坐标、交互状态和框线显示，不拥有 `TemplateDrawingInput`、模板磁盘、应用服务或检测业务。
+- `InspectionImageCanvas` 只通过五个私有几何成员和只读 getter 管理模板制作期间的 UI 坐标、交互状态和框线显示，不拥有 `TemplateDrawingInput`、模板磁盘、应用服务或检测业务。
 - `TemplateEditorPage` 只在校验或保存时组装唯一的应用层 `TemplateDrawingInput`，不维护重复的 UI 几何快照结构。
 - `template_editor_support` 保持删除，HighGUI 交互零引用。
 - 模板 Schema、坐标参考中心、检测算法、阈值、统计、PLC 和存图合同保持阶段 8 终局。

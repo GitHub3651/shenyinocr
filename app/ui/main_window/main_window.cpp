@@ -1,0 +1,480 @@
+// 文件作用：本文件用于构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
+// 主要职责：构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
+// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
+// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
+/**
+ * @file ui/main_window/main_window.cpp
+ * @brief 工业视觉识别系统主窗口实现文件
+ * @details 实现图像采集、OCR识别、模板匹配、PLC通信等核心功能
+ * @author 优化版本
+ * @date 2024
+ */
+
+#include "ui/main_window/main_window.h"
+#include "contracts/detection_mode.h"
+#include "ui/main_window/inspection/inspection_page.h"
+#include "ui/main_window/settings/machine_settings_page.h"
+#include "ui/main_window/template/template_editor_page.h"
+#include "system_support/logging/log_categories.h"
+#include "ui_detection_settings_page.h"
+#include "ui_image_settings_page.h"
+#include "ui_inspection_info_page.h"
+#include "ui_main_window.h"
+#include "ui_plc_settings_page.h"
+#include "ui_software_settings_page.h"
+
+
+#include <QTimer>
+#include <QCheckBox>
+#include <QLabel>
+#include <QPushButton>
+#include <QString>
+#include <QMessageBox>
+#include <QSignalBlocker>
+#include <QStyle>
+#include <QTextOption>
+#include <QToolButton>
+
+/**
+ * @brief MainWindow构造函数
+ * @param parent 父窗口指针
+ * @details 初始化UI、相机、OCR模型、定时器等核心组件
+ */
+MainWindow::MainWindow(
+    const std::shared_ptr<InspectionApplicationService> &inspectionService,
+    InspectionRuntime *runtime,
+    const std::shared_ptr<SettingsApplicationService> &settingsService,
+    const std::shared_ptr<TemplateApplicationService> &templateService,
+    QWidget *parent)
+    : QWidget(parent),
+      ui(new Ui::MainWindow),
+      m_inspectionApplicationService(inspectionService),
+      m_runtime(runtime),
+      m_settingsApplicationService(settingsService),
+      m_templateApplicationService(templateService),
+      m_inspectionInfoUi(new Ui::InspectionInfoPage),
+      m_detectionSettingsUi(new Ui::DetectionSettingsPage),
+      m_imageSettingsUi(new Ui::ImageSettingsPage),
+      m_plcSettingsUi(new Ui::PlcSettingsPage),
+      m_softwareSettingsUi(new Ui::SoftwareSettingsPage)
+{
+    ui->setupUi(this);
+    m_inspectionInfoUi->setupUi(ui->page_inspectionInfo);
+    m_detectionSettingsUi->setupUi(ui->page_detectionSettings);
+    m_imageSettingsUi->setupUi(ui->page_imageSettings);
+    m_plcSettingsUi->setupUi(ui->page_plcSettings);
+    m_softwareSettingsUi->setupUi(ui->page_softwareSettings);
+    ui->stackedWidget_rightDrawer->setCurrentWidget(ui->page_inspectionInfo);
+    ui->toolButton_showInspectionInfo->setChecked(true);
+
+    m_detectionSettingsUi->resultExportIp->setText(
+                machineSettings().resultExportReceiverIp);
+    m_detectionSettingsUi->resultExportPort->setValue(
+                machineSettings().resultExportReceiverPort);
+    {
+        QSignalBlocker blocker(m_detectionSettingsUi->resultExportEnable);
+        m_detectionSettingsUi->resultExportEnable->setChecked(
+                    machineSettings().resultExportEnabled);
+    }
+    initStyle();
+    initializePages();
+
+    connect(ui->toolButton_showInspectionInfo,
+            &QToolButton::clicked,
+            this,
+            [this]() {
+        showRightPanelPage(
+                    ui->page_inspectionInfo,
+                    ui->toolButton_showInspectionInfo);
+    });
+    connect(ui->toolButton_showDetectionSettings,
+            &QToolButton::clicked,
+            this,
+            [this]() {
+        showRightPanelPage(
+                    ui->page_detectionSettings,
+                    ui->toolButton_showDetectionSettings);
+    });
+    connect(ui->toolButton_showImageSettings,
+            &QToolButton::clicked,
+            this,
+            [this]() {
+        showRightPanelPage(
+                    ui->page_imageSettings,
+                    ui->toolButton_showImageSettings);
+    });
+    connect(ui->toolButton_showPlcSettings,
+            &QToolButton::clicked,
+            this,
+            [this]() {
+        showRightPanelPage(
+                    ui->page_plcSettings,
+                    ui->toolButton_showPlcSettings);
+    });
+    connect(ui->toolButton_showSoftwareSettings,
+            &QToolButton::clicked,
+            this,
+            [this]() {
+        showRightPanelPage(
+                    ui->page_softwareSettings,
+                    ui->toolButton_showSoftwareSettings);
+    });
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::runtimeSnapshotChanged,
+            this,
+            [this](const RuntimeSnapshot &snapshot) {
+        updateResultExportUi(snapshot);
+        updateOperationUiState();
+    });
+
+    m_plcHealthTimer = new QTimer(this);
+    m_plcHealthTimer->setInterval(500);
+    connect(m_plcHealthTimer,
+            &QTimer::timeout,
+            this,
+            &MainWindow::checkInspectionPlcHealth);
+    m_plcHealthTimer->start();
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::captureStopped,
+            this,
+            [this](bool preview) {
+        if (preview) {
+            return;
+        }
+        if (operationUiState() == OperationUiState::Detecting) {
+            m_inspectionApplicationService
+                    ->completeUnexpectedAcquisitionStop();
+            m_inspectionInfoUi->label_runtimeStatus->setText(
+                        "识别线程已停止");
+            updateOperationUiState();
+        }
+    },
+    Qt::QueuedConnection);
+    connect(
+        m_runtime,
+        &InspectionRuntime::presentationReady,
+        this,
+        [this](const InspectionPresentation &presentation) {
+        m_inspectionPage->present(presentation);
+        m_inspectionPage->setStatistics(m_runtime->statistics());
+    },
+    Qt::QueuedConnection);
+    connect(
+        m_runtime,
+        &InspectionRuntime::imageSaveFailed,
+        this,
+        [this](quint64 totalFailed, const QString &latestError) {
+        m_inspectionPage->reportImageSaveFailure(
+                    totalFailed, latestError);
+    },
+    Qt::QueuedConnection);
+    connect(
+        m_runtime,
+        &InspectionRuntime::faultSnapshotChanged,
+        this,
+        [this](const InspectionFaultSnapshot &snapshot) {
+        if (!m_faultAlarmPresented) {
+            ui->toolButton_showInspectionInfo->setChecked(true);
+            showRightPanelPage(
+                        ui->page_inspectionInfo,
+                        ui->toolButton_showInspectionInfo);
+        }
+        m_inspectionPage->presentFault(snapshot, m_faultAlarmPresented);
+        updateOperationUiState();
+    },
+    Qt::QueuedConnection);
+}
+
+void MainWindow::showRightPanelPage(
+    QWidget *page,
+    QToolButton *button)
+{
+    if (!button->isChecked()) {
+        hideRightPanel();
+        return;
+    }
+
+    ui->stackedWidget_rightDrawer->setCurrentWidget(page);
+    ui->widget_rightPanel->show();
+    ui->toolButton_showInspectionInfo->setChecked(
+                button == ui->toolButton_showInspectionInfo);
+    ui->toolButton_showDetectionSettings->setChecked(
+                button == ui->toolButton_showDetectionSettings);
+    ui->toolButton_showImageSettings->setChecked(
+                button == ui->toolButton_showImageSettings);
+    ui->toolButton_showPlcSettings->setChecked(
+                button == ui->toolButton_showPlcSettings);
+    ui->toolButton_showSoftwareSettings->setChecked(
+                button == ui->toolButton_showSoftwareSettings);
+}
+
+void MainWindow::hideRightPanel()
+{
+    ui->widget_rightPanel->hide();
+    ui->toolButton_showInspectionInfo->setChecked(false);
+    ui->toolButton_showDetectionSettings->setChecked(false);
+    ui->toolButton_showImageSettings->setChecked(false);
+    ui->toolButton_showPlcSettings->setChecked(false);
+    ui->toolButton_showSoftwareSettings->setChecked(false);
+}
+
+void MainWindow::initializePages()
+{
+    m_inspectionPage.reset(new InspectionPage(
+                *this, *ui, *m_inspectionInfoUi));
+    m_machineSettingsPage.reset(new MachineSettingsPage(
+                *m_detectionSettingsUi,
+                *m_imageSettingsUi,
+                *m_plcSettingsUi,
+                *m_softwareSettingsUi,
+                *m_settingsApplicationService,
+                m_settingsEditState));
+    m_templateEditorPage.reset(new TemplateEditorPage(
+                *this,
+                *ui,
+                *m_detectionSettingsUi,
+                *m_imageSettingsUi,
+                *m_templateApplicationService,
+                *m_inspectionApplicationService,
+                *m_settingsApplicationService,
+                m_settingsEditState));
+    connect(m_templateEditorPage.get(),
+            &TemplateEditorPage::operationUiRefreshRequested,
+            this, &MainWindow::updateOperationUiState);
+    connect(m_templateEditorPage.get(),
+            &TemplateEditorPage::previewFramePresentationRequested,
+            this, &MainWindow::presentTemplatePreviewFrame);
+    connect(ui->toolButton_createTemplate,
+            &QToolButton::clicked,
+            m_templateEditorPage.get(),
+            &TemplateEditorPage::handleTemplateCaptureButton);
+    connect(m_detectionSettingsUi->pushButton_applyPhotoDistance,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyPhotoDistance_clicked);
+    connect(m_detectionSettingsUi->resultExportConnect,
+            &QPushButton::clicked,
+            this, &MainWindow::on_resultExportConnect_clicked);
+    connect(m_detectionSettingsUi->resultExportDisconnect,
+            &QPushButton::clicked,
+            this, &MainWindow::on_resultExportDisconnect_clicked);
+    connect(m_detectionSettingsUi->resultExportEnable,
+            &QCheckBox::toggled,
+            this, &MainWindow::on_resultExportEnable_toggled);
+
+    connect(m_imageSettingsUi->pushButton_browseImageSavePath,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_browseImageSavePath_clicked);
+    connect(m_imageSettingsUi->pushButton_applyCameraExposure,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyCameraExposure_clicked);
+    connect(m_imageSettingsUi->pushButton_applyCameraGain,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyCameraGain_clicked);
+    connect(m_imageSettingsUi->pushButton_applyColorChannel,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyColorChannel_clicked);
+    connect(m_imageSettingsUi->pushButton_applyImageRotation,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyImageRotation_clicked);
+
+    connect(m_plcSettingsUi->pushButton_connectPlc,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_connectPlc_clicked);
+    connect(m_plcSettingsUi->pushButton_disconnectPlc,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_disconnectPlc_clicked);
+    connect(m_plcSettingsUi->pushButton_applyPlcTriggerMode,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyPlcTriggerMode_clicked);
+    connect(m_plcSettingsUi->pushButton_applyPlcProcessParameters,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_applyPlcProcessParameters_clicked);
+
+    connect(m_softwareSettingsUi->pushButton_clearSoftwareData,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_clearSoftwareData_clicked);
+
+    connect(m_inspectionInfoUi->pushButton_resetTotalCount,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_resetTotalCount_clicked);
+    connect(m_inspectionInfoUi->pushButton_resetNgCount,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_resetNgCount_clicked);
+    connect(m_inspectionInfoUi->pushButton_resetRejectQueue,
+            &QPushButton::clicked,
+            this, &MainWindow::on_pushButton_resetRejectQueue_clicked);
+
+    const OperationResult resetResult =
+            m_inspectionApplicationService->resetStatistics();
+    if (!resetResult.isSuccess()) {
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=statistics.reset_failed context=startup code=%1 reason=%2")
+                   .arg(resetResult.error.code,
+                        resetResult.error.userMessage);
+    } else {
+        m_inspectionPage->setStatistics(m_runtime->statistics());
+    }
+    m_detectionSettingsUi->textEdit_targetText->setWordWrapMode(
+                QTextOption::WordWrap);
+    setupSoftwareSettingsPage();
+    m_machineSettingsPage->installWheelProtection(*this);
+    m_machineSettingsPage->setupNumericInputValidators();
+    setupNonPersistentDefaults();
+    m_machineSettingsPage->setupBindings();
+    m_machineSettingsPage->initialize(
+                m_settingsApplicationService->current());
+    m_currentDetectModeId = m_templateEditorPage->currentDetectModeId();
+    m_templateEditorPage->restoreTemplatesForMode(
+                m_currentDetectModeId, false);
+    updateTissueRoughnessUiVisibility();
+    setupDetectModeChangeTracking();
+    m_machineSettingsPage->clearAllDirty();
+    m_templateEditorPage->clearTemplateDirty();
+    updateOperationUiState();
+    updateResultExportUi(m_inspectionApplicationService->runtimeSnapshot());
+
+    QTimer::singleShot(1000, this, [this]() {
+        const QString targetIp =
+                m_plcSettingsUi->lineEdit_plcIpAddress->text();
+        PlcConnectionCommand command;
+        command.address = targetIp;
+        command.rack = m_plcSettingsUi->lineEdit_plcRack->text().toInt();
+        command.slot = m_plcSettingsUi->lineEdit_plcSlot->text().toInt();
+        const OperationResult result =
+                m_inspectionApplicationService->connectPlc(command);
+        if (result.isSuccess()) {
+            const QStringList connectionKeys =
+                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot";
+            if (saveAppliedHardwareSettings(connectionKeys)) {
+                QMessageBox::information(this, "提示", "PLC 自动连接成功");
+            }
+        } else {
+            const bool stateRejected =
+                    result.error.code == QStringLiteral("PLC_RUNTIME_BUSY")
+                    || result.error.code
+                       == QStringLiteral("PLC_ALREADY_CONNECTED");
+            const QString errorMessage = stateRejected
+                    ? result.error.userMessage
+                    : QString(
+                        "PLC 自动连接失败！\n尝试连接的地址：%1\n"
+                        "请检查网络或稍后手动连接！").arg(targetIp);
+            m_machineSettingsPage->restoreAppliedValues(
+                        QStringList()
+                        << "plc.ip" << "plc.rack" << "plc.slot");
+            QMessageBox::warning(this, "警告", errorMessage);
+        }
+        updateOperationUiState();
+    });
+}
+
+/**
+ * @brief MainWindow析构函数
+ * @details 清理所有资源，关闭相机、停止线程、删除临时文件
+ */
+MainWindow::~MainWindow()
+{
+    m_templateEditorPage->resetTemplateCaptureState();
+    m_inspectionApplicationService->shutdown();
+
+}
+
+void MainWindow::updateResultExportUi(const RuntimeSnapshot &snapshot)
+{
+    DetectionMode mode = DetectionMode::Word;
+    const bool barcodeMode = detectionModeFromUiId(
+                machineSettings().detectModeId, &mode)
+            && mode == DetectionMode::BarcodeWord;
+    m_detectionSettingsUi->groupBox_resultExport->setVisible(barcodeMode);
+    if (!barcodeMode) {
+        return;
+    }
+    const bool busy = snapshot.state == ApplicationRuntimeState::Starting
+            || snapshot.state == ApplicationRuntimeState::Running
+            || snapshot.state == ApplicationRuntimeState::Stopping;
+    const bool connected = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Connected;
+    const bool connecting = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Connecting;
+    const bool checking = snapshot.resultExportConnectionState
+            == ResultExportConnectionState::Checking;
+    QString status = QStringLiteral("● 已断开");
+    QString statusUiState = QStringLiteral("offline");
+    if (connecting) {
+        status = QStringLiteral("● 正在连接…");
+        statusUiState = QStringLiteral("working");
+    } else if (checking) {
+        status = QStringLiteral("● 正在检查…");
+        statusUiState = QStringLiteral("working");
+    } else if (connected) {
+        status = snapshot.resultExportRoundTripMs >= 0.0
+                ? QStringLiteral("● 已连接 · %1 ms")
+                  .arg(snapshot.resultExportRoundTripMs, 0, 'f', 2)
+                : QStringLiteral("● 已连接");
+        statusUiState = QStringLiteral("online");
+    }
+    m_detectionSettingsUi->resultExportStatus->setText(status);
+    if (m_detectionSettingsUi->resultExportStatus->property("uiState").toString()
+            != statusUiState) {
+        m_detectionSettingsUi->resultExportStatus->setProperty("uiState", statusUiState);
+        m_detectionSettingsUi->resultExportStatus->style()->unpolish(
+                    m_detectionSettingsUi->resultExportStatus);
+        m_detectionSettingsUi->resultExportStatus->style()->polish(
+                    m_detectionSettingsUi->resultExportStatus);
+        m_detectionSettingsUi->resultExportStatus->update();
+    }
+    const bool canEdit = !busy && !connected && !connecting
+            && !checking;
+    m_detectionSettingsUi->resultExportIp->setEnabled(canEdit);
+    m_detectionSettingsUi->resultExportPort->setEnabled(canEdit);
+    m_detectionSettingsUi->resultExportConnect->setEnabled(!busy && !connecting && !checking);
+    m_detectionSettingsUi->resultExportDisconnect->setEnabled(!busy
+                                           && snapshot.resultExportConnectionState
+                                           != ResultExportConnectionState::Disconnected);
+    const bool enableAvailable = !busy
+            && snapshot.state != ApplicationRuntimeState::Fault;
+    m_detectionSettingsUi->resultExportEnable->setEnabled(enableAvailable);
+}
+
+void MainWindow::on_resultExportConnect_clicked()
+{
+    const RuntimeSnapshot snapshot = m_inspectionApplicationService->runtimeSnapshot();
+    if (snapshot.resultExportConnectionState == ResultExportConnectionState::Connected) {
+        m_inspectionApplicationService->requestResultExportConnectionCheck();
+        return;
+    }
+    AppSettings candidate = m_settingsApplicationService->current();
+    candidate.resultExportReceiverIp = m_detectionSettingsUi->resultExportIp->text().trimmed();
+    candidate.resultExportReceiverPort = m_detectionSettingsUi->resultExportPort->value();
+    const OperationResult saved = m_settingsApplicationService
+            ->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        showParameterWarning(QStringLiteral("结果传输设置保存失败"),
+                             saved.error.userMessage);
+        return;
+    }
+    m_inspectionApplicationService->requestResultExportConnect(
+                candidate.resultExportReceiverIp,
+                static_cast<quint16>(candidate.resultExportReceiverPort));
+}
+
+void MainWindow::on_resultExportDisconnect_clicked()
+{
+    m_inspectionApplicationService->requestResultExportDisconnect();
+}
+
+void MainWindow::on_resultExportEnable_toggled(bool enabled)
+{
+    AppSettings candidate = m_settingsApplicationService->current();
+    candidate.resultExportEnabled = enabled;
+    const OperationResult saved = m_settingsApplicationService
+            ->saveConfiguration(candidate);
+    if (!saved.isSuccess()) {
+        QSignalBlocker blocker(m_detectionSettingsUi->resultExportEnable);
+        m_detectionSettingsUi->resultExportEnable->setChecked(
+                    m_settingsApplicationService->current()
+                    .resultExportEnabled);
+        showParameterWarning(QStringLiteral("结果传输设置保存失败"),
+                             saved.error.userMessage);
+    }
+}

@@ -1,36 +1,65 @@
 # ui：界面层
 
-本目录负责控件、对话框、页面交互和结果展示。它只调用 Application Service，不直接访问 Runtime、设备 SDK、设置 Store 或模板磁盘。
+本目录负责主窗口、页面交互、模板弹窗和检测结果呈现。界面层调用现有 Application Service，不直接实现检测算法、设备时序、设置存储或模板磁盘规则。
 
-## 文件树
+## 目录结构
 
 ```text
 ui/
-├─ main_window.ui
-├─ main_window.h/.cpp                    主窗口内部组合、跨页面协调和生命周期
-├─ main_window_inspection.cpp            检测/相机/PLC槽和操作状态
-├─ main_window_settings.cpp              设置、模式显隐和参数应用
-├─ pages/
-│  ├─ inspection_page.h/.cpp
-│  ├─ machine_settings_page.h/.cpp
-│  └─ template_editor_page.h/.cpp        模板选择/编辑/取景集中页面
-├─ dialogs/
-│  ├─ template_selection_dialog.h/.cpp   预勾选、单/多选、排序
-│  └─ character_template_editor_dialog.h/.cpp
-├─ controllers/
-│  ├─ operation_ui_policy.h/.cpp
-│  └─ settings_edit_state.h/.cpp
-├─ presenters/inspection_fault_presenter.h/.cpp
-└─ widgets/image_label.h/.cpp
+├─ README.md
+└─ main_window/
+   ├─ main_window.ui
+   ├─ main_window.h/.cpp
+   ├─ main_window_inspection.cpp
+   ├─ main_window_settings.cpp
+   ├─ inspection_image_canvas.h/.cpp
+   ├─ operation_ui_policy.h/.cpp
+   ├─ inspection/
+   │  ├─ inspection_info_page.ui
+   │  ├─ inspection_page.h/.cpp
+   │  └─ inspection_fault_presenter.h/.cpp
+   ├─ settings/
+   │  ├─ detection_settings_page.ui
+   │  ├─ image_settings_page.ui
+   │  ├─ plc_settings_page.ui
+   │  ├─ software_settings_page.ui
+   │  ├─ machine_settings_page.h/.cpp
+   │  └─ settings_edit_state.h/.cpp
+   └─ template/
+      ├─ template_editor_page.h/.cpp
+      ├─ selection/
+      │  └─ template_selection_dialog.ui/.h/.cpp
+      ├─ save/
+      │  └─ template_save_dialog.ui/.h/.cpp
+      └─ character_editor/
+         ├─ character_template_editor_dialog.ui/.h/.cpp
+         └─ character_crop_label.h/.cpp
 ```
+
+## Designer 编辑入口
+
+- 主窗口骨架和主控操作区：`main_window/main_window.ui`。
+- 检测信息、参数设定、图像设置、PLC 通讯和软件设置：分别打开对应功能目录中的五个页面 `.ui`。
+- 选择模板、保存模板和分割字符模板：分别打开三个模板子目录中的弹窗 `.ui`。
+
+`main_window.ui` 只保留五个空页面根节点。`MainWindow` 依次对主窗口和五个页面生成 Ui 调用 `setupUi()`，再构造 `InspectionPage`、`MachineSettingsPage` 和 `TemplateEditorPage`。主窗口、五个页面和三个弹窗的生成 Ui 均由各自所有者使用 `std::unique_ptr` 管理。
+
+## 页面协作
+
+- `InspectionPage` 直接使用主窗口 Ui 和检测信息页 Ui，更新主图像、判定、运行状态和统计。
+- `MachineSettingsPage` 直接使用四个设置页 Ui，管理参数绑定、校验、未应用状态和运行时禁用规则。
+- `TemplateEditorPage` 直接使用主窗口 Ui、参数设定页 Ui 和图像设置页 Ui，处理模板选择、制作、保存和参数编辑。
+- MainWindow 只保留跨页面或应用级协调；迁出页面且仍由 MainWindow 处理的按钮采用显式函数指针连接。
+
+右侧五个导航按钮切换同一个 `QStackedWidget`。启动时默认显示检测信息；再次点击当前按钮会收起右侧面板；检测启动成功后自动收起；Fault 首次呈现时自动打开检测信息。
 
 ## 模板 UI
 
 ```text
 选择模板
- → TemplateSelectionDialog 读取当前正式路径并预勾选
- → 增加/取消/排序只改对话框草稿
- → 确认时 saveTemplatePaths，一次成功后关闭
+ → TemplateSelectionDialog 读取当前正式路径
+ → 增加和勾选移除只修改对话框内列表
+ → 确认时通过 SettingsApplicationService 保存模板路径
 
 当前编辑模板下拉框
  → 项内部保存绝对路径
@@ -39,66 +68,73 @@ ui/
 
 移除模板
  → 复制当前路径列表并移除当前项
- → saveTemplatePaths
+ → 保存新的模板路径列表
  → 不读取、不移动、不删除模板文件夹
 ```
 
-单模板模式最多一项；多模板模式可排序多项；纸巾模式隐藏选择、名称、新建、保存、字符和 ROI 制作控件，只显示粗糙度阈值。
+单模板模式最多一项；多模板模式可包含多项；纸巾模式隐藏模板选择、名称、保存、字符和 ROI 制作控件，只显示粗糙度阈值。
 
-四种模板模式统一使用主界面的 `ImageLabel`，纸巾模式禁用模板绘图。字库和 OCR 使用“定位锚点 → 检测多边形”，二维码使用“日期锚点 → 二维码矩形 → 日期多边形”，刚印使用“吸管口锚点 → 钢印多边形 → 日期锚点 → 日期多边形”。刚印的两个锚点和两个多边形分别保存、分别换算；不再从日期多边形推导钢印区域，也不再创建 OpenCV 原生交互窗口。
+四种模板模式统一使用主窗口的 `InspectionImageCanvas`，纸巾模式禁用模板绘图。字库和 OCR 使用“定位锚点 → 检测多边形”，二维码使用“日期锚点 → 二维码矩形 → 日期多边形”，钢印使用“吸管口锚点 → 钢印多边形 → 日期锚点 → 日期多边形”。钢印的两个锚点和两个多边形分别保存、分别换算，不从日期多边形推导钢印区域，也不创建 OpenCV 原生交互窗口。
 
-`ImageLabel` 只维护显示坐标、绘制步骤和框线，并向 `TemplateEditorPage` 发出强类型进度事件。模板页直接绑定该事件，负责中文向导、二维码即时校验和保存确认；MainWindow 不转发原始鼠标事件或模板绘图事件。
+`InspectionImageCanvas` 只维护显示坐标、绘制步骤和框线，并向 `TemplateEditorPage` 发出强类型进度事件。模板页负责中文向导、二维码即时校验和保存确认；MainWindow 不转发原始鼠标事件或模板绘图事件。
 
 ## 页面所有权与调用流
 
 ```text
 application_startup
-  └─ 创建 MainWindow（只传入三个应用服务）
-       ├─ setupUi()
-       ├─ 内部创建 InspectionPage
-       ├─ 内部创建 MachineSettingsPage
-       └─ 内部创建 TemplateEditorPage
+  └─ 创建 MainWindow（传入应用服务）
+       ├─ setupUi(main_window.ui)
+       ├─ setupUi(五个独立页面 .ui)
+       ├─ 创建 InspectionPage
+       ├─ 创建 MachineSettingsPage
+       └─ 创建 TemplateEditorPage
 ```
 
-Startup 不知道 Page、ViewBindings、控件地址、页面状态地址或 UI 回调。ViewBindings 只在 MainWindow 内部构造，用于限制每个 Page 可访问的控件范围。MainWindow 析构时先销毁三个 Page，再释放 `Ui::MainWindow`。
-
-页面自有按钮直接连接到对应 Page；MainWindow 只保留相机、检测、PLC、模式切换、故障和退出等跨页面或应用级协调。固定的“当前编辑模板”行和模板制作向导定义在 `main_window.ui`，C++ 只更新内容、可见性和运行状态。
+Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow 直接持有自身和五个页面的生成 Ui；三个模板弹窗分别持有自身生成 Ui。逻辑 Page 使用明确的生成 Ui、服务和状态引用，不通过 ViewBindings、回调包装或控件查找访问界面。
 
 ## 操作状态
 
 `OperationUiPolicy` 根据 `CameraClosed/CameraReady/Detecting/Stopping/Fault/TemplatePreviewing/TemplateFrozen` 统一计算权限。UI 禁用用于明确状态展示；真正影响设备和生产运行的操作仍由 Application/Runtime 检查。
 
+## 专用控件
+
+`InspectionImageCanvas` 是主窗口唯一检测图像和模板绘制画布，负责图像自适应显示、绘制步骤、显示坐标和强类型绘图事件，不负责模板保存、提示文案或检测算法。
+
+`CharacterCropLabel` 只服务于字符模板编辑弹窗，负责字符框绘制、撤销、清空和坐标换算，并通过 `itemsChanged()` 通知弹窗刷新动态预览。
+
 ## 统一样式
 
-唯一正式样式文件是`app/resource/qss/app_theme.qss`，运行时只从`:/qss/app_theme.qss`加载。普通控件按控件类型自动继承样式，不在`.ui`或业务C++中填写完整`styleSheet`。当前主题按用户确认恢复旧版视觉习惯：全局默认使用16px粗体，重要状态和结果仍可在正式QSS中使用更大的字号或更高字重。
+唯一正式样式文件是 `app/resource/qss/app_theme.qss`，运行时只从 `:/qss/app_theme.qss` 加载。普通控件按控件类型自动继承样式，不在 `.ui` 或业务 C++ 中填写完整 `styleSheet`。
 
-模板制作向导的背景、边框、字体、字号和颜色只允许在`app_theme.qss`的`frame_templateGuide/label_templateGuideTitle/label_templateGuideBody`选择器中维护。C++只负责把提示栏放在图像上方、按文字收缩，以及根据检测模式和框选事件更新标题、步骤、错误和点数文案。
+模板制作向导的背景、边框、字体、字号和颜色只在 `app_theme.qss` 的 `frame_templateGuide`、`label_templateGuideTitle` 和 `label_templateGuideBody` 选择器中维护。C++ 只负责按检测模式和框选事件更新内容、可见性和状态。
 
-只允许两个按钮角色：
+按钮只使用两个已有角色：
 
 - `uiRole=primary`：当前页面的主要保存或确认动作。
 - `uiRole=danger`：清空、清零等危险动作。
 
-运行时视觉只使用三个属性：
+运行时视觉属性保持为：
 
 - `uiState`：运行、停止、警告、故障和模板取景状态。
-- `verdict`：`idle/ok/ng/fault`检测判定。
+- `verdict`：`idle/ok/ng/fault` 检测判定。
 - `hasError`：输入校验错误。
 
-C++只设置状态属性，并在属性变化后执行`unpolish/polish/update`；颜色、边框、字体和禁用视觉全部由`app_theme.qss`决定。确实需要单控件差异时，只在`app_theme.qss`末尾使用对象名选择器，不在控件创建点恢复样式字符串。
+C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁用视觉由 `app_theme.qss` 决定。
 
 ## 维护规则
 
-- `.ui` 对象名、自动槽声明和实现必须同步。
-- Startup 只能创建应用级服务和 MainWindow，不能重新创建或回挂三个 Page。
-- Page 自有按钮优先在 Page 内直接连接，不在 MainWindow 增加一行转发槽。
-- 固定布局放在 `main_window.ui`；只把定时器、Splitter Handle 装饰和数量真正动态的项目留在 C++。
-- 不新增 PageManager、UiManager、MainWindowBuilder、UiCompositionRoot 或事件总线。
+- 固定布局和固定控件放在对应 `.ui`；模板树节点、字符命名行和预览卡片等数据驱动内容可动态创建。
+- 页面类直接使用生成 Ui 引用，不增加 ViewBindings、控件 getter、Facade、页面工厂或路由器。
+- `.ui` 对象名、提升控件类名、C++ 引用、QSS 选择器和 qmake 清单必须同步。
+- 主图像提升控件固定为 `InspectionImageCanvas`，对象名固定为 `inspectionImageCanvas`。
+- `OperationUiPolicy` 是主控按钮状态的唯一规则，`SettingsEditState` 是未应用设置状态的唯一实现。
+- Startup 只创建应用级服务和 MainWindow，不创建或回挂三个逻辑 Page。
+- 页面自有按钮直接连接所属 Page；MainWindow 只保留跨页面或应用级协调。
+- 不新增 PageManager、UiManager、MainWindowBuilder、UiCompositionRoot、事件总线、页面注册表或控件访问层。
 - 当前编辑模板是临时 UI 状态，不写入设置。
-- 无效已选路径要保留显示并允许移除，不能静默切换或删除。
-- 新增页面行为优先放现有页面对象；不要把 MainWindow 再拆成大量一函数文件。
+- 无效已选模板路径保留显示并允许移除，不静默切换或删除。
 - 所有用户文字直接使用 UTF-8 中文，不写人为 Unicode 转义。
-- 新增普通控件不要设置`styleSheet`；先使用默认样式，再考虑现有角色，最后才考虑对象名覆盖。
-- `setEnabled()`和禁用原因 Tooltip 属于交互规则，不能因为样式重构而删除。
-- 固定控件说明直接使用 Qt 原生`setToolTip()`，列表项和下拉项的完整路径使用`Qt::ToolTipRole`；不要用`eventFilter`、定时器或`QToolTip::showText()`重复实现悬停显示。
-- 运行状态导致的禁用原因统一通过`applyOperationUiAccess()`覆盖，控件重新启用后恢复原 Tooltip；不为 Tooltip 新增 Manager、配置文件或字符串注册层。
+- 新增普通控件不设置内联 `styleSheet`；先使用正式 QSS 的类型样式和已有角色。
+- `setEnabled()` 和禁用原因 Tooltip 属于交互规则，不能因为界面重排而删除。
+- 固定控件说明使用 Qt 原生 `setToolTip()`；列表项和下拉项的完整路径使用 `Qt::ToolTipRole`。
+- 运行状态导致的禁用原因通过 `applyOperationUiAccess()` 更新；控件重新启用后恢复原 Tooltip。

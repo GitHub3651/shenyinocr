@@ -1618,3 +1618,35 @@
 - [x] A2-5 已删除全部 ROI 专用警告字段、信号、函数、状态记忆及 MainWindow 连接；`label_runtimeStatus` 保留运行中、停止、Fault、模板制作和存图失败等既有状态。
 - [x] Agent 静态门禁通过：计划列出的旧状态、ROI 警告、日期包装和重复 `reason` 符号在生产代码中均为零；队列/Worker 生命周期 `Cancelled` 仍保留且不构造 `DetectionResult`；`git diff --check` 通过；未修改算法、Schema、UI 布局、PLC 协议或资源文件。
 - [ ] 待用户在 Qt Creator 执行 qmake、Clean/Rebuild 和五模式软触发回归，并使用真实硬触发、PLC、延迟 NG、引擎异常和现场 Fault 恢复完成第 6 节统一验收；在此之前 A2 保持“代码实施完成，待验证”。
+
+## 二维码结果发送端内存队列精简（2026-09-02，代码完成待统一验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `04aea48354012f48845cd4bb751c0fba31b6f342`。开始时生产代码和暂存区无差异；计划索引、内存队列方案及右侧导航栏方案与图标目录属于既有工作区资产，实施过程未覆盖、暂存或提交这些无关资产。
+- [x] `ResultExportClient` 已原位精简为一个进程内 `QList<ResultExportRecord>` FIFO 和一个 `m_sendInFlight`：删除 `QSaveFile` 完整快照、启动残留清理、双 mutex、startup/处置状态、同步/放弃/清空接口、公开 shutdown、无用记录校验和元类型注册；析构函数在惰性网络资源存在时唯一执行 worker `stop()` 与线程 `quit()/wait()`。
+- [x] `ResultExportNetworkWorker` 继续唯一校验 ACK 格式、类型和产品 ID；匹配成功信号收口为无参数 `ackReceived()`，客户端收到后直接删除队首并继续发送。TCP、PING/PONG、1.5 秒 ACK、3 秒连接/检查、坏响应断开和接收端协议均未改变。
+- [x] `ResultService::process()` 已先构造发送记录，再执行 `finalizeResultClaim()`，成功后才内存入队；删除 enqueue 业务失败和本地队列 Fault 分支。入队后的到期延迟 NG、统计、界面图像渲染、异步存图、正常产品 PLC 和界面发布顺序保持不变。
+- [x] Runtime、Application 和 UI 已删除结果传输 ready/shutdown 转发、outbox 快照字段、处置信号与对话框、`Syncing`、关闭删除及旧日志文案；开始只要求 `Connected`，传输 Fault 恢复要求 `Connected && pendingCount() == 0`，非空退出只提示确认后随进程丢弃内存记录。
+- [x] 计划内生产差异为 12 个文件；`tools/result_receiver`、TCP JSON/ACK 格式、接收端 JSONL/CSV、AppSettings、二维码+三期算法、其他四种模式、相机、PLC、存图、模板和资源均无范围外修改。旧发送端符号、旧处置文案、带 ID ACK 成功信号和 `ResultExportRecord` 元类型注册均为零引用，`git diff --check` 通过。
+- [x] 内存队列精简方案、原 TCP/CSV 方案替代说明、计划索引和本执行记录已同步。Agent 未运行或间接触发 qmake、编译、测试程序、主程序、接收端、真实相机/PLC 或现场机械动作。
+- [ ] 等待用户统一执行 Qt Creator Release 构建，以及正常发送、ACK 前断线重发、接收端幂等、Fault 恢复、Stop/退出和五模式回归；通过前保持“代码完成待统一验证”。
+
+## 二维码结果传输启用策略持久化与连接解耦（2026-09-02，代码完成待统一验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `01675d78e35f01e7df01435adba20c16ec2a345a`。开始时计划内生产文件和暂存区无差异；计划索引、执行记录、项目限制、右侧导航栏方案与图标目录属于既有工作区资产，实施过程未覆盖、暂存或提交这些无关资产。
+- [x] AppSettings 已升级为严格 Schema 4，`resultExport.enabled` 是必填布尔字段，默认值为 `false`；保存、读取和相等比较均使用同一字段。Schema 3 继续沿用现有 `SETTINGS_RESET_REQUIRED` 整体重置流程，不增加迁移、可选读取、旧键别名、双 Schema 或回退。
+- [x] `resultExportEnable` 启用政策已与 TCP 状态解耦：程序启动从 AppSettings 恢复，切换时复用现有 `saveConfiguration()` 持久化，保存失败恢复正式值；连接、重连、主动断开和异常断开均不再修改勾选状态，空闲且非 Fault 时可在任意连接状态下切换。
+- [x] 二维码+三期开始识别门禁已收口到 `InspectionApplicationService::start()`：未启用时不要求连接；已启用但状态不是 `Connected` 时返回 `RESULT_EXPORT_NOT_CONNECTED` 和固定提示并拒绝启动。MainWindow 不增加第二套连接预检、继续对话框或临时覆盖状态。
+- [x] 每轮启用值直接冻结在 `ResultServiceRunConfiguration::resultExportEnabled`；删除单字段 `ResultExportRunConfiguration`、MainWindow 两个瞬时成员、`StartInspectionCommand` 临时布尔值、RuntimeSnapshot 无消费者字段和 InspectionRuntime 快照转发。保留有运行中传输 Fault 真实调用者的 `ResultService::resultExportEnabled()`。
+- [x] 计划内差异为 15 个生产文件和 1 个子系统 README；`.ui`、qmake、接收端、协议、内存 FIFO、产品 ID ACK、JSONL/CSV、算法、相机、PLC、存图、统计、样式和资源均无本计划修改。旧状态、旧转发、单字段包装、嵌套 `.resultExport.enabled` 和 AppSettings Schema 2/3 说明均为零引用。
+- [x] Agent 静态门禁通过：实际文件清单与计划完全一致，严格 UTF-8、尾随空白和末尾换行检查通过，`git diff --check` 通过。Agent 未运行或间接触发 qmake、编译、测试程序、主程序、接收端、真实相机/PLC 或现场机械动作。
+- [ ] 等待用户在 Qt Creator 执行 Release 构建，并统一验证 Schema 3 重置、启用状态重启恢复、未连接阻断启动、连接/断开不改勾选、启用/未启用发送、保存失败恢复、Stop/Fault/ACK/退出及五模式回归；通过前保持“代码完成待统一验证”。
+
+## 右侧折叠导航栏界面优化（2026-09-02，代码实施完成待验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `1e381854ecb0ae81c1bd44467edd35b808baa56b`；Schema 4 结果传输启用策略已经提交，本批次只在其上实施右侧界面改造，未执行暂存、提交、推送、合并、变基或历史改写。
+- [x] `main_window.ui` 已静态建立 80px 右侧导航栏、五个导航按钮、初始隐藏的 500～580px 抽屉、标题栏、收起按钮、五页 `QStackedWidget` 和检测信息滚动区；四个旧 `tab_*` 容器直接重命名为 `page_*`，唯一判定栏移到主图像上方。
+- [x] MainWindow 只增加 `showRightDrawerPage()` 和 `collapseRightDrawer()` 两个私有方法；启动成功收起抽屉并显示“等待结果”，取消或失败不改变抽屉；两个现有 Fault 入口复用 `m_faultAlarmPresented`，首次 Fault 保证显示检测信息，同一 Fault 后续刷新不反复打开。
+- [x] 旧 `splitter_mainContent`、`tabWidget_settings`、`groupBox_verdictResult`、动态 `QScrollArea`、Splitter Handle 装饰、MachineSettingsPage 绑定及关闭保存块均已删除；`rightPanelSplitterState/rightPanelSplitterStateBase64` 的字段、比较、JSON 读写和校验完整删除，AppSettings 升级为严格 Schema 5，未增加迁移、兼容读取、双写、替代字段或状态胶水。
+- [x] 五个用户指定 SVG 已原位重命名为 `nav_*.svg`，直接登记到 `image.qrc` 并启用 Qt SVG 模块，不生成 PNG；正式 QSS 已增加导航、抽屉和绿色/红色实底白字判定样式，并删除失效 Splitter、Tab 和旧判定包装选择器。
+- [x] Agent 静态门禁通过：`main_window.ui`、`image.qrc` 和五个 SVG 均可解析；五页父子关系、唯一判定控件和资源路径正确；生产代码旧布局符号零引用，Schema 5 保留严格 `templateSaveDirectory` 与 `resultExport.enabled/receiverIp/receiverPort`；`git diff --check` 通过。按项目限制未运行或间接触发 qmake、构建、测试程序、主程序、真实相机/PLC 或人工交互验证。
+- [ ] 等待用户在 Qt Creator 执行 Run qmake、Clean、Rebuild，并按右侧导航方案第 18 节完成布局、导航、启动、Fault、判定、设置草稿、SVG 和 Schema 5 回归；通过前保持“代码已实施，待用户验证”。

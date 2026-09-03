@@ -137,23 +137,31 @@ app/
 │     ├─ windows_crash_handler.h/.cpp
 │     └─ windows_crash_stack.h/.cpp
 └─ ui/
-   ├─ main_window.ui
-   ├─ main_window.h/.cpp
-   ├─ main_window_inspection.cpp
-   ├─ main_window_settings.cpp
-   ├─ controllers/
-   │  ├─ operation_ui_policy.h/.cpp
-   │  └─ settings_edit_state.h/.cpp
-   ├─ dialogs/
-   │  ├─ character_template_editor_dialog.h/.cpp
-   │  └─ template_selection_dialog.h/.cpp
-   ├─ pages/
-   │  ├─ inspection_page.h/.cpp
-   │  ├─ machine_settings_page.h/.cpp
-   │  ├─ template_editor_page.h/.cpp
-   │  └─ template_editor_support.h/.cpp
-   ├─ presenters/inspection_fault_presenter.h/.cpp
-   └─ widgets/image_label.h/.cpp
+   ├─ README.md
+   └─ main_window/
+      ├─ main_window.ui/.h/.cpp
+      ├─ main_window_inspection.cpp
+      ├─ main_window_settings.cpp
+      ├─ inspection_image_canvas.h/.cpp
+      ├─ operation_ui_policy.h/.cpp
+      ├─ inspection/
+      │  ├─ inspection_info_page.ui
+      │  ├─ inspection_page.h/.cpp
+      │  └─ inspection_fault_presenter.h/.cpp
+      ├─ settings/
+      │  ├─ detection_settings_page.ui
+      │  ├─ image_settings_page.ui
+      │  ├─ plc_settings_page.ui
+      │  ├─ software_settings_page.ui
+      │  ├─ machine_settings_page.h/.cpp
+      │  └─ settings_edit_state.h/.cpp
+      └─ template/
+         ├─ template_editor_page.h/.cpp
+         ├─ selection/template_selection_dialog.ui/.h/.cpp
+         ├─ save/template_save_dialog.ui/.h/.cpp
+         └─ character_editor/
+            ├─ character_template_editor_dialog.ui/.h/.cpp
+            └─ character_crop_label.h/.cpp
 ```
 
 当前统计：148 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
@@ -170,7 +178,7 @@ startup/main.cpp
     ├─ DetectionRegistry → InspectionRuntime → CameraSession
     ├─ InspectionApplicationService
     ├─ TemplateApplicationService
-    └─ MainWindow + InspectionPage + MachineSettingsPage + TemplateEditorPage
+    └─ MainWindow（内部拥有 InspectionPage、MachineSettingsPage 和 TemplateEditorPage）
 ```
 
 不要在页面或槽函数里再次创建 Store、Runtime 或设备实例。所有长期对象都在启动层建立一次并显式注入。
@@ -377,21 +385,23 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `main_window.ui` | 固定窗口布局和静态控件；对象名改动必须同步自动槽和绑定。 |
-| `main_window.h` | MainWindow组合接口、自动槽和页面指针。 |
-| `main_window.cpp` | UI初始化、三页面绑定/回调和组合根薄转发。 |
-| `main_window_inspection.cpp` | 检测/相机/PLC操作槽、操作状态应用、错误提示和悬停说明。 |
-| `main_window_settings.cpp` | 设置保存/恢复/清空、模式显隐、参数应用和模板页薄转发。 |
-| `controllers/operation_ui_policy.h/.cpp` | 唯一按钮权限矩阵和状态文字。 |
-| `controllers/settings_edit_state.h/.cpp` | 整机和模板未应用项记录。 |
-| `dialogs/template_selection_dialog.h/.cpp` | 当前路径预勾选、添加、异常状态、单选互斥、多选排序和确认保存。 |
-| `dialogs/character_template_editor_dialog.h/.cpp` | 字符框绘制、排序、命名、预览和字符图片结果。 |
-| `pages/inspection_page.h/.cpp` | 主检测页面显示、启动/停止交互和状态。 |
-| `pages/machine_settings_page.h/.cpp` | 整机设置控件绑定、验证、dirty 和硬件依赖权限。 |
-| `pages/template_editor_page.h/.cpp` | 模板取景、冻结、选择、当前编辑项、移除引用、新建/覆盖、字符编辑和批量更新，集中在一个实现文件以减少分散。 |
-| `pages/template_editor_support.h/.cpp` | 模板页少量无状态转换辅助。 |
-| `presenters/inspection_fault_presenter.h/.cpp` | Fault 文案和恢复提示。 |
-| `widgets/image_label.h/.cpp` | 图像显示、定位矩形、二维码矩形、日期多边形和刚印区域交互。 |
+| `main_window/main_window.ui` | 主窗口骨架、主控区、右侧导航和五个空页面根节点。 |
+| `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权和跨页面协调。 |
+| `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、故障和窗口关闭协调。 |
+| `main_window/main_window_settings.cpp` | 设置保存、恢复、清空、模式显隐和硬件参数应用。 |
+| `main_window/operation_ui_policy.h/.cpp` | 唯一按钮权限矩阵和状态文字。 |
+| `main_window/inspection/inspection_info_page.ui` | 检测状态、识别内容、统计和当前模板固定界面。 |
+| `main_window/inspection/inspection_page.h/.cpp` | 检测图像、判定、统计、运行状态和主控按钮状态。 |
+| `main_window/inspection/inspection_fault_presenter.h/.cpp` | Fault 文案和恢复提示。 |
+| `main_window/settings/*.ui` | 参数、图像、PLC 和软件设置的四个独立 Designer 页面。 |
+| `main_window/settings/machine_settings_page.h/.cpp` | 整机设置绑定、验证、dirty 和硬件依赖权限。 |
+| `main_window/settings/settings_edit_state.h/.cpp` | 整机和模板未应用项记录。 |
+| `main_window/template/template_editor_page.h/.cpp` | 模板取景、冻结、选择、编辑、保存、字符编辑和批量更新。 |
+| `main_window/template/selection/template_selection_dialog.ui/.h/.cpp` | 当前模板路径展示、添加、移除和确认应用。 |
+| `main_window/template/save/template_save_dialog.ui/.h/.cpp` | 模板名称、保存目录、浏览和输入校验。 |
+| `main_window/template/character_editor/character_template_editor_dialog.ui/.h/.cpp` | 字符框排序、命名、预览和字符图片结果。 |
+| `main_window/template/character_editor/character_crop_label.h/.cpp` | 字符框绘制、撤销、清空和坐标换算。 |
+| `main_window/inspection_image_canvas.h/.cpp` | 主图像显示和模式化模板区域绘制。 |
 
 ## 6. 常见修改指南
 

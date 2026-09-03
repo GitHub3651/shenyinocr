@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CharacterTemplateEditorDialog</class>
+ <widget class="QDialog" name="characterTemplateEditorDialog">
+  <property name="geometry">
+   <rect><x>0</x><y>0</y><width>920</width><height>760</height></rect>
+  </property>
+  <property name="windowTitle"><string>分割字符模板</string></property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QStackedWidget" name="stackedWidget">
+     <property name="currentIndex"><number>0</number></property>
+     <widget class="QWidget" name="page_draw">
+      <layout class="QVBoxLayout" name="verticalLayout_draw" stretch="1,0">
+       <property name="leftMargin"><number>10</number></property>
+       <property name="topMargin"><number>10</number></property>
+       <property name="rightMargin"><number>10</number></property>
+       <property name="bottomMargin"><number>10</number></property>
+       <property name="spacing"><number>8</number></property>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_content" stretch="1,0">
+         <property name="spacing"><number>10</number></property>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_drawLeft" stretch="0,1,0,0">
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="spacing"><number>8</number></property>
+           <item><widget class="QLabel" name="label_characterDrawHint"><property name="text"><string>在喷码区域图像上按住鼠标左键拖拽，逐个框选字符。
+字符框选顺序不限，系统会在命名前自动按位置排序。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+           <item><widget class="CharacterCropLabel" name="label_characterCropCanvas"><property name="minimumSize"><size><width>760</width><height>260</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property></widget></item>
+           <item><widget class="QLabel" name="label_characterSampleTitle"><property name="text"><string>结果示意图：</string></property></widget></item>
+           <item><widget class="QLabel" name="label_characterSample"><property name="minimumSize"><size><width>0</width><height>120</height></size></property><property name="maximumSize"><size><width>16777215</width><height>160</height></size></property><property name="alignment"><set>Qt::AlignCenter</set></property><property name="text"><string/></property></widget></item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QVBoxLayout" name="verticalLayout_drawRight" stretch="0,1">
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+           <property name="spacing"><number>8</number></property>
+           <item><widget class="QLabel" name="label_characterExistingTitle"><property name="text"><string>字符模板预览：</string></property></widget></item>
+           <item><widget class="QScrollArea" name="scrollArea_preview"><property name="minimumSize"><size><width>260</width><height>0</height></size></property><property name="maximumSize"><size><width>320</width><height>16777215</height></size></property><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="scrollAreaWidgetContents_preview"><layout class="QGridLayout" name="gridLayout_preview"><property name="leftMargin"><number>8</number></property><property name="topMargin"><number>8</number></property><property name="rightMargin"><number>8</number></property><property name="bottomMargin"><number>8</number></property><property name="spacing"><number>8</number></property></layout></widget></widget></item>
+          </layout>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_drawButtons">
+         <item><widget class="QPushButton" name="pushButton_undoCharacterBox"><property name="text"><string>撤销上一个字符框</string></property></widget></item>
+         <item><widget class="QPushButton" name="pushButton_clearCharacterBoxes"><property name="text"><string>清空所有字符框</string></property></widget></item>
+         <item><spacer name="horizontalSpacer_drawButtons"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+         <item><widget class="QPushButton" name="pushButton_nextCharacterNaming"><property name="text"><string>下一步命名</string></property></widget></item>
+         <item><widget class="QPushButton" name="pushButton_cancelCharacterDrawing"><property name="text"><string>取消</string></property></widget></item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="page_names">
+      <layout class="QVBoxLayout" name="verticalLayout_names" stretch="0,1,0">
+       <property name="leftMargin"><number>10</number></property><property name="topMargin"><number>10</number></property><property name="rightMargin"><number>10</number></property><property name="bottomMargin"><number>10</number></property><property name="spacing"><number>8</number></property>
+       <item><widget class="QLabel" name="label_characterNameHint"><property name="text"><string>请为每个字符图片填写字符名称。例如字符 1 只填写 1，重复名称会自动生成 1(1)、1(2)。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
+       <item><widget class="QScrollArea" name="scrollArea_names"><property name="widgetResizable"><bool>true</bool></property><widget class="QWidget" name="scrollAreaWidgetContents_names"><layout class="QVBoxLayout" name="verticalLayout_nameList"><property name="leftMargin"><number>0</number></property><property name="topMargin"><number>0</number></property><property name="rightMargin"><number>0</number></property><property name="bottomMargin"><number>0</number></property><property name="spacing"><number>8</number></property></layout></widget></widget></item>
+       <item><layout class="QHBoxLayout" name="horizontalLayout_nameButtons"><item><widget class="QPushButton" name="pushButton_backToCharacterDrawing"><property name="text"><string>返回框选</string></property></widget></item><item><spacer name="horizontalSpacer_nameButtons"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item><item><widget class="QPushButton" name="pushButton_saveCharacterTemplates"><property name="text"><string>保存字符模板</string></property><property name="uiRole" stdset="0"><string>primary</string></property></widget></item><item><widget class="QPushButton" name="pushButton_cancelCharacterNaming"><property name="text"><string>取消</string></property></widget></item></layout></item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>CharacterCropLabel</class>
+   <extends>QLabel</extends>
+   <header>ui/main_window/template/character_editor/character_crop_label.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

@@ -3,7 +3,6 @@
 
 #include "contracts/detection_mode.h"
 
-#include <QByteArray>
 #include <QString>
 #include <QStringList>
 
@@ -28,7 +27,7 @@ bool operator!=(const DetectionSchemes &left,
 
 struct AppSettings
 {
-    static const int CurrentSchemaVersion = 4;
+    static const int CurrentSchemaVersion = 5;
 
     AppSettings();
 
@@ -66,7 +65,6 @@ struct AppSettings
     int plcRejectDistanceOffset;
     int plcRejectTimeOffset;
 
-    QByteArray rightPanelSplitterState;
     QString templateSaveDirectory;
     bool resultExportEnabled;
     QString resultExportReceiverIp;

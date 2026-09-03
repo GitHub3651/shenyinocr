@@ -1,4 +1,4 @@
-QT       += core gui network
+QT       += core gui network svg
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -35,13 +35,15 @@ SOURCES += \
     application/template_application_service.cpp \
     application/template_geometry_service.cpp \
     templates/template_store.cpp \
-    ui/dialogs/template_selection_dialog.cpp \
-    ui/dialogs/character_template_editor_dialog.cpp \
-    ui/pages/inspection_page.cpp \
-    ui/pages/machine_settings_page.cpp \
-    ui/controllers/operation_ui_policy.cpp \
-    ui/controllers/settings_edit_state.cpp \
-    ui/pages/template_editor_page.cpp \
+    ui/main_window/template/selection/template_selection_dialog.cpp \
+    ui/main_window/template/save/template_save_dialog.cpp \
+    ui/main_window/template/character_editor/character_template_editor_dialog.cpp \
+    ui/main_window/template/character_editor/character_crop_label.cpp \
+    ui/main_window/inspection/inspection_page.cpp \
+    ui/main_window/settings/machine_settings_page.cpp \
+    ui/main_window/operation_ui_policy.cpp \
+    ui/main_window/settings/settings_edit_state.cpp \
+    ui/main_window/template/template_editor_page.cpp \
     system_support/machine_settings_policy.cpp \
     system_support/settings/app_settings.cpp \
     system_support/settings/app_settings_store.cpp \
@@ -53,7 +55,7 @@ SOURCES += \
     startup/runtime_guard.cpp \
     startup/single_instance_guard.cpp \
     startup/application_startup.cpp \
-    ui/presenters/inspection_fault_presenter.cpp \
+    ui/main_window/inspection/inspection_fault_presenter.cpp \
     runtime/inspection_presentation_renderer.cpp \
     engines/barcode/vendor/barcode_decoder_adapter.cpp \
     devices/camera/vendor/hikvision_camera_device.cpp \
@@ -93,12 +95,12 @@ SOURCES += \
     engines/ocr/vendor/paddle/src/preprocess_op.cpp \
     engines/ocr/vendor/paddle/src/utility.cpp \
     detection/detectionmode/tissue/tissue_roll_detector.cpp \
-    ui/widgets/image_label.cpp \
+    ui/main_window/inspection_image_canvas.cpp \
     startup/main.cpp \
     devices/plc/vendor/snap7.cpp \
-    ui/main_window.cpp \
-    ui/main_window_inspection.cpp \
-    ui/main_window_settings.cpp
+    ui/main_window/main_window.cpp \
+    ui/main_window/main_window_inspection.cpp \
+    ui/main_window/main_window_settings.cpp
 
 HEADERS += \
     application/application_result.h \
@@ -111,17 +113,19 @@ HEADERS += \
     application/template_geometry_service.h \
     contracts/barcode_parameter_defaults.h \
     templates/template_store.h \
-    ui/dialogs/template_selection_dialog.h \
-    ui/dialogs/character_template_editor_dialog.h \
+    ui/main_window/template/selection/template_selection_dialog.h \
+    ui/main_window/template/save/template_save_dialog.h \
+    ui/main_window/template/character_editor/character_template_editor_dialog.h \
+    ui/main_window/template/character_editor/character_crop_label.h \
     contracts/inspection_presentation.h \
     runtime/result_service.h \
     runtime/result_export_client.h \
     runtime/result_export_network_worker.h \
-    ui/pages/inspection_page.h \
-    ui/pages/machine_settings_page.h \
-    ui/controllers/operation_ui_policy.h \
-    ui/controllers/settings_edit_state.h \
-    ui/pages/template_editor_page.h \
+    ui/main_window/inspection/inspection_page.h \
+    ui/main_window/settings/machine_settings_page.h \
+    ui/main_window/operation_ui_policy.h \
+    ui/main_window/settings/settings_edit_state.h \
+    ui/main_window/template/template_editor_page.h \
     system_support/machine_settings_policy.h \
     system_support/settings/app_settings.h \
     system_support/settings/app_settings_store.h \
@@ -133,7 +137,7 @@ HEADERS += \
     startup/runtime_guard.h \
     startup/single_instance_guard.h \
     startup/application_startup.h \
-    ui/presenters/inspection_fault_presenter.h \
+    ui/main_window/inspection/inspection_fault_presenter.h \
     runtime/inspection_presentation_renderer.h \
     engines/barcode/vendor/barcode_decoder_adapter.h \
     engines/barcode/barcode_decoder.h \
@@ -179,12 +183,20 @@ HEADERS += \
     engines/ocr/vendor/paddle/include/utility.h \
     detection/common/detection_pose.h \
     detection/detectionmode/tissue/tissue_roll_detector.h \
-    ui/widgets/image_label.h \
+    ui/main_window/inspection_image_canvas.h \
     devices/plc/vendor/snap7.h \
-    ui/main_window.h
+    ui/main_window/main_window.h
 
 FORMS += \
-    ui/main_window.ui
+    ui/main_window/main_window.ui \
+    ui/main_window/inspection/inspection_info_page.ui \
+    ui/main_window/settings/detection_settings_page.ui \
+    ui/main_window/settings/image_settings_page.ui \
+    ui/main_window/settings/plc_settings_page.ui \
+    ui/main_window/settings/software_settings_page.ui \
+    ui/main_window/template/selection/template_selection_dialog.ui \
+    ui/main_window/template/save/template_save_dialog.ui \
+    ui/main_window/template/character_editor/character_template_editor_dialog.ui
 
 RESOURCES += \
     resource/image.qrc

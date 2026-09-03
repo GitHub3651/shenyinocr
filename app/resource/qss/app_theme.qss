@@ -2,7 +2,7 @@
  * OCRGangYin 唯一正式应用主题。
  *
  * 维护顺序：基础 -> 容器 -> 标签 -> 按钮 -> 工具按钮 -> 输入控件
- *          -> 复选框 -> 标签页/列表 -> 语义角色 -> 运行状态 -> 单控件例外。
+ *          -> 复选框 -> 列表 -> 语义角色 -> 运行状态 -> 单控件例外。
  * 普通控件不得在 .ui 或 C++ 中复制完整 QSS；个别差异写在本文件末尾。
  */
 
@@ -27,7 +27,7 @@ QToolTip {
     padding: 5px 8px;
 }
 
-/* 2. 容器、卡片、分隔条和滚动区 */
+/* 2. 容器、卡片和滚动区 */
 QGroupBox {
     background-color: #ffffff;
     border: 1px solid #e4e7ed;
@@ -48,7 +48,6 @@ QGroupBox::title {
 }
 
 QGroupBox#groupBox_runtimeStatus,
-QGroupBox#groupBox_verdictResult,
 QGroupBox#groupBox_totalCount,
 QGroupBox#groupBox_ngCount,
 QGroupBox#groupBox_detectionDuration,
@@ -93,14 +92,16 @@ QFrame#frame_plcProcessParameters {
 QScrollArea#scrollArea_detectionSettings,
 QScrollArea#scrollArea_imageSettings,
 QScrollArea#scrollArea_plcSettings,
-QScrollArea#scrollArea_inspectionInfo {
+QScrollArea#scrollArea_inspectionInfo,
+QScrollArea#scrollArea_softwareSettings {
     background: transparent;
     border: none;
 }
 
 QWidget#widget_detectionSettingsScrollContent,
 QWidget#widget_imageSettingsScrollContent,
-QWidget#widget_plcSettingsScrollContent {
+QWidget#widget_plcSettingsScrollContent,
+QWidget#widget_softwareSettingsScrollContent {
     background-color: #ffffff;
 }
 
@@ -108,28 +109,10 @@ QWidget#widget_currentTemplateEditor {
     background: transparent;
 }
 
-QSplitter#splitter_mainContent::handle:vertical {
-    border: none;
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 rgba(255, 255, 255, 0),
-        stop: 0.47 rgba(255, 255, 255, 0),
-        stop: 0.48 #cbd5df,
-        stop: 0.52 #cbd5df,
-        stop: 0.53 rgba(255, 255, 255, 0),
-        stop: 1 rgba(255, 255, 255, 0));
-}
-
-QSplitter#splitter_mainContent::handle:vertical:hover,
-QSplitter#splitter_mainContent::handle:vertical:pressed {
-    background: qlineargradient(
-        x1: 0, y1: 0, x2: 0, y2: 1,
-        stop: 0 rgba(255, 255, 255, 0),
-        stop: 0.47 rgba(255, 255, 255, 0),
-        stop: 0.48 #409eff,
-        stop: 0.52 #409eff,
-        stop: 0.53 rgba(255, 255, 255, 0),
-        stop: 1 rgba(255, 255, 255, 0));
+QWidget#widget_rightPanel,
+QStackedWidget#stackedWidget_rightDrawer,
+QWidget#scrollAreaWidgetContents_inspectionInfo {
+    background-color: #ffffff;
 }
 
 /* 3. 标签 */
@@ -290,6 +273,33 @@ QGroupBox#groupBox_mainControls QToolButton#toolButton_createTemplate[uiState="a
     margin-top: 0;
 }
 
+QWidget#widget_rightNavigationRail {
+    background-color: #f4f7fa;
+    border-left: 1px solid #dcdfe6;
+}
+
+QWidget#widget_rightNavigationRail QToolButton {
+    background-color: transparent;
+    color: #303133;
+    border: none;
+    border-left: 3px solid transparent;
+    border-radius: 4px;
+    padding: 5px 2px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QWidget#widget_rightNavigationRail QToolButton:hover {
+    background-color: #ecf5ff;
+    color: #1677d2;
+}
+
+QWidget#widget_rightNavigationRail QToolButton:checked {
+    background-color: #d9ecff;
+    color: #1677d2;
+    border-left-color: #1677d2;
+}
+
 /* 6. 输入控件 */
 QLineEdit,
 QTextEdit,
@@ -395,43 +405,7 @@ QCheckBox::indicator {
     height: 20px;
 }
 
-/* 8. 标签页、列表和树 */
-QTabWidget::pane {
-    background-color: #ffffff;
-    border: 1px solid #e4e7ed;
-    border-top: none;
-    border-radius: 6px;
-}
-
-QTabWidget::tab-bar {
-    left: 5px;
-}
-
-QTabBar::tab {
-    background-color: #f5f7fa;
-    color: #303133;
-    border: 1px solid #e4e7ed;
-    border-bottom: none;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
-    margin-right: 2px;
-    padding: 8px 18px;
-    font-size: 16px;
-    font-weight: 600;
-}
-
-QTabBar::tab:selected,
-QTabBar::tab:hover {
-    background-color: #ffffff;
-    color: #1677d2;
-    border-color: #e4e7ed;
-}
-
-QTabBar::tab:selected {
-    border-bottom-color: #ffffff;
-    margin-bottom: -1px;
-}
-
+/* 8. 列表和树 */
 QTreeWidget,
 QListWidget,
 QTableWidget {
@@ -598,9 +572,8 @@ QLabel#label_verdictResult {
     background-color: #eef1f6;
     color: #909399;
     border: 1px solid #dcdfe6;
-    border-radius: 6px;
     padding: 10px;
-    font-size: 40px;
+    font-size: 48px;
     font-weight: 900;
 }
 
@@ -610,39 +583,30 @@ QLabel#label_verdictResult[verdict="idle"] {
 }
 
 QLabel#label_verdictResult[verdict="ok"] {
-    background-color: #f0f9eb;
-    color: #67c23a;
-    border-color: #b3e19d;
+    background-color: #67c23a;
+    color: #ffffff;
+    border-color: #67c23a;
 }
 
 QLabel#label_verdictResult[verdict="ng"] {
-    background-color: #fef0f0;
-    color: #f56c6c;
-    border-color: #fab6b6;
+    background-color: #f56c6c;
+    color: #ffffff;
+    border-color: #f56c6c;
 }
 
 QLabel#label_verdictResult[verdict="fault"] {
-    background-color: #ffebee;
-    color: #d93025;
-    border-color: #d93025;
+    background-color: #b42318;
+    color: #ffffff;
+    border-color: #b42318;
     font-size: 32px;
 }
 
 /* 11. 单控件例外 */
-ImageLabel#imageLabel_inspection {
+InspectionImageCanvas#inspectionImageCanvas {
     background-color: #e3e6eb;
     color: #aab0b7;
     font-size: 24px;
     font-weight: bold;
-}
-
-QLabel#label_mainContentSplitterGrip {
-    background-color: #f4f7fa;
-    color: #526b80;
-    border: 1px solid #aebdca;
-    border-radius: 11px;
-    font-size: 12px;
-    font-weight: 600;
 }
 
 QLineEdit#lineEdit_totalCount {

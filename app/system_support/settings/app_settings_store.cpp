@@ -1,4 +1,4 @@
-// 文件作用：实现 AppSettings Schema 4 的唯一磁盘入口。
+// 文件作用：实现 AppSettings Schema 5 的唯一磁盘入口。
 #include "system_support/settings/app_settings_store.h"
 
 #include <QDir>
@@ -435,8 +435,6 @@ QJsonObject settingsToJson(const AppSettings &settings)
     detectionModeFromUiId(settings.detectModeId, &selectedMode);
     QJsonObject ui;
     ui.insert(QStringLiteral("selectedDetectionMode"), detectionModeId(selectedMode));
-    ui.insert(QStringLiteral("rightPanelSplitterStateBase64"),
-              QString::fromLatin1(settings.rightPanelSplitterState.toBase64()));
     ui.insert(QStringLiteral("templateSaveDirectory"),
               settings.templateSaveDirectory);
 
@@ -579,7 +577,6 @@ bool settingsFromJson(const QJsonObject &root,
                             QStringLiteral("imageSaving"), error)
             || !hasOnlyKeys(ui,
                             QStringList() << QStringLiteral("selectedDetectionMode")
-                                          << QStringLiteral("rightPanelSplitterStateBase64")
                                           << QStringLiteral("templateSaveDirectory"),
                             QStringLiteral("ui"), error)
             || !hasOnlyKeys(resultExport,
@@ -612,20 +609,8 @@ bool settingsFromJson(const QJsonObject &root,
         return false;
     }
 
-    const QJsonValue templateSaveDirectory =
-            ui.value(QStringLiteral("templateSaveDirectory"));
-    if (!templateSaveDirectory.isUndefined()) {
-        if (!templateSaveDirectory.isString()) {
-            return fail(error,
-                        QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                        QStringLiteral("模板保存目录字段类型不正确。"),
-                        QStringLiteral("Expected string: templateSaveDirectory"));
-        }
-        candidate.templateSaveDirectory = templateSaveDirectory.toString();
-    }
-
     QString triggerSource, rotation, colorChannel, triggerMode;
-    QString imageRange, imageContent, selectedModeId, splitter;
+    QString imageRange, imageContent, selectedModeId;
     if (!readInt(camera, "exposureMicroseconds", &candidate.cameraExposure, error)
             || !readInt(camera, "gain", &candidate.cameraGain, error)
             || !readString(camera, "triggerSource", &triggerSource, error)
@@ -654,7 +639,8 @@ bool settingsFromJson(const QJsonObject &root,
             || !readString(imageSaving, "outputDirectory", &candidate.imageSavePath, error)
             || !readInt(imageSaving, "jpegQuality", &candidate.imageJpegQuality, error)
             || !readString(ui, "selectedDetectionMode", &selectedModeId, error)
-            || !readString(ui, "rightPanelSplitterStateBase64", &splitter, error)
+            || !readString(ui, "templateSaveDirectory",
+                           &candidate.templateSaveDirectory, error)
             || !readBool(resultExport, "enabled",
                          &candidate.resultExportEnabled, error)
             || !readString(resultExport, "receiverIp",
@@ -698,13 +684,6 @@ bool settingsFromJson(const QJsonObject &root,
             || !mapId(imageContent, imageSaveContentJsonIds(), appSettingsImageSaveTypeIds(),
                       QStringLiteral("imageSaving.content"), &candidate.imageSaveTypeId, error)) {
         return false;
-    }
-    candidate.rightPanelSplitterState = QByteArray::fromBase64(splitter.toLatin1());
-    if (!splitter.isEmpty()
-            && QString::fromLatin1(candidate.rightPanelSplitterState.toBase64()) != splitter) {
-        return fail(error, QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("界面布局数据已损坏。"),
-                    QStringLiteral("Invalid base64 splitter state."));
     }
     if (!validateSettings(candidate, error)) {
         return false;

@@ -17,6 +17,12 @@ resource/
 ├─ H.png                     现有业务图片
 ├─ sample1.png / sample2.png 示例图片
 ├─ Img_Icon_*.ico            camera/database/image/qr/txt 图标
+├─ svg/
+│  ├─ nav_inspection.svg     检测信息导航图标
+│  ├─ nav_parameters.svg     参数设定导航图标
+│  ├─ nav_image.svg          图像设置导航图标
+│  ├─ nav_plc.svg            PLC 通讯导航图标
+│  └─ nav_software.svg       软件设置导航图标
 ├─ sy.ico                    Windows 应用图标（由 qmake 的 RC_ICONS 使用）
 ├─ Translate_CN.ts           中文翻译源文件（由 qmake 生成 .qm）
 ├─ Translate_EN.ts           英文翻译源文件（由 qmake 生成 .qm）
@@ -32,7 +38,7 @@ resource/
 └─ README.md
 ```
 
-当前资源目录共 135 个文件（含本 README）。大量文件来自不同 QSS 主题各自配套的箭头、复选框、单选框、树分支和日历图标，不是业务模块，也不会参与检测流程。
+当前资源目录共 148 个文件（含本 README）。大量文件来自不同 QSS 主题各自配套的箭头、复选框、单选框、树分支和日历图标，不是业务模块，也不会参与检测流程。
 
 ## image.qrc 的作用
 
@@ -71,7 +77,19 @@ resource/
 
 CSS 文件和同名图片目录是一组资源，不能只替换其中一边。
 
-### 3. 翻译资源
+### 3. SVG 导航图标
+
+`svg/nav_*.svg` 是右侧折叠导航栏使用的五个矢量图标，直接由 Qt SVG 模块按控件尺寸渲染，不生成 PNG 副本。图标来自 [Tabler Icons](https://tabler.io/icons)，采用 MIT License；原始 SVG 内的图标元数据注释继续保留。
+
+| 原始文件名 | 当前文件名 | 用途 |
+|---|---|---|
+| `scan-cube.svg` | `nav_inspection.svg` | 检测信息 |
+| `adjustments-horizontal.svg` | `nav_parameters.svg` | 参数设定 |
+| `photo-cog.svg` | `nav_image.svg` | 图像设置 |
+| `plug-connected.svg` | `nav_plc.svg` | PLC 通讯 |
+| `settings.svg` | `nav_software.svg` | 软件设置 |
+
+### 4. 翻译资源
 
 - `Translate_CN.qm`：由中文翻译源编译的运行时文件。
 - `Translate_EN.qm`：由英文翻译源编译的运行时文件。

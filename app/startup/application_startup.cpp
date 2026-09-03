@@ -23,7 +23,7 @@
 #include "runtime/camera_session.h"
 #include "templates/template_store.h"
 #include "system_support/settings/app_settings_store.h"
-#include "ui/main_window.h"
+#include "ui/main_window/main_window.h"
 
 #include <QApplication>
 #include <QCoreApplication>

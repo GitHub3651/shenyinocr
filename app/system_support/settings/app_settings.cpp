@@ -226,7 +226,6 @@ bool operator==(const AppSettings &left,
             && left.plcPhotoTimeOffset == right.plcPhotoTimeOffset
             && left.plcRejectDistanceOffset == right.plcRejectDistanceOffset
             && left.plcRejectTimeOffset == right.plcRejectTimeOffset
-            && left.rightPanelSplitterState == right.rightPanelSplitterState
             && left.templateSaveDirectory == right.templateSaveDirectory
             && left.resultExportEnabled == right.resultExportEnabled
             && left.resultExportReceiverIp == right.resultExportReceiverIp
