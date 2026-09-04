@@ -138,11 +138,11 @@ void MachineSettingsPage::setupBindings()
     m_hardwareActions.clear();
 
     {
-        QSignalBlocker blocker(m_imageSettingsUi.comboBox_detectionMode);
-        m_imageSettingsUi.comboBox_detectionMode->clear();
+        QSignalBlocker blocker(m_detectionSettingsUi.comboBox_detectionMode);
+        m_detectionSettingsUi.comboBox_detectionMode->clear();
         for (const DetectionModeDescriptor &descriptor :
              detectionModeDescriptors()) {
-            m_imageSettingsUi.comboBox_detectionMode->addItem(
+            m_detectionSettingsUi.comboBox_detectionMode->addItem(
                         QString::fromUtf8(descriptor.displayName),
                         QLatin1String(descriptor.uiId));
         }
@@ -159,8 +159,8 @@ void MachineSettingsPage::setupBindings()
     registerGlobalSetting("image.rotation", m_imageSettingsUi.comboBox_imageRotation,
                           m_imageSettingsUi.label_imageRotation, true);
     registerGlobalSetting("tissue.roughness_threshold",
-                          m_imageSettingsUi.lineEdit_tissueRoughnessThreshold,
-                          m_imageSettingsUi.label_tissueRoughnessThreshold, true);
+                          m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold,
+                          m_detectionSettingsUi.label_tissueRoughnessThreshold, true);
     registerGlobalSetting("plc.trigger_mode", m_plcSettingsUi.comboBox_plcTriggerMode,
                           m_plcSettingsUi.label_plcTriggerMode, true,
                           HardwareDependency::PlcRuntime);
@@ -191,15 +191,15 @@ void MachineSettingsPage::setupBindings()
     registerGlobalSetting("plc.slot", m_plcSettingsUi.lineEdit_plcSlot,
                           m_plcSettingsUi.label_plcRackSlot, true,
                           HardwareDependency::PlcConnection);
-    registerGlobalSetting("detect.mode", m_imageSettingsUi.comboBox_detectionMode,
-                          m_imageSettingsUi.label_detectionMode, false);
+    registerGlobalSetting("detect.mode", m_detectionSettingsUi.comboBox_detectionMode,
+                          m_detectionSettingsUi.label_detectionMode, false);
     registerGlobalSetting("image.save_mode", m_imageSettingsUi.comboBox_imageSaveRange,
                           m_imageSettingsUi.label_imageSaveRange, false);
     registerGlobalSetting("image.save_type", m_imageSettingsUi.comboBox_imageSaveContent,
                           m_imageSettingsUi.label_imageSaveContent, false);
     registerGlobalSetting("image.save_path", m_imageSettingsUi.lineEdit_imageSavePath,
                           m_imageSettingsUi.label_imageSavePath, false);
-    registerGlobalSetting("trigger.enabled", m_imageSettingsUi.checkBox_hardwareTriggerEnabled,
+    registerGlobalSetting("trigger.enabled", m_detectionSettingsUi.checkBox_hardwareTriggerEnabled,
                           nullptr, false);
 
     registerHardwareAction(m_imageSettingsUi.pushButton_applyCameraExposure, HardwareDependency::Camera);
@@ -216,7 +216,7 @@ void MachineSettingsPage::setupBindings()
                            HardwareDependency::PlcRuntime);
 
     QObject::connect(
-        m_imageSettingsUi.pushButton_applyTissueRoughnessThreshold,
+        m_detectionSettingsUi.pushButton_applyTissueRoughnessThreshold,
         &QPushButton::clicked,
         this,
         &MachineSettingsPage::applyTissueRoughnessThreshold);
@@ -251,9 +251,9 @@ void MachineSettingsPage::setupNumericInputValidators()
 
     QDoubleValidator *validator = new QDoubleValidator(
         0.001, 1000000.0, 3,
-        m_imageSettingsUi.lineEdit_tissueRoughnessThreshold);
+        m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold);
     validator->setNotation(QDoubleValidator::StandardNotation);
-    m_imageSettingsUi.lineEdit_tissueRoughnessThreshold->setValidator(validator);
+    m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold->setValidator(validator);
 }
 
 void MachineSettingsPage::installWheelProtection(
@@ -297,9 +297,9 @@ void MachineSettingsPage::applyToUi(
     const bool previousUpdating = m_updatingSettingsUi;
     m_applyingSettings = true;
     m_updatingSettingsUi = true;
-    QSignalBlocker detectionModeBlocker(m_imageSettingsUi.comboBox_detectionMode);
+    QSignalBlocker detectionModeBlocker(m_detectionSettingsUi.comboBox_detectionMode);
 
-    m_imageSettingsUi.comboBox_detectionMode->setCurrentIndex(
+    m_detectionSettingsUi.comboBox_detectionMode->setCurrentIndex(
         indexOf(detectModeIds(), settings.detectModeId, 1));
     m_imageSettingsUi.comboBox_imageSaveRange->setCurrentIndex(
         indexOf(imageSaveModeIds(), settings.imageSaveModeId, 0));
@@ -311,7 +311,7 @@ void MachineSettingsPage::applyToUi(
         indexOf(rotationIds(), settings.imageRotationId, 0));
     m_plcSettingsUi.comboBox_plcTriggerMode->setCurrentIndex(
         indexOf(triggerModeIds(), settings.triggerModeId, 1));
-    m_imageSettingsUi.checkBox_hardwareTriggerEnabled->setChecked(settings.triggerEnabled);
+    m_detectionSettingsUi.checkBox_hardwareTriggerEnabled->setChecked(settings.triggerEnabled);
     m_imageSettingsUi.spinBox_cameraExposure->setValue(settings.cameraExposure);
     m_imageSettingsUi.lineEdit_cameraGain->setText(
         QString::number(static_cast<int>(settings.cameraGain)));
@@ -325,7 +325,7 @@ void MachineSettingsPage::applyToUi(
     m_plcSettingsUi.lineEdit_rejectTime->setText(QString::number(settings.rejectTime));
     m_plcSettingsUi.lineEdit_rejectPosition->setText(QString::number(settings.rejectPosition));
     m_imageSettingsUi.lineEdit_imageSavePath->setText(settings.imageSavePath);
-    m_imageSettingsUi.lineEdit_tissueRoughnessThreshold->setText(
+    m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold->setText(
                 QString::number(
                     settings.detectionSchemes.tissueRoughnessThreshold,
                     'f', 3));
@@ -490,7 +490,7 @@ bool MachineSettingsPage::isDirtyByValue(
     }
     if (key == "tissue.roughness_threshold") {
         return doubleDirty(
-                    m_imageSettingsUi.lineEdit_tissueRoughnessThreshold,
+                    m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold,
                     applied.detectionSchemes.tissueRoughnessThreshold);
     }
     if (key == "plc.trigger_mode") {
@@ -611,7 +611,7 @@ void MachineSettingsPage::copyUiValuesTo(
     for (const QString &key : keys) {
         if (key == "detect.mode") {
             settings.detectModeId = idAt(
-                detectModeIds(), m_imageSettingsUi.comboBox_detectionMode->currentIndex(),
+                detectModeIds(), m_detectionSettingsUi.comboBox_detectionMode->currentIndex(),
                 settings.detectModeId);
         } else if (key == "image.save_mode") {
             settings.imageSaveModeId = idAt(
@@ -627,7 +627,7 @@ void MachineSettingsPage::copyUiValuesTo(
                     m_imageSettingsUi.lineEdit_imageSavePath->text().trimmed();
         } else if (key == "trigger.enabled") {
             settings.triggerEnabled =
-                    m_imageSettingsUi.checkBox_hardwareTriggerEnabled->isChecked();
+                    m_detectionSettingsUi.checkBox_hardwareTriggerEnabled->isChecked();
         } else if (key == "camera.exposure") {
             settings.cameraExposure = m_imageSettingsUi.spinBox_cameraExposure->value();
         } else if (key == "camera.gain") {
@@ -740,8 +740,8 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
     m_updatingSettingsUi = true;
     for (const QString &key : keys) {
         if (key == "detect.mode") {
-            QSignalBlocker blocker(m_imageSettingsUi.comboBox_detectionMode);
-            m_imageSettingsUi.comboBox_detectionMode->setCurrentIndex(indexOf(
+            QSignalBlocker blocker(m_detectionSettingsUi.comboBox_detectionMode);
+            m_detectionSettingsUi.comboBox_detectionMode->setCurrentIndex(indexOf(
                 detectModeIds(), applied.detectModeId, 1));
         } else if (key == "image.save_mode") {
             QSignalBlocker blocker(m_imageSettingsUi.comboBox_imageSaveRange);
@@ -755,8 +755,8 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
             QSignalBlocker blocker(m_imageSettingsUi.lineEdit_imageSavePath);
             m_imageSettingsUi.lineEdit_imageSavePath->setText(applied.imageSavePath);
         } else if (key == "trigger.enabled") {
-            QSignalBlocker blocker(m_imageSettingsUi.checkBox_hardwareTriggerEnabled);
-            m_imageSettingsUi.checkBox_hardwareTriggerEnabled->setChecked(
+            QSignalBlocker blocker(m_detectionSettingsUi.checkBox_hardwareTriggerEnabled);
+            m_detectionSettingsUi.checkBox_hardwareTriggerEnabled->setChecked(
                         applied.triggerEnabled);
         } else if (key == "camera.exposure") {
             QSignalBlocker blocker(m_imageSettingsUi.spinBox_cameraExposure);
@@ -775,8 +775,8 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
                 rotationIds(), applied.imageRotationId, 0));
         } else if (key == "tissue.roughness_threshold") {
             QSignalBlocker blocker(
-                        m_imageSettingsUi.lineEdit_tissueRoughnessThreshold);
-            m_imageSettingsUi.lineEdit_tissueRoughnessThreshold->setText(
+                        m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold);
+            m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold->setText(
                         QString::number(
                             applied.detectionSchemes
                             .tissueRoughnessThreshold,
@@ -852,11 +852,11 @@ void MachineSettingsPage::applyTissueRoughnessThreshold()
 {
     double value = 0.0;
     if (!parseDouble(
-            m_imageSettingsUi.lineEdit_tissueRoughnessThreshold->text(), &value)
+            m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold->text(), &value)
             || value < 0.0) {
         restoreAppliedValue("tissue.roughness_threshold");
         QMessageBox::warning(
-                    m_imageSettingsUi.lineEdit_tissueRoughnessThreshold,
+                    m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold,
                     QStringLiteral("参数错误"),
                     QStringLiteral("纸巾粗糙度阈值必须是非负数。"));
         return;
@@ -871,7 +871,7 @@ void MachineSettingsPage::applyTissueRoughnessThreshold()
                    .arg(saved.error.code, saved.error.userMessage);
         restoreAppliedValue("tissue.roughness_threshold");
         QMessageBox::critical(
-                    m_imageSettingsUi.lineEdit_tissueRoughnessThreshold,
+                    m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold,
                     QStringLiteral("纸巾阈值保存失败"),
                     saved.error.userMessage);
         return;
@@ -882,7 +882,7 @@ void MachineSettingsPage::applyTissueRoughnessThreshold()
                 "event=settings.saved key=tissue.roughness_threshold value=%1")
                .arg(value, 0, 'f', 3);
     QMessageBox::information(
-                m_imageSettingsUi.lineEdit_tissueRoughnessThreshold,
+                m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold,
                 QStringLiteral("成功"),
                 QStringLiteral("纸巾检测阈值已保存。"));
 }
@@ -952,7 +952,7 @@ void MachineSettingsPage::applyOperationState(
         applyOperationUiAccess(binding.control, access);
     }
     applyOperationUiAccess(
-                m_imageSettingsUi.pushButton_applyTissueRoughnessThreshold,
+                m_detectionSettingsUi.pushButton_applyTissueRoughnessThreshold,
                 snapshot.generalSettings);
 }
 

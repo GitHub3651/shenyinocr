@@ -53,7 +53,7 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     DetectionMode mode = DetectionMode::Word;
     const bool validMode = detectionModeFromUiId(
                 m_templateEditorPage->detectModeIdForIndex(
-                    m_imageSettingsUi->comboBox_detectionMode->currentIndex()),
+                    m_detectionSettingsUi->comboBox_detectionMode->currentIndex()),
                 &mode);
     const DetectionModeDescriptor descriptor =
             detectionModeDescriptor(mode);
@@ -87,9 +87,9 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     m_detectionSettingsUi->pushButton_applyBatchImageThreshold->setVisible(
                 showBatch && showImageThreshold);
     ui->toolButton_editCharacterTemplates->setVisible(showCharacterSettings);
-    m_imageSettingsUi->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
-    m_imageSettingsUi->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
-    m_imageSettingsUi->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
+    m_detectionSettingsUi->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
+    m_detectionSettingsUi->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
+    m_detectionSettingsUi->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
 }
 
 void MainWindow::setupSoftwareSettingsPage()
@@ -219,7 +219,7 @@ void MainWindow::restoreUnappliedSettingsFromApplied()
 
 void MainWindow::setupDetectModeChangeTracking()
 {
-    connect(m_imageSettingsUi->comboBox_detectionMode,
+    connect(m_detectionSettingsUi->comboBox_detectionMode,
             static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
             this,
             [this](int index) {
@@ -637,10 +637,6 @@ void MainWindow::setupNonPersistentDefaults()
     m_detectionSettingsUi->lineEdit_imageThreshold->setText(QString::number(
         TemplateSettings::DefaultImageThresholdPercent));
     m_detectionSettingsUi->textEdit_targetText->setPlainText("");
-    m_imageSettingsUi->lineEdit_tissueRoughnessThreshold->setText(
-        QString::number(
-            6.0,
-            'f', 3));
 }
 
 // ================= 拦截滚轮误操作事件 =================

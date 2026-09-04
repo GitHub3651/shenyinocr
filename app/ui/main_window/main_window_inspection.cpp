@@ -576,7 +576,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
         updateOperationUiState();
         return;
     }
-    hideRightPanel();
     if (!result.details.isEmpty()) {
         QMessageBox::warning(
                     this,

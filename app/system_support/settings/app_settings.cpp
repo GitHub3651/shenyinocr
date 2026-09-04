@@ -119,7 +119,7 @@ AppSettings::AppSettings()
       imageRotationId(QStringLiteral("rotate_none")),
       triggerEnabled(true),
       cameraDelay(300),
-      triggerModeId(QStringLiteral("trigger_interval")),
+      triggerModeId(QStringLiteral("trigger_continuous")),
       plcIp(QStringLiteral("192.168.10.10")),
       plcRack(0),
       plcSlot(1),

@@ -476,10 +476,10 @@ void TemplateEditorPage::setupCurrentTemplateEditor()
 QString TemplateEditorPage::detectModeIdForIndex(int index) const
 {
     if (index < 0
-            || index >= m_imageSettingsUi.comboBox_detectionMode->count()) {
+            || index >= m_detectionSettingsUi.comboBox_detectionMode->count()) {
         return QString();
     }
-    const QVariant data = m_imageSettingsUi.comboBox_detectionMode->itemData(index);
+    const QVariant data = m_detectionSettingsUi.comboBox_detectionMode->itemData(index);
     return data.isValid() && !data.toString().isEmpty()
             ? data.toString()
             : detectionModeUiId(detectionModeDescriptors()
@@ -489,7 +489,7 @@ QString TemplateEditorPage::detectModeIdForIndex(int index) const
 QString TemplateEditorPage::currentDetectModeId() const
 {
     return detectModeIdForIndex(
-                m_imageSettingsUi.comboBox_detectionMode->currentIndex());
+                m_detectionSettingsUi.comboBox_detectionMode->currentIndex());
 }
 
 QStringList TemplateEditorPage::currentModeTemplatePaths() const

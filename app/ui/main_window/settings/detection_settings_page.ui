@@ -39,6 +39,51 @@
       </property>
       <layout class="QGridLayout" name="gridLayout_detectionSettings">
        <item row="0" column="0">
+        <widget class="QGroupBox" name="groupBox_detectionMode">
+         <property name="title">
+          <string>识别模式设置</string>
+         </property>
+         <layout class="QFormLayout" name="formLayout_detectionMode">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_detectionMode">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>识别模式:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="comboBox_detectionMode">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0" colspan="2">
+           <widget class="QCheckBox" name="checkBox_hardwareTriggerEnabled">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>开启PLC硬触发</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="1" column="0">
         <widget class="QGroupBox" name="groupBox_currentTemplateSettings">
          <property name="title">
           <string>当前产品模板设置</string>
@@ -289,7 +334,7 @@
          </layout>
         </widget>
        </item>
-       <item row="1" column="0">
+       <item row="2" column="0">
         <widget class="QGroupBox" name="groupBox_barcodeCsv">
          <property name="title">
           <string>二维码结果本机记录</string>
@@ -383,6 +428,46 @@
         </layout>
        </item>
        <item row="4" column="0">
+        <layout class="QGridLayout" name="gridLayout_tissueRoughnessThreshold" columnstretch="0,1,0">
+         <property name="verticalSpacing">
+          <number>15</number>
+         </property>
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_tissueRoughnessThreshold">
+           <property name="text">
+            <string>纸巾检测粗糙度阈值:</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="lineEdit_tissueRoughnessThreshold">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>50</height>
+            </size>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="2">
+          <widget class="QPushButton" name="pushButton_applyTissueRoughnessThreshold">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>50</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>设置</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="5" column="0">
         <spacer name="verticalSpacer_detectionSettingsBottom">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
