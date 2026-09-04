@@ -75,7 +75,6 @@ QGroupBox#groupBox_productionStatistics::title {
 
 QGroupBox#groupBox_currentTemplateSettings,
 QGroupBox#groupBox_barcodeCsv,
-QGroupBox#groupBox_templateCreation,
 QGroupBox#groupBox_detectionMode,
 QGroupBox#groupBox_imageSaving,
 QGroupBox#groupBox_imageAcquisitionAndProcessing,

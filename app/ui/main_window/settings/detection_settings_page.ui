@@ -110,19 +110,6 @@
             </layout>
            </widget>
           </item>
-          <item row="5" column="1" colspan="2">
-           <widget class="QPushButton" name="pushButton_editCharacterTemplates">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>50</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>分割字符模板</string>
-            </property>
-           </widget>
-          </item>
           <item row="2" column="1" colspan="2">
            <layout class="QHBoxLayout" name="horizontalLayout_targetTextActions">
             <property name="spacing">
@@ -351,31 +338,6 @@
              </widget>
             </item>
            </layout>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item row="2" column="0">
-        <widget class="QGroupBox" name="groupBox_templateCreation">
-         <property name="title">
-          <string>模板制作</string>
-         </property>
-         <layout class="QFormLayout" name="formLayout_templateCreation">
-          <item row="0" column="1">
-           <widget class="QPushButton" name="pushButton_saveTemplate">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>50</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>保存模板</string>
-            </property>
-            <property name="uiRole" stdset="0">
-             <string>primary</string>
-            </property>
-           </widget>
           </item>
          </layout>
         </widget>

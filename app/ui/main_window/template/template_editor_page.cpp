@@ -274,7 +274,7 @@ void TemplateEditorPage::applyOperationState(
                            snapshot.templateEditing);
     applyOperationUiAccess(m_detectionSettingsUi.toolButton_removeCurrentTemplate,
                            snapshot.templateEditing);
-    applyOperationUiAccess(m_detectionSettingsUi.pushButton_editCharacterTemplates,
+    applyOperationUiAccess(m_mainWindowUi.toolButton_editCharacterTemplates,
                            editAccess);
     applyOperationUiAccess(m_detectionSettingsUi.textEdit_targetText,
                            editAccess);
@@ -288,7 +288,7 @@ void TemplateEditorPage::applyOperationState(
                            editAccess);
     applyOperationUiAccess(m_detectionSettingsUi.pushButton_applyBatchImageThreshold,
                            editAccess);
-    applyOperationUiAccess(m_detectionSettingsUi.pushButton_saveTemplate,
+    applyOperationUiAccess(m_mainWindowUi.toolButton_saveTemplate,
                            snapshot.saveTemplate);
     if (requestedState == OperationUiState::Detecting) {
         showInspectionStatus();
@@ -1541,8 +1541,8 @@ void TemplateEditorPage::askToSaveCompletedTemplate(DetectionMode mode)
 
 void TemplateEditorPage::setupManualCharacterCropUi()
 {
-    connect(m_detectionSettingsUi.pushButton_editCharacterTemplates,
-            &QPushButton::clicked,
+    connect(m_mainWindowUi.toolButton_editCharacterTemplates,
+            &QToolButton::clicked,
             this,
             &TemplateEditorPage::showManualCharacterTemplateEditorDialog);
 }
@@ -1552,8 +1552,8 @@ void TemplateEditorPage::connectPageActions()
     connect(m_mainWindowUi.toolButton_selectTemplate,
             &QToolButton::clicked,
             this, &TemplateEditorPage::selectTemplatesForCurrentMode);
-    connect(m_detectionSettingsUi.pushButton_saveTemplate,
-            &QPushButton::clicked,
+    connect(m_mainWindowUi.toolButton_saveTemplate,
+            &QToolButton::clicked,
             this, &TemplateEditorPage::saveCurrentTemplate);
     connect(m_detectionSettingsUi.pushButton_applyTargetText,
             &QPushButton::clicked,

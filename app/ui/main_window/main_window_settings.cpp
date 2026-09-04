@@ -69,12 +69,9 @@ void MainWindow::updateTissueRoughnessUiVisibility()
             && descriptor.trackingKind
                == DetectionTrackingKind::MultipleTemplates;
 
-    ui->toolButton_selectTemplate->setVisible(usesTemplate);
-    ui->toolButton_createTemplate->setVisible(usesTemplate);
-    m_detectionSettingsUi->pushButton_saveTemplate->setVisible(usesTemplate);
+    ui->widget_templateControls->setVisible(usesTemplate);
     m_inspectionInfoUi->groupBox_currentTemplate->setVisible(usesTemplate);
     m_detectionSettingsUi->groupBox_currentTemplateSettings->setVisible(usesTemplate);
-    m_detectionSettingsUi->groupBox_templateCreation->setVisible(usesTemplate);
     m_detectionSettingsUi->label_targetText->setVisible(usesTemplate
                                      && descriptor.requiresTargetText);
     m_detectionSettingsUi->textEdit_targetText->setVisible(usesTemplate
@@ -89,8 +86,7 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     m_detectionSettingsUi->pushButton_applyImageThreshold->setVisible(showImageThreshold);
     m_detectionSettingsUi->pushButton_applyBatchImageThreshold->setVisible(
                 showBatch && showImageThreshold);
-    m_detectionSettingsUi->pushButton_editCharacterTemplates->setVisible(
-                showCharacterSettings);
+    ui->toolButton_editCharacterTemplates->setVisible(showCharacterSettings);
     m_imageSettingsUi->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     m_imageSettingsUi->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     m_imageSettingsUi->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
