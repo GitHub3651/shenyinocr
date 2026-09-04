@@ -26,7 +26,6 @@ struct ImageSaveItem {
     std::shared_ptr<const FrameData> frame;
     QString filePath;
     QByteArray format;
-    int quality = -1;
 
     // 函数说明：isValid 函数检查相关状态并返回判断结果。
     bool isValid() const
@@ -34,9 +33,7 @@ struct ImageSaveItem {
         return (!image.isNull()
                 || (frame && !frame->originalImage.empty()))
                 && !filePath.trimmed().isEmpty()
-                && !format.trimmed().isEmpty()
-                && quality >= -1
-                && quality <= 100;
+                && !format.trimmed().isEmpty();
     }
 };
 

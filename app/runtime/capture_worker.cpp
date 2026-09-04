@@ -12,7 +12,7 @@ namespace {
 
 constexpr int kHardwareFrameWaitSliceMs = 1000;
 constexpr int kSoftwareFrameWaitTimeoutMs = 500;
-constexpr int kSoftwareTriggerIntervalMs = 150;
+constexpr int kSoftwareTriggerIntervalMs = 180;
 
 } // namespace
 

@@ -27,7 +27,7 @@ bool operator!=(const DetectionSchemes &left,
 
 struct AppSettings
 {
-    static const int CurrentSchemaVersion = 6;
+    static const int CurrentSchemaVersion = 7;
 
     AppSettings();
 
@@ -37,7 +37,6 @@ struct AppSettings
     QString imageSaveModeId;
     QString imageSaveTypeId;
     QString imageSavePath;
-    int imageJpegQuality;
 
     int cameraExposure;
     int cameraGain;

@@ -113,7 +113,6 @@ AppSettings::AppSettings()
       detectModeId(detectionModeUiId(DetectionMode::Word)),
       imageSaveModeId(QStringLiteral("save_none")),
       imageSaveTypeId(QStringLiteral("save_annotated_only")),
-      imageJpegQuality(92),
       cameraExposure(800),
       cameraGain(1),
       colorChannelId(QStringLiteral("color")),
@@ -200,7 +199,6 @@ bool operator==(const AppSettings &left,
             && left.imageSaveModeId == right.imageSaveModeId
             && left.imageSaveTypeId == right.imageSaveTypeId
             && left.imageSavePath == right.imageSavePath
-            && left.imageJpegQuality == right.imageJpegQuality
             && left.cameraExposure == right.cameraExposure
             && left.cameraGain == right.cameraGain
             && left.colorChannelId == right.colorChannelId

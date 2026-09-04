@@ -49,7 +49,6 @@ struct ResultSaveOptions
     ResultSaveLayout layout = ResultSaveLayout::AnnotatedAndRaw;
     QString rootDirectory;
     QString format = QStringLiteral("png");
-    int quality = -1;
     int imageContentModeIndex = 0;
 };
 

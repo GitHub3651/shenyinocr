@@ -83,7 +83,6 @@ ResultServiceRunConfiguration resultConfiguration(
     configuration.delayedNgOffset = settings.rejectPosition;
     configuration.saveOptions.rootDirectory = settings.imageSavePath;
     configuration.saveOptions.format = QStringLiteral("jpg");
-    configuration.saveOptions.quality = settings.imageJpegQuality;
     configuration.saveOptions.imageContentModeIndex =
             appSettingsImageSaveTypeIds().indexOf(
                 settings.imageSaveTypeId);

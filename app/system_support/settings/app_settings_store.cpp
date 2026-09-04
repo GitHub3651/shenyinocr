@@ -1,4 +1,4 @@
-// 文件作用：实现 AppSettings Schema 6 的唯一磁盘入口。
+// 文件作用：实现 AppSettings Schema 7 的唯一磁盘入口。
 #include "system_support/settings/app_settings_store.h"
 
 #include <QDir>
@@ -301,12 +301,11 @@ bool validateSettings(const AppSettings &settings,
         }
     }
     if (settings.photoTime > 65535 || settings.rejectTime > 65535
-            || settings.plcIp.trimmed().isEmpty()
-            || settings.imageJpegQuality != defaults.imageJpegQuality) {
+            || settings.plcIp.trimmed().isEmpty()) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
                     QStringLiteral("设置字段组合不符合设备合同。"),
-                    QStringLiteral("PLC word, IP, or JPEG contract invalid."));
+                    QStringLiteral("PLC word or IP contract invalid."));
     }
     if (settings.imageSaveModeId != QLatin1String("save_none")
             && (settings.imageSavePath.trimmed().isEmpty()
@@ -425,7 +424,6 @@ QJsonObject settingsToJson(const AppSettings &settings)
                        mappedId(settings.imageSaveTypeId,
                                 appSettingsImageSaveTypeIds(), imageSaveContentJsonIds()));
     imageSaving.insert(QStringLiteral("outputDirectory"), settings.imageSavePath);
-    imageSaving.insert(QStringLiteral("jpegQuality"), settings.imageJpegQuality);
 
     DetectionMode selectedMode = DetectionMode::Word;
     detectionModeFromUiId(settings.detectModeId, &selectedMode);
@@ -566,8 +564,7 @@ bool settingsFromJson(const QJsonObject &root,
             || !hasOnlyKeys(imageSaving,
                             QStringList() << QStringLiteral("range")
                                           << QStringLiteral("content")
-                                          << QStringLiteral("outputDirectory")
-                                          << QStringLiteral("jpegQuality"),
+                                          << QStringLiteral("outputDirectory"),
                             QStringLiteral("imageSaving"), error)
             || !hasOnlyKeys(ui,
                             QStringList() << QStringLiteral("selectedDetectionMode")
@@ -630,7 +627,6 @@ bool settingsFromJson(const QJsonObject &root,
             || !readString(imageSaving, "range", &imageRange, error)
             || !readString(imageSaving, "content", &imageContent, error)
             || !readString(imageSaving, "outputDirectory", &candidate.imageSavePath, error)
-            || !readInt(imageSaving, "jpegQuality", &candidate.imageJpegQuality, error)
             || !readString(ui, "selectedDetectionMode", &selectedModeId, error)
             || !readString(ui, "templateSaveDirectory",
                            &candidate.templateSaveDirectory, error)

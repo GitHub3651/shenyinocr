@@ -9,7 +9,7 @@ system_support/
 ├─ machine_settings_policy.h/.cpp       整机默认恢复策略
 ├─ settings/
 │  ├─ app_settings.h/.cpp               AppSettings 与五模式 DetectionSchemes
-│  └─ app_settings_store.h/.cpp         Schema 6 严格 JSON + QSaveFile
+│  └─ app_settings_store.h/.cpp         Schema 7 严格 JSON + QSaveFile
 ├─ license/license_codec.h/.cpp
 ├─ logging/application_logger.h/.cpp
 └─ crash/

@@ -43,8 +43,7 @@ ImageSaveItem saveItem(
     const std::shared_ptr<const FrameData> &frame,
     const QString &directoryPath,
     const QString &baseName,
-    const QString &format,
-    int quality)
+    const QString &format)
 {
     ImageSaveItem item;
     item.image = image;
@@ -52,7 +51,6 @@ ImageSaveItem saveItem(
     item.filePath = QDir(directoryPath).filePath(
                 baseName + QStringLiteral(".") + format);
     item.format = format.toUpper().toLatin1();
-    item.quality = quality;
     return item;
 }
 
@@ -558,8 +556,7 @@ bool ResultService::submitImageSave(
             options.rootDirectory + QStringLiteral("/") + resultName,
             QDateTime::currentDateTime().toString(
                 QStringLiteral("yyyyMMdd-hhmmss-zzz")),
-            format,
-            options.quality));
+            format));
     } else {
         const QString baseName = QDateTime::currentDateTime().toString(
                     QStringLiteral("yyyyMMdd-hhmmss.zzz"));
@@ -579,8 +576,7 @@ bool ResultService::submitImageSave(
                     std::shared_ptr<const FrameData>(),
                     options.rootDirectory + QStringLiteral("/") + resultName,
                     baseName,
-                    format,
-                    options.quality));
+                    format));
             }
         }
         if (saveRaw) {
@@ -590,8 +586,7 @@ bool ResultService::submitImageSave(
                 options.rootDirectory + QStringLiteral("/")
                     + resultName + QStringLiteral("_raw"),
                 baseName,
-                format,
-                options.quality));
+                format));
         }
     }
     if (task.items.empty()) {

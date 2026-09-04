@@ -1,6 +1,6 @@
 # OCRGangYin 数据 Schema（阶段 8）
 
-状态：AppSettings Schema 6 代码已实施，等待用户统一验证
+状态：AppSettings Schema 7 代码已实施，等待用户统一验证
 实现依据：`app/system_support/settings/app_settings*` 与 `app/templates/template_store*`
 
 ## 1. 数据边界
@@ -29,7 +29,7 @@
 - 纸巾检测不使用模板，粗糙度阈值直接写入 `app_settings.json`。
 - 旧格式不迁移、不兼容，也不作为缺字段时的回退来源。
 
-## 2. AppSettings Schema 6
+## 2. AppSettings Schema 7
 
 ### 2.1 唯一内存结构
 
@@ -43,7 +43,7 @@ struct DetectionSchemes {
 };
 
 struct AppSettings {
-    static const int CurrentSchemaVersion = 6;
+    static const int CurrentSchemaVersion = 7;
     // 已验证的整机和 UI 扁平成员
     QString templateSaveDirectory;
     bool barcodeCsvEnabled;
@@ -58,7 +58,7 @@ struct AppSettings {
 
 ```json
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "camera": {
     "exposureMicroseconds": 800,
     "gain": 1,
@@ -95,8 +95,7 @@ struct AppSettings {
   "imageSaving": {
     "range": "none",
     "content": "annotatedOnly",
-    "outputDirectory": "",
-    "jpegQuality": 92
+    "outputDirectory": ""
   },
   "ui": {
     "selectedDetectionMode": "word",
@@ -146,8 +145,8 @@ struct AppSettings {
 - 八个根字段和各分区字段都必须存在，未知字段、类型错误和约束错误会拒绝整个文件。
 - 文件不存在时只在内存使用完整默认值，第一次保存时创建。
 - `barcodeCsv.outputDirectory` 为空时 `barcodeCsv.enabled` 必须为 `false`；非空时必须是绝对路径。
-- `schemaVersion != 6` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 6 原子替换。
-- 已是 Schema 6 但内容损坏时拒绝启动，不自动覆盖诊断证据。
+- `schemaVersion != 7` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 7 原子替换。
+- 已是 Schema 7 但内容损坏时拒绝启动，不自动覆盖诊断证据。
 - 所有写入统一经过 `AppSettingsStore::save()` 和 `QSaveFile`。
 - 模板路径或纸巾阈值保存从最新 `current` 复制候选，只改目标字段；不会提交或丢弃未应用的整机草稿。
 - “恢复默认设置”保留 `detectionSchemes`；“清空软件数据”原子写入完整默认 `AppSettings`，但不删除任何外部模板。

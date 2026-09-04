@@ -12,6 +12,9 @@
 #include <exception>
 
 namespace {
+
+constexpr int kImageJpegQuality = 80;
+
 // 函数说明：frameImage 函数实现名称所表示的处理步骤。
 QImage frameImage(const cv::Mat &image)
 {
@@ -175,7 +178,7 @@ bool ImageSaveService::writeImage(
     if (!image.save(
             item.filePath,
             item.format.constData(),
-            item.quality)) {
+            kImageJpegQuality)) {
         if (errorMessage) {
             *errorMessage = QString::fromWCharArray(
                         L"图像写入失败：%1")
