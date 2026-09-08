@@ -893,20 +893,12 @@ void MachineSettingsPage::updateImageSaveOptionsVisibility()
             m_imageSettingsUi.comboBox_imageSaveRange->currentIndex() != 0;
     m_imageSettingsUi.label_imageSaveContent->setVisible(saveImages);
     m_imageSettingsUi.comboBox_imageSaveContent->setVisible(saveImages);
-    m_imageSettingsUi.label_imageSavePath->setVisible(true);
-    m_imageSettingsUi.lineEdit_imageSavePath->setVisible(true);
-    m_imageSettingsUi.pushButton_browseImageSavePath->setVisible(true);
-    m_imageSettingsUi.groupBox_imageSaving->updateGeometry();
 }
 
 void MachineSettingsPage::updateSaveDirectoryText()
 {
     const QString saveDir =
             m_imageSettingsUi.lineEdit_imageSavePath->text().trimmed();
-    m_imageSettingsUi.pushButton_browseImageSavePath->setText(
-                QStringLiteral("浏览"));
-    m_imageSettingsUi.pushButton_browseImageSavePath->setToolTip(
-                QStringLiteral("点击选择图像保存路径"));
     if (saveDir.isEmpty()) {
         m_imageSettingsUi.lineEdit_imageSavePath->clear();
         m_imageSettingsUi.lineEdit_imageSavePath->setToolTip(QString());

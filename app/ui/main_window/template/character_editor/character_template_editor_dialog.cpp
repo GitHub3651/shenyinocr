@@ -72,7 +72,7 @@ CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(
     connect(ui->pushButton_cancelCharacterNaming, &QPushButton::clicked,
             this, &QDialog::reject);
 
-    const QImage sampleImage(QStringLiteral(":/sample1.png"));
+    const QImage sampleImage(QStringLiteral(":/png/sample1.png"));
     const bool hasSample = !sampleImage.isNull();
     ui->label_characterSampleTitle->setVisible(hasSample);
     ui->label_characterSample->setVisible(hasSample);

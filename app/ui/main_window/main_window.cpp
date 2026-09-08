@@ -33,6 +33,7 @@
 #include <QString>
 #include <QMessageBox>
 #include <QSignalBlocker>
+#include <QSplitter>
 #include <QTextOption>
 #include <QToolButton>
 
@@ -65,8 +66,15 @@ MainWindow::MainWindow(
     m_imageSettingsUi->setupUi(ui->page_imageSettings);
     m_plcSettingsUi->setupUi(ui->page_plcSettings);
     m_softwareSettingsUi->setupUi(ui->page_softwareSettings);
-    ui->stackedWidget_rightDrawer->setCurrentWidget(ui->page_inspectionInfo);
-    ui->toolButton_showInspectionInfo->setChecked(true);
+    if (m_settingsApplicationService->current()
+            .leftDrawerSplitterState.isEmpty()) {
+        ui->splitter_leftDrawerMain->setSizes(
+                    QList<int>() << 360 << 1130);
+    } else {
+        ui->splitter_leftDrawerMain->restoreState(
+                    m_settingsApplicationService->current()
+                    .leftDrawerSplitterState);
+    }
 
     m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
                 machineSettings().barcodeCsvOutputDirectory);
@@ -75,14 +83,13 @@ MainWindow::MainWindow(
         m_detectionSettingsUi->barcodeCsvEnable->setChecked(
                     machineSettings().barcodeCsvEnabled);
     }
-    initStyle();
     initializePages();
 
     connect(ui->toolButton_showInspectionInfo,
             &QToolButton::clicked,
             this,
             [this]() {
-        showRightPanelPage(
+        showLeftDrawerPage(
                     ui->page_inspectionInfo,
                     ui->toolButton_showInspectionInfo);
     });
@@ -90,7 +97,7 @@ MainWindow::MainWindow(
             &QToolButton::clicked,
             this,
             [this]() {
-        showRightPanelPage(
+        showLeftDrawerPage(
                     ui->page_detectionSettings,
                     ui->toolButton_showDetectionSettings);
     });
@@ -98,7 +105,7 @@ MainWindow::MainWindow(
             &QToolButton::clicked,
             this,
             [this]() {
-        showRightPanelPage(
+        showLeftDrawerPage(
                     ui->page_imageSettings,
                     ui->toolButton_showImageSettings);
     });
@@ -106,7 +113,7 @@ MainWindow::MainWindow(
             &QToolButton::clicked,
             this,
             [this]() {
-        showRightPanelPage(
+        showLeftDrawerPage(
                     ui->page_plcSettings,
                     ui->toolButton_showPlcSettings);
     });
@@ -114,7 +121,7 @@ MainWindow::MainWindow(
             &QToolButton::clicked,
             this,
             [this]() {
-        showRightPanelPage(
+        showLeftDrawerPage(
                     ui->page_softwareSettings,
                     ui->toolButton_showSoftwareSettings);
     });
@@ -174,7 +181,7 @@ MainWindow::MainWindow(
         [this](const InspectionFaultSnapshot &snapshot) {
         if (!m_faultAlarmPresented) {
             ui->toolButton_showInspectionInfo->setChecked(true);
-            showRightPanelPage(
+            showLeftDrawerPage(
                         ui->page_inspectionInfo,
                         ui->toolButton_showInspectionInfo);
         }
@@ -184,17 +191,17 @@ MainWindow::MainWindow(
     Qt::QueuedConnection);
 }
 
-void MainWindow::showRightPanelPage(
+void MainWindow::showLeftDrawerPage(
     QWidget *page,
     QToolButton *button)
 {
     if (!button->isChecked()) {
-        hideRightPanel();
+        hideLeftDrawer();
         return;
     }
 
-    ui->stackedWidget_rightDrawer->setCurrentWidget(page);
-    ui->widget_rightPanel->show();
+    ui->stackedWidget_leftDrawer->setCurrentWidget(page);
+    ui->widget_leftDrawer->show();
     ui->toolButton_showInspectionInfo->setChecked(
                 button == ui->toolButton_showInspectionInfo);
     ui->toolButton_showDetectionSettings->setChecked(
@@ -207,9 +214,9 @@ void MainWindow::showRightPanelPage(
                 button == ui->toolButton_showSoftwareSettings);
 }
 
-void MainWindow::hideRightPanel()
+void MainWindow::hideLeftDrawer()
 {
-    ui->widget_rightPanel->hide();
+    ui->widget_leftDrawer->hide();
     ui->toolButton_showInspectionInfo->setChecked(false);
     ui->toolButton_showDetectionSettings->setChecked(false);
     ui->toolButton_showImageSettings->setChecked(false);
@@ -320,7 +327,7 @@ void MainWindow::initializePages()
         m_inspectionPage->setStatistics(m_runtime->statistics());
     }
     m_detectionSettingsUi->textEdit_targetText->setWordWrapMode(
-                QTextOption::WordWrap);
+                QTextOption::WrapAtWordBoundaryOrAnywhere);
     setupSoftwareSettingsPage();
     m_machineSettingsPage->installWheelProtection(*this);
     m_machineSettingsPage->setupNumericInputValidators();

@@ -88,7 +88,6 @@ private:
     void showCritical(const QString &title, const QString &message);
     void applyTemplateSettingsToUi(const TemplateSettings &settings);
     void setupCurrentTemplateEditor();
-    void setupTemplateGuide();
     void adjustTemplateGuideHeight();
     void showInspectionStatus();
     void showTemplateImageSource(const QString &templateName);

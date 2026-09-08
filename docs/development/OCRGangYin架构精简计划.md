@@ -108,7 +108,7 @@ DetectionMode枚举、JSON ID、UI ID
 
 ### 3.6 目标模式边界
 
-不引入动态插件、反射、运行时脚本或复杂依赖注入。Qt 5.14/C++11下只建立两层静态边界：
+不引入动态插件、反射、运行时脚本或复杂依赖注入。本计划实施时在 Qt 5.14/C++11 下只建立两层静态边界；当前本地 Qt Creator 已选用 Qt 5.15.2/MSVC2019 64-bit Kit，本段仅描述当时的设计约束：
 
 ```text
 contracts/DetectionModeDescriptor

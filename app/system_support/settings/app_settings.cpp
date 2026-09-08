@@ -223,6 +223,8 @@ bool operator==(const AppSettings &left,
             && left.plcRejectDistanceOffset == right.plcRejectDistanceOffset
             && left.plcRejectTimeOffset == right.plcRejectTimeOffset
             && left.templateSaveDirectory == right.templateSaveDirectory
+            && left.leftDrawerSplitterState
+               == right.leftDrawerSplitterState
             && left.barcodeCsvEnabled == right.barcodeCsvEnabled
             && left.barcodeCsvOutputDirectory
                == right.barcodeCsvOutputDirectory

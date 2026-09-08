@@ -235,10 +235,6 @@ TemplateEditorPage::TemplateEditorPage(
     m_detectionSettingsUi.lineEdit_imageThreshold->setValidator(
                 new QIntValidator(0, 100,
                                   m_detectionSettingsUi.lineEdit_imageThreshold));
-    m_detectionSettingsUi.lineEdit_imageThreshold->setMaxLength(3);
-    m_detectionSettingsUi.lineEdit_imageThreshold->setToolTip(
-                QString::fromWCharArray(
-                    L"请输0到100之间的整数，单位：%"));
     connect(&m_inspectionService,
             &InspectionApplicationService::templatePreviewFailed,
             this, &TemplateEditorPage::handlePreviewFailure,
@@ -252,7 +248,6 @@ TemplateEditorPage::TemplateEditorPage(
         }
     }, Qt::QueuedConnection);
     setupCurrentTemplateEditor();
-    setupTemplateGuide();
     connect(m_mainWindowUi.inspectionImageCanvas, &InspectionImageCanvas::templateDrawingChanged,
             this, &TemplateEditorPage::handleTemplateDrawingChanged);
     setupManualCharacterCropUi();
@@ -452,15 +447,6 @@ void TemplateEditorPage::handlePreviewFailure(
 
 void TemplateEditorPage::setupCurrentTemplateEditor()
 {
-    m_detectionSettingsUi.toolButton_removeCurrentTemplate->setToolTip(
-                QStringLiteral("从当前检测方案移除模板，不会删除模板文件夹。"));
-    m_detectionSettingsUi.label_currentEditTemplate->ensurePolished();
-    m_detectionSettingsUi.label_targetText->ensurePolished();
-    const int sharedLabelWidth = qMax(
-                m_detectionSettingsUi.label_currentEditTemplate->sizeHint().width(),
-                m_detectionSettingsUi.label_targetText->sizeHint().width());
-    m_detectionSettingsUi.label_currentEditTemplate->setFixedWidth(
-                sharedLabelWidth);
     connect(m_detectionSettingsUi.comboBox_currentEditTemplate,
             static_cast<void (QComboBox::*)(int)>(
                 &QComboBox::currentIndexChanged),
@@ -507,11 +493,12 @@ void TemplateEditorPage::refreshCurrentTemplateEditor()
     DetectionMode mode = DetectionMode::Tissue;
     detectionModeFromUiId(currentDetectModeId(), &mode);
     const bool usesTemplate = mode != DetectionMode::Tissue;
-    m_detectionSettingsUi.widget_currentTemplateEditor->setVisible(usesTemplate);
+    const QStringList paths = currentModeTemplatePaths();
+    const bool hasMultipleTemplates = paths.size() > 1;
     m_detectionSettingsUi.pushButton_applyBatchTargetText->setVisible(
-                isMultiTemplateMode(mode));
+                hasMultipleTemplates);
     m_detectionSettingsUi.pushButton_applyBatchImageThreshold->setVisible(
-                isMultiTemplateMode(mode));
+                hasMultipleTemplates);
     if (!usesTemplate) {
         QSignalBlocker blocker(m_detectionSettingsUi.comboBox_currentEditTemplate);
         m_detectionSettingsUi.comboBox_currentEditTemplate->clear();
@@ -519,7 +506,6 @@ void TemplateEditorPage::refreshCurrentTemplateEditor()
     }
     const QString previous = m_detectionSettingsUi.comboBox_currentEditTemplate->currentData()
             .toString();
-    const QStringList paths = currentModeTemplatePaths();
     QSignalBlocker blocker(m_detectionSettingsUi.comboBox_currentEditTemplate);
     m_detectionSettingsUi.comboBox_currentEditTemplate->clear();
     for (const QString &path : paths) {
@@ -1245,12 +1231,6 @@ void TemplateEditorPage::applyTemplateSettingsToUi(
 PreparedTemplateSnapshot TemplateEditorPage::activePreparedTemplate() const
 {
     return m_templateService.activePreparedTemplate();
-}
-
-void TemplateEditorPage::setupTemplateGuide()
-{
-    m_mainWindowUi.label_templateGuideBody->setTextFormat(Qt::RichText);
-    m_mainWindowUi.frame_templateGuide->hide();
 }
 
 void TemplateEditorPage::adjustTemplateGuideHeight()

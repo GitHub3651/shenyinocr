@@ -65,10 +65,6 @@ void MainWindow::updateTissueRoughnessUiVisibility()
             && descriptor.requiresCharacterTemplates;
     const bool showImageThreshold = usesTemplate
             && mode != DetectionMode::Ocr;
-    const bool showBatch = usesTemplate
-            && descriptor.trackingKind
-               == DetectionTrackingKind::MultipleTemplates;
-
     ui->widget_templateControls->setVisible(usesTemplate);
     m_inspectionInfoUi->groupBox_currentTemplate->setVisible(usesTemplate);
     m_detectionSettingsUi->groupBox_currentTemplateSettings->setVisible(usesTemplate);
@@ -78,14 +74,10 @@ void MainWindow::updateTissueRoughnessUiVisibility()
                                         && descriptor.requiresTargetText);
     m_detectionSettingsUi->pushButton_applyTargetText->setVisible(
                 usesTemplate && descriptor.requiresTargetText);
-    m_detectionSettingsUi->pushButton_applyBatchTargetText->setVisible(
-                showBatch && descriptor.requiresTargetText);
     m_detectionSettingsUi->label_imageThreshold->setVisible(showImageThreshold);
     m_detectionSettingsUi->lineEdit_imageThreshold->setVisible(showImageThreshold);
     m_detectionSettingsUi->label_imageThresholdUnit->setVisible(showImageThreshold);
     m_detectionSettingsUi->pushButton_applyImageThreshold->setVisible(showImageThreshold);
-    m_detectionSettingsUi->pushButton_applyBatchImageThreshold->setVisible(
-                showBatch && showImageThreshold);
     ui->toolButton_editCharacterTemplates->setVisible(showCharacterSettings);
     m_detectionSettingsUi->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     m_detectionSettingsUi->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
@@ -94,17 +86,8 @@ void MainWindow::updateTissueRoughnessUiVisibility()
 
 void MainWindow::setupSoftwareSettingsPage()
 {
-    m_softwareSettingsUi->lineEdit_softwareDataDirectory->setReadOnly(true);
-    m_softwareSettingsUi->lineEdit_softwareDataDirectory->setCursor(
-                Qt::PointingHandCursor);
     m_softwareSettingsUi->lineEdit_softwareDataDirectory->setText(
                 m_settingsApplicationService->applicationDataRoot());
-    m_softwareSettingsUi->lineEdit_softwareDataDirectory->setToolTip(
-                "软件公共设置保存在此文件夹。双击可打开目录；产品模板、识别图片、授权和日志不在清空范围内。");
-    m_softwareSettingsUi->pushButton_clearSoftwareData->setToolTip(
-                "删除当前 Windows 用户的软件设置文件并关闭软件，不删除产品模板、识别图片、授权文件或日志。");
-    m_softwareSettingsUi->pushButton_restoreDefaultSettings->setToolTip(
-                "将软件公共界面设置恢复为默认值，不删除产品模板、识别图片、授权文件或日志。");
     connect(m_softwareSettingsUi->pushButton_restoreDefaultSettings,
             &QPushButton::clicked,
             this,
@@ -177,6 +160,7 @@ void MainWindow::restoreDefaultMachineSettings()
     candidate.barcodeCsvEnabled = editableDefaults.barcodeCsvEnabled;
     candidate.barcodeCsvOutputDirectory =
             editableDefaults.barcodeCsvOutputDirectory;
+    candidate.leftDrawerSplitterState.clear();
     const OperationResult saved =
             m_settingsApplicationService->saveConfiguration(candidate);
     if (!saved.isSuccess()) {
@@ -189,6 +173,10 @@ void MainWindow::restoreDefaultMachineSettings()
     }
 
     applyMachineSettingsToUi(editableDefaults);
+    ui->splitter_leftDrawerMain->setSizes(
+                QList<int>()
+                << 360
+                << ui->splitter_leftDrawerMain->width() - 360);
     m_templateEditorPage->clearTemplateDirty();
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();

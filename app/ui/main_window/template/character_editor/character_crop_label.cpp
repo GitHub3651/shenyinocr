@@ -83,6 +83,7 @@ void CharacterCropLabel::paintEvent(QPaintEvent *event)
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setFont(font());
 
     if (m_image.isNull()) {
         painter.setPen(Qt::gray);

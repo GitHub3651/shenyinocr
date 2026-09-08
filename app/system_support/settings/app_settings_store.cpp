@@ -1,4 +1,4 @@
-// 文件作用：实现 AppSettings Schema 7 的唯一磁盘入口。
+// 文件作用：实现 AppSettings Schema 8 的唯一磁盘入口。
 #include "system_support/settings/app_settings_store.h"
 
 #include <QDir>
@@ -431,6 +431,9 @@ QJsonObject settingsToJson(const AppSettings &settings)
     ui.insert(QStringLiteral("selectedDetectionMode"), detectionModeId(selectedMode));
     ui.insert(QStringLiteral("templateSaveDirectory"),
               settings.templateSaveDirectory);
+    ui.insert(QStringLiteral("leftDrawerSplitterStateBase64"),
+              QString::fromLatin1(
+                  settings.leftDrawerSplitterState.toBase64()));
 
     const DetectionSchemes &schemes = settings.detectionSchemes;
     QJsonObject stamp;
@@ -568,7 +571,8 @@ bool settingsFromJson(const QJsonObject &root,
                             QStringLiteral("imageSaving"), error)
             || !hasOnlyKeys(ui,
                             QStringList() << QStringLiteral("selectedDetectionMode")
-                                          << QStringLiteral("templateSaveDirectory"),
+                                          << QStringLiteral("templateSaveDirectory")
+                                          << QStringLiteral("leftDrawerSplitterStateBase64"),
                             QStringLiteral("ui"), error)
             || !hasOnlyKeys(barcodeCsv,
                             QStringList() << QStringLiteral("enabled")
@@ -601,6 +605,7 @@ bool settingsFromJson(const QJsonObject &root,
 
     QString triggerSource, rotation, colorChannel, triggerMode;
     QString imageRange, imageContent, selectedModeId;
+    QString leftDrawerSplitterStateBase64;
     if (!readInt(camera, "exposureMicroseconds", &candidate.cameraExposure, error)
             || !readInt(camera, "gain", &candidate.cameraGain, error)
             || !readString(camera, "triggerSource", &triggerSource, error)
@@ -630,6 +635,8 @@ bool settingsFromJson(const QJsonObject &root,
             || !readString(ui, "selectedDetectionMode", &selectedModeId, error)
             || !readString(ui, "templateSaveDirectory",
                            &candidate.templateSaveDirectory, error)
+            || !readString(ui, "leftDrawerSplitterStateBase64",
+                           &leftDrawerSplitterStateBase64, error)
             || !readBool(barcodeCsv, "enabled",
                          &candidate.barcodeCsvEnabled, error)
             || !readString(barcodeCsv, "outputDirectory",
@@ -661,6 +668,9 @@ bool settingsFromJson(const QJsonObject &root,
                     QStringLiteral("检测模式不受支持。"), selectedModeId);
     }
     candidate.detectModeId = detectionModeUiId(selectedMode);
+    candidate.leftDrawerSplitterState =
+            QByteArray::fromBase64(
+                leftDrawerSplitterStateBase64.toLatin1());
     candidate.colorChannelId = colorChannel;
     if (!mapId(rotation, rotationJsonIds(), appSettingsRotationIds(),
                QStringLiteral("camera.rotation"), &candidate.imageRotationId, error)

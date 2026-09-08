@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>智能视觉检测系统</string>
   </property>
-  <layout class="QHBoxLayout" name="horizontalLayout_mainWindow" stretch="10,3,0">
+  <layout class="QHBoxLayout" name="horizontalLayout_mainWindow" stretch="0,1">
    <property name="spacing">
     <number>0</number>
    </property>
@@ -30,14 +30,342 @@
     <number>15</number>
    </property>
    <item>
-    <widget class="QWidget" name="widget_leftPanel" native="true">
+    <widget class="QWidget" name="widget_leftNavigationRail" native="true">
+     <property name="minimumSize">
+      <size>
+       <width>80</width>
+       <height>0</height>
+      </size>
+     </property>
+     <property name="maximumSize">
+      <size>
+       <width>80</width>
+       <height>16777215</height>
+      </size>
+     </property>
+     <layout class="QVBoxLayout" name="verticalLayout_leftNavigationRail">
+      <property name="spacing">
+       <number>0</number>
+      </property>
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QToolButton" name="toolButton_showInspectionInfo">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>检测信息</string>
+        </property>
+        <property name="text">
+         <string>检测信息</string>
+        </property>
+        <property name="icon">
+         <iconset resource="../../resource/image.qrc">
+          <normaloff>:/svg/navigation/nav_inspection.svg</normaloff>:/svg/navigation/nav_inspection.svg</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>28</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButton_showDetectionSettings">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>参数设定</string>
+        </property>
+        <property name="text">
+         <string>参数设定</string>
+        </property>
+        <property name="icon">
+         <iconset resource="../../resource/image.qrc">
+          <normaloff>:/svg/navigation/nav_parameters.svg</normaloff>:/svg/navigation/nav_parameters.svg</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>28</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButton_showImageSettings">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>图像设置</string>
+        </property>
+        <property name="text">
+         <string>图像设置</string>
+        </property>
+        <property name="icon">
+         <iconset resource="../../resource/image.qrc">
+          <normaloff>:/svg/navigation/nav_image.svg</normaloff>:/svg/navigation/nav_image.svg</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>28</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButton_showPlcSettings">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>PLC通讯</string>
+        </property>
+        <property name="text">
+         <string>PLC通讯</string>
+        </property>
+        <property name="icon">
+         <iconset resource="../../resource/image.qrc">
+          <normaloff>:/svg/navigation/nav_plc.svg</normaloff>:/svg/navigation/nav_plc.svg</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>28</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="toolButton_showSoftwareSettings">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="maximumSize">
+         <size>
+          <width>80</width>
+          <height>80</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>软件设置</string>
+        </property>
+        <property name="text">
+         <string>软件设置</string>
+        </property>
+        <property name="icon">
+         <iconset resource="../../resource/image.qrc">
+          <normaloff>:/svg/navigation/nav_software.svg</normaloff>:/svg/navigation/nav_software.svg</iconset>
+        </property>
+        <property name="iconSize">
+         <size>
+          <width>28</width>
+          <height>28</height>
+         </size>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
+        </property>
+        <property name="toolButtonStyle">
+         <enum>Qt::ToolButtonTextUnderIcon</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="verticalSpacer_leftNavigationRailBottom">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Expanding</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>40</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QSplitter" name="splitter_leftDrawerMain">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QWidget" name="widget_leftDrawer" native="true">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>200</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>16777215</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="visible">
+       <bool>true</bool>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_leftDrawer">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QStackedWidget" name="stackedWidget_leftDrawer">
+         <property name="currentIndex">
+          <number>0</number>
+         </property>
+         <widget class="QWidget" name="page_inspectionInfo"/>
+         <widget class="QWidget" name="page_detectionSettings"/>
+         <widget class="QWidget" name="page_imageSettings"/>
+         <widget class="QWidget" name="page_plcSettings"/>
+         <widget class="QWidget" name="page_softwareSettings"/>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="widget_mainPanel" native="true">
      <property name="sizePolicy">
       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-       <horstretch>60</horstretch>
+       <horstretch>1</horstretch>
        <verstretch>0</verstretch>
       </sizepolicy>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_leftPanel">
+     <layout class="QVBoxLayout" name="verticalLayout_mainPanel">
       <property name="spacing">
        <number>0</number>
       </property>
@@ -132,7 +460,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/Img_Icon_camera3.ico</normaloff>:/Img_Icon_camera3.ico</iconset>
+                <normaloff>:/svg/action/action_camera_open.svg</normaloff>:/svg/action/action_camera_open.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -164,7 +492,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/1.png</normaloff>:/1.png</iconset>
+                <normaloff>:/svg/action/action_camera_close.svg</normaloff>:/svg/action/action_camera_close.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -217,7 +545,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/3.png</normaloff>:/3.png</iconset>
+                <normaloff>:/svg/action/action_template_select.svg</normaloff>:/svg/action/action_template_select.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -244,12 +572,15 @@
                 <height>85</height>
                </size>
               </property>
+              <property name="toolTip">
+               <string>进入当前检测模式的模板制作流程。</string>
+              </property>
               <property name="text">
                <string>制作模板</string>
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/11.png</normaloff>:/11.png</iconset>
+                <normaloff>:/svg/action/action_template_create.svg</normaloff>:/svg/action/action_template_create.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -281,7 +612,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/Img_Icon_database.ico</normaloff>:/Img_Icon_database.ico</iconset>
+                <normaloff>:/svg/action/action_template_save.svg</normaloff>:/svg/action/action_template_save.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -313,7 +644,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/Img_Icon_image.ico</normaloff>:/Img_Icon_image.ico</iconset>
+                <normaloff>:/svg/action/action_character_split.svg</normaloff>:/svg/action/action_character_split.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -366,7 +697,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/13.png</normaloff>:/13.png</iconset>
+                <normaloff>:/svg/action/action_inspection_start.svg</normaloff>:/svg/action/action_inspection_start.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -398,7 +729,7 @@
               </property>
               <property name="icon">
                <iconset resource="../../resource/image.qrc">
-                <normaloff>:/close.png</normaloff>:/close.png</iconset>
+                <normaloff>:/svg/action/action_inspection_stop.svg</normaloff>:/svg/action/action_inspection_stop.svg</iconset>
               </property>
               <property name="iconSize">
                <size>
@@ -471,6 +802,9 @@
               <property name="text">
                <string/>
               </property>
+              <property name="textFormat">
+               <enum>Qt::RichText</enum>
+              </property>
              </widget>
             </item>
            </layout>
@@ -505,7 +839,7 @@
               <string/>
              </property>
              <property name="scaledContents">
-              <bool>true</bool>
+              <bool>false</bool>
              </property>
              <property name="alignment">
               <set>Qt::AlignCenter</set>
@@ -533,7 +867,10 @@
               </size>
              </property>
              <property name="text">
-              <string>等待检测</string>
+              <string/>
+             </property>
+             <property name="textFormat">
+              <enum>Qt::PlainText</enum>
              </property>
              <property name="alignment">
               <set>Qt::AlignCenter</set>
@@ -553,285 +890,6 @@
       </item>
      </layout>
     </widget>
-   </item>
-   <item>
-    <widget class="QWidget" name="widget_rightPanel" native="true">
-     <property name="sizePolicy">
-      <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-       <horstretch>40</horstretch>
-       <verstretch>0</verstretch>
-      </sizepolicy>
-     </property>
-     <property name="minimumSize">
-      <size>
-       <width>200</width>
-       <height>0</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>16777215</width>
-       <height>16777215</height>
-      </size>
-     </property>
-     <property name="visible">
-      <bool>true</bool>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_rightPanel">
-      <property name="spacing">
-       <number>0</number>
-      </property>
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <item>
-       <widget class="QStackedWidget" name="stackedWidget_rightDrawer">
-        <property name="currentIndex">
-         <number>0</number>
-        </property>
-        <widget class="QWidget" name="page_inspectionInfo"/>
-        <widget class="QWidget" name="page_detectionSettings"/>
-        <widget class="QWidget" name="page_imageSettings"/>
-        <widget class="QWidget" name="page_plcSettings"/>
-        <widget class="QWidget" name="page_softwareSettings"/>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QWidget" name="widget_rightNavigationRail" native="true">
-     <property name="minimumSize">
-      <size>
-       <width>80</width>
-       <height>0</height>
-      </size>
-     </property>
-     <property name="maximumSize">
-      <size>
-       <width>80</width>
-       <height>16777215</height>
-      </size>
-     </property>
-     <layout class="QVBoxLayout" name="verticalLayout_rightNavigationRail">
-      <property name="spacing">
-       <number>0</number>
-      </property>
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
-      <item>
-       <widget class="QToolButton" name="toolButton_showInspectionInfo">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>72</width>
-          <height>68</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>检测信息</string>
-        </property>
-        <property name="text">
-         <string>检测信息</string>
-        </property>
-        <property name="icon">
-         <iconset resource="../../resource/image.qrc">
-          <normaloff>:/svg/nav_inspection.svg</normaloff>:/svg/nav_inspection.svg</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>28</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="checked">
-         <bool>true</bool>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_showDetectionSettings">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>72</width>
-          <height>68</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>参数设定</string>
-        </property>
-        <property name="text">
-         <string>参数设定</string>
-        </property>
-        <property name="icon">
-         <iconset resource="../../resource/image.qrc">
-          <normaloff>:/svg/nav_parameters.svg</normaloff>:/svg/nav_parameters.svg</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>28</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_showImageSettings">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>72</width>
-          <height>68</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>图像设置</string>
-        </property>
-        <property name="text">
-         <string>图像设置</string>
-        </property>
-        <property name="icon">
-         <iconset resource="../../resource/image.qrc">
-          <normaloff>:/svg/nav_image.svg</normaloff>:/svg/nav_image.svg</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>28</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_showPlcSettings">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>72</width>
-          <height>68</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>PLC通讯</string>
-        </property>
-        <property name="text">
-         <string>PLC通讯</string>
-        </property>
-        <property name="icon">
-         <iconset resource="../../resource/image.qrc">
-          <normaloff>:/svg/nav_plc.svg</normaloff>:/svg/nav_plc.svg</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>28</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <widget class="QToolButton" name="toolButton_showSoftwareSettings">
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>72</width>
-          <height>68</height>
-         </size>
-        </property>
-        <property name="toolTip">
-         <string>软件设置</string>
-        </property>
-        <property name="text">
-         <string>软件设置</string>
-        </property>
-        <property name="icon">
-         <iconset resource="../../resource/image.qrc">
-          <normaloff>:/svg/nav_software.svg</normaloff>:/svg/nav_software.svg</iconset>
-        </property>
-        <property name="iconSize">
-         <size>
-          <width>28</width>
-          <height>28</height>
-         </size>
-        </property>
-        <property name="checkable">
-         <bool>true</bool>
-        </property>
-        <property name="toolButtonStyle">
-         <enum>Qt::ToolButtonTextUnderIcon</enum>
-        </property>
-       </widget>
-      </item>
-     </layout>
     </widget>
    </item>
   </layout>

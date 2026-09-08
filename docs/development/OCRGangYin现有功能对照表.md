@@ -12,13 +12,26 @@
 - `已确认删除`：用户明确同意，且已记录影响。
 - 证据缩写：`S`=已在基线HEAD完成源码/UI/工程静态核对；`T`=已有离线测试源码、等待Qt Creator执行；`U`=等待用户从原入口、真实设备或固定样本确认；`P`=升级计划明确延期。
 
+## 左侧导航与页面抽屉（2026-09-07，代码实施完成待统一验证）
+
+本节是当前主窗口 UI 事实，覆盖后文历史条目中关于右侧导航、固定页面宽度、旧 Splitter 状态和旧判定栏视觉的描述。
+
+| 范围 | 当前唯一正式路径 | 已删除的旧路径 | 待用户统一验证 |
+|---|---|---|---|
+| 导航与抽屉 | 80px 左侧导航栏控制同一个五页抽屉；抽屉与主画面由 `splitter_leftDrawerMain` 承载 | 右侧方向对象名、方法名和 QSS 选择器均已删除，不保留别名或转发层 | 五入口打开、切换、再次点击收起及 Fault 首次打开检测信息页 |
+| 宽度保存 | 正常关闭时用 `QSplitter::saveState()` 保存到 `AppSettings::leftDrawerSplitterState`，JSON 只写 `ui.leftDrawerSplitterStateBase64` | 不连接 `splitterMoved`，不保存独立宽度，不迁移或兼容读取 Schema 7 | 首次 360px、拖动、重启恢复及恢复默认设置 |
+| 文字显示 | `label_recognitionText` 和四个统计值使用 20px；识别结果允许任意字符换行，目标文字使用 `WrapAtWordBoundaryOrAnywhere` | 无第二份识别结果，不改变原始检测文字 | 长二维码、序列号和目标文字不再撑出页面横向滚动条 |
+| 判定栏 | 闲置为空且与主画布同为 `#202830`；OK/NG 使用 56px 绿色“正确”和红色“错误”；Fault 保持原深红样式 | `showWaitingResult()` 及“等待检测/等待结果”文字已删除 | 首次启动、视图清空、OK/NG、Fault 和恢复显示 |
+
+主程序已通过 qmake、MSVC x64 Release 编译、链接和运行库部署；真实交互、重启状态和长文本效果等待用户统一验证。
+
 ## 二维码结果本机 CSV 直写（2026-09-03，代码实施完成待统一验证）
 
 二维码+三期的结果输出已从远程 TCP 发送替换为主程序本机每日 CSV 直接追加。本节是当前实现事实，覆盖后文历史条目中关于 `resultExport`、连接状态、ACK、内存 FIFO、传输 Fault 和退出待发送提示的描述；`tools/result_receiver/` 不在本轮范围内。
 
 | 范围 | 当前唯一正式路径 | 已删除的旧路径 | 待用户统一验证 |
 |---|---|---|---|
-| 设置与 UI | 严格 AppSettings Schema 6 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期页只保留启用、只读目录和选择目录 | `resultExport`、IP、端口、连接/断开、状态和延迟 UI | Schema 5 整体重置、目录与启用状态保存/恢复、未选目录时拒绝启用 |
+| 设置与 UI | 严格 AppSettings Schema 8 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期页只保留启用、只读目录和选择目录 | `resultExport`、IP、端口、连接/断开、状态和延迟 UI | Schema 7 整体重置、目录与启用状态保存/恢复、未选目录时拒绝启用 |
 | 启动与运行配置 | 启用时开始识别只调用 `QDir::mkpath()` 准备目录；本轮配置冻结开关和目录；不创建测试文件或写探针 | TCP 已连接门禁、连接状态快照和专用 Fault 恢复门禁 | 目录可创建/不可创建、其他四模式无 CSV、运行中控件禁用 |
 | 正式结果事务 | `ResultService::process()` 在 `claimResult()` 后按本机日期追加 `qr_results_YYYYMMDD.csv`，成功后才 `finalizeResultClaim()`；OK 写二维码原文，整体 NG 写 `noQR` | 发送记录、ACK、内存队列及网络 Worker | BOM、无表头、转义、逐行 flush、同日续写和跨日新文件 |
 | 失败与关闭 | 打开、写入或 flush 失败记录 ERROR 并进入 `BarcodeCsvUnavailable` 通用 Fault；关闭流程无待发送数据 | `ResultExportUnavailable`、pending 查询和退出丢失提示 | 首件和运行中写入失败弹出 Fault、统计/PLC/呈现停止、确认后 Unconfirmed reconciliation |
@@ -325,5 +338,5 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 |---|---|---|---|---|
 | 五模式样本清单 | `tests/baseline/sample_manifest.tsv` | DET-002..008、RES、SAVE、PLC | 用户填写每模式OK/NG/FAILURE的固定图、模板、文本、Overlay、计数、存图、PLC和耗时 | 已建清单，15份实际证据待用户 |
 | 纸巾离线基线测试 | `tests/detection_tests/tissue_roll_detector_baseline_test.cpp` | SET-010、DET-005 | Qt Creator打开`tests/tests.pro`，Run qmake、Build并运行测试 | 2026-08-12用户确认纸巾Pipeline切片的4项业务测试全部通过，汇总`6 passed, 0 failed` |
-| 生产主程序构建 | `app/AutoOCRproject.pro` | 全部主程序功能 | Qt 5.14.2/MSVC2017 x64 Release，Run qmake、Rebuild、Run | 2026-08-12用户先后确认含纸巾Pipeline和深度OCR Pipeline的主程序正常构建运行；纸巾阈值与OCR模式切换正常 |
+| 生产主程序构建 | `app/AutoOCRproject.pro` | 全部主程序功能 | 当前本地 Qt Creator Kit：Qt 5.15.2/MSVC2019 64-bit，Release，Run qmake、Rebuild、Run | 2026-08-12 用户在当时的 Qt 5.14.2/MSVC2017 Kit 上确认含纸巾 Pipeline 和深度 OCR Pipeline 的主程序正常构建运行；2026-08-29 Agent 使用 Qt 5.15.2 qmake，并在 VS2022 Developer Command Prompt 下完成 MSVC x64 Release 全量编译、链接及部署；当前 Qt 5.15.2/MSVC2019 Kit 尚无单独的用户门禁记录 |
 | 运行与性能记录 | `docs/development/OCRGangYin重构执行记录.md` | 内存、P50/P95、慢盘、停止/重启 | 用户按执行记录步骤填写真实数值 | 待用户验证 |

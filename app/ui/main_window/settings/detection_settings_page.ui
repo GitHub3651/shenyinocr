@@ -32,9 +32,9 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>-10</y>
-        <width>340</width>
-        <height>771</height>
+        <y>0</y>
+        <width>357</width>
+        <height>761</height>
        </rect>
       </property>
       <layout class="QGridLayout" name="gridLayout_detectionSettings">
@@ -92,67 +92,49 @@
           <property name="verticalSpacing">
            <number>15</number>
           </property>
-          <item row="0" column="0" colspan="3">
-           <widget class="QWidget" name="widget_currentTemplateEditor" native="true">
-            <layout class="QHBoxLayout" name="horizontalLayout_currentTemplateEditor">
-             <property name="leftMargin">
-              <number>0</number>
-             </property>
-             <property name="topMargin">
-              <number>0</number>
-             </property>
-             <property name="rightMargin">
-              <number>0</number>
-             </property>
-             <property name="bottomMargin">
-              <number>0</number>
-             </property>
-             <item>
-              <widget class="QLabel" name="label_currentEditTemplate">
-               <property name="frameShape">
-                <enum>QFrame::NoFrame</enum>
-               </property>
-               <property name="text">
-                <string>当前编辑模板</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QComboBox" name="comboBox_currentEditTemplate">
-               <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                 <horstretch>1</horstretch>
-                 <verstretch>0</verstretch>
-                </sizepolicy>
-               </property>
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>50</height>
-                </size>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QPushButton" name="toolButton_removeCurrentTemplate">
-               <property name="minimumSize">
-                <size>
-                 <width>0</width>
-                 <height>50</height>
-                </size>
-               </property>
-               <property name="toolTip">
-                <string>从当前检测方案移除模板，不会删除模板文件夹。</string>
-               </property>
-               <property name="text">
-                <string>移除模板</string>
-               </property>
-               <property name="uiRole" stdset="0">
-                <string>danger</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_currentEditTemplate">
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
+            </property>
+            <property name="text">
+             <string>当前编辑模板</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="comboBox_currentEditTemplate">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>1</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QPushButton" name="toolButton_removeCurrentTemplate">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>从当前检测方案移除模板，不会删除模板文件夹。</string>
+            </property>
+            <property name="text">
+             <string>移除当前模板</string>
+            </property>
+            <property name="uiRole" stdset="0">
+             <string>danger</string>
+            </property>
            </widget>
           </item>
           <item row="2" column="1" colspan="2">
@@ -247,8 +229,14 @@
               <height>50</height>
              </size>
             </property>
+            <property name="toolTip">
+             <string>请输0到100之间的整数，单位：%</string>
+            </property>
             <property name="text">
              <string>80</string>
+            </property>
+            <property name="maxLength">
+             <number>3</number>
             </property>
            </widget>
           </item>
@@ -270,7 +258,7 @@
              <string>%</string>
             </property>
             <property name="alignment">
-             <set>Qt::AlignCenter</set>
+             <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
             </property>
            </widget>
           </item>
@@ -339,8 +327,8 @@
          <property name="title">
           <string>二维码结果本机记录</string>
          </property>
-         <layout class="QFormLayout" name="formLayout_barcodeCsv">
-          <item row="0" column="0" colspan="2">
+         <layout class="QGridLayout" name="gridLayout_barcodeCsv" columnstretch="0,1,0">
+          <item row="0" column="0" colspan="3">
            <widget class="QCheckBox" name="barcodeCsvEnable">
             <property name="text">
              <string>启用本机 CSV 记录</string>
@@ -355,34 +343,30 @@
            </widget>
           </item>
           <item row="1" column="1">
-           <layout class="QHBoxLayout" name="horizontalLayout_barcodeCsvOutputDirectory">
-            <item>
-             <widget class="QLineEdit" name="barcodeCsvOutputDirectory">
-              <property name="minimumSize">
-               <size>
-                <width>0</width>
-                <height>50</height>
-               </size>
-              </property>
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="barcodeCsvBrowseDirectory">
-              <property name="minimumSize">
-               <size>
-                <width>80</width>
-                <height>50</height>
-               </size>
-              </property>
-              <property name="text">
-               <string>选择目录</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
+           <widget class="QLineEdit" name="barcodeCsvOutputDirectory">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="2">
+           <widget class="QPushButton" name="barcodeCsvBrowseDirectory">
+            <property name="minimumSize">
+             <size>
+              <width>80</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>选择目录</string>
+            </property>
+           </widget>
           </item>
          </layout>
         </widget>
@@ -412,7 +396,7 @@
            </property>
           </widget>
          </item>
-         <item row="1" column="1">
+         <item row="0" column="2">
           <widget class="QPushButton" name="pushButton_applyPhotoDistance">
            <property name="minimumSize">
             <size>

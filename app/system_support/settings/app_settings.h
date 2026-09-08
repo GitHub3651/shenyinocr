@@ -3,6 +3,7 @@
 
 #include "contracts/detection_mode.h"
 
+#include <QByteArray>
 #include <QString>
 #include <QStringList>
 
@@ -27,7 +28,7 @@ bool operator!=(const DetectionSchemes &left,
 
 struct AppSettings
 {
-    static const int CurrentSchemaVersion = 7;
+    static const int CurrentSchemaVersion = 8;
 
     AppSettings();
 
@@ -65,6 +66,7 @@ struct AppSettings
     int plcRejectTimeOffset;
 
     QString templateSaveDirectory;
+    QByteArray leftDrawerSplitterState;
     bool barcodeCsvEnabled;
     QString barcodeCsvOutputDirectory;
     DetectionSchemes detectionSchemes;

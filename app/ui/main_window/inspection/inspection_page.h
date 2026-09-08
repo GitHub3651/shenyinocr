@@ -32,7 +32,6 @@ public:
     InspectionPage &operator=(const InspectionPage &) = delete;
 
     void present(const InspectionPresentation &presentation);
-    void showWaitingResult();
     void setStatistics(const DetectionResultStatistics &statistics);
     void presentPreviewImage(const QImage &image);
     void clearInspectionView(InspectionClearScope scope);

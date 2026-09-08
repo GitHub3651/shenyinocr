@@ -31,6 +31,19 @@ void setLabelTextIfChanged(QLabel &label, const QString &text)
     }
 }
 
+QString breakableRecognitionText(const QString &text)
+{
+    QString displayText;
+    displayText.reserve(text.size() * 2);
+    for (const QChar character : text) {
+        displayText.append(character);
+        if (!character.isSpace()) {
+            displayText.append(QChar(0x200B));
+        }
+    }
+    return displayText;
+}
+
 void setStyleProperty(
     QWidget &widget,
     const char *name,
@@ -75,8 +88,6 @@ InspectionPage::InspectionPage(
       m_mainWindowUi(mainWindowUi),
       m_inspectionInfoUi(inspectionInfoUi)
 {
-    m_mainWindowUi.toolButton_createTemplate->setToolTip(
-                QStringLiteral("进入当前检测模式的模板制作流程。"));
     m_templateAttentionTimer.setInterval(900);
     QObject::connect(
         &m_templateAttentionTimer,
@@ -93,32 +104,18 @@ InspectionPage::InspectionPage(
     });
 }
 
-void InspectionPage::showWaitingResult()
-{
-    m_mainWindowUi.label_verdictResult->setTextFormat(Qt::PlainText);
-    m_mainWindowUi.label_verdictResult->setWordWrap(true);
-    setStyleProperty(
-                *m_mainWindowUi.label_verdictResult,
-                "verdict",
-                QStringLiteral("idle"));
-    m_mainWindowUi.label_verdictResult->setText(QStringLiteral("等待结果"));
-}
-
 void InspectionPage::present(const InspectionPresentation &presentation)
 {
     if (!presentation.isValid()) {
         return;
     }
     const QPixmap pixmap = QPixmap::fromImage(presentation.image);
-    m_mainWindowUi.inspectionImageCanvas->setScaledContents(false);
-    m_mainWindowUi.inspectionImageCanvas->setAlignment(Qt::AlignCenter);
     m_mainWindowUi.inspectionImageCanvas->setAutoFitPixmap(pixmap);
     if (!m_mainWindowUi.inspectionImageCanvas->isTemplateDrawingEnabled()) {
         setLabelTextIfChanged(
                     *m_inspectionInfoUi.label_runtimeStatus,
                     QStringLiteral("正在显示相机采集图像..."));
     }
-    m_mainWindowUi.label_verdictResult->setTextFormat(Qt::PlainText);
     setStyleProperty(
                 *m_mainWindowUi.label_verdictResult,
                 "verdict",
@@ -126,7 +123,6 @@ void InspectionPage::present(const InspectionPresentation &presentation)
                 == DetectionVerdictViewStyle::Correct
                 ? QStringLiteral("ok")
                 : QStringLiteral("ng"));
-    m_mainWindowUi.label_verdictResult->setWordWrap(true);
     setLabelTextIfChanged(
                 *m_mainWindowUi.label_verdictResult,
                 presentation.verdictText.isEmpty()
@@ -137,7 +133,8 @@ void InspectionPage::present(const InspectionPresentation &presentation)
                 : presentation.verdictText);
     setLabelTextIfChanged(
                 *m_inspectionInfoUi.label_recognitionText,
-                presentation.recognitionText);
+                breakableRecognitionText(
+                    presentation.recognitionText));
     m_inspectionInfoUi.lineEdit_currentTemplateName->setText(
                 presentation.updatesTemplateName
                 ? presentation.templateName : QString());
@@ -163,8 +160,6 @@ void InspectionPage::presentPreviewImage(const QImage &image)
         return;
     }
     clearInspectionView(InspectionClearScope::ImageMetadata);
-    m_mainWindowUi.inspectionImageCanvas->setScaledContents(false);
-    m_mainWindowUi.inspectionImageCanvas->setAlignment(Qt::AlignCenter);
     m_mainWindowUi.inspectionImageCanvas->setAutoFitPixmap(QPixmap::fromImage(image));
 }
 
@@ -172,7 +167,7 @@ void InspectionPage::clearInspectionView(InspectionClearScope scope)
 {
     setLabelTextIfChanged(
                 *m_mainWindowUi.label_verdictResult,
-                QStringLiteral("等待检测"));
+                QString());
     setLabelTextIfChanged(*m_inspectionInfoUi.label_recognitionText, QString());
     m_inspectionInfoUi.lineEdit_detectionDuration->clear();
     m_inspectionInfoUi.lineEdit_currentTemplateName->clear();
@@ -257,7 +252,6 @@ void InspectionPage::presentFault(
                 *m_inspectionInfoUi.label_runtimeStatus,
                 "uiState",
                 QStringLiteral("fault"));
-    m_mainWindowUi.label_verdictResult->setTextFormat(Qt::PlainText);
     m_mainWindowUi.label_verdictResult->setText(presentation.resultText);
     setStyleProperty(
                 *m_mainWindowUi.label_verdictResult,
@@ -308,7 +302,7 @@ void InspectionPage::restoreNormalFaultStyle()
                 *m_mainWindowUi.label_verdictResult,
                 "verdict",
                 QStringLiteral("idle"));
-    m_mainWindowUi.label_verdictResult->setText(QStringLiteral("等待检测"));
+    m_mainWindowUi.label_verdictResult->clear();
 }
 
 void InspectionPage::reportImageSaveFailure(

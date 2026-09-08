@@ -25,7 +25,7 @@
 - 仓库：`D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin`
 - 分支：`codex/ocrgangyin-refactor`
 - 阶段 0 核对 HEAD：`8595cb2 refactor: complete stage 4 architecture closure`
-- 工具链：Qt 5.14、qmake、MSVC2017、C++11
+- 阶段 0 历史工具链：Qt 5.14、qmake、MSVC2017、C++11。当前本地 Qt Creator 已选用 Qt 5.15.2/MSVC2019 64-bit Kit；`AutoOCRproject.pro` 只声明 Qt 模块和 C++11，不锁定 Qt 补丁版本。
 - 2026-08-16 阶段 0 实查：`git status --short --untracked-files=all` 无输出，工作区干净；交接基准提到的未跟踪文件 `app.zip` 当前未找到。Agent 不得创建、修改、移动、删除或提交 `app.zip`；若它之后重新出现，必须继续视为用户文件并排除在所有操作之外。
 - 当前功能表历史基准：已验证 88 项、已延期 2 项；按本方案更新治理结论后为已验证 87 项、已确认删除 3 项、其余状态为 0。
 - 现有“重构完成”只代表 2026-08-15 固定四轮计划及其门禁已完成，不代表达到本文定义的终局架构。
@@ -39,7 +39,7 @@
 - 除多相机和 Fault 兜底策略外，其余用户可达功能全部保留。
 - 不兼容旧模板、旧设置和旧目录，不提供运行时兼容或离线转换工具。
 - 真实相机可用于回归；当前无真实 PLC。PLC 只做 Fake 合同验证，真实 PLC 与机械剔除的现场验收保持待验。
-- 保持 Qt 5.14、qmake、MSVC2017、C++11。
+- 本方案实施时保持 Qt 5.14、qmake、MSVC2017、C++11；这是历史执行边界，当前构建以 1.2 节记录的本地 Kit 为准。
 - 不调整五种算法的判定、阈值、模型和正常统计口径。
 
 ### 1.4 功能表终局要求

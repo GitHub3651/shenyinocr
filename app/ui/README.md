@@ -104,14 +104,20 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 ## 统一样式
 
-唯一正式样式文件是 `app/resource/qss/app_theme.qss`，运行时只从 `:/qss/app_theme.qss` 加载。普通控件按控件类型自动继承样式，不在 `.ui` 或业务 C++ 中填写完整 `styleSheet`。
+唯一正式样式文件是 `app/resource/qss/app_theme.qss`，由 `ApplicationStartup` 在任何启动消息框出现前从 `:/qss/app_theme.qss` 加载一次。主题使用浅灰设备外壳、白灰内容面板、深色图像画布、钢灰边框和低饱和蓝色操作色；普通控件按控件类型自动继承样式，不在 `.ui` 或业务 C++ 中填写完整 `styleSheet`。
 
-模板制作向导的背景、边框、字体、字号和颜色只在 `app_theme.qss` 的 `frame_templateGuide`、`label_templateGuideTitle` 和 `label_templateGuideBody` 选择器中维护。C++ 只负责按检测模式和框选事件更新内容、可见性和状态。
+主窗口保持 1600×950 设计尺寸，主控区固定 200px，相机/模板/检测三组保持 `1:2:1`，图像/判定保持 `3:1`。最左侧导航栏固定 80px，五个导航按钮固定为 80×80px、使用 28×28 图标并在顶部连续排列，底部伸展项吸收剩余高度；导航按钮无边框和选中蓝条，当前入口由近白背景和蓝色文字表示。导航右侧的五页抽屉与主画面由水平 `QSplitter` 承载，首次使用 360px 抽屉宽度，正常关闭时把完整 Splitter 状态保存到 AppSettings Schema 8。
+
+八个主控按钮直接使用 `:/svg/action/action_*.svg` 静态资源，左侧导航使用 `:/svg/navigation/nav_*.svg`。`InspectionImageCanvas` 使用 `#202830` 底色，并通过正式 QSS 使用 `:/svg/canvas/canvas_background_grid.svg` 作为静态弱网格背景；`CharacterCropLabel` 使用相同的 `#202830` 纯色底，不使用网格。界面层不生成、换色或动态绘制这些资源。
+
+界面文字只使用 16、18、20、26、56px 五个字号和常规 400、加重 600 两档字重。普通界面文字为 16px；18px 只用于模板制作向导标题和正文；识别内容和四个统计值为 20px；其他重要信息为 26px；最终判定为 56px。普通正文、说明、单位、只读值和普通标题统一为纯黑色；禁用、主操作、成功、警告、危险和反白文字使用正式 QSS 中的固定角色色。列表、树、表格、下拉弹出项和非原生目录选择框统一通过 `QAbstractItemView` 获得普通与选中文字规则。
+
+模板制作向导的背景、边框和基础字体由 `app_theme.qss` 的 `frame_templateGuide`、`label_templateGuideTitle` 和 `label_templateGuideBody` 选择器维护。标题和正文均为 18px，标题保持蓝色加重、正文保持黑色常规。`TemplateEditorPage` 保留现有 RichText，只在区域名称上使用四种既有强调色和加重显示；其他内容继承正式 QSS。
 
 按钮只使用两个已有角色：
 
 - `uiRole=primary`：当前页面的主要保存或确认动作。
-- `uiRole=danger`：清空、清零等危险动作。
+- `uiRole=danger`：清空、清零等危险动作；清空软件数据、总数清零、NG 清零和剔除复位同时由固定对象名直接使用同一组危险状态规则。
 
 运行时视觉属性保持为：
 
@@ -119,7 +125,7 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 - `verdict`：`idle/ok/ng/fault` 检测判定。
 - `hasError`：输入校验错误。
 
-C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁用视觉由 `app_theme.qss` 决定。
+C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁用视觉由 `app_theme.qss` 决定。模板向导既有区域名称强调色和字符框选画布既有标注色除外；`CharacterCropLabel` 只通过 `QPainter::setFont(font())` 继承控件字体，不保存字号或字重值。五个左侧抽屉页面的 8px 纵向滚动条只通过对应 `QScrollArea` 对象名限定，不影响文本编辑框和模板对话框的内部滚动条。
 
 ## 维护规则
 
@@ -128,13 +134,15 @@ C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁�
 - `.ui` 对象名、提升控件类名、C++ 引用、QSS 选择器和 qmake 清单必须同步。
 - 主图像提升控件固定为 `InspectionImageCanvas`，对象名固定为 `inspectionImageCanvas`。
 - `OperationUiPolicy` 是主控按钮状态的唯一规则，`SettingsEditState` 是未应用设置状态的唯一实现。
-- Startup 只创建应用级服务和 MainWindow，不创建或回挂三个逻辑 Page。
+- Startup 只负责进程初始化、加载翻译与正式 QSS，并创建应用级服务和 MainWindow；不创建或回挂三个逻辑 Page。
 - 页面自有按钮直接连接所属 Page；MainWindow 只保留跨页面或应用级协调。
 - 不新增 PageManager、UiManager、MainWindowBuilder、UiCompositionRoot、事件总线、页面注册表或控件访问层。
 - 当前编辑模板是临时 UI 状态，不写入设置。
 - 无效已选模板路径保留显示并允许移除，不静默切换或删除。
 - 所有用户文字直接使用 UTF-8 中文，不写人为 Unicode 转义。
 - 新增普通控件不设置内联 `styleSheet`；先使用正式 QSS 的类型样式和已有角色。
+- 不新增第二套 QSS、主题管理器、兼容主题、控件皮肤层或资源生成脚本。
+- 主控和导航图标只引用 `image.qrc` 中登记的静态 SVG，不保留 PNG/ICO 副本或回退路径。
 - `setEnabled()` 和禁用原因 Tooltip 属于交互规则，不能因为界面重排而删除。
 - 固定控件说明使用 Qt 原生 `setToolTip()`；列表项和下拉项的完整路径使用 `Qt::ToolTipRole`。
 - 运行状态导致的禁用原因通过 `applyOperationUiAccess()` 更新；控件重新启用后恢复原 Tooltip。

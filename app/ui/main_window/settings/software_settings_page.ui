@@ -65,6 +65,12 @@
           <height>50</height>
          </size>
         </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="toolTip">
+         <string>软件公共设置保存在此文件夹。双击可打开目录；产品模板、识别图片、授权和日志不在清空范围内。</string>
+        </property>
         <property name="readOnly">
          <bool>true</bool>
         </property>
@@ -77,6 +83,9 @@
           <width>0</width>
           <height>50</height>
          </size>
+        </property>
+        <property name="toolTip">
+         <string>删除当前 Windows 用户的软件设置文件并关闭软件，不删除产品模板、识别图片、授权文件或日志。</string>
         </property>
         <property name="text">
          <string>清空当前软件数据</string>
@@ -93,6 +102,9 @@
           <width>0</width>
           <height>50</height>
          </size>
+        </property>
+        <property name="toolTip">
+         <string>将软件公共界面设置恢复为默认值，不删除产品模板、识别图片、授权文件或日志。</string>
         </property>
         <property name="text">
          <string>恢复默认设置</string>

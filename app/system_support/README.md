@@ -9,7 +9,7 @@ system_support/
 ├─ machine_settings_policy.h/.cpp       整机默认恢复策略
 ├─ settings/
 │  ├─ app_settings.h/.cpp               AppSettings 与五模式 DetectionSchemes
-│  └─ app_settings_store.h/.cpp         Schema 7 严格 JSON + QSaveFile
+│  └─ app_settings_store.h/.cpp         Schema 8 严格 JSON + QSaveFile
 ├─ license/license_codec.h/.cpp
 ├─ logging/application_logger.h/.cpp
 └─ crash/
@@ -28,7 +28,7 @@ UI 草稿
 
 `AppSettingsStore` 无长期内存副本、无逐字段 setter，也不读取模板文件夹。整机设置、检测方案和纸巾阈值共用一个完整 JSON 原子提交入口。
 
-二维码+三期的本机 CSV 开关与绝对输出目录保存在 `barcodeCsv.enabled/outputDirectory`；目录准备和结果写入不属于 Store。
+二维码+三期的本机 CSV 开关与绝对输出目录保存在 `barcodeCsv.enabled/outputDirectory`；左侧页面抽屉的 `QSplitter` 状态保存在 `ui.leftDrawerSplitterStateBase64`。目录准备和结果写入不属于 Store。
 
 ## 维护规则
 

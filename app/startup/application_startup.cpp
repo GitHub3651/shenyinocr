@@ -28,6 +28,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QLibraryInfo>
 #include <QMessageBox>
 #include <QStandardPaths>
@@ -113,6 +114,15 @@ int ApplicationStartup::run(int argc, char *argv[])
     installQtTranslations(
                 &application, &qtBaseTranslator, &qtTranslator,
                 &applicationTranslator);
+    {
+        QFile themeFile(QStringLiteral(":/qss/app_theme.qss"));
+        if (!themeFile.open(QFile::ReadOnly)) {
+            qCWarning(logUi).noquote()
+                    << "event=ui.style_load_failed path=:/qss/app_theme.qss";
+        } else {
+            application.setStyleSheet(QString::fromUtf8(themeFile.readAll()));
+        }
+    }
     qRegisterMetaType<cv::Mat>("cv::Mat");
     qRegisterMetaType<InspectionPresentation>("InspectionPresentation");
     qRegisterMetaType<InspectionFaultSnapshot>("InspectionFaultSnapshot");

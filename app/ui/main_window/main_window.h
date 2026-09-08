@@ -79,9 +79,6 @@ private:
     void initializePages();
     void presentTemplatePreviewFrame(const cv::Mat &image);
     void showParameterInfo(const QString &title, const QString &message);
-    void showParameterInfoWithRedWarning(const QString &title,
-                                         const QString &message,
-                                         const QString &warningMessage);
     void showParameterInfoAsError(const QString &title,
                                   const QString &message);
     void showParameterWarning(const QString &title, const QString &message);
@@ -112,12 +109,11 @@ private:
     void presentInspectionFault();
     void checkInspectionPlcHealth();
     void restoreNormalFaultUi();
-    void showRightPanelPage(QWidget *page, QToolButton *button);
-    void hideRightPanel();
+    void showLeftDrawerPage(QWidget *page, QToolButton *button);
+    void hideLeftDrawer();
     void setupDetectModeChangeTracking();
     void applyMachineSettingsToUi(const AppSettings &settings);
     void setupNonPersistentDefaults();
-    void initStyle();
     void updateBarcodeCsvUi(const RuntimeSnapshot &snapshot);
 
     std::unique_ptr<Ui::MainWindow> ui;

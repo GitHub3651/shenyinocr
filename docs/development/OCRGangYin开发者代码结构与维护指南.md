@@ -289,9 +289,9 @@ toolButton_selectTemplate
 |---|---|
 | `templates/template_store.h` | `TemplateSettings/EditableTemplate/PreparedTemplate/Summary/Error` 与四个 Store 方法。不要拆出 Repository、Manager 或 Session。 |
 | `templates/template_store.cpp` | 严格 JSON、图片/字符加载、两级校验和唯一目录事务保存。任何模板磁盘格式修改都集中在这里。 |
-| `system_support/settings/app_settings.h` | 整机扁平字段、固定五模式 `DetectionSchemes` 和默认/相等接口。 |
+| `system_support/settings/app_settings.h` | Schema 8 整机扁平字段、固定五模式 `DetectionSchemes`、左侧抽屉 Splitter 状态和默认/相等接口。 |
 | `system_support/settings/app_settings.cpp` | 默认值、枚举 ID、路径规范化与单/多/无模板路径规则。 |
-| `system_support/settings/app_settings_store.h` | Schema 2 加载状态、错误和统一 Store 接口。 |
+| `system_support/settings/app_settings_store.h` | Schema 8 加载状态、错误和统一 Store 接口。 |
 | `system_support/settings/app_settings_store.cpp` | 严格分区 JSON 读写、完整约束和 `QSaveFile` 原子提交。 |
 | `system_support/machine_settings_policy.h/.cpp` | 相机/PLC当前状态下可恢复的整机默认字段；必须保留检测方案。 |
 
@@ -385,7 +385,7 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `main_window/main_window.ui` | 主窗口骨架、主控区、右侧导航和五个空页面根节点。 |
+| `main_window/main_window.ui` | 主窗口骨架、主控区、左侧 80px 导航、可调宽五页抽屉和五个空页面根节点。 |
 | `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权和跨页面协调。 |
 | `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、故障和窗口关闭协调。 |
 | `main_window/main_window_settings.cpp` | 设置保存、恢复、清空、模式显隐和硬件参数应用。 |

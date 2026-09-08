@@ -25,7 +25,6 @@
 #include <QFileDialog>
 #include <QLabel>
 #include <QLineEdit>
-#include <QFile>
 #include <QString>
 #include <QMessageBox>
 #include <QPushButton>
@@ -34,7 +33,6 @@
 #include <QSpinBox>
 #include <QTextEdit>
 #include <QCloseEvent>
-#include <QApplication>
 
 #include <limits>
 
@@ -43,7 +41,7 @@ void MainWindow::presentInspectionFault()
     updateOperationUiState();
     if (!m_faultAlarmPresented) {
         ui->toolButton_showInspectionInfo->setChecked(true);
-        showRightPanelPage(
+        showLeftDrawerPage(
                     ui->page_inspectionInfo,
                     ui->toolButton_showInspectionInfo);
     }
@@ -346,33 +344,6 @@ void MainWindow::showParameterInfo(const QString &title, const QString &message)
     QMessageBox::information(this, title, message);
 }
 
-void MainWindow::showParameterInfoWithRedWarning(const QString &title,
-                                             const QString &message,
-                                             const QString &warningMessage)
-{
-    QString infoHtml = message.toHtmlEscaped();
-    infoHtml.replace("\r\n", "\n");
-    infoHtml.replace('\r', '\n');
-    infoHtml.replace("\n", "<br>");
-
-    QString warningHtml = warningMessage.toHtmlEscaped();
-    warningHtml.replace("\r\n", "\n");
-    warningHtml.replace('\r', '\n');
-    warningHtml.replace("\n", "<br>");
-
-    QMessageBox messageBox(QMessageBox::Warning,
-                           title,
-                           QString(),
-                           QMessageBox::Ok,
-                           this);
-    messageBox.setTextFormat(Qt::RichText);
-    messageBox.setText(
-                QString("<div>%1</div><p><strong>%2</strong></p>")
-                .arg(infoHtml)
-                .arg(warningHtml));
-    messageBox.exec();
-}
-
 void MainWindow::showParameterInfoAsError(const QString &title, const QString &message)
 {
     QMessageBox::information(this, title, message);
@@ -399,6 +370,11 @@ void MainWindow::closeEvent(QCloseEvent *event)
         event->accept();
         return;
     }
+
+    AppSettings settings = m_settingsApplicationService->current();
+    settings.leftDrawerSplitterState =
+            ui->splitter_leftDrawerMain->saveState();
+    m_settingsApplicationService->saveConfiguration(settings);
 
     const RuntimeSnapshot beforeShutdown =
             m_inspectionApplicationService->runtimeSnapshot();
@@ -588,7 +564,6 @@ void MainWindow::on_toolButton_startInspection_clicked()
         m_inspectionPage->clearInspectionView(
                     InspectionClearScope::AllDetectionData);
     }
-    m_inspectionPage->showWaitingResult();
     m_inspectionInfoUi->label_runtimeStatus->setText(
                 result.acquisitionKind
                 == InspectionAcquisitionDto::HardwareTrigger
@@ -702,21 +677,5 @@ void MainWindow::on_pushButton_resetRejectQueue_clicked()
     qCInfo(logRuntime).noquote() << "event=plc.reject_queue_reset";
     QMessageBox::information(this, "提示", "剔除队列已清空！");
 }
-
-//加载UI样式表模板
-void MainWindow::initStyle()
-{
-    QFile file(QStringLiteral(":/qss/app_theme.qss"));
-    if (!file.open(QFile::ReadOnly)) {
-        qCWarning(logUi).noquote()
-                << "event=ui.style_load_failed path=:/qss/app_theme.qss";
-        return;
-    }
-
-    const QString qss = QString::fromUtf8(file.readAll());
-    qApp->setStyleSheet(qss);
-}
-
-
 
 //设置颜色通道

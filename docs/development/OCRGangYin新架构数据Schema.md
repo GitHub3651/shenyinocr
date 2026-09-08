@@ -1,6 +1,6 @@
 # OCRGangYin 数据 Schema（阶段 8）
 
-状态：AppSettings Schema 7 代码已实施，等待用户统一验证
+状态：AppSettings Schema 8 代码已实施，等待用户统一验证
 实现依据：`app/system_support/settings/app_settings*` 与 `app/templates/template_store*`
 
 ## 1. 数据边界
@@ -29,7 +29,7 @@
 - 纸巾检测不使用模板，粗糙度阈值直接写入 `app_settings.json`。
 - 旧格式不迁移、不兼容，也不作为缺字段时的回退来源。
 
-## 2. AppSettings Schema 7
+## 2. AppSettings Schema 8
 
 ### 2.1 唯一内存结构
 
@@ -43,9 +43,10 @@ struct DetectionSchemes {
 };
 
 struct AppSettings {
-    static const int CurrentSchemaVersion = 7;
+    static const int CurrentSchemaVersion = 8;
     // 已验证的整机和 UI 扁平成员
     QString templateSaveDirectory;
+    QByteArray leftDrawerSplitterState;
     bool barcodeCsvEnabled;
     QString barcodeCsvOutputDirectory;
     DetectionSchemes detectionSchemes;
@@ -58,7 +59,7 @@ struct AppSettings {
 
 ```json
 {
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "camera": {
     "exposureMicroseconds": 800,
     "gain": 1,
@@ -99,7 +100,8 @@ struct AppSettings {
   },
   "ui": {
     "selectedDetectionMode": "word",
-    "templateSaveDirectory": ""
+    "templateSaveDirectory": "",
+    "leftDrawerSplitterStateBase64": ""
   },
   "detectionSchemes": {
     "stamp": { "templatePath": "" },
@@ -126,6 +128,7 @@ struct AppSettings {
 | `imageSaving.range` | `none`、`ngOnly`、`okOnly`、`all` |
 | `imageSaving.content` | `annotatedAndRaw`、`annotatedOnly`、`rawOnly` |
 | `ui.selectedDetectionMode` | `stamp`、`word`、`ocr`、`tissue`、`barcodeWord` |
+| `ui.leftDrawerSplitterStateBase64` | 空字符串或 `QSplitter::saveState()` 的 Base64 字符串 |
 | `barcodeCsv.enabled` | `true`、`false` |
 
 ### 2.4 detectionSchemes 规则
@@ -145,11 +148,11 @@ struct AppSettings {
 - 八个根字段和各分区字段都必须存在，未知字段、类型错误和约束错误会拒绝整个文件。
 - 文件不存在时只在内存使用完整默认值，第一次保存时创建。
 - `barcodeCsv.outputDirectory` 为空时 `barcodeCsv.enabled` 必须为 `false`；非空时必须是绝对路径。
-- `schemaVersion != 7` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 7 原子替换。
-- 已是 Schema 7 但内容损坏时拒绝启动，不自动覆盖诊断证据。
+- `schemaVersion != 8` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 8 原子替换。
+- 已是 Schema 8 但内容损坏时拒绝启动，不自动覆盖诊断证据。
 - 所有写入统一经过 `AppSettingsStore::save()` 和 `QSaveFile`。
 - 模板路径或纸巾阈值保存从最新 `current` 复制候选，只改目标字段；不会提交或丢弃未应用的整机草稿。
-- “恢复默认设置”保留 `detectionSchemes`；“清空软件数据”原子写入完整默认 `AppSettings`，但不删除任何外部模板。
+- “恢复默认设置”保留 `detectionSchemes`，清空 Splitter 状态并把当前左侧抽屉恢复为 360px；“清空软件数据”删除当前设置文件，但不删除任何外部模板。
 
 ## 3. TemplateSettings Schema 1
 
@@ -323,5 +326,5 @@ struct PreparedTemplate {
 
 - Schema 和生产代码已经一致收口。
 - 未增加旧格式迁移、双读或双写逻辑。
-- 未运行 qmake、编译、测试或主程序。
-- 功能状态保持“迁移中”，等待用户在 Qt Creator 统一验证后再提交。
+- 已完成 qmake 和 MSVC x64 Release 编译、链接及运行库部署。
+- 功能状态保持“迁移中”，等待用户在 Qt Creator 完成人工统一验证。

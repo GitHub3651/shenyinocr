@@ -434,7 +434,7 @@ void ResultService::process(const ProcessRequest &request)
             std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now()
                 - request.completion.frame->processingStartedAt).count();
-    presentation.elapsedText = QStringLiteral("检测耗时 %1 ms")
+    presentation.elapsedText = QStringLiteral("%1 ms")
             .arg(processingElapsedMs, 0, 'f', 2);
     m_runtime.publishPresentation(presentation);
     const DetectionResult &result = request.completion.result;
