@@ -53,12 +53,17 @@ public:
 private slots:
     void on_toolButton_openCamera_clicked();
     void on_toolButton_closeCamera_clicked();
-    void on_pushButton_applyCameraExposure_clicked();
     void on_toolButton_startInspection_clicked();
+    void on_toolButton_stopInspection_clicked();
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+private:
+    void on_pushButton_applyCameraExposure_clicked();
     void on_pushButton_connectPlc_clicked();
     void on_pushButton_disconnectPlc_clicked();
     void on_pushButton_applyPhotoDistance_clicked();
-    void on_toolButton_stopInspection_clicked();
     void on_pushButton_applyPlcTriggerMode_clicked();
     void on_pushButton_browseImageSavePath_clicked();
     void on_pushButton_applyPlcProcessParameters_clicked();
@@ -71,11 +76,6 @@ private slots:
     void on_pushButton_clearSoftwareData_clicked();
     void on_barcodeCsvBrowseDirectory_clicked();
     void on_barcodeCsvEnable_toggled(bool enabled);
-
-protected:
-    void closeEvent(QCloseEvent *event) override;
-
-private:
     void initializePages();
     void presentTemplatePreviewFrame(const cv::Mat &image);
     void showParameterInfo(const QString &title, const QString &message);
