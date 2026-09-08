@@ -64,6 +64,7 @@ private:
     enum class HardwareDependency
     {
         None,
+        ImageSettings,
         Camera,
         PlcConnection,
         PlcRuntime

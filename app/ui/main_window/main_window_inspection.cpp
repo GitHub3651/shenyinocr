@@ -315,13 +315,13 @@ void MainWindow::updateOperationUiState()
                 snapshot.templateSelection);
     applyOperationUiAccess(
                 m_imageSettingsUi->pushButton_browseImageSavePath,
-                snapshot.generalSettings);
+                snapshot.imageSettings);
     applyOperationUiAccess(
                 m_imageSettingsUi->pushButton_applyImageRotation,
-                snapshot.generalSettings);
+                snapshot.imageSettings);
     applyOperationUiAccess(
                 m_imageSettingsUi->pushButton_applyColorChannel,
-                snapshot.generalSettings);
+                snapshot.imageSettings);
     applyOperationUiAccess(
                 m_softwareSettingsUi->pushButton_clearSoftwareData,
                 snapshot.generalSettings);

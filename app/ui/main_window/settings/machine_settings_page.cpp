@@ -155,9 +155,11 @@ void MachineSettingsPage::setupBindings()
                           m_imageSettingsUi.label_cameraGain, true,
                           HardwareDependency::Camera);
     registerGlobalSetting("image.color_channel", m_imageSettingsUi.comboBox_colorChannel,
-                          m_imageSettingsUi.label_colorChannel, true);
+                          m_imageSettingsUi.label_colorChannel, true,
+                          HardwareDependency::ImageSettings);
     registerGlobalSetting("image.rotation", m_imageSettingsUi.comboBox_imageRotation,
-                          m_imageSettingsUi.label_imageRotation, true);
+                          m_imageSettingsUi.label_imageRotation, true,
+                          HardwareDependency::ImageSettings);
     registerGlobalSetting("tissue.roughness_threshold",
                           m_detectionSettingsUi.lineEdit_tissueRoughnessThreshold,
                           m_detectionSettingsUi.label_tissueRoughnessThreshold, true);
@@ -194,11 +196,14 @@ void MachineSettingsPage::setupBindings()
     registerGlobalSetting("detect.mode", m_detectionSettingsUi.comboBox_detectionMode,
                           m_detectionSettingsUi.label_detectionMode, false);
     registerGlobalSetting("image.save_mode", m_imageSettingsUi.comboBox_imageSaveRange,
-                          m_imageSettingsUi.label_imageSaveRange, false);
+                          m_imageSettingsUi.label_imageSaveRange, false,
+                          HardwareDependency::ImageSettings);
     registerGlobalSetting("image.save_type", m_imageSettingsUi.comboBox_imageSaveContent,
-                          m_imageSettingsUi.label_imageSaveContent, false);
+                          m_imageSettingsUi.label_imageSaveContent, false,
+                          HardwareDependency::ImageSettings);
     registerGlobalSetting("image.save_path", m_imageSettingsUi.lineEdit_imageSavePath,
-                          m_imageSettingsUi.label_imageSavePath, false);
+                          m_imageSettingsUi.label_imageSavePath, false,
+                          HardwareDependency::ImageSettings);
     registerGlobalSetting("trigger.enabled", m_detectionSettingsUi.checkBox_hardwareTriggerEnabled,
                           nullptr, false);
 
@@ -920,6 +925,8 @@ void MachineSettingsPage::applyOperationState(
     auto accessFor = [&](HardwareDependency dependency)
             -> OperationUiSnapshot::Access {
         switch (dependency) {
+        case HardwareDependency::ImageSettings:
+            return snapshot.imageSettings;
         case HardwareDependency::Camera:
             return snapshot.cameraSettings;
         case HardwareDependency::PlcConnection:

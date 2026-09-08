@@ -114,8 +114,12 @@ OperationUiSnapshot OperationUiPolicy::create(
                 ? QStringLiteral("系统正在停止，请稍候。")
                 : QStringLiteral("当前没有需要停止的任务。"));
     snapshot.generalSettings = access(idle, busyReason);
+    snapshot.imageSettings = access(
+                idle || state == OperationUiState::TemplateFrozen,
+                busyReason);
     snapshot.cameraSettings = access(
-                state == OperationUiState::CameraReady
+                (state == OperationUiState::CameraReady
+                 || state == OperationUiState::TemplateFrozen)
                 && context.cameraOpen,
                 context.cameraOpen
                 ? busyReason

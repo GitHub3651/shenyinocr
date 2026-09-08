@@ -38,6 +38,7 @@ struct OperationUiSnapshot
     Access templateCapture;
     Access saveTemplate;
     Access generalSettings;
+    Access imageSettings;
     Access cameraSettings;
     Access plcConnection;
     Access plcRuntime;
