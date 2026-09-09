@@ -326,9 +326,6 @@ void MainWindow::updateOperationUiState()
                 m_softwareSettingsUi->pushButton_clearSoftwareData,
                 snapshot.generalSettings);
     applyOperationUiAccess(
-                m_softwareSettingsUi->pushButton_restoreDefaultSettings,
-                snapshot.generalSettings);
-    applyOperationUiAccess(
                 m_inspectionInfoUi->pushButton_resetTotalCount,
                 snapshot.statisticsReset);
     applyOperationUiAccess(

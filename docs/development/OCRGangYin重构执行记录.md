@@ -1674,3 +1674,13 @@
 - [x] 已删除 `MachineSettingsPolicy`、`defaultsForHardwareState()`、`applyMachineSettingsToUi()` 及其工程条目、include 和现行说明；恢复入口不再使用旧 UI 包装、模板重载、全量 dirty 刷新或额外运行状态刷新。
 - [x] Agent 静态门禁通过：旧策略和整页回填符号在生产代码及现行说明中为零；恢复入口恰好调用一次 `saveConfiguration()` 和一次 `commitAppliedHardwareSettings()`；qmake 159 个清单项无缺失或重复；软件设置页 XML、严格 UTF-8、文件末尾换行、尾随空白及暂存区和工作区 `git diff --check` 均通过。未运行 qmake、编译、链接、主程序、真实相机或 PLC。
 - [ ] 等待用户在 Qt Creator 执行 Run qmake、Rebuild 并按恢复默认设置方案第 11 节统一验证相机/PLC 连接组合、保存失败、硬件失败、未应用状态、范围外设置、重启和清空软件数据后的默认值。
+
+## 恢复默认设置功能完全删除（2026-09-09，代码实施完成待统一验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `9a66aded4487f604a47a87427118d26fe67d832b`；开始时完全删除方案和计划索引修改属于本任务既有资产，生产代码与暂存区无其他差异。
+- [x] 软件设置页已完整删除 `pushButton_restoreDefaultSettings` 控件、Tooltip 和文字；没有隐藏控件、空占位、替代按钮、快捷入口或到清空数据槽的转发。
+- [x] `MainWindow::restoreDefaultMachineSettings()` 的声明、完整实现、显式连接、操作状态权限、恢复专用字段列表、candidate、日志和提示均已删除。失去独立职责的 `setupSoftwareSettingsPage()`、`ui_software_settings_page.h` 和 `<QPushButton>` include 同时删除，唯一仍需保留的软件数据目录赋值已原位放入 `initializePages()`，未新增兼容层或胶水层。
+- [x] “清空当前软件数据”继续保留 UI、唯一槽声明/定义/连接、`generalSettings` 权限和危险按钮 QSS；仍只删除当前用户的 `settings/app_settings.json`，失败时不退出，成功后提示并退出。`AppSettings` 默认值、相机/PLC手动应用、图像设置、模板、CSV、dirty 回退和左侧抽屉持久化未改。
+- [x] 计划索引、当前功能表、数据 Schema、开发者指南和被替代方案状态已同步；`SET-013` 标记为已确认删除，旧在线恢复方案只作历史追溯，不再提供当前入口或验证要求。
+- [x] Agent 静态门禁通过：`app/` 中恢复控件名、函数名、包装函数、日志上下文和提示文案为零；清空槽声明/定义/连接各唯一且完整链共有 10 处引用；软件设置页 XML 可解析；qmake 159 个源、头、UI和资源条目无缺失或重复；本次修改 C++ 的本地 include 无缺失；共享设置及设备接口仍有正式调用者；修改文本严格 UTF-8、有末尾换行，`git diff --check` 和 `git diff --cached --check` 通过。未运行 qmake、编译、链接、测试程序、主程序或真实设备。
+- [ ] 等待用户在 Qt Creator 执行 Run qmake、Rebuild，确认软件设置页只剩数据目录和清空按钮，并验证清空取消/确认、重启默认值、保留数据、操作状态权限及现有手动设置链。

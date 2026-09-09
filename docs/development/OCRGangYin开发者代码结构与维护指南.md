@@ -386,7 +386,7 @@ toolButton_selectTemplate
 | `main_window/main_window.ui` | 主窗口骨架、主控区、左侧 80px 导航、可调宽五页抽屉和五个空页面根节点。 |
 | `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权和跨页面协调。 |
 | `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、故障和窗口关闭协调。 |
-| `main_window/main_window_settings.cpp` | 设置保存、直接恢复、清空、模式显隐和硬件参数应用。恢复只使用现有应用服务，图像设置保存一次，设备成功结果最多统一提交一次。 |
+| `main_window/main_window_settings.cpp` | 设置保存、清空软件数据、模式显隐和硬件参数应用。软件设置页不提供在线恢复默认入口。 |
 | `main_window/operation_ui_policy.h/.cpp` | 唯一按钮权限矩阵和状态文字。 |
 | `main_window/inspection/inspection_info_page.ui` | 检测状态、识别内容、统计和当前模板固定界面。 |
 | `main_window/inspection/inspection_page.h/.cpp` | 检测图像、判定、统计、运行状态和主控按钮状态。 |

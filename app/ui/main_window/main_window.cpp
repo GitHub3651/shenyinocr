@@ -330,7 +330,8 @@ void MainWindow::initializePages()
     }
     m_detectionSettingsUi->textEdit_targetText->setWordWrapMode(
                 QTextOption::WrapAtWordBoundaryOrAnywhere);
-    setupSoftwareSettingsPage();
+    m_softwareSettingsUi->lineEdit_softwareDataDirectory->setText(
+                m_settingsApplicationService->applicationDataRoot());
     m_machineSettingsPage->installWheelProtection(*this);
     m_machineSettingsPage->setupNumericInputValidators();
     setupNonPersistentDefaults();

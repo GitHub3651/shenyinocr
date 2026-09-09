@@ -97,8 +97,6 @@ private:
     QString dirtySettingsMessage() const;
     void restoreUnappliedSettingsFromApplied();
     void updateTissueRoughnessUiVisibility();
-    void setupSoftwareSettingsPage();
-    void restoreDefaultMachineSettings();
     void updateOperationUiState();
     OperationUiState operationUiState() const;
     bool isCameraOpen() const;
