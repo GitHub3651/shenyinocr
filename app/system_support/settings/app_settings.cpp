@@ -113,7 +113,7 @@ AppSettings::AppSettings()
       detectModeId(detectionModeUiId(DetectionMode::Word)),
       imageSaveModeId(QStringLiteral("save_none")),
       imageSaveTypeId(QStringLiteral("save_annotated_only")),
-      cameraExposure(800),
+      cameraExposure(300),
       cameraGain(1),
       colorChannelId(QStringLiteral("color")),
       imageRotationId(QStringLiteral("rotate_none")),

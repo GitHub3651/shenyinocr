@@ -131,59 +131,227 @@ void MainWindow::on_pushButton_clearSoftwareData_clicked()
 
 void MainWindow::restoreDefaultMachineSettings()
 {
+    const AppSettings defaults = AppSettings::defaults();
+    const RuntimeSnapshot snapshot =
+            m_inspectionApplicationService->runtimeSnapshot();
+    QString confirmation = QStringLiteral(
+        "将直接恢复以下参数，恢复后立即生效，不会产生待应用标记：\n\n"
+        "图像设置：\n"
+        "- 图像保存范围：全部不保存\n"
+        "- 保存图像类型：只保存带识别框图像\n"
+        "- 图像保存路径：空\n"
+        "- 颜色通道：彩色通道\n"
+        "- 图像旋转：无旋转\n\n"
+        "界面位置：\n"
+        "- 左侧抽屉分隔位置：400px\n");
+    QStringList skippedGroups;
+    if (snapshot.cameraOpen) {
+        confirmation += QStringLiteral(
+            "\n相机参数：\n"
+            "- 相机曝光：%1\n"
+            "- 相机增益：%2\n")
+                .arg(defaults.cameraExposure)
+                .arg(defaults.cameraGain);
+    } else {
+        skippedGroups.append(QStringLiteral("相机未连接，本次不处理相机参数。"));
+    }
+    if (snapshot.plcConnected) {
+        confirmation += QStringLiteral(
+            "\nPLC 参数：\n"
+            "- 工作模式：连续触发模式\n"
+            "- 拍照距离：%1\n"
+            "- 拍照时间：%2\n"
+            "- 硬触发延时：%3\n"
+            "- 剔除距离：%4\n"
+            "- 剔除时间：%5\n"
+            "- 剔除位置：%6\n")
+                .arg(defaults.photoDistance)
+                .arg(defaults.photoTime)
+                .arg(defaults.cameraDelay)
+                .arg(defaults.rejectDistance)
+                .arg(defaults.rejectTime)
+                .arg(defaults.rejectPosition);
+    } else {
+        skippedGroups.append(QStringLiteral("PLC 未连接，本次不处理 PLC 参数。"));
+    }
+    if (!skippedGroups.isEmpty()) {
+        confirmation += QStringLiteral("\n%1\n").arg(
+                    skippedGroups.join(QStringLiteral("\n")));
+    }
+    confirmation += QStringLiteral("\n其他设置不会改变。是否继续？");
+
     const QMessageBox::StandardButton answer = QMessageBox::question(
                 this,
                 "恢复默认设置",
-                "将恢复软件公共设置为默认值。\n"
-                "不会删除产品模板、识别图片、授权文件或日志。\n\n"
-                "是否继续？",
+                confirmation,
                 QMessageBox::Yes | QMessageBox::No,
                 QMessageBox::No);
     if (answer != QMessageBox::Yes) {
         return;
     }
 
-    const bool cameraOpen = isCameraOpen();
-    const bool plcConnected =
-            m_inspectionApplicationService
-            ->runtimeSnapshot().plcConnected;
-    const AppSettings editableDefaults =
-            m_machineSettingsPage->defaultsForHardwareState(
-                cameraOpen, plcConnected);
+    const QStringList imageKeys = QStringList()
+            << "image.save_mode"
+            << "image.save_type"
+            << "image.save_path"
+            << "image.color_channel"
+            << "image.rotation";
+    const QStringList cameraKeys = QStringList()
+            << "camera.exposure"
+            << "camera.gain";
+    const QStringList plcTriggerKeys = QStringList()
+            << "plc.trigger_mode";
+    const QStringList plcRunKeys = QStringList()
+            << "plc.photo_distance"
+            << "plc.photo_time"
+            << "plc.camera_delay"
+            << "plc.reject_distance"
+            << "plc.reject_time"
+            << "plc.reject_position";
+    QStringList processedKeys = imageKeys;
+    QStringList failures;
 
-    AppSettings candidate = m_settingsApplicationService->current();
-    candidate.detectModeId = editableDefaults.detectModeId;
-    candidate.imageSaveModeId = editableDefaults.imageSaveModeId;
-    candidate.imageSaveTypeId = editableDefaults.imageSaveTypeId;
-    candidate.imageSavePath = editableDefaults.imageSavePath;
-    candidate.triggerEnabled = editableDefaults.triggerEnabled;
-    candidate.barcodeCsvEnabled = editableDefaults.barcodeCsvEnabled;
-    candidate.barcodeCsvOutputDirectory =
-            editableDefaults.barcodeCsvOutputDirectory;
-    candidate.leftDrawerSplitterState.clear();
-    const OperationResult saved =
-            m_settingsApplicationService->saveConfiguration(candidate);
-    if (!saved.isSuccess()) {
-        applyMachineSettingsToUi(m_settingsApplicationService->current());
-        showParameterCritical(
-                    "严重警告",
-                    QString("恢复默认设置失败：\n%1")
-                    .arg(saved.error.userMessage));
+    AppSettings imageCandidate = m_settingsApplicationService->current();
+    imageCandidate.imageSaveModeId = defaults.imageSaveModeId;
+    imageCandidate.imageSaveTypeId = defaults.imageSaveTypeId;
+    imageCandidate.imageSavePath = defaults.imageSavePath;
+    imageCandidate.colorChannelId = defaults.colorChannelId;
+    imageCandidate.imageRotationId = defaults.imageRotationId;
+    imageCandidate.leftDrawerSplitterState.clear();
+    const OperationResult imageSaved =
+            m_settingsApplicationService->saveConfiguration(imageCandidate);
+    if (imageSaved.isSuccess()) {
+        ui->splitter_leftDrawerMain->setSizes(
+                    QList<int>()
+                    << 400
+                    << ui->splitter_leftDrawerMain->width() - 400);
+    } else {
+        qCCritical(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.save_failed context=restore_defaults keys=%1 code=%2 reason=%3")
+                   .arg(imageKeys.join(QStringLiteral(",")),
+                        imageSaved.error.code, imageSaved.error.userMessage);
+        failures.append(QStringLiteral("图像设置保存失败：%1")
+                        .arg(imageSaved.error.userMessage));
+    }
+
+    AppSettings hardwareCandidate = m_settingsApplicationService->current();
+    bool hardwareApplied = false;
+    if (snapshot.cameraOpen) {
+        processedKeys += cameraKeys;
+        const CameraParameterResultDto exposure =
+                m_inspectionApplicationService->applyCameraExposure(
+                    defaults.cameraExposure);
+        if (exposure.success) {
+            hardwareCandidate.cameraExposure =
+                    static_cast<int>(exposure.actualValue);
+            hardwareApplied = true;
+            qCInfo(logDevice).noquote()
+                    << QStringLiteral(
+                        "event=camera.exposure_applied context=restore_defaults requested=%1 actual=%2 range=%3-%4")
+                       .arg(defaults.cameraExposure)
+                       .arg(exposure.actualValue)
+                       .arg(exposure.minimumValue)
+                       .arg(exposure.maximumValue);
+        } else {
+            failures.append(QStringLiteral("相机曝光恢复失败：%1")
+                            .arg(exposure.diagnostic));
+        }
+
+        const CameraParameterResultDto gain =
+                m_inspectionApplicationService->applyCameraGain(
+                    defaults.cameraGain);
+        if (gain.success) {
+            hardwareCandidate.cameraGain = static_cast<int>(gain.actualValue);
+            hardwareApplied = true;
+            qCInfo(logDevice).noquote()
+                    << QStringLiteral(
+                        "event=camera.gain_applied context=restore_defaults requested=%1 actual=%2 range=%3-%4")
+                       .arg(defaults.cameraGain)
+                       .arg(gain.actualValue)
+                       .arg(gain.minimumValue)
+                       .arg(gain.maximumValue);
+        } else {
+            failures.append(QStringLiteral("相机增益恢复失败：%1")
+                            .arg(gain.diagnostic));
+        }
+    }
+
+    if (snapshot.plcConnected) {
+        processedKeys += plcTriggerKeys;
+        const OperationResult triggerModeResult =
+                m_inspectionApplicationService->applyPlcTriggerMode(
+                    defaults.triggerModeId);
+        if (triggerModeResult.isSuccess()) {
+            hardwareCandidate.triggerModeId = defaults.triggerModeId;
+            hardwareApplied = true;
+        } else {
+            failures.append(QStringLiteral("PLC 工作模式恢复失败：%1")
+                            .arg(triggerModeResult.error.userMessage));
+        }
+
+        processedKeys += plcRunKeys;
+        PlcRunSettingsCommand plcSettings;
+        plcSettings.rejectTime = static_cast<std::uint16_t>(
+                    defaults.rejectTime);
+        plcSettings.rejectDistance = static_cast<std::uint32_t>(
+                    defaults.rejectDistance);
+        plcSettings.photoTime = static_cast<std::uint16_t>(
+                    defaults.photoTime);
+        plcSettings.photoDistance = static_cast<std::uint32_t>(
+                    defaults.photoDistance);
+        const OperationResult plcRunResult =
+                m_inspectionApplicationService->applyPlcRunSettings(plcSettings);
+        if (plcRunResult.isSuccess()) {
+            hardwareCandidate.photoDistance = defaults.photoDistance;
+            hardwareCandidate.photoTime = defaults.photoTime;
+            hardwareCandidate.cameraDelay = defaults.cameraDelay;
+            hardwareCandidate.rejectDistance = defaults.rejectDistance;
+            hardwareCandidate.rejectTime = defaults.rejectTime;
+            hardwareCandidate.rejectPosition = defaults.rejectPosition;
+            hardwareApplied = true;
+        } else {
+            failures.append(QStringLiteral("PLC 过程参数恢复失败：%1")
+                            .arg(plcRunResult.error.userMessage));
+        }
+    }
+
+    if (hardwareApplied) {
+        const OperationResult hardwareSaved =
+                m_settingsApplicationService->commitAppliedHardwareSettings(
+                    hardwareCandidate);
+        if (!hardwareSaved.isSuccess()) {
+            qCWarning(logUi).noquote()
+                    << QStringLiteral(
+                        "event=settings.save_failed context=restore_defaults keys=%1 code=%2 reason=%3")
+                       .arg(processedKeys.join(QStringLiteral(",")),
+                            hardwareSaved.error.code,
+                            hardwareSaved.error.userMessage);
+            failures.append(QStringLiteral(
+                "硬件参数已生效，但配置保存失败，重启后可能仍使用磁盘旧值：%1")
+                            .arg(hardwareSaved.error.userMessage));
+        }
+    }
+
+    m_machineSettingsPage->restoreAppliedValues(processedKeys);
+
+    if (failures.isEmpty()) {
+        QString message = QStringLiteral("本次列出的参数已恢复默认并生效。");
+        if (!skippedGroups.isEmpty()) {
+            message += QStringLiteral("\n\n%1").arg(
+                        skippedGroups.join(QStringLiteral("\n")));
+        }
+        showParameterInfo(QStringLiteral("提示"), message);
         return;
     }
 
-    applyMachineSettingsToUi(editableDefaults);
-    ui->splitter_leftDrawerMain->setSizes(
-                QList<int>()
-                << 360
-                << ui->splitter_leftDrawerMain->width() - 360);
-    m_templateEditorPage->clearTemplateDirty();
-    updateOperationUiState();
-    m_machineSettingsPage->refreshAllDirty();
-
-    showParameterInfo(
-        "提示",
-        "当前可设置参数已恢复为默认值。带 * 的参数需要点击对应【设置】后才会生效。");
+    QString message = QStringLiteral("本次恢复存在以下问题：\n- %1")
+            .arg(failures.join(QStringLiteral("\n- ")));
+    if (!skippedGroups.isEmpty()) {
+        message += QStringLiteral("\n\n%1").arg(
+                    skippedGroups.join(QStringLiteral("\n")));
+    }
+    showParameterWarning(QStringLiteral("恢复默认设置未完全完成"), message);
 }
 
 bool MainWindow::hasDirtySettings() const
@@ -403,7 +571,7 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
     if (plcMode != 0 && plcMode != 1) {
         const QString message = "PLC触发模式无效";
         if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("error", message);
+        if (showSuccessMessage) showParameterWarning("错误", message);
         m_machineSettingsPage->restoreAppliedValue("plc.trigger_mode");
         return false;
     }
@@ -416,7 +584,7 @@ bool MainWindow::applyPlcTriggerModeFromUi(QStringList *errors, bool showSuccess
     if (!result.isSuccess()) {
         const QString message = result.error.userMessage;
         if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("error", message);
+        if (showSuccessMessage) showParameterWarning("错误", message);
         m_machineSettingsPage->restoreAppliedValue("plc.trigger_mode");
         return false;
     }
@@ -448,7 +616,7 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
             || !m_plcSettingsUi->lineEdit_rejectPosition->hasAcceptableInput()) {
         const QString message = QStringLiteral("PLC 过程参数必须是有效整数。");
         if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("error", message);
+        if (showSuccessMessage) showParameterWarning("错误", message);
         m_machineSettingsPage->restoreAppliedValues(keys);
         return false;
     }
@@ -467,7 +635,7 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
     if (!result.isSuccess()) {
         const QString message = result.error.userMessage;
         if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("error", message);
+        if (showSuccessMessage) showParameterWarning("错误", message);
         m_machineSettingsPage->restoreAppliedValues(keys);
         return false;
     }
@@ -505,7 +673,7 @@ void MainWindow::on_pushButton_connectPlc_clicked()
             || !m_plcSettingsUi->lineEdit_plcRack->hasAcceptableInput()
             || !m_plcSettingsUi->lineEdit_plcSlot->hasAcceptableInput()) {
         m_machineSettingsPage->restoreAppliedValues(connectionKeys);
-        showParameterWarning("error", "PLC 连接参数无效");
+        showParameterWarning("错误", "PLC 连接参数无效");
         return;
     }
     PlcConnectionCommand command;
@@ -521,7 +689,7 @@ void MainWindow::on_pushButton_connectPlc_clicked()
                 saveAppliedHardwareSettings(connectionKeys);
         updateOperationUiState();
         if (persisted) {
-            QMessageBox::information(this, "success", "PLC连接成功");
+            QMessageBox::information(this, "成功", "PLC连接成功");
         }
     }
     else
@@ -529,7 +697,7 @@ void MainWindow::on_pushButton_connectPlc_clicked()
         m_machineSettingsPage->restoreAppliedValues(connectionKeys);
         updateOperationUiState();
         QMessageBox::critical(
-                    this, "error", result.error.userMessage);
+                    this, "错误", result.error.userMessage);
     }
 }
 
@@ -544,13 +712,13 @@ void MainWindow::on_pushButton_disconnectPlc_clicked()
     if (result.isSuccess())
     {
         updateOperationUiState();
-        QMessageBox::information(this, "success", "PLC断开成功");
+        QMessageBox::information(this, "成功", "PLC断开成功");
     }
     else
     {
         updateOperationUiState();
         QMessageBox::critical(
-                    this, "error", result.error.userMessage);
+                    this, "错误", result.error.userMessage);
     }
 }
 
@@ -599,23 +767,6 @@ void MainWindow::on_toolButton_stopInspection_clicked()
     finishInspectionStopUi(
                 m_inspectionApplicationService->stop(command));
 }
-void MainWindow::applyMachineSettingsToUi(
-    const AppSettings &settings)
-{
-    m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
-                settings.barcodeCsvOutputDirectory);
-    {
-        QSignalBlocker blocker(m_detectionSettingsUi->barcodeCsvEnable);
-        m_detectionSettingsUi->barcodeCsvEnable->setChecked(
-                    settings.barcodeCsvEnabled);
-    }
-    m_machineSettingsPage->applyToUi(settings);
-    m_currentDetectModeId = m_templateEditorPage->currentDetectModeId();
-    m_templateEditorPage->restoreTemplatesForMode(
-                m_currentDetectModeId, false);
-    updateTissueRoughnessUiVisibility();
-}
-
 /**
  * @brief 设置非公共配置初始值
  * @details 公共配置统一由 AppSettings::defaults() 提供
@@ -670,7 +821,7 @@ void MainWindow::on_pushButton_applyPhotoDistance_clicked()
 {
     if (!m_detectionSettingsUi->lineEdit_photoDistance->hasAcceptableInput()) {
         m_machineSettingsPage->restoreAppliedValue("plc.photo_distance");
-        showParameterWarning("error", "拍照距离必须是有效整数");
+        showParameterWarning("错误", "拍照距离必须是有效整数");
         return;
     }
     const std::uint32_t value =
@@ -683,7 +834,7 @@ void MainWindow::on_pushButton_applyPhotoDistance_clicked()
     {
         // 写入失败
         m_machineSettingsPage->restoreAppliedValue("plc.photo_distance");
-        showParameterWarning("error", result.error.userMessage);
+        showParameterWarning("错误", result.error.userMessage);
     }
     else
     {

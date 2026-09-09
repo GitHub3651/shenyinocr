@@ -660,7 +660,7 @@ StopInspectionResult InspectionApplicationService::stop(
         const int unconfirmed = m_runtime->reconcileFaultProducts();
         result.reconciliationSummary = QStringLiteral(
                     "视觉检测已暂停，输送线状态未知。\n"
-                    "本次未完成产品记为Unconfirmed：%1件。\n"
+                    "本次未完成产品记为未确认：%1件。\n"
                     "请通过输送线自身控制确认停线并隔离相关产品。")
                 .arg(unconfirmed);
         if (!m_runtime->acknowledgeFault()) {

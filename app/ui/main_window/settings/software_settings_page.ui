@@ -104,7 +104,7 @@
          </size>
         </property>
         <property name="toolTip">
-         <string>将软件公共界面设置恢复为默认值，不删除产品模板、识别图片、授权文件或日志。</string>
+         <string>恢复图像设置、左侧抽屉分隔位置，以及已连接相机和 PLC 的可直接应用参数；不删除产品模板、识别图片、授权文件或日志。</string>
         </property>
         <property name="text">
          <string>恢复默认设置</string>

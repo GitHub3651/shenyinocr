@@ -61,7 +61,7 @@ struct AppSettings {
 {
   "schemaVersion": 8,
   "camera": {
-    "exposureMicroseconds": 800,
+    "exposureMicroseconds": 300,
     "gain": 1,
     "triggerSource": "hardwareLine0",
     "rotation": "none",
@@ -152,7 +152,7 @@ struct AppSettings {
 - 已是 Schema 8 但内容损坏时拒绝启动，不自动覆盖诊断证据。
 - 所有写入统一经过 `AppSettingsStore::save()` 和 `QSaveFile`。
 - 模板路径或纸巾阈值保存从最新 `current` 复制候选，只改目标字段；不会提交或丢弃未应用的整机草稿。
-- “恢复默认设置”保留 `detectionSchemes`，清空 Splitter 状态并把当前左侧抽屉恢复为 360px；“清空软件数据”删除当前设置文件，但不删除任何外部模板。
+- “恢复默认设置”只直接恢复五个图像设置和当前左侧抽屉 400px 分隔位置；相机已打开时直接恢复曝光和增益，PLC 已连接时直接恢复工作模式及四项过程参数并保存六项过程配置。未连接设备整组跳过；“清空软件数据”删除当前设置文件，但不删除任何外部模板。
 
 ## 3. TemplateSettings Schema 1
 

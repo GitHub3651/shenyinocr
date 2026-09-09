@@ -37,9 +37,6 @@ public:
     void installWheelProtection(QWidget &rootWidget);
 
     void initialize(const AppSettings &settings);
-    AppSettings defaultsForHardwareState(
-        bool cameraOpen,
-        bool plcConnected) const;
     void applyToUi(const AppSettings &settings);
 
     void copyUiValuesTo(AppSettings &settings,

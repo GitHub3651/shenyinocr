@@ -1664,3 +1664,13 @@
 - [x] 主程序已删除 ResultExportClient、ResultExportNetworkWorker 四个文件，以及 Runtime/Application/RuntimeSnapshot/UI/关闭流程中的 TCP、PING/PONG、ACK、内存 FIFO、连接状态、pending 查询和传输恢复链；qmake 已删除四个文件条目和 Qt Network 模块，QSS 与翻译已同步最终本机 CSV 界面。
 - [x] Agent 静态门禁通过：`app/` 中旧结果传输业务符号和 Qt Network 依赖为零，四个旧网络文件不存在；11 个 UI/翻译 XML 可解析；qmake 161 个源、头、UI、资源条目无缺失或重复；当前差异文本严格 UTF-8 且有末尾换行；`git diff --check` 通过；`tools/result_receiver/` 差异为零。按计划未运行或间接触发 qmake、构建、测试程序、主程序、接收端或真实设备。
 - [ ] 等待用户在 Qt Creator 使用 Release 执行 Run qmake、Clean、Rebuild，并按本机 CSV 方案第 14.2 节一次性验证 Schema 重置、设置保存、目录准备、OK/NG/转义/BOM/续写/跨日、写入失败 Fault、关闭和五模式回归；通过前保持“代码实施完成，待用户统一验证”。
+
+## 恢复默认设置范围收紧与直接应用（2026-09-08，代码实施完成待统一验证）
+
+- [x] 实施基线为分支 `codex/ocrgangyin-refactor`、HEAD `b36693f`；开始时恢复默认方案和计划索引已存在暂存修改，实施过程未覆盖、回退、暂存、提交、推送、合并、变基或改写这些既有内容。
+- [x] `AppSettings` 的唯一相机曝光默认值已改为 300；无已保存左侧抽屉状态时，启动和恢复默认均使用 400px 与当前 Splitter 总宽度减 400 设置两侧尺寸。
+- [x] `MainWindow::restoreDefaultMachineSettings()` 现在按一次 `RuntimeSnapshot` 动态列出可处理参数和未连接设备组；五个图像字段与 Splitter 状态独立保存，相机和 PLC 直接调用现有应用服务，所有成功硬件结果汇总到局部 candidate 后最多提交一次。未连接设备不预写配置或 UI；失败不回读、补偿或重试。
+- [x] 恢复结束后仅按实际处理字段回填 UI 并显示一次结果。检测模式、硬触发开关、PLC 连接参数、纸巾阈值、模板和 CSV 设置保持不变；清空软件数据入口保持独立。
+- [x] 已删除 `MachineSettingsPolicy`、`defaultsForHardwareState()`、`applyMachineSettingsToUi()` 及其工程条目、include 和现行说明；恢复入口不再使用旧 UI 包装、模板重载、全量 dirty 刷新或额外运行状态刷新。
+- [x] Agent 静态门禁通过：旧策略和整页回填符号在生产代码及现行说明中为零；恢复入口恰好调用一次 `saveConfiguration()` 和一次 `commitAppliedHardwareSettings()`；qmake 159 个清单项无缺失或重复；软件设置页 XML、严格 UTF-8、文件末尾换行、尾随空白及暂存区和工作区 `git diff --check` 均通过。未运行 qmake、编译、链接、主程序、真实相机或 PLC。
+- [ ] 等待用户在 Qt Creator 执行 Run qmake、Rebuild 并按恢复默认设置方案第 11 节统一验证相机/PLC 连接组合、保存失败、硬件失败、未应用状态、范围外设置、重启和清空软件数据后的默认值。

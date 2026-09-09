@@ -44,7 +44,6 @@ SOURCES += \
     ui/main_window/operation_ui_policy.cpp \
     ui/main_window/settings/settings_edit_state.cpp \
     ui/main_window/template/template_editor_page.cpp \
-    system_support/machine_settings_policy.cpp \
     system_support/settings/app_settings.cpp \
     system_support/settings/app_settings_store.cpp \
     system_support/license/license_codec.cpp \
@@ -122,7 +121,6 @@ HEADERS += \
     ui/main_window/operation_ui_policy.h \
     ui/main_window/settings/settings_edit_state.h \
     ui/main_window/template/template_editor_page.h \
-    system_support/machine_settings_policy.h \
     system_support/settings/app_settings.h \
     system_support/settings/app_settings_store.h \
     system_support/license/license_codec.h \

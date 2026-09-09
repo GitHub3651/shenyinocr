@@ -152,7 +152,7 @@ int ApplicationStartup::run(int argc, char *argv[])
     if (!singleInstanceGuard.acquire()) {
         QMessageBox::warning(
                     nullptr,
-                    QStringLiteral("Warning"),
+                    QStringLiteral("警告"),
                     QStringLiteral("程序运行中避免重复打开"));
         return 0;
     }

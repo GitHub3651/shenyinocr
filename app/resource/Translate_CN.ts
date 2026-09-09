@@ -890,6 +890,21 @@
     </message>
 </context>
 <context>
+    <name>QPlatformTheme</name>
+    <message>
+        <source>OK</source>
+        <translation>确定</translation>
+    </message>
+    <message>
+        <source>&amp;Yes</source>
+        <translation>确定</translation>
+    </message>
+    <message>
+        <source>&amp;No</source>
+        <translation>取消</translation>
+    </message>
+</context>
+<context>
     <name>DetectionSettingsPage</name>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="308"/>

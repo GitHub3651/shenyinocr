@@ -112,7 +112,6 @@ private:
     void showLeftDrawerPage(QWidget *page, QToolButton *button);
     void hideLeftDrawer();
     void setupDetectModeChangeTracking();
-    void applyMachineSettingsToUi(const AppSettings &settings);
     void setupNonPersistentDefaults();
     void updateBarcodeCsvUi(const RuntimeSnapshot &snapshot);
 

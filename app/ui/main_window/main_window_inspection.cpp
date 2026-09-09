@@ -600,7 +600,7 @@ void MainWindow::on_toolButton_openCamera_clicked()
     {
         m_machineSettingsPage->restoreAppliedValues(
                     QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
-        QMessageBox::critical(this, "error", "PLC连接失败");
+        QMessageBox::critical(this, "错误", "PLC连接失败");
     }
     else{
     saveAppliedHardwareSettings(

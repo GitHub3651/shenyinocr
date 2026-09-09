@@ -1,12 +1,11 @@
 # system_support：系统支撑
 
-本目录提供设置持久化、默认策略、日志、授权和崩溃诊断，不实现检测业务。
+本目录提供设置持久化、日志、授权和崩溃诊断，不实现检测业务。
 
 ## 文件树
 
 ```text
 system_support/
-├─ machine_settings_policy.h/.cpp       整机默认恢复策略
 ├─ settings/
 │  ├─ app_settings.h/.cpp               AppSettings 与五模式 DetectionSchemes
 │  └─ app_settings_store.h/.cpp         Schema 8 严格 JSON + QSaveFile

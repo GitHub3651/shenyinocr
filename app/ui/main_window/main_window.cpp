@@ -69,7 +69,9 @@ MainWindow::MainWindow(
     if (m_settingsApplicationService->current()
             .leftDrawerSplitterState.isEmpty()) {
         ui->splitter_leftDrawerMain->setSizes(
-                    QList<int>() << 360 << 1130);
+                    QList<int>()
+                    << 400
+                    << ui->splitter_leftDrawerMain->width() - 400);
     } else {
         ui->splitter_leftDrawerMain->restoreState(
                     m_settingsApplicationService->current()

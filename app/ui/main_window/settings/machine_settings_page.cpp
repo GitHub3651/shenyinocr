@@ -4,7 +4,6 @@
 // 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/main_window/settings/machine_settings_page.h"
 
-#include "system_support/machine_settings_policy.h"
 #include "system_support/logging/log_categories.h"
 #include "contracts/detection_mode.h"
 #include "ui/main_window/settings/settings_edit_state.h"
@@ -281,18 +280,6 @@ void MachineSettingsPage::initialize(
 {
     m_loaded = true;
     applyToUi(settings);
-}
-
-AppSettings MachineSettingsPage::defaultsForHardwareState(
-    bool cameraOpen,
-    bool plcConnected) const
-{
-    const AppSettings defaults = AppSettings::defaults();
-    return MachineSettingsPolicy::defaultsForHardwareState(
-        m_settingsService.current(),
-        defaults,
-        cameraOpen,
-        plcConnected);
 }
 
 void MachineSettingsPage::applyToUi(
