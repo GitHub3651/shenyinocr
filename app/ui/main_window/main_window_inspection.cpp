@@ -549,17 +549,16 @@ void MainWindow::on_toolButton_startInspection_clicked()
         updateOperationUiState();
         return;
     }
+    m_templateEditorPage->cancelTemplateDrawing();
+    ui->inspectionImageCanvas->clear();
+    m_inspectionPage->clearInspectionView(
+                InspectionClearScope::ImageMetadata);
+    m_inspectionPage->setStatistics(m_runtime->statistics());
     if (!result.details.isEmpty()) {
         QMessageBox::warning(
                     this,
                     QStringLiteral("部分模板已跳过"),
                     result.details.join(QStringLiteral("\n")));
-    }
-    m_templateEditorPage->cancelTemplateDrawing();
-    if (result.acquisitionKind
-            == InspectionAcquisitionDto::HardwareTrigger) {
-        m_inspectionPage->clearInspectionView(
-                    InspectionClearScope::AllDetectionData);
     }
     m_inspectionInfoUi->label_runtimeStatus->setText(
                 result.acquisitionKind

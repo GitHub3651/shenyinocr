@@ -440,9 +440,6 @@ StartInspectionResult InspectionApplicationService::start(
     }
 
     const bool hardwareTriggerEnabled = settings.triggerEnabled;
-    if (hardwareTriggerEnabled) {
-        m_runtime->resetStatistics();
-    }
     MultiTemplateRuntimeSnapshot multiTemplateSnapshot;
     if (detectionModeDescriptor(detectionMode).trackingKind
             == DetectionTrackingKind::MultipleTemplates) {
