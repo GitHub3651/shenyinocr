@@ -1,12 +1,7 @@
-// 文件作用：本文件用于从正式帧队列取帧、调用检测流水线并把唯一结果交给结果服务。
-// 主要职责：从正式帧队列取帧、调用检测流水线并把唯一结果交给结果服务。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/detection_worker.h"
 
 #include <exception>
 
-// 函数说明：DetectionWorker 构造函数创建组件并初始化其依赖和初始状态。
 DetectionWorker::DetectionWorker(
     std::size_t queueCapacity,
     const Executor &executor,
@@ -23,14 +18,12 @@ DetectionWorker::DetectionWorker(
 {
 }
 
-// 函数说明：~DetectionWorker 析构函数按生命周期要求释放组件持有的资源。
 DetectionWorker::~DetectionWorker()
 {
     requestStop();
     wait();
 }
 
-// 函数说明：start 函数创建、准备或启动对应流程。
 bool DetectionWorker::start()
 {
     std::lock_guard<std::mutex> lock(m_lifecycleMutex);
@@ -62,7 +55,6 @@ bool DetectionWorker::start()
     return true;
 }
 
-// 函数说明：submit 函数执行对应事件或业务处理。
 bool DetectionWorker::submit(
     const std::shared_ptr<const FrameData> &frame)
 {
@@ -72,7 +64,6 @@ bool DetectionWorker::submit(
     return m_queue.submit(frame);
 }
 
-// 函数说明：trySubmit 函数实现名称所表示的处理步骤。
 DetectionWorkSubmissionResult DetectionWorker::trySubmit(
     const std::shared_ptr<const FrameData> &frame)
 {
@@ -93,7 +84,6 @@ DetectionWorkSubmissionResult DetectionWorker::trySubmit(
                 : DetectionWorkSubmissionResult::Cancelled;
 }
 
-// 函数说明：requestStop 函数实现名称所表示的处理步骤。
 void DetectionWorker::requestStop()
 {
     m_stopRequested.store(true);
@@ -101,7 +91,6 @@ void DetectionWorker::requestStop()
                 static_cast<quint64>(m_queue.cancel()));
 }
 
-// 函数说明：wait 函数读取、等待或计算对应的数据。
 void DetectionWorker::wait()
 {
     std::lock_guard<std::mutex> lock(m_lifecycleMutex);
@@ -112,31 +101,21 @@ void DetectionWorker::wait()
     m_thread.join();
 }
 
-// 函数说明：isRunning 函数检查相关状态并返回判断结果。
 bool DetectionWorker::isRunning() const
 {
     return m_running.load();
 }
 
-// 函数说明：queueCapacity 函数实现名称所表示的处理步骤。
 std::size_t DetectionWorker::queueCapacity() const
 {
     return m_queue.capacity();
 }
 
-// 函数说明：processedFrameCount 函数执行对应事件或业务处理。
 quint64 DetectionWorker::processedFrameCount() const
 {
     return m_processedFrameCount.load();
 }
 
-// 函数说明：cancelledFrameCount 函数检查相关状态并返回判断结果。
-quint64 DetectionWorker::cancelledFrameCount() const
-{
-    return m_cancelledFrameCount.load();
-}
-
-// 函数说明：run 函数执行对应事件或业务处理。
 void DetectionWorker::run()
 {
     while (!m_stopRequested.load()) {
@@ -193,7 +172,6 @@ void DetectionWorker::run()
     m_running.store(false);
 }
 
-// 函数说明：reportFailure 函数实现名称所表示的处理步骤。
 void DetectionWorker::reportFailure(const QString &message) const
 {
     if (!m_failureConsumer) {

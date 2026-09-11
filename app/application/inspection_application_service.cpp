@@ -1,7 +1,3 @@
-// 文件作用：本文件用于组织相机、PLC、检测运行和模板启动等用户用例，并向界面返回结构化结果。
-// 主要职责：组织相机、PLC、检测运行和模板启动等用户用例，并向界面返回结构化结果。
-// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/inspection_application_service.h"
 
 #include "contracts/detection_mode.h"
@@ -9,6 +5,7 @@
 #include "templates/template_store.h"
 #include "runtime/camera_session.h"
 #include "runtime/inspection_runtime.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -19,7 +16,6 @@ namespace {
 
 constexpr float kMicrosecondsPerMillisecond = 1000.0f;
 
-// 函数说明：applicationState 函数实现名称所表示的处理步骤。
 ApplicationRuntimeState applicationState(
     InspectionRuntimeState state)
 {
@@ -38,7 +34,6 @@ ApplicationRuntimeState applicationState(
     }
 }
 
-// 函数说明：framePreprocessSettings 函数实现名称所表示的处理步骤。
 FramePreprocessSettings framePreprocessSettings(
     const AppSettings &settings)
 {
@@ -52,7 +47,6 @@ FramePreprocessSettings framePreprocessSettings(
     return output;
 }
 
-// 函数说明：cameraConfiguration 函数实现名称所表示的处理步骤。
 CameraSessionCaptureConfiguration cameraConfiguration(
     const AppSettings &settings,
     bool hardwareTriggerEnabled)
@@ -70,7 +64,6 @@ CameraSessionCaptureConfiguration cameraConfiguration(
     return output;
 }
 
-// 函数说明：resultConfiguration 函数实现名称所表示的处理步骤。
 ResultServiceRunConfiguration resultConfiguration(
     const AppSettings &settings,
     DetectionMode detectionMode)
@@ -95,7 +88,6 @@ ResultServiceRunConfiguration resultConfiguration(
     return configuration;
 }
 
-// 函数说明：plcRunSettings 函数实现名称所表示的处理步骤。
 PlcRunSettingsCommand plcRunSettings(const AppSettings &settings)
 {
     PlcRunSettingsCommand output;
@@ -108,7 +100,6 @@ PlcRunSettingsCommand plcRunSettings(const AppSettings &settings)
     return output;
 }
 
-// 函数说明：startIssueCode 函数创建、准备或启动对应流程。
 QString startIssueCode(InspectionStartIssue issue)
 {
     switch (issue) {
@@ -138,7 +129,6 @@ QString startIssueCode(InspectionStartIssue issue)
     }
 }
 
-// 函数说明：startIssueMessage 函数创建、准备或启动对应流程。
 QString startIssueMessage(InspectionStartIssue issue)
 {
     switch (issue) {
@@ -157,7 +147,7 @@ QString startIssueMessage(InspectionStartIssue issue)
     case InspectionStartIssue::TemplatesMissing:
         return QStringLiteral("当前模式没有任何可用模板。");
     case InspectionStartIssue::TemplateResourcesInvalid:
-        return QStringLiteral("二维码+三期模板资源预检失败。");
+        return QStringLiteral("二维码识别组件无法使用。");
     case InspectionStartIssue::TemplateIncomplete:
         return QStringLiteral("模板尚未制作完整，无法启动检测。");
     case InspectionStartIssue::TemplatesIncomplete:
@@ -168,29 +158,27 @@ QString startIssueMessage(InspectionStartIssue issue)
     }
 }
 
-// 函数说明：faultReasonText 函数实现名称所表示的处理步骤。
 QString faultReasonText(InspectionFaultReason reason)
 {
     switch (reason) {
     case InspectionFaultReason::CameraDisconnected:
-        return QStringLiteral("相机断连或正式采集异常");
+        return QStringLiteral("相机连接或图像采集异常");
     case InspectionFaultReason::PlcDisconnected:
-        return QStringLiteral("PLC连接或结果输出异常");
+        return QStringLiteral("PLC 连接或检测结果发送异常");
     case InspectionFaultReason::HardTriggerQueueOverflow:
-        return QStringLiteral("硬触发检测队列已满");
+        return QStringLiteral("待检测图像过多，系统已暂停");
     case InspectionFaultReason::ProductIdentityAmbiguous:
-        return QStringLiteral("产品身份无法唯一确定");
+        return QStringLiteral("无法确定当前图像对应的产品");
     case InspectionFaultReason::RuntimeInvariantViolation:
-        return QStringLiteral("检测运行约束被破坏");
+        return QStringLiteral("系统状态异常，检测已暂停");
     case InspectionFaultReason::BarcodeCsvUnavailable:
-        return QStringLiteral("二维码 CSV 写入不可用");
+        return QStringLiteral("二维码结果无法保存到本机");
     case InspectionFaultReason::None:
         break;
     }
     return QString();
 }
 
-// 函数说明：acquisitionDto 函数实现名称所表示的处理步骤。
 InspectionAcquisitionDto acquisitionDto(
         bool hardwareTriggerEnabled)
 {
@@ -199,90 +187,8 @@ InspectionAcquisitionDto acquisitionDto(
             : InspectionAcquisitionDto::SoftwareTrigger;
 }
 
-// 函数说明：cameraParameterDto 函数实现名称所表示的处理步骤。
-CameraParameterResultDto cameraParameterDto(
-        const InspectionCameraParameterResult &source)
-{
-    CameraParameterResultDto result;
-    result.success = source.success;
-    result.minimumValue = source.minimumValue;
-    result.maximumValue = source.maximumValue;
-    result.actualValue = source.actualValue;
-    result.nativeErrorCode = source.nativeErrorCode;
-    result.diagnostic = source.diagnostic;
-    return result;
-}
-
-// 函数说明：cameraOpenIssueDto 函数实现名称所表示的处理步骤。
-CameraOpenIssueDto cameraOpenIssueDto(
-        InspectionCameraOpenIssue issue)
-{
-    switch (issue) {
-    case InspectionCameraOpenIssue::DeviceNotFound:
-        return CameraOpenIssueDto::DeviceNotFound;
-    case InspectionCameraOpenIssue::DeviceError:
-        return CameraOpenIssueDto::DeviceError;
-    case InspectionCameraOpenIssue::DeviceOpenFailed:
-        return CameraOpenIssueDto::DeviceOpenFailed;
-    case InspectionCameraOpenIssue::ExposureFailed:
-        return CameraOpenIssueDto::ExposureFailed;
-    case InspectionCameraOpenIssue::InitializationFailed:
-        return CameraOpenIssueDto::InitializationFailed;
-    case InspectionCameraOpenIssue::None:
-    default:
-        return CameraOpenIssueDto::None;
-    }
-}
-
-// 函数说明：cameraOpenDto 函数实现名称所表示的处理步骤。
-CameraOpenResultDto cameraOpenDto(
-        const InspectionCameraOpenResult &source)
-{
-    CameraOpenResultDto result;
-    result.issue = cameraOpenIssueDto(source.issue);
-    result.deviceCount = source.deviceCount;
-    result.appliedExposure = source.appliedExposure;
-    result.exposureMinimum = source.exposureMinimum;
-    result.exposureMaximum = source.exposureMaximum;
-    result.exposureAdjusted = source.exposureAdjusted;
-    result.adjustmentMessage = source.adjustmentMessage;
-    result.diagnostic = source.diagnostic;
-    return result;
-}
-
-// 函数说明：cameraRecoveryIssueDto 函数实现名称所表示的处理步骤。
-CameraRecoveryIssueDto cameraRecoveryIssueDto(
-        InspectionCameraRecoveryIssue issue)
-{
-    switch (issue) {
-    case InspectionCameraRecoveryIssue::MissingCamera:
-        return CameraRecoveryIssueDto::MissingCamera;
-    case InspectionCameraRecoveryIssue::ExposureRejected:
-        return CameraRecoveryIssueDto::ExposureRejected;
-    case InspectionCameraRecoveryIssue::InitializationFailed:
-        return CameraRecoveryIssueDto::InitializationFailed;
-    case InspectionCameraRecoveryIssue::None:
-    default:
-        return CameraRecoveryIssueDto::None;
-    }
-}
-
-// 函数说明：cameraRecoveryDto 函数实现名称所表示的处理步骤。
-CameraRecoveryResultDto cameraRecoveryDto(
-        const InspectionCameraRecoveryResult &source)
-{
-    CameraRecoveryResultDto result;
-    result.issue = cameraRecoveryIssueDto(source.issue);
-    result.recoveryAttempted = source.recoveryAttempted;
-    result.cameraOpen = source.cameraOpen;
-    result.adjustmentMessage = source.adjustmentMessage;
-    result.errorMessage = source.errorMessage;
-    return result;
-}
-
 } // namespace
 
-// 函数说明：InspectionApplicationService 构造函数创建组件并初始化其依赖和初始状态。
 InspectionApplicationService::InspectionApplicationService(
     const std::shared_ptr<InspectionRuntime> &runtime,
     const std::shared_ptr<CameraSession> &cameraSession,
@@ -316,13 +222,11 @@ InspectionApplicationService::InspectionApplicationService(
     m_cameraSession->setCallbacks(callbacks);
 }
 
-// 函数说明：~InspectionApplicationService 析构函数按生命周期要求释放组件持有的资源。
 InspectionApplicationService::~InspectionApplicationService()
 {
     m_cameraSession->setCallbacks(CameraSessionCallbacks());
 }
 
-// 函数说明：start 函数创建、准备或启动对应流程。
 StartInspectionResult InspectionApplicationService::start(
     const StartInspectionCommand &command)
 {
@@ -352,7 +256,7 @@ StartInspectionResult InspectionApplicationService::start(
         return rejectStart(
                     InspectionStartIssue::TemplateMissing,
                     QStringLiteral("INSPECTION_DETECTION_MODE_INVALID"),
-                    QStringLiteral("应用设置中的检测模式无效。"));
+                    QStringLiteral("当前选择的检测模式无效。"));
     }
     if (detectionMode == DetectionMode::BarcodeWord
             && settings.barcodeCsvEnabled
@@ -361,7 +265,7 @@ StartInspectionResult InspectionApplicationService::start(
                     InspectionStartIssue::None,
                     QStringLiteral("BARCODE_CSV_DIRECTORY_UNAVAILABLE"),
                     QStringLiteral(
-                        "二维码 CSV 输出目录不可用，请重新选择可写入的本机目录。"),
+                        "二维码结果保存文件夹不可用，请重新选择。"),
                     QStringList(),
                     settings.barcodeCsvOutputDirectory);
     }
@@ -390,12 +294,17 @@ StartInspectionResult InspectionApplicationService::start(
             continue;
         }
         const QString reason = templateError.userMessage.isEmpty()
-                ? QStringLiteral("未知模板错误")
+                ? QStringLiteral("模板无法使用。")
                 : templateError.userMessage;
+        qCWarning(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=run.template_load_failed code=%1 path=%2 diagnostic=%3")
+                   .arg(templateError.code, path,
+                        templateError.diagnostic);
         const QString warning = QStringLiteral(
-                    "模板“%1”状态异常：\n%2\n%3")
+                    "模板“%1”无法使用：%2")
                 .arg(QFileInfo(path).fileName(),
-                     path, reason);
+                     reason);
         if (detectionMode == DetectionMode::Stamp
                 || detectionMode == DetectionMode::Ocr) {
             return rejectStart(
@@ -405,7 +314,8 @@ StartInspectionResult InspectionApplicationService::start(
                         : templateError.code,
                         warning,
                         QStringList() << warning,
-                        templateError.diagnostic);
+                        QStringLiteral("path=%1; diagnostic=%2")
+                        .arg(path, templateError.diagnostic));
         }
         templateWarnings.append(
                     QStringLiteral("%1\n已跳过加载该模板。")
@@ -449,7 +359,7 @@ StartInspectionResult InspectionApplicationService::start(
             return rejectStart(
                         InspectionStartIssue::TemplatesMissing,
                         QStringLiteral("INSPECTION_TEMPLATE_SNAPSHOT_INVALID"),
-                        QStringLiteral("没有可用的多模板定位配置。"));
+                        QStringLiteral("当前模板未准备好。"));
         }
     }
 
@@ -490,9 +400,7 @@ StartInspectionResult InspectionApplicationService::start(
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
                     QStringLiteral("INSPECTION_CAMERA_PREPARE_FAILED"),
-                    cameraError.isEmpty()
-                    ? QStringLiteral("启动识别前相机准备失败。")
-                    : cameraError,
+                    QStringLiteral("相机尚未准备好，无法开始检测。"),
                     QStringList(),
                     cameraError);
     }
@@ -515,8 +423,7 @@ StartInspectionResult InspectionApplicationService::start(
             return rejectStart(
                         InspectionStartIssue::RuntimeBusy,
                         QStringLiteral("INSPECTION_PLC_START_SETTINGS_FAILED"),
-                        QStringLiteral("启动识别前PLC参数下发失败：\n")
-                            + error.userMessage,
+                        QStringLiteral("PLC 参数应用失败，无法开始检测。"),
                         QStringList(),
                         error.diagnostic);
         }
@@ -535,7 +442,7 @@ StartInspectionResult InspectionApplicationService::start(
                     InspectionStartIssue::RuntimeBusy,
                     QStringLiteral("INSPECTION_START_EXECUTION_FAILED"),
                     executionError.isEmpty()
-                    ? QStringLiteral("启动识别失败。")
+                    ? QStringLiteral("无法开始检测，请重试。")
                     : executionError,
                     QStringList(),
                     executionError);
@@ -549,9 +456,7 @@ StartInspectionResult InspectionApplicationService::start(
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
                     QStringLiteral("INSPECTION_CAPTURE_START_FAILED"),
-                    cameraError.isEmpty()
-                    ? QStringLiteral("相机采集线程启动失败。")
-                    : cameraError,
+                    QStringLiteral("图像采集启动失败。"),
                     QStringList(),
                     cameraError);
     }
@@ -564,7 +469,7 @@ StartInspectionResult InspectionApplicationService::start(
         return rejectStart(
                     InspectionStartIssue::RuntimeBusy,
                     QStringLiteral("INSPECTION_START_COMMIT_FAILED"),
-                    QStringLiteral("运行状态提交失败。"));
+                    QStringLiteral("无法开始检测，请重试。"));
     }
 
     m_activeTemplatePaths.clear();
@@ -581,7 +486,6 @@ StartInspectionResult InspectionApplicationService::start(
     return result;
 }
 
-// 函数说明：stop 函数停止流程、清理状态或释放对应资源。
 StopInspectionResult InspectionApplicationService::stop(
     const StopInspectionCommand &command)
 {
@@ -632,10 +536,9 @@ StopInspectionResult InspectionApplicationService::stop(
         return saved.isSuccess();
     };
     if (acquisition.shouldRestoreCamera()) {
-        result.cameraRecovery = cameraRecoveryDto(
-                    m_cameraSession->restorePreviewReady(
-                        settings.cameraExposure,
-                        persistExposure));
+        result.cameraRecovery = m_cameraSession->restorePreviewReady(
+                    settings.cameraExposure,
+                    persistExposure);
     } else {
         result.cameraRecovery.cameraOpen = m_cameraSession->isOpen();
     }
@@ -647,7 +550,7 @@ StopInspectionResult InspectionApplicationService::stop(
         result.error.code = QStringLiteral(
                     "INSPECTION_RUNTIME_FAULT_DURING_STOP");
         result.error.userMessage = QStringLiteral(
-                    "停止过程中检测运行时进入故障状态。");
+                    "停止检测时发生系统故障。");
         result.snapshot = runtimeSnapshot();
         publishSnapshot();
         return result;
@@ -679,7 +582,7 @@ StopInspectionResult InspectionApplicationService::stop(
         result.error.code = QStringLiteral(
                     "INSPECTION_CAMERA_EXPOSURE_RECOVERY_FAILED");
         result.error.userMessage = QStringLiteral(
-                    "停止识别后恢复相机曝光失败。");
+                    "停止检测后，相机曝光恢复失败，请检查相机状态。");
         result.error.diagnostic =
                 result.cameraRecovery.errorMessage;
     }
@@ -688,7 +591,6 @@ StopInspectionResult InspectionApplicationService::stop(
     return result;
 }
 
-// 函数说明：openCamera 函数创建、准备或启动对应流程。
 OpenCameraResult InspectionApplicationService::openCamera(
     const PlcConnectionCommand &plcCommand)
 {
@@ -727,13 +629,12 @@ OpenCameraResult InspectionApplicationService::openCamera(
         }
         return saved.isSuccess();
     };
-    result.camera = cameraOpenDto(
-                m_cameraSession->openFirst(
-                    settings.cameraExposure, persistExposure));
+    result.camera = m_cameraSession->openFirst(
+                settings.cameraExposure, persistExposure);
     if (!result.camera.isSuccess()) {
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_OPEN_FAILED"),
-                    QStringLiteral("相机异常。"),
+                    QStringLiteral("相机打开失败，请检查相机连接和参数。"),
                     result.camera.diagnostic);
         result.snapshot = runtimeSnapshot();
         publishSnapshot();
@@ -745,7 +646,6 @@ OpenCameraResult InspectionApplicationService::openCamera(
     return result;
 }
 
-// 函数说明：closeCamera 函数停止流程、清理状态或释放对应资源。
 OperationResult InspectionApplicationService::closeCamera()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
@@ -766,7 +666,6 @@ OperationResult InspectionApplicationService::closeCamera()
     return OperationResult::accepted();
 }
 
-// 函数说明：connectPlc 函数建立或断开对应外部连接。
 OperationResult InspectionApplicationService::connectPlc(
     const PlcConnectionCommand &command)
 {
@@ -791,7 +690,6 @@ OperationResult InspectionApplicationService::connectPlc(
                 result.nativeErrorCode);
 }
 
-// 函数说明：disconnectPlc 函数建立或断开对应外部连接。
 OperationResult InspectionApplicationService::disconnectPlc()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
@@ -814,7 +712,6 @@ OperationResult InspectionApplicationService::disconnectPlc()
                 result.nativeErrorCode);
 }
 
-// 函数说明：applyPlcTriggerMode 函数更新或应用对应的配置和状态。
 OperationResult InspectionApplicationService::applyPlcTriggerMode(
     const QString &modeId)
 {
@@ -853,7 +750,6 @@ InspectionApplicationService::applyPlcTriggerModeToDevice(
                 result.nativeErrorCode);
 }
 
-// 函数说明：applyPlcRunSettings 函数更新或应用对应的配置和状态。
 OperationResult InspectionApplicationService::applyPlcRunSettings(
     const PlcRunSettingsCommand &command)
 {
@@ -885,7 +781,7 @@ InspectionApplicationService::applyPlcRunSettingsToDevice(
         return OperationResult::accepted();
     }
     QString code = QStringLiteral("PLC_RUN_SETTINGS_WRITE_FAILED");
-    QString message = QStringLiteral("PLC运行参数下发失败");
+    QString message = QStringLiteral("PLC 运行参数应用失败");
     switch (result.failedField) {
     case InspectionPlcRunSettingField::RejectTime:
         code = QStringLiteral("PLC_REJECT_TIME_WRITE_FAILED");
@@ -911,7 +807,6 @@ InspectionApplicationService::applyPlcRunSettingsToDevice(
                 code, message, result.operation.nativeErrorCode);
 }
 
-// 函数说明：writePlcPhotoDistance 函数保存或发布对应的数据和资源。
 OperationResult InspectionApplicationService::writePlcPhotoDistance(
     std::uint32_t value)
 {
@@ -936,7 +831,6 @@ OperationResult InspectionApplicationService::writePlcPhotoDistance(
 }
 
 CameraParameterResultDto
-// 函数说明：queryCameraGainRange 函数读取、等待或计算对应的数据。
 InspectionApplicationService::queryCameraGainRange()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle
@@ -947,11 +841,10 @@ InspectionApplicationService::queryCameraGainRange()
                     "当前相机状态不能查询增益范围。");
         return result;
     }
-    return cameraParameterDto(m_cameraSession->queryGainRange());
+    return m_cameraSession->queryGainRange();
 }
 
 CameraParameterResultDto
-// 函数说明：applyCameraExposure 函数更新或应用对应的配置和状态。
 InspectionApplicationService::applyCameraExposure(int exposure)
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle
@@ -962,11 +855,10 @@ InspectionApplicationService::applyCameraExposure(int exposure)
                     "请在相机已打开且没有检测或取景时设置曝光。");
         return result;
     }
-    return cameraParameterDto(m_cameraSession->applyExposure(exposure));
+    return m_cameraSession->applyExposure(exposure);
 }
 
 CameraParameterResultDto
-// 函数说明：applyCameraGain 函数更新或应用对应的配置和状态。
 InspectionApplicationService::applyCameraGain(int gain)
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle
@@ -977,10 +869,9 @@ InspectionApplicationService::applyCameraGain(int gain)
                     "请在相机已打开且没有检测或取景时设置增益。");
         return result;
     }
-    return cameraParameterDto(m_cameraSession->applyGain(gain));
+    return m_cameraSession->applyGain(gain);
 }
 
-// 函数说明：startTemplatePreview 函数创建、准备或启动对应流程。
 OperationResult InspectionApplicationService::startTemplatePreview(
     int rotationCode,
     int colorChannelCode)
@@ -998,9 +889,9 @@ OperationResult InspectionApplicationService::startTemplatePreview(
     if (m_cameraSession->isCapturing()) {
         return OperationResult::rejected(
                     QStringLiteral("TEMPLATE_CAPTURE_BUSY"),
-                    QStringLiteral("相机采集线程仍在运行，请先停止当前任务。"));
+                    QStringLiteral("相机正在采集图像，请先停止检测。"));
     }
-    const InspectionCameraParameterResult exposure =
+    const CameraParameterResultDto exposure =
             m_cameraSession->applyExposure(
                 m_settings->current().cameraExposure);
     if (!exposure.success) {
@@ -1018,15 +909,12 @@ OperationResult InspectionApplicationService::startTemplatePreview(
             settings, &errorMessage)) {
         return OperationResult::rejected(
                     QStringLiteral("TEMPLATE_PREVIEW_START_FAILED"),
-                    errorMessage.isEmpty()
-                    ? QStringLiteral("实时取景线程启动失败。")
-                    : errorMessage,
+                    QStringLiteral("无法开始实时取景，请重试。"),
                     errorMessage);
     }
     return OperationResult::accepted();
 }
 
-// 函数说明：stopTemplatePreview 函数停止流程、清理状态或释放对应资源。
 OperationResult InspectionApplicationService::stopTemplatePreview()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
@@ -1038,28 +926,24 @@ OperationResult InspectionApplicationService::stopTemplatePreview()
             ? OperationResult::accepted()
             : OperationResult::rejected(
                 QStringLiteral("TEMPLATE_PREVIEW_STOP_FAILED"),
-                QStringLiteral("实时取景线程尚未停止，请稍后重试。"));
+                QStringLiteral("实时取景尚未停止，请稍后重试。"));
 }
 
-// 函数说明：hasCurrentCameraImage 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::hasCurrentCameraImage() const
 {
     return m_cameraSession->hasCurrentImage();
 }
 
-// 函数说明：currentCameraImageClone 函数读取、等待或计算对应的数据。
 cv::Mat InspectionApplicationService::currentCameraImageClone() const
 {
     return m_cameraSession->currentImageClone();
 }
 
-// 函数说明：isCameraOpen 函数检查相关状态并返回判断结果。
 bool InspectionApplicationService::isCameraOpen() const
 {
     return m_cameraSession->isOpen();
 }
 
-// 函数说明：shutdown 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::shutdown()
 {
     m_runtime->beginStop();
@@ -1076,7 +960,6 @@ void InspectionApplicationService::shutdown()
     publishSnapshot();
 }
 
-// 函数说明：completeUnexpectedAcquisitionStop 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::completeUnexpectedAcquisitionStop()
 {
     const InspectionRuntimeState state = m_runtime->state();
@@ -1108,7 +991,6 @@ void InspectionApplicationService::completeUnexpectedAcquisitionStop()
     publishSnapshot();
 }
 
-// 函数说明：renderPreviewFrame 函数执行对应事件或业务处理。
 QImage InspectionApplicationService::renderPreviewFrame(
     const cv::Mat &image,
     bool tissueMode,
@@ -1120,7 +1002,6 @@ QImage InspectionApplicationService::renderPreviewFrame(
     return m_runtime->renderPreviewFrame(image);
 }
 
-// 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
 OperationResult InspectionApplicationService::resetStatistics()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
@@ -1132,7 +1013,6 @@ OperationResult InspectionApplicationService::resetStatistics()
     return OperationResult::accepted();
 }
 
-// 函数说明：resetNgCount 函数停止流程、清理状态或释放对应资源。
 OperationResult InspectionApplicationService::resetNgCount()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
@@ -1144,20 +1024,18 @@ OperationResult InspectionApplicationService::resetNgCount()
     return OperationResult::accepted();
 }
 
-// 函数说明：clearPendingDelayedNgRequests 函数停止流程、清理状态或释放对应资源。
 OperationResult
 InspectionApplicationService::clearPendingDelayedNgRequests()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
         return OperationResult::rejected(
                     QStringLiteral("REJECT_QUEUE_RUNTIME_BUSY"),
-                    QStringLiteral("请先停止当前任务再清空剔除队列。"));
+                    QStringLiteral("请先停止检测，再清除待执行的剔除动作。"));
     }
     m_runtime->clearPendingDelayedNgRequests();
     return OperationResult::accepted();
 }
 
-// 函数说明：checkPlcHealth 函数校验、转换或恢复对应数据。
 void InspectionApplicationService::checkPlcHealth()
 {
     if (!m_runtime->isRunning()
@@ -1170,7 +1048,6 @@ void InspectionApplicationService::checkPlcHealth()
                 QStringLiteral("运行中 PLC 连接状态已断开。"));
 }
 
-// 函数说明：enterFault 函数实现名称所表示的处理步骤。
 void InspectionApplicationService::enterFault(
     InspectionFaultReason reason,
     const QString &diagnostic)
@@ -1181,7 +1058,6 @@ void InspectionApplicationService::enterFault(
     publishSnapshot();
 }
 
-// 函数说明：runtimeSnapshot 函数执行对应事件或业务处理。
 RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
 {
     RuntimeSnapshot snapshot;
@@ -1193,7 +1069,6 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
     return snapshot;
 }
 
-// 函数说明：rejectStart 函数实现名称所表示的处理步骤。
 StartInspectionResult InspectionApplicationService::rejectStart(
     InspectionStartIssue issue,
     const QString &code,
@@ -1211,7 +1086,6 @@ StartInspectionResult InspectionApplicationService::rejectStart(
     return result;
 }
 
-// 函数说明：plcFailure 函数实现名称所表示的处理步骤。
 OperationResult InspectionApplicationService::plcFailure(
     const QString &code,
     const QString &userMessage,
@@ -1224,7 +1098,6 @@ OperationResult InspectionApplicationService::plcFailure(
                 .arg(nativeErrorCode));
 }
 
-// 函数说明：publishSnapshot 函数保存或发布对应的数据和资源。
 void InspectionApplicationService::publishSnapshot()
 {
     emit runtimeSnapshotChanged(runtimeSnapshot());

@@ -1,4 +1,3 @@
-// 文件作用：实现 AppSettings Schema 8 的唯一磁盘入口。
 #include "system_support/settings/app_settings_store.h"
 
 #include <QDir>
@@ -45,7 +44,7 @@ bool hasOnlyKeys(const QJsonObject &object,
         if (!allowed.contains(it.key())) {
             return fail(error,
                         QStringLiteral("SETTINGS_SCHEMA_UNSUPPORTED"),
-                        QStringLiteral("设置文件包含不支持的字段。"),
+                        QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                         QStringLiteral("Unsupported %1 field: %2")
                         .arg(context, it.key()));
         }
@@ -64,7 +63,7 @@ bool readObject(const QJsonObject &parent,
                     field.isUndefined()
                     ? QStringLiteral("SETTINGS_FIELD_MISSING")
                     : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                    QStringLiteral("设置文件缺少对象或对象类型不正确。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("Expected object: %1")
                     .arg(QLatin1String(key)));
     }
@@ -83,7 +82,7 @@ bool readString(const QJsonObject &parent,
                     field.isUndefined()
                     ? QStringLiteral("SETTINGS_FIELD_MISSING")
                     : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                    QStringLiteral("设置文件缺少文本字段或字段类型不正确。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("Expected string: %1")
                     .arg(QLatin1String(key)));
     }
@@ -102,7 +101,7 @@ bool readBool(const QJsonObject &parent,
                     field.isUndefined()
                     ? QStringLiteral("SETTINGS_FIELD_MISSING")
                     : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                    QStringLiteral("设置文件缺少布尔字段或字段类型不正确。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("Expected bool: %1")
                     .arg(QLatin1String(key)));
     }
@@ -126,7 +125,7 @@ bool readInt(const QJsonObject &parent,
                     field.isUndefined()
                     ? QStringLiteral("SETTINGS_FIELD_MISSING")
                     : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                    QStringLiteral("设置文件缺少整数或字段类型不正确。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("Expected int: %1")
                     .arg(QLatin1String(key)));
     }
@@ -147,7 +146,7 @@ bool readDouble(const QJsonObject &parent,
                     field.isUndefined()
                     ? QStringLiteral("SETTINGS_FIELD_MISSING")
                     : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                    QStringLiteral("设置文件缺少数值或字段类型不正确。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("Expected number: %1")
                     .arg(QLatin1String(key)));
     }
@@ -166,7 +165,7 @@ bool readStringList(const QJsonObject &parent,
                     field.isUndefined()
                     ? QStringLiteral("SETTINGS_FIELD_MISSING")
                     : QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                    QStringLiteral("设置文件缺少路径列表或字段类型不正确。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("Expected array: %1")
                     .arg(QLatin1String(key)));
     }
@@ -175,7 +174,7 @@ bool readStringList(const QJsonObject &parent,
         if (!item.isString()) {
             return fail(error,
                         QStringLiteral("SETTINGS_FIELD_TYPE_INVALID"),
-                        QStringLiteral("模板路径列表中存在非文本值。"),
+                        QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                         QStringLiteral("Non-string item in %1")
                         .arg(QLatin1String(key)));
         }
@@ -234,7 +233,7 @@ bool mapId(const QString &source,
     if (mapped.isEmpty()) {
         return fail(error,
                     QStringLiteral("SETTINGS_FIELD_RANGE_INVALID"),
-                    QStringLiteral("设置文件包含不支持的选项。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("%1=%2").arg(field, source));
     }
     *target = mapped;
@@ -283,7 +282,7 @@ bool validateSettings(const AppSettings &settings,
             || !appSettingsTriggerModeIds().contains(settings.triggerModeId)) {
         return fail(error,
                     QStringLiteral("SETTINGS_FIELD_RANGE_INVALID"),
-                    QStringLiteral("设置文件包含不支持的选项。"),
+                    QStringLiteral("软件设置文件内容不完整或格式不正确。"),
                     QStringLiteral("One or more enum ids are invalid."));
     }
     const int nonNegativeValues[] = {
@@ -296,7 +295,7 @@ bool validateSettings(const AppSettings &settings,
         if (value < 0) {
             return fail(error,
                         QStringLiteral("SETTINGS_FIELD_RANGE_INVALID"),
-                        QStringLiteral("设置数值超出合法范围。"),
+                        QStringLiteral("软件设置中的数值无效。"),
                         QStringLiteral("Negative numeric field."));
         }
     }
@@ -304,7 +303,7 @@ bool validateSettings(const AppSettings &settings,
             || settings.plcIp.trimmed().isEmpty()) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("设置字段组合不符合设备合同。"),
+                    QStringLiteral("软件设置与当前设备不匹配。"),
                     QStringLiteral("PLC word or IP contract invalid."));
     }
     if (settings.imageSaveModeId != QLatin1String("save_none")
@@ -312,7 +311,7 @@ bool validateSettings(const AppSettings &settings,
                 || !QFileInfo(settings.imageSavePath).isAbsolute())) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("启用存图时必须选择绝对输出目录。"),
+                    QStringLiteral("保存图像前，请先选择保存文件夹"),
                     QStringLiteral("imageSaving.outputDirectory invalid."));
     }
     const QString barcodeCsvDirectory =
@@ -322,13 +321,13 @@ bool validateSettings(const AppSettings &settings,
                 && !QFileInfo(barcodeCsvDirectory).isAbsolute())) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("启用本机 CSV 时必须选择绝对输出目录。"),
+                    QStringLiteral("保存二维码结果前，请先选择保存文件夹。"),
                     QStringLiteral("barcodeCsv.outputDirectory invalid."));
     }
     if (!validTemplatePath(settings.templateSaveDirectory)) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("模板保存目录必须是规范化绝对路径。"),
+                    QStringLiteral("请选择有效的模板保存文件夹"),
                     QStringLiteral("ui.templateSaveDirectory invalid."));
     }
     if (settings.plcTriggerModeDb != defaults.plcTriggerModeDb
@@ -341,7 +340,7 @@ bool validateSettings(const AppSettings &settings,
             || settings.plcRejectTimeOffset != defaults.plcRejectTimeOffset) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("PLC 地址与当前设备合同不一致。"),
+                    QStringLiteral("PLC 参数与当前设备不匹配。"),
                     QStringLiteral("Fixed PLC address contract changed."));
     }
     const DetectionSchemes &schemes = settings.detectionSchemes;
@@ -353,7 +352,7 @@ bool validateSettings(const AppSettings &settings,
             || schemes.tissueRoughnessThreshold < 0.0) {
         return fail(error,
                     QStringLiteral("SETTINGS_CONSTRAINT_VIOLATION"),
-                    QStringLiteral("检测方案中的模板路径或纸巾阈值无效。"),
+                    QStringLiteral("检测设置无效，请重新选择模板或检查纸巾检测阈值。"),
                     QStringLiteral("Invalid detectionSchemes value."));
     }
     return true;
@@ -718,12 +717,12 @@ bool AppSettingsStore::load(AppSettings *settings,
     clearError(error);
     if (!settings || !status) {
         return fail(error, QStringLiteral("SETTINGS_READ_FAILED"),
-                    QStringLiteral("设置读取目标无效。"),
+                    QStringLiteral("软件设置读取失败，请联系维护人员。"),
                     QStringLiteral("Null load output."));
     }
     if (m_applicationDataRoot.isEmpty()) {
         return fail(error, QStringLiteral("DATA_ROOT_UNAVAILABLE"),
-                    QStringLiteral("无法确定当前用户的应用数据目录。"),
+                    QStringLiteral("无法访问软件设置文件夹，软件不能启动。"),
                     QStringLiteral("Application data root is empty."));
     }
     const QString path = settingsFilePath();
@@ -736,7 +735,7 @@ bool AppSettingsStore::load(AppSettings *settings,
     QFile versionFile(path);
     if (!versionFile.open(QIODevice::ReadOnly)) {
         return fail(error, QStringLiteral("SETTINGS_READ_FAILED"),
-                    QStringLiteral("无法读取设置文件。"), versionFile.errorString());
+                    QStringLiteral("无法读取软件设置，请检查文件权限。"), versionFile.errorString());
     }
     QJsonParseError parseError;
     const QJsonDocument versionDocument =
@@ -744,7 +743,7 @@ bool AppSettingsStore::load(AppSettings *settings,
     if (parseError.error != QJsonParseError::NoError
             || !versionDocument.isObject()) {
         return fail(error, QStringLiteral("SETTINGS_JSON_MALFORMED"),
-                    QStringLiteral("设置文件已损坏，程序不会自动覆盖原文件。"),
+                    QStringLiteral("软件设置文件已损坏，原设置不会被覆盖。"),
                     parseError.errorString());
     }
     int schemaVersion = 0;
@@ -773,7 +772,7 @@ bool AppSettingsStore::save(const AppSettings &settings,
     clearError(error);
     if (m_applicationDataRoot.isEmpty()) {
         return fail(error, QStringLiteral("DATA_ROOT_UNAVAILABLE"),
-                    QStringLiteral("无法确定当前用户的应用数据目录。"),
+                    QStringLiteral("无法访问软件设置文件夹，软件不能启动。"),
                     QStringLiteral("Application data root is empty."));
     }
     if (!validateSettings(settings, error)) {
@@ -782,24 +781,24 @@ bool AppSettingsStore::save(const AppSettings &settings,
     const QString path = settingsFilePath();
     if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
         return fail(error, QStringLiteral("SETTINGS_WRITE_FAILED"),
-                    QStringLiteral("无法创建设置目录。"),
+                    QStringLiteral("无法创建软件设置文件夹，请检查文件夹权限。"),
                     QFileInfo(path).absolutePath());
     }
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly)) {
         return fail(error, QStringLiteral("SETTINGS_WRITE_FAILED"),
-                    QStringLiteral("无法写入设置文件。"), file.errorString());
+                    QStringLiteral("软件设置保存失败，原设置保持不变。"), file.errorString());
     }
     const QByteArray json = QJsonDocument(settingsToJson(settings))
             .toJson(QJsonDocument::Indented);
     if (file.write(json) != json.size()) {
         file.cancelWriting();
         return fail(error, QStringLiteral("SETTINGS_WRITE_FAILED"),
-                    QStringLiteral("设置文件写入不完整。"), file.errorString());
+                    QStringLiteral("软件设置保存失败，原设置保持不变。"), file.errorString());
     }
     if (!file.commit()) {
         return fail(error, QStringLiteral("SETTINGS_COMMIT_FAILED"),
-                    QStringLiteral("设置文件原子提交失败，原文件保持不变。"),
+                    QStringLiteral("软件设置保存失败，原设置保持不变。"),
                     file.errorString());
     }
     return true;

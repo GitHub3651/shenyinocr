@@ -1,4 +1,3 @@
-// 文件作用：实现字符区域的绘制、撤销、清空和坐标换算。
 #include "ui/main_window/template/character_editor/character_crop_label.h"
 
 #include <QMouseEvent>

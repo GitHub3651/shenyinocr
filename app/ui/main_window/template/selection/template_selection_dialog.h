@@ -1,4 +1,3 @@
-// 文件作用：统一显示单模板和多模板，并提供增加和批量移除入口。
 #pragma once
 
 #include "contracts/detection_mode.h"

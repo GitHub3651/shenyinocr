@@ -1,4 +1,3 @@
-// 文件作用：管理机器设置控件、校验、脏状态和运行中禁用规则。
 #pragma once
 
 #include "application/settings_application_service.h"

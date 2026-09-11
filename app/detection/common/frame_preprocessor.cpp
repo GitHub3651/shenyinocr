@@ -1,14 +1,9 @@
-// 文件作用：本文件用于统一执行图像旋转、颜色通道选择和检测前的基础预处理。
-// 主要职责：统一执行图像旋转、颜色通道选择和检测前的基础预处理。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "detection/common/frame_preprocessor.h"
 
 #include <opencv2/imgproc.hpp>
 
 #include <vector>
 
-// 函数说明：transform 函数校验、转换或恢复对应数据。
 bool FramePreprocessor::transform(
     const cv::Mat &source,
     const FramePreprocessSettings &settings,

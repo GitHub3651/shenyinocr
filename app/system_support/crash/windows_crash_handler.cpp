@@ -1,4 +1,3 @@
-// 文件作用：把Windows未处理异常写入独立崩溃文件。
 #include "system_support/crash/windows_crash_handler.h"
 
 #include <QtGlobal>

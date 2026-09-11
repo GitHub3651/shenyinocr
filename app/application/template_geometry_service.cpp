@@ -1,5 +1,3 @@
-// 文件作用：校验并转换各检测模式的模板绘图坐标。
-// 模块位置：应用层；不访问 UI 控件、磁盘、设备或检测算法。
 #include "application/template_geometry_service.h"
 
 #include <QtGlobal>
@@ -199,7 +197,7 @@ TemplateGeometryResult TemplateGeometryService::buildGeometry(
         if (result.stampAnchorImageRect.width <= 5
                 || result.stampAnchorImageRect.height <= 5) {
             result.errorMessage = QStringLiteral(
-                        "吸管口定位锚点转换后无效，模板未保存。");
+                        "吸管口定位参考区域转换后无效，模板未保存。");
             return result;
         }
         if (input.stampPolygon.size() < 3) {

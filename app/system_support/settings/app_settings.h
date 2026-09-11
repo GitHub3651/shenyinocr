@@ -1,4 +1,3 @@
-// 文件作用：定义整机、界面和五种检测方案的唯一持久化设置。
 #pragma once
 
 #include "contracts/detection_mode.h"

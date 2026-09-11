@@ -21,8 +21,8 @@ app/
 ├─ startup/          程序入口和对象组装
 ├─ ui/               窗口、页面、对话框和纯显示逻辑
 ├─ application/      启动检测、设置、模板编辑等用户用例
-├─ contracts/        跨层共享的五种检测模式定义
-├─ recipes/          配方数据、持久化、准备和编辑事务（4组.h/.cpp）
+├─ contracts/        跨层共享的检测模式、相机结果和呈现数据合同
+├─ templates/        模板数据、持久化和运行准备
 ├─ detection/        五种检测算法、定位、预处理和唯一模式装配
 ├─ runtime/          采集/检测线程、队列、运行状态、结果、PLC和存图（21个代码文件）
 ├─ devices/          相机、PLC端口和供应商适配器
@@ -42,7 +42,7 @@ MainWindow
 → PLC / ImageSaveService / ResultPresentationMailbox → UI
 ```
 
-`recipes/`现在只有四组职责：`ProductRecipe`是可保存的数据Schema，`PreparedRecipe`是已校验运行快照，`RecipeStore`负责事务读写，`RecipeEditorSession`负责编辑工作区和资源暂存。`runtime/`不再知道五种具体模式，也不保存配方内部算法字段；它只负责“什么时候采集、检测、结算、停止和进入故障”。
+`templates/` 的核心类型是可保存的 `TemplateSettings`、已校验的 `PreparedTemplate` 和唯一磁盘入口 `TemplateStore`；编辑状态由 `TemplateApplicationService` 持有。`runtime/`不再知道五种具体模式，也不保存模板内部算法字段；它只负责“什么时候采集、检测、结算、停止和进入故障”。
 
 完整的163个工程/代码文件逐项说明、调用链和维护规则见[`docs/development/OCRGangYin开发者代码结构与维护指南.md`](docs/development/OCRGangYin开发者代码结构与维护指南.md)。
 

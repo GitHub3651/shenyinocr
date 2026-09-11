@@ -1,4 +1,3 @@
-// 文件作用：本文件在Detection内完成预处理、定位和模式算法装配。
 #include "detection/detection_registry.h"
 
 #include "detection/detectionmode/barcode_word/barcode_word_detection_pipeline.h"
@@ -11,6 +10,7 @@
 #include "detection/detectionmode/word/word_detection_pipeline.h"
 #include "engines/barcode/barcode_decoder.h"
 #include "engines/ocr/ocr_engine.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QStringList>
 #include <stdexcept>
@@ -59,7 +59,7 @@ bool buildStampRuntimeConfig(
     if (!overlap->init(prepared.stampRingTemplate, regions)) {
         if (errorMessage) {
             *errorMessage = QStringLiteral(
-                        "钢印模板无法初始化防重叠检测资源。");
+                        "钢印模板中的防重叠区域无效，请重新制作模板。");
         }
         return false;
     }
@@ -154,13 +154,14 @@ DetectionPipelineCreationResult DetectionRegistry::create(
     const DetectionModeDescriptor descriptor = detectionModeDescriptor(request.mode);
     if (request.mode != DetectionMode::Tissue
             && request.preparedTemplates.isEmpty()) {
-        creation.errorMessage = QStringLiteral("当前模式没有可用运行模板。");
+        creation.errorMessage = QStringLiteral("当前模式没有可用模板。");
         return creation;
     }
     for (const PreparedTemplateSnapshot &prepared :
          request.preparedTemplates) {
         if (!prepared || prepared->settings.detectionMode != request.mode) {
-            creation.errorMessage = QStringLiteral("运行模板模式不匹配。");
+            creation.errorMessage = QStringLiteral(
+                        "所选模板与当前检测模式不匹配。");
             return creation;
         }
     }
@@ -176,21 +177,25 @@ DetectionPipelineCreationResult DetectionRegistry::create(
     if (request.mode == DetectionMode::Ocr
             && (!m_ocrEngine || !first)) {
         creation.errorMessage = QStringLiteral(
-                    "深度OCR引擎或目标文本未初始化。");
+                    "深度 OCR 未准备好，请检查模板中的目标文字。");
         return creation;
     }
     if (descriptor.trackingKind == DetectionTrackingKind::MultipleTemplates
             && !request.multiTemplateSnapshot.isValid()) {
-        creation.errorMessage = request.mode == DetectionMode::BarcodeWord
-                ? QStringLiteral("二维码+三期运行模板快照未准备。")
-                : QStringLiteral("字库运行模板快照未准备。");
+        creation.errorMessage = QStringLiteral("当前模板未准备好。");
         return creation;
     }
     if (request.mode == DetectionMode::BarcodeWord
             && !prepare(DetectionMode::BarcodeWord).ready) {
-        creation.errorMessage = m_barcodeDecoder
+        const QString diagnostic = m_barcodeDecoder
                 ? m_barcodeDecoder->lastError()
                 : QStringLiteral("Barcode decoder is not available.");
+        qCWarning(logDetection).noquote()
+                << QStringLiteral(
+                    "event=detection.prepare_failed mode=barcode_word diagnostic=%1")
+                   .arg(diagnostic);
+        creation.errorMessage = QStringLiteral(
+                    "二维码识别组件无法使用");
         return creation;
     }
 
@@ -200,7 +205,8 @@ DetectionPipelineCreationResult DetectionRegistry::create(
                 request.multiTemplateSnapshot.trackingTemplates,
                 first ? first->datePolygon : std::vector<cv::Point2f>(),
                 first ? first->trackingTemplate : cv::Mat())) {
-        creation.errorMessage = QStringLiteral("运行定位资源初始化失败。");
+        creation.errorMessage = QStringLiteral(
+                    "模板定位准备失败，请重新选择或制作模板");
         return creation;
     }
 
@@ -354,9 +360,9 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         }
         lines.append(QStringLiteral("日期：%1").arg(output.dateState));
         if (result.verdict == AlgorithmVerdict::Ng
-                && !result.diagnostic.trimmed().isEmpty()) {
+                && !output.operatorReason.trimmed().isEmpty()) {
             lines.append(QStringLiteral("原因：%1")
-                         .arg(result.diagnostic));
+                         .arg(output.operatorReason));
         }
         result.presentationText = lines.join(QStringLiteral("\n"));
         result.hasPresentationText = true;

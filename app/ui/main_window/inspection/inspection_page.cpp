@@ -1,7 +1,3 @@
-// 文件作用：本文件用于绑定检测页面控件，集中更新图像、判定、统计、耗时和运行按钮状态。
-// 主要职责：绑定检测页面控件，集中更新图像、判定、统计、耗时和运行按钮状态。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/main_window/inspection/inspection_page.h"
 
 #include "ui/main_window/inspection/inspection_fault_presenter.h"
@@ -281,7 +277,7 @@ bool InspectionPage::confirmFaultRecovery(
                 QStringLiteral("故障恢复确认"),
                 presentation.operatorMessage
                 + QStringLiteral(
-                    "\n\n注意：解除软件锁定不代表输送线已停止。"),
+                    "\n\n注意：恢复检测操作不代表输送线已停止。"),
                 QMessageBox::Yes | QMessageBox::Cancel,
                 &m_rootWidget);
     messageBox.setDefaultButton(QMessageBox::Cancel);
@@ -307,10 +303,9 @@ void InspectionPage::restoreNormalFaultStyle()
 
 void InspectionPage::reportImageSaveFailure(
     quint64 totalFailed,
-    const QString &latestError)
+    const QString &)
 {
     m_imageSaveFailedCount = totalFailed;
-    m_latestImageSaveError = latestError;
     if (m_imageSaveWarningScheduled) {
         return;
     }
@@ -320,14 +315,9 @@ void InspectionPage::reportImageSaveFailure(
         QString warningText = m_imageSaveFailedCount == 0
                 ? QString::fromWCharArray(L"保存失败：未采集到标注图像。")
                 : QString::fromWCharArray(
-                    L"存图失败：累计 %1 个任务。"
-                    L"请检查存图目录、权限和磁盘空间。")
+                    L"保存图像失败：累计 %1 个任务。"
+                    L"请检查保存文件夹、权限和磁盘空间。")
                 .arg(m_imageSaveFailedCount);
-        if (!m_latestImageSaveError.trimmed().isEmpty()) {
-            warningText += QString::fromWCharArray(
-                        L"\n最近错误：%1")
-                    .arg(m_latestImageSaveError);
-        }
         m_inspectionInfoUi.label_runtimeStatus->setWordWrap(true);
         m_inspectionInfoUi.label_runtimeStatus->setText(warningText);
         setStyleProperty(

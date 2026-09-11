@@ -1,8 +1,4 @@
 #include "detection/detectionmode/stamp/overlap_detector.h"
-// 文件作用：本文件用于计算钢印区域的重叠特征，并给出重叠异常判断。
-// 主要职责：计算钢印区域的重叠特征，并给出重叠异常判断。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include <algorithm>
 #include <cmath>
 #include <mutex> // 必须添加，用于多线程安全锁
@@ -14,7 +10,6 @@ struct DateTopLine {
     cv::Point2f left;
     cv::Point2f right;
 
-    // 函数说明：yAt 函数实现名称所表示的处理步骤。
     float yAt(float x) const {
         const float dx = right.x - left.x;
         if (std::abs(dx) < 1e-3f) {
@@ -24,7 +19,6 @@ struct DateTopLine {
     }
 };
 
-// 函数说明：buildDateTopLine 函数创建、准备或启动对应流程。
 DateTopLine buildDateTopLine(const std::vector<cv::Point>& datePoly) {
     DateTopLine line;
     if (datePoly.size() < 2) {
@@ -91,7 +85,6 @@ DateTopLine buildDateTopLine(const std::vector<cv::Point>& datePoly) {
     return line;
 }
 
-// 函数说明：suppressCandidatesBelowDateLine 函数实现名称所表示的处理步骤。
 void suppressCandidatesBelowDateLine(cv::Mat& matchResult,
                                      const cv::Rect& searchRoi,
                                      const cv::Size& templateSize,
@@ -117,7 +110,6 @@ void suppressCandidatesBelowDateLine(cv::Mat& matchResult,
     }
 }
 
-// 函数说明：buildRingSearchRoi 函数创建、准备或启动对应流程。
 cv::Rect buildRingSearchRoi(const cv::Size& imageSize,
                             const cv::Rect& dateBounds,
                             const DateTopLine& dateTopLine) {
@@ -137,10 +129,8 @@ cv::Rect buildRingSearchRoi(const cv::Size& imageSize,
 
 } // namespace
 
-// 函数说明：OverlapDetector 构造函数创建组件并初始化其依赖和初始状态。
 OverlapDetector::OverlapDetector() {}
 
-// 函数说明：init 函数创建、准备或启动对应流程。
 bool OverlapDetector::init(const cv::Mat& ringTemplate,
                            const StampRegionData& regions) {
     try {
@@ -206,7 +196,6 @@ bool OverlapDetector::init(const cv::Mat& ringTemplate,
     }
 }
 
-// 函数说明：processImage 函数执行对应事件或业务处理。
 DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::vector<cv::Point>& datePoly) {
     DetectResult res;
     res.isOk = false;

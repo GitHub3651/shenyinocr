@@ -3,6 +3,7 @@
 
 #include <QDir>
 #include <QFileDialog>
+#include <QDebug>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSettings>
@@ -15,7 +16,7 @@ ResultReceiverWindow::ResultReceiverWindow(QWidget *parent)
 
     connect(ui->pushButton_browse, &QPushButton::clicked, this, [this]() {
         const QString selected = QFileDialog::getExistingDirectory(
-                    this, QStringLiteral("选择结果输出目录"),
+                    this, QStringLiteral("选择结果保存文件夹"),
                     ui->lineEdit_outputDirectory->text());
         if (!selected.isEmpty()) {
             ui->lineEdit_outputDirectory->setText(QDir::cleanPath(selected));
@@ -37,8 +38,8 @@ ResultReceiverWindow::ResultReceiverWindow(QWidget *parent)
             this, [this](const QString &id, bool duplicate) {
         ui->textEdit_log->append(
                     QStringLiteral("%1 %2")
-                    .arg(duplicate ? QStringLiteral("duplicate")
-                                   : QStringLiteral("accepted"), id));
+                    .arg(duplicate ? QStringLiteral("重复记录")
+                                   : QStringLiteral("已接收"), id));
     });
     loadSettings();
     updateStatus(QStringLiteral("已停止"));
@@ -60,7 +61,9 @@ void ResultReceiverWindow::startListening()
     if (!m_server.listen(
                 static_cast<quint16>(ui->spinBox_port->value()),
                 ui->lineEdit_outputDirectory->text(), &error)) {
-        QMessageBox::warning(this, QStringLiteral("监听失败"), error);
+        QMessageBox::warning(
+                    this, QStringLiteral("监听失败"),
+                    QStringLiteral("无法开始接收，请检查端口是否被占用。"));
         return;
     }
     ui->spinBox_port->setEnabled(false);
@@ -94,7 +97,7 @@ void ResultReceiverWindow::synchronizeCsv()
     }
     ui->textEdit_log->append(message);
     if (!allOk) {
-        QMessageBox::warning(this, QStringLiteral("CSV 同步未全部成功"), message);
+        QMessageBox::warning(this, QStringLiteral("部分 CSV 文件未能生成"), message);
     }
 }
 
@@ -132,13 +135,16 @@ bool ResultReceiverWindow::outputDirectoryReady(QString *errorMessage) const
     const QString path = ui->lineEdit_outputDirectory->text().trimmed();
     if (path.isEmpty() || !QDir(path).isAbsolute()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("首次使用必须选择绝对输出目录。" );
+            *errorMessage = QStringLiteral("首次使用前，请先选择结果保存文件夹。" );
         }
         return false;
     }
     if (!QDir().mkpath(path)) {
+        qWarning().noquote()
+                << QStringLiteral("result receiver output directory creation failed: %1")
+                   .arg(path);
         if (errorMessage) {
-            *errorMessage = QStringLiteral("无法创建输出目录。" );
+            *errorMessage = QStringLiteral("无法创建结果保存文件夹，请检查文件夹权限。" );
         }
         return false;
     }

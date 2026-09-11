@@ -325,20 +325,20 @@
        <item row="2" column="0">
         <widget class="QGroupBox" name="groupBox_barcodeCsv">
          <property name="title">
-          <string>二维码结果本机记录</string>
+          <string>二维码结果保存</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_barcodeCsv" columnstretch="0,1,0">
           <item row="0" column="0" colspan="3">
            <widget class="QCheckBox" name="barcodeCsvEnable">
             <property name="text">
-             <string>启用本机 CSV 记录</string>
+             <string>保存二维码结果到本机（CSV）</string>
             </property>
            </widget>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_barcodeCsvOutputDirectory">
             <property name="text">
-             <string>输出目录</string>
+             <string>保存文件夹</string>
             </property>
            </widget>
           </item>

@@ -1,4 +1,3 @@
-// 文件作用：维护模板取景、统一选择、当前编辑模板和模板参数应用。
 #pragma once
 
 #include "application/template_application_service.h"
@@ -74,8 +73,6 @@ public:
     void applyCurrentImageThreshold();
     void applyBatchTargetText();
     void applyBatchImageThreshold();
-
-    PreparedTemplateSnapshot activePreparedTemplate() const;
 
 signals:
     void operationUiRefreshRequested();

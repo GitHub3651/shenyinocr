@@ -1,6 +1,6 @@
 # OCRGangYin 开发者代码结构与维护指南
 
-状态：阶段 8 实现完成；A2 生产代码实施完成，等待用户统一验证
+状态：阶段 8、A2 与范围控制净结果整改代码已实施，等待用户统一验证
 范围：只列代码和工程文件，不列图片、模型、DLL、样式或翻译资源
 
 ## 1. 先用一句话理解架构
@@ -18,7 +18,7 @@ UI 收集操作
 
 最重要的边界：
 
-- `contracts`：五模式稳定规则。
+- `contracts`：五模式、相机结果和检测呈现的稳定纯数据合同。
 - `system_support/settings`：整机设置和当前检测方案。
 - `templates`：一个外部模板文件夹的唯一磁盘入口。
 - `application`：把一次用户操作跨模块组织起来。
@@ -35,10 +35,8 @@ app/
 ├─ AutoOCRproject.pro
 ├─ application/
 │  ├─ application_result.h
-│  ├─ camera_application_contract.h
 │  ├─ inspection_application_service.h/.cpp
 │  ├─ inspection_start_preflight.h/.cpp
-│  ├─ inspection_ui_contract.h
 │  ├─ runtime_snapshot.h
 │  ├─ settings_application_service.h/.cpp
 │  ├─ template_application_service.h/.cpp
@@ -46,6 +44,8 @@ app/
 │  └─ template_geometry_service.h/.cpp
 ├─ contracts/
 │  ├─ barcode_parameter_defaults.h
+│  ├─ camera_operation_result.h
+│  ├─ inspection_presentation.h
 │  └─ detection_mode.h/.cpp
 ├─ templates/
 │  └─ template_store.h/.cpp
@@ -116,7 +116,6 @@ app/
 │  ├─ frame_queue.h/.cpp
 │  ├─ image_save_service.h/.cpp
 │  ├─ inspection_plc_controller.h/.cpp
-│  ├─ inspection_presentation.h
 │  ├─ inspection_presentation_renderer.h/.cpp
 │  ├─ inspection_runtime.h/.cpp
 │  ├─ result_presentation_mailbox.h/.cpp
@@ -259,6 +258,8 @@ toolButton_selectTemplate
 |---|---|
 | `app/AutoOCRproject.pro` | 主 qmake 清单、Qt/OpenCV/厂商库和部署规则。增删/改名源码必须同步且不得重复。 |
 | `app/contracts/barcode_parameter_defaults.h` | 二维码默认格式、外扩、预算和回退开关；默认值只能在这里定义一次。 |
+| `app/contracts/camera_operation_result.h` | 相机打开、参数设置和停止后恢复结果的唯一跨层纯数据合同。 |
+| `app/contracts/inspection_presentation.h` | Runtime 向 UI 发布的检测呈现纯数据合同。 |
 | `app/contracts/detection_mode.h` | 五模式枚举、定位分类和 Descriptor 声明。 |
 | `app/contracts/detection_mode.cpp` | 五模式唯一登记表；中文名可改，稳定 ID 不可随意改。 |
 
@@ -267,8 +268,6 @@ toolButton_selectTemplate
 | 文件 | 作用与修改注意点 |
 |---|---|
 | `application_result.h` | `ApplicationError/OperationResult`，供 UI 展示结构化错误。 |
-| `camera_application_contract.h` | 相机操作 DTO，不含 SDK 类型。 |
-| `inspection_ui_contract.h` | 检测 UI 回调和视图绑定 DTO。 |
 | `runtime_snapshot.h` | UI 可读取的相机、PLC、运行和当前模板路径快照。 |
 | `inspection_start_preflight.h` | 启动 Issue、访问输入、资源输入和结果声明。 |
 | `inspection_start_preflight.cpp` | 固定启动拒绝顺序；不重复模板字段校验。 |
@@ -313,8 +312,8 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `detectionmode/stamp/overlap_detector.h/.cpp` | 刚印环定位、区域变换和刚印/日期重叠判断；纯内存算法。 |
-| `detectionmode/stamp/stamp_detection_pipeline.h/.cpp` | 刚印字符检测、重叠结果和统一输出。 |
+| `detectionmode/stamp/overlap_detector.h/.cpp` | 钢印环定位、区域变换和钢印/日期重叠判断；纯内存算法。 |
+| `detectionmode/stamp/stamp_detection_pipeline.h/.cpp` | 钢印字符检测、重叠结果和统一输出。 |
 | `detectionmode/word/word_detection_pipeline.h/.cpp` | 字库字符匹配、文字组合、Overlay 和 OK/NG。 |
 | `detectionmode/ocr/ocr_detection_pipeline.h/.cpp` | 调用 OCR Engine、目标比较和结果转换。 |
 | `detectionmode/tissue/tissue_roll_detector.h/.cpp` | 纸巾纹理/粗糙度算法；阈值由构造参数提供。 |
@@ -334,7 +333,7 @@ toolButton_selectTemplate
 | `inspection_plc_controller.h/.cpp` | PLC 连接、工艺参数、结果脉冲和延迟剔除队列。 |
 | `image_save_service.h/.cpp` | 按运行快照保存原图/标注图。 |
 | `result_presentation_mailbox.h/.cpp` | 后台到 UI 的有界完成邮箱。 |
-| `inspection_presentation.h` | UI 呈现的纯数据结构。 |
+| `contracts/inspection_presentation.h` | UI 呈现的纯数据结构。 |
 | `inspection_presentation_renderer.h/.cpp` | 将 Detection 结果变成文字、颜色和图像显示。 |
 
 ### 5.7 devices
@@ -375,7 +374,7 @@ toolButton_selectTemplate
 | `crash/windows_crash_handler.h/.cpp` | Windows 未处理异常接入。 |
 | `crash/windows_crash_stack.h/.cpp` | Windows 调用栈解析。 |
 | `startup/main.cpp` | 唯一 `main()`。 |
-| `startup/application_startup.h/.cpp` | 设置重置提示、所有对象装配、页面组合和事件循环。 |
+| `startup/application_startup.h/.cpp` | 旧 Schema 默认设置静默覆盖、其他设置错误提示、所有对象装配、页面组合和事件循环。 |
 | `startup/runtime_guard.h/.cpp` | 运行库/DLL环境前置检查。 |
 | `startup/single_instance_guard.h/.cpp` | 单实例互斥。 |
 
@@ -430,7 +429,7 @@ toolButton_selectTemplate
 1. 加入 `AppSettings` 和唯一默认值。
 2. 同步 `AppSettingsStore` 的 JSON、严格键、范围和相等比较。
 3. 在 MachineSettingsPage 登记控件、dirty 和硬件依赖。
-4. 只通过 `SettingsApplicationService::applyDraft()` 保存。
+4. 按参数类型通过 `SettingsApplicationService::saveConfiguration()` 或 `commitAppliedHardwareSettings()` 保存。
 
 ### 6.5 修改模板保存
 
@@ -459,4 +458,4 @@ toolButton_selectTemplate
 
 Agent 只执行静态检查：旧符号清零、qmake 文件存在/无重复、include 解析、UI XML、UTF-8、资源差异和 `git diff --check`。用户在 Qt Creator 统一执行：Run qmake、Rebuild、设置重置、五模式显隐、模板选择/批量引用移除、新建/覆盖、坏模板跳过、并行最高分、纸巾阈值和完整生产回归。
 
-在用户确认前，阶段 8 状态保持“迁移中”，不得提交。
+代码状态与验证结论以计划索引和 Git 状态为准；未完成用户验证的方案不得标记为完成。

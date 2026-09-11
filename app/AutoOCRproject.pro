@@ -101,7 +101,6 @@ SOURCES += \
 
 HEADERS += \
     application/application_result.h \
-    application/camera_application_contract.h \
     application/inspection_application_service.h \
     application/inspection_start_preflight.h \
     application/runtime_snapshot.h \
@@ -165,6 +164,7 @@ HEADERS += \
     detection/detectionmode/word/word_detection_pipeline.h \
     engines/barcode/vendor/barcode_decoder_api.h \
     engines/barcode/barcode_types.h \
+    contracts/camera_operation_result.h \
     contracts/detection_mode.h \
     detection/detectionmode/stamp/overlap_detector.h \
     engines/ocr/vendor/paddle/include/clipper.h \

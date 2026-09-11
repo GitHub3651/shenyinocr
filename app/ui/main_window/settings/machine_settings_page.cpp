@@ -1,7 +1,3 @@
-// 文件作用：本文件用于绑定机器设置页面，管理控件映射、校验、脏状态和运行中禁用规则。
-// 主要职责：绑定机器设置页面，管理控件映射、校验、脏状态和运行中禁用规则。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/main_window/settings/machine_settings_page.h"
 
 #include "system_support/logging/log_categories.h"
@@ -372,7 +368,7 @@ void MachineSettingsPage::registerGlobalSetting(
             QMessageBox::warning(
                         it.value().editor,
                         QStringLiteral("提示"),
-                        QStringLiteral("启用存图前，请先选择图像保存路径。"));
+                        QStringLiteral("保存图像前，请先选择保存文件夹"));
             restoreAppliedValue(key);
             return;
         }
@@ -390,8 +386,7 @@ void MachineSettingsPage::registerGlobalSetting(
             QMessageBox::critical(
                         it.value().editor,
                         QStringLiteral("严重警告"),
-                        QStringLiteral("当前界面设置保存失败：\n%1")
-                        .arg(saved.error.userMessage));
+                        QStringLiteral("软件设置保存失败"));
         } else {
             if (key != QStringLiteral("image.save_path")) {
                 qCInfo(logUi).noquote()
@@ -956,11 +951,14 @@ bool MachineSettingsPage::eventFilter(
         QDir directory(path);
         if (!directory.exists()
                 && !QDir().mkpath(directory.absolutePath())) {
+            qCWarning(logUi).noquote()
+                    << QStringLiteral(
+                        "event=settings.directory_open_failed path=%1")
+                       .arg(directory.absolutePath());
             QMessageBox::warning(
                         m_softwareSettingsUi.lineEdit_softwareDataDirectory,
                         QStringLiteral("提示"),
-                        QStringLiteral("无法打开软件数据文件夹：\n%1")
-                        .arg(directory.absolutePath()));
+                        QStringLiteral("无法打开软件设置文件夹"));
             return true;
         }
         QDesktopServices::openUrl(

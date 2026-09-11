@@ -1,7 +1,3 @@
-// 文件作用：本文件用于从正式帧队列取帧、调用检测流水线并把唯一结果交给结果服务。
-// 主要职责：从正式帧队列取帧、调用检测流水线并把唯一结果交给结果服务。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "runtime/frame_queue.h"
@@ -14,7 +10,6 @@
 #include <mutex>
 #include <thread>
 
-// 组件说明：DetectionWorkSubmissionResult 枚举列出该组件允许使用的稳定状态和选项。
 enum class DetectionWorkSubmissionResult
 {
     Accepted,
@@ -24,7 +19,6 @@ enum class DetectionWorkSubmissionResult
     QueueFull
 };
 
-// 组件说明：DetectionWorker 组件封装对应业务职责和生命周期边界。
 class DetectionWorker
 {
 public:
@@ -51,7 +45,6 @@ public:
     bool isRunning() const;
     std::size_t queueCapacity() const;
     quint64 processedFrameCount() const;
-    quint64 cancelledFrameCount() const;
 
 private:
     void run();

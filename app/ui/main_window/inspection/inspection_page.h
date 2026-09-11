@@ -1,4 +1,3 @@
-// 文件作用：集中更新检测图像、判定、统计、耗时和运行按钮状态。
 #pragma once
 
 #include "contracts/inspection_presentation.h"
@@ -56,6 +55,5 @@ private:
     QTimer m_templateAttentionTimer;
     bool m_templateAttentionOn = false;
     quint64 m_imageSaveFailedCount = 0;
-    QString m_latestImageSaveError;
     bool m_imageSaveWarningScheduled = false;
 };

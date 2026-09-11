@@ -1,4 +1,3 @@
-// 文件作用：组织单模板编辑、资源准备和统一安全保存用例。
 #pragma once
 
 #include "application/template_editor_contract.h"
@@ -74,7 +73,6 @@ public:
         QString *failureReason) const;
 
     QString currentDirectoryPath() const;
-    PreparedTemplateSnapshot activePreparedTemplate() const;
     void setActivePreparedTemplate(
         const PreparedTemplateSnapshot &preparedTemplate);
 

@@ -1,6 +1,7 @@
 #include "result_receiver_store.h"
 
 #include <QDateTime>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -52,17 +53,24 @@ bool ResultReceiverStore::acceptProduct(const QJsonObject &object,
     const QString path = jsonlPath(date);
     QFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        qWarning().noquote()
+                << QStringLiteral("result record open failed: path=%1 error=%2")
+                   .arg(path, file.errorString());
         if (errorMessage) {
-            *errorMessage = file.errorString();
+            *errorMessage = QStringLiteral(
+                        "结果记录保存失败，请检查保存文件夹权限和磁盘空间。");
         }
         return false;
     }
     const QByteArray line = QJsonDocument(object).toJson(QJsonDocument::Compact)
             + '\n';
     if (file.write(line) != line.size() || !file.flush()) {
+        qWarning().noquote()
+                << QStringLiteral("result record write failed: path=%1 error=%2")
+                   .arg(path, file.errorString());
         if (errorMessage) {
-            *errorMessage = file.errorString().isEmpty()
-                    ? QStringLiteral("JSONL 写入失败。") : file.errorString();
+            *errorMessage = QStringLiteral(
+                        "结果记录保存失败，请检查保存文件夹权限和磁盘空间。");
         }
         return false;
     }
@@ -85,7 +93,7 @@ bool ResultReceiverStore::synchronizeAllCsv(QStringList *successDates,
     }
     if (m_outputDirectory.isEmpty()) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("输出目录为空。" );
+            *errorMessage = QStringLiteral("请先选择结果保存文件夹。" );
         }
         return false;
     }
@@ -116,22 +124,31 @@ QString ResultReceiverStore::dateForObject(const QJsonObject &object,
 {
     const QJsonValue timeValue = object.value(QStringLiteral("time"));
     if (!timeValue.isString()) {
+        qWarning().noquote()
+                << QStringLiteral("invalid result time type: type=%1")
+                   .arg(static_cast<int>(timeValue.type()));
         if (errorMessage) {
-            *errorMessage = QStringLiteral("time 字段无效。" );
+            *errorMessage = QStringLiteral("结果记录中的时间格式无效。" );
         }
         return QString();
     }
     const QString text = timeValue.toString();
     if (!text.endsWith(QLatin1Char('Z'))) {
+        qWarning().noquote()
+                << QStringLiteral("invalid result time zone: value=%1")
+                   .arg(text);
         if (errorMessage) {
-            *errorMessage = QStringLiteral("time 必须使用 UTC Z。" );
+            *errorMessage = QStringLiteral("结果记录中的时间格式无效。" );
         }
         return QString();
     }
     const QDateTime utc = QDateTime::fromString(text, Qt::ISODateWithMs);
     if (!utc.isValid()) {
+        qWarning().noquote()
+                << QStringLiteral("invalid result time value: value=%1")
+                   .arg(text);
         if (errorMessage) {
-            *errorMessage = QStringLiteral("time 不是有效的 ISO-8601 时间。" );
+            *errorMessage = QStringLiteral("结果记录中的时间格式无效。" );
         }
         return QString();
     }
@@ -182,8 +199,12 @@ bool ResultReceiverStore::readDateRecords(const QString &date,
         return true;
     }
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning().noquote()
+                << QStringLiteral("result record read failed: path=%1 error=%2")
+                   .arg(file.fileName(), file.errorString());
         if (errorMessage) {
-            *errorMessage = file.errorString();
+            *errorMessage = QStringLiteral(
+                        "结果记录保存失败，请检查保存文件夹权限和磁盘空间。");
         }
         return false;
     }
@@ -194,16 +215,22 @@ bool ResultReceiverStore::readDateRecords(const QString &date,
         const int lastLf = data.lastIndexOf('\n');
         const QString backup = file.fileName() + QStringLiteral(".bak");
         if (!QFile::exists(backup) && !QFile::copy(file.fileName(), backup)) {
+            qWarning().noquote()
+                    << QStringLiteral("result record tail backup failed: source=%1 backup=%2")
+                       .arg(file.fileName(), backup);
             if (errorMessage) {
-                *errorMessage = QStringLiteral("JSONL 尾行备份失败。" );
+                *errorMessage = QStringLiteral("无法备份不完整的结果记录。" );
             }
             return false;
         }
         file.close();
         QFile repair(file.fileName());
         if (!repair.open(QIODevice::ReadWrite) || !repair.resize(lastLf + 1)) {
+            qWarning().noquote()
+                    << QStringLiteral("result record tail repair failed: path=%1 error=%2")
+                       .arg(repair.fileName(), repair.errorString());
             if (errorMessage) {
-                *errorMessage = QStringLiteral("JSONL 尾行截断失败。" );
+                *errorMessage = QStringLiteral("无法修复不完整的结果记录。" );
             }
             return false;
         }
@@ -220,8 +247,18 @@ bool ResultReceiverStore::readDateRecords(const QString &date,
         if (parseError.error != QJsonParseError::NoError
                 || !document.isObject()
                 || !document.object().value(QStringLiteral("id")).isString()) {
+            qWarning().noquote()
+                    << QStringLiteral(
+                        "result record parse failed: path=%1 line=%2 offset=%3 error=%4 object=%5 idString=%6")
+                       .arg(file.fileName())
+                       .arg(i + 1)
+                       .arg(parseError.offset)
+                       .arg(parseError.errorString())
+                       .arg(document.isObject())
+                       .arg(document.object()
+                            .value(QStringLiteral("id")).isString());
             if (errorMessage) {
-                *errorMessage = QStringLiteral("JSONL 中间记录损坏。" );
+                *errorMessage = QStringLiteral("结果记录已损坏，无法生成 CSV 文件。" );
             }
             return false;
         }
@@ -241,15 +278,23 @@ bool ResultReceiverStore::materializeDate(const QString &date,
     }
     QSaveFile file(csvPath(date));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning().noquote()
+                << QStringLiteral("CSV open failed: path=%1 error=%2")
+                   .arg(file.fileName(), file.errorString());
         if (errorMessage) {
-            *errorMessage = file.errorString();
+            *errorMessage = QStringLiteral(
+                        "CSV 文件保存失败，请检查保存文件夹权限和磁盘空间。");
         }
         return false;
     }
     const QByteArray bom("\xEF\xBB\xBF", 3);
     if (file.write(bom) != bom.size()) {
+        qWarning().noquote()
+                << QStringLiteral("CSV BOM write failed: path=%1 error=%2")
+                   .arg(file.fileName(), file.errorString());
         if (errorMessage) {
-            *errorMessage = file.errorString();
+            *errorMessage = QStringLiteral(
+                        "CSV 文件保存失败，请检查保存文件夹权限和磁盘空间。");
         }
         file.cancelWriting();
         return false;
@@ -261,17 +306,24 @@ bool ResultReceiverStore::materializeDate(const QString &date,
                 : QStringLiteral("noQR");
         const QByteArray line = csvEscape(value).toUtf8() + '\n';
         if (file.write(line) != line.size()) {
+            qWarning().noquote()
+                    << QStringLiteral("CSV row write failed: path=%1 error=%2")
+                       .arg(file.fileName(), file.errorString());
             if (errorMessage) {
-                *errorMessage = file.errorString();
+                *errorMessage = QStringLiteral(
+                            "CSV 文件保存失败，请检查保存文件夹权限和磁盘空间。");
             }
             file.cancelWriting();
             return false;
         }
     }
     if (!file.flush() || !file.commit()) {
+        qWarning().noquote()
+                << QStringLiteral("CSV atomic replace failed: path=%1 error=%2")
+                   .arg(file.fileName(), file.errorString());
         if (errorMessage) {
-            *errorMessage = file.errorString().isEmpty()
-                    ? QStringLiteral("CSV 原子替换失败。") : file.errorString();
+            *errorMessage = QStringLiteral(
+                        "CSV 文件保存失败，原文件保持不变。");
         }
         return false;
     }

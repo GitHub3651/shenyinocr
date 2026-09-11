@@ -1,7 +1,3 @@
-// 文件作用：本文件用于执行二维码与三期字符组合模式的定位、解码、字符检查和结果生成。
-// 主要职责：执行二维码与三期字符组合模式的定位、解码、字符检查和结果生成。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "barcode_word_detection_pipeline.h"
 #include "contracts/detection_mode.h"
 
@@ -11,7 +7,6 @@
 #include <algorithm>
 #include <stdexcept>
 
-// 函数说明：detect 函数执行对应事件或业务处理。
 BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const QStringList &targetUnits,
@@ -52,15 +47,17 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         result.overlay.polygons.push_back(polygon);
     };
     const auto finishNg = [&output, &result](
-            const QString &reason) {
+            const QString &diagnostic,
+            const QString &operatorReason) {
         result.verdict = AlgorithmVerdict::Ng;
         result.recognizedText = output.barcode.text;
-        result.diagnostic = reason;
+        result.diagnostic = diagnostic;
+        output.operatorReason = operatorReason;
     };
 
     if (!item.pose.valid) {
-        finishNg(QStringLiteral(
-                     "未找到定位锚点"));
+        finishNg(QStringLiteral("未找到定位锚点"),
+                 QStringLiteral("未找到定位参考区域"));
         return output;
     }
 
@@ -78,15 +75,13 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         output.barcode.status = BarcodeReadStatus::InvalidRoi;
         output.barcode.errorReason = QStringLiteral(
                     "Barcode polygon is missing or invalid");
-        finishNg(QStringLiteral(
-                     "二维码区域配置"
-                     "无效或未映射"));
+        finishNg(QStringLiteral("二维码区域配置无效或未映射"),
+                 QStringLiteral("二维码检测区域未设置或无效"));
         return output;
     }
     if (item.pose.datePoly.size() < 3) {
-        finishNg(QStringLiteral(
-                     "日期检测区域配置"
-                     "无效或未映射"));
+        finishNg(QStringLiteral("日期检测区域配置无效或未映射"),
+                 QStringLiteral("日期检测区域未设置或无效"));
         return output;
     }
 
@@ -102,15 +97,13 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
         output.barcode.status = BarcodeReadStatus::InvalidRoi;
         output.barcode.errorReason = QStringLiteral(
                     "Invalid barcode ROI");
-        finishNg(QStringLiteral(
-                     "二维码区域无效"
-                     "或超出图像范围"));
+        finishNg(QStringLiteral("二维码区域无效或超出图像范围"),
+                 QStringLiteral("二维码检测区域无效或超出图像范围"));
         return output;
     }
     if (!output.dateRoiValid) {
-        finishNg(QStringLiteral(
-                     "日期检测区域无效"
-                     "或超出图像范围"));
+        finishNg(QStringLiteral("日期检测区域无效或超出图像范围"),
+                 QStringLiteral("日期检测区域无效或超出图像范围"));
         return output;
     }
 
@@ -196,7 +189,7 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
                         "二维码不可读或"
                         "区域内没有二维码");
         }
-        finishNg(reason);
+        finishNg(reason, reason);
         return output;
     }
 
@@ -222,6 +215,12 @@ BarcodeWordDetectionWorkOutput BarcodeWordDetectionPipeline::detect(
     output.dateState = output.barcodeWordResult.dateIsOk
             ? QStringLiteral("正确")
             : QStringLiteral("错误");
+    if (!output.barcodeWordResult.dateIsOk) {
+        output.operatorReason = result.diagnostic
+                == QLatin1String("日期检测区域无效或超出图像范围")
+                ? QStringLiteral("日期检测区域无效或超出图像范围")
+                : output.wordOutput.reason;
+    }
 
     bool hasBarcodeOverlay = false;
     for (const DetectionOverlayPolygon &polygon :

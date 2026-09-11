@@ -1,15 +1,3 @@
-// 文件作用：本文件用于构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
-// 主要职责：构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
-/**
- * @file ui/main_window/main_window.cpp
- * @brief 工业视觉识别系统主窗口实现文件
- * @details 实现图像采集、OCR识别、模板匹配、PLC通信等核心功能
- * @author 优化版本
- * @date 2024
- */
-
 #include "ui/main_window/main_window.h"
 #include "contracts/detection_mode.h"
 #include "ui/main_window/inspection/inspection_page.h"
@@ -37,11 +25,6 @@
 #include <QTextOption>
 #include <QToolButton>
 
-/**
- * @brief MainWindow构造函数
- * @param parent 父窗口指针
- * @details 初始化UI、相机、OCR模型、定时器等核心组件
- */
 MainWindow::MainWindow(
     const std::shared_ptr<InspectionApplicationService> &inspectionService,
     InspectionRuntime *runtime,
@@ -153,7 +136,7 @@ MainWindow::MainWindow(
             m_inspectionApplicationService
                     ->completeUnexpectedAcquisitionStop();
             m_inspectionInfoUi->label_runtimeStatus->setText(
-                        "识别线程已停止");
+                        "图像采集已停止，检测已暂停");
             updateOperationUiState();
         }
     },
@@ -382,10 +365,6 @@ void MainWindow::initializePages()
     });
 }
 
-/**
- * @brief MainWindow析构函数
- * @details 清理所有资源，关闭相机、停止线程、删除临时文件
- */
 MainWindow::~MainWindow()
 {
     m_templateEditorPage->resetTemplateCaptureState();
@@ -414,7 +393,7 @@ void MainWindow::on_barcodeCsvBrowseDirectory_clicked()
             machineSettings().barcodeCsvOutputDirectory;
     const QString selectedDirectory = QFileDialog::getExistingDirectory(
                 this,
-                QStringLiteral("选择二维码 CSV 输出目录"),
+                QStringLiteral("选择二维码结果保存文件夹"),
                 currentDirectory.isEmpty()
                 ? QStringLiteral("C:/")
                 : currentDirectory,
@@ -432,7 +411,7 @@ void MainWindow::on_barcodeCsvBrowseDirectory_clicked()
     if (!saved.isSuccess()) {
         m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
                     machineSettings().barcodeCsvOutputDirectory);
-        showParameterWarning(QStringLiteral("二维码 CSV 设置保存失败"),
+        showParameterWarning(QStringLiteral("二维码结果保存设置失败"),
                              saved.error.userMessage);
         return;
     }
@@ -451,7 +430,7 @@ void MainWindow::on_barcodeCsvEnable_toggled(bool enabled)
         m_detectionSettingsUi->barcodeCsvEnable->setChecked(
                     m_settingsApplicationService->current()
                     .barcodeCsvEnabled);
-        showParameterWarning(QStringLiteral("二维码 CSV 设置保存失败"),
+        showParameterWarning(QStringLiteral("二维码结果保存设置失败"),
                              saved.error.userMessage);
     }
 }

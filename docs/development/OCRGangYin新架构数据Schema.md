@@ -148,7 +148,7 @@ struct AppSettings {
 - 八个根字段和各分区字段都必须存在，未知字段、类型错误和约束错误会拒绝整个文件。
 - 文件不存在时只在内存使用完整默认值，第一次保存时创建。
 - `barcodeCsv.outputDirectory` 为空时 `barcodeCsv.enabled` 必须为 `false`；非空时必须是绝对路径。
-- `schemaVersion != 8` 返回 `SETTINGS_RESET_REQUIRED`；用户确认后用默认 Schema 8 原子替换。
+- `schemaVersion != 8` 返回 `SETTINGS_RESET_REQUIRED`，启动层立即用完整默认 Schema 8 原子覆盖原文件并继续启动；不提示、不确认、不迁移、不备份，也不读取旧 Schema 的其他字段。
 - 已是 Schema 8 但内容损坏时拒绝启动，不自动覆盖诊断证据。
 - 所有写入统一经过 `AppSettingsStore::save()` 和 `QSaveFile`。
 - 模板路径或纸巾阈值保存从最新 `current` 复制候选，只改目标字段；不会提交或丢弃未应用的整机草稿。
@@ -326,5 +326,5 @@ struct PreparedTemplate {
 
 - Schema 和生产代码已经一致收口。
 - 未增加旧格式迁移、双读或双写逻辑。
-- 已完成 qmake 和 MSVC x64 Release 编译、链接及运行库部署。
-- 功能状态保持“迁移中”，等待用户在 Qt Creator 完成人工统一验证。
+- 模板终局已经完成用户统一验证，并作为当前数据结构基线。
+- 旧 Schema 静默默认覆盖说明已同步，等待本轮范围整改的用户统一验证。

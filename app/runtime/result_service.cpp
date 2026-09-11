@@ -1,7 +1,3 @@
-// 文件作用：本文件用于作为唯一检测结果入口，统一完成去重、统计、PLC、存图和界面呈现。
-// 主要职责：作为唯一检测结果入口，统一完成去重、统计、PLC、存图和界面呈现。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/result_service.h"
 
 #include "contracts/detection_mode.h"
@@ -19,7 +15,6 @@
 
 namespace {
 
-// 函数说明：normalizedFormat 函数校验、转换或恢复对应数据。
 QString normalizedFormat(QString format)
 {
     format = format.trimmed();
@@ -29,7 +24,6 @@ QString normalizedFormat(QString format)
     return format.isEmpty() ? QStringLiteral("png") : format.toLower();
 }
 
-// 函数说明：resultDirectoryName 函数实现名称所表示的处理步骤。
 QString resultDirectoryName(DetectionResultSaveAction action)
 {
     return action == DetectionResultSaveAction::SaveNg
@@ -37,7 +31,6 @@ QString resultDirectoryName(DetectionResultSaveAction action)
             : QStringLiteral("ok");
 }
 
-// 函数说明：saveItem 函数保存或发布对应的数据和资源。
 ImageSaveItem saveItem(
     const QImage &image,
     const std::shared_ptr<const FrameData> &frame,
@@ -54,7 +47,6 @@ ImageSaveItem saveItem(
     return item;
 }
 
-// 函数说明：verdictStyle 函数实现名称所表示的处理步骤。
 DetectionVerdictViewStyle verdictStyle(AlgorithmVerdict verdict)
 {
     return verdict == AlgorithmVerdict::Ok
@@ -114,7 +106,6 @@ QString finalScoreText(const DetectionResult &result)
 
 } // namespace
 
-// 函数说明：ResultService 构造函数创建组件并初始化其依赖和初始状态。
 ResultService::ResultService(
     InspectionRuntime &runtime,
     QObject *parent)
@@ -140,13 +131,11 @@ ResultService::ResultService(
     Qt::QueuedConnection);
 }
 
-// 函数说明：~ResultService 析构函数按生命周期要求释放组件持有的资源。
 ResultService::~ResultService()
 {
     shutdown();
 }
 
-// 函数说明：configureRun 函数更新或应用对应的配置和状态。
 void ResultService::configureRun(
     const ResultServiceRunConfiguration &configuration)
 {
@@ -157,7 +146,6 @@ void ResultService::configureRun(
     m_pendingPlcResetProducts.clear();
 }
 
-// 函数说明：requiresPlcForRun 函数实现名称所表示的处理步骤。
 bool ResultService::requiresPlcForRun() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -171,63 +159,24 @@ DetectionWorker::CompletionConsumer ResultService::completionConsumer()
     };
 }
 
-// 函数说明：statistics 函数实现名称所表示的处理步骤。
 DetectionResultStatistics ResultService::statistics() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_statistics;
 }
 
-// 函数说明：abnormalStatistics 函数实现名称所表示的处理步骤。
-DetectionAbnormalStatistics ResultService::abnormalStatistics() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_abnormalStatistics;
-}
-
-// 函数说明：totalCount 函数校验、转换或恢复对应数据。
-int ResultService::totalCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_statistics.totalCount;
-}
-
-// 函数说明：ngCount 函数实现名称所表示的处理步骤。
-int ResultService::ngCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_statistics.ngCount;
-}
-
-// 函数说明：pendingDelayedNgCount 函数实现名称所表示的处理步骤。
-int ResultService::pendingDelayedNgCount() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return static_cast<int>(m_delayedNgRequests.size());
-}
-
-// 函数说明：resetStatistics 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetStatistics()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_statistics = DetectionResultStatistics();
 }
 
-// 函数说明：resetAbnormalStatistics 函数停止流程、清理状态或释放对应资源。
-void ResultService::resetAbnormalStatistics()
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_abnormalStatistics = DetectionAbnormalStatistics();
-}
-
-// 函数说明：resetNgCount 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetNgCount()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_statistics.ngCount = 0;
 }
 
-// 函数说明：clearPendingDelayedNgRequests 函数停止流程、清理状态或释放对应资源。
 void ResultService::clearPendingDelayedNgRequests()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -235,7 +184,6 @@ void ResultService::clearPendingDelayedNgRequests()
     m_delayedNgRequests.swap(empty);
 }
 
-// 函数说明：recordSystemFault 函数实现名称所表示的处理步骤。
 void ResultService::recordSystemFault()
 {
     {
@@ -246,7 +194,6 @@ void ResultService::recordSystemFault()
     }
 }
 
-// 函数说明：recordUnconfirmedProducts 函数实现名称所表示的处理步骤。
 void ResultService::recordUnconfirmedProducts(int count)
 {
     if (count <= 0) {
@@ -257,14 +204,12 @@ void ResultService::recordUnconfirmedProducts(int count)
             static_cast<quint64>(count);
 }
 
-// 函数说明：recordPostFaultDroppedFrame 函数实现名称所表示的处理步骤。
 void ResultService::recordPostFaultDroppedFrame()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     ++m_abnormalStatistics.postFaultDroppedFrameCount;
 }
 
-// 函数说明：shutdown 函数实现名称所表示的处理步骤。
 void ResultService::shutdown()
 {
     m_plcResetTimer.stop();
@@ -274,7 +219,6 @@ void ResultService::shutdown()
     }
 }
 
-// 函数说明：acceptCompletion 函数实现名称所表示的处理步骤。
 DetectionCompletion ResultService::acceptCompletion(
     const DetectionCompletion &completion)
 {
@@ -292,7 +236,6 @@ DetectionCompletion ResultService::acceptCompletion(
     return accepted;
 }
 
-// 函数说明：imageSaveActionFor 函数实现名称所表示的处理步骤。
 DetectionResultSaveAction ResultService::imageSaveActionFor(
     AlgorithmVerdict verdict) const
 {
@@ -311,7 +254,6 @@ DetectionResultSaveAction ResultService::imageSaveActionFor(
             : DetectionResultSaveAction::DoNotSave;
 }
 
-// 函数说明：consumeDueDelayedNgRequest 函数执行对应事件或业务处理。
 bool ResultService::consumeDueDelayedNgRequest(ProductKey *productKey)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -327,7 +269,6 @@ bool ResultService::consumeDueDelayedNgRequest(ProductKey *productKey)
     return true;
 }
 
-// 函数说明：process 函数执行对应事件或业务处理。
 void ResultService::process(const ProcessRequest &request)
 {
     if (!request.completion.isValid()) {
@@ -524,7 +465,6 @@ QString ResultService::csvEscape(QString value)
     return QStringLiteral("\"") + value + QStringLiteral("\"");
 }
 
-// 函数说明：submitImageSave 函数执行对应事件或业务处理。
 bool ResultService::submitImageSave(
     const ProcessRequest &request,
     DetectionResultSaveAction saveAction,
@@ -617,7 +557,6 @@ bool ResultService::submitImageSave(
     return true;
 }
 
-// 函数说明：requestPlc 函数实现名称所表示的处理步骤。
 bool ResultService::requestPlc(
     DetectionPlcAction action,
     const ProductKey &productKey)
@@ -666,7 +605,6 @@ bool ResultService::requestPlc(
     return true;
 }
 
-// 函数说明：resetPlcPulse 函数停止流程、清理状态或释放对应资源。
 void ResultService::resetPlcPulse()
 {
     std::vector<ProductKey> pending;
@@ -689,7 +627,6 @@ void ResultService::resetPlcPulse()
     }
 }
 
-// 函数说明：enterPlcFault 函数实现名称所表示的处理步骤。
 void ResultService::enterPlcFault(const QString &diagnostic)
 {
     m_runtime.enterFault(

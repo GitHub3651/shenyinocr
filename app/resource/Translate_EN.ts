@@ -893,18 +893,18 @@ settings</translation>
     <name>DetectionSettingsPage</name>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="308"/>
-        <source>二维码结果本机记录</source>
-        <translation>Local QR Code Results</translation>
+        <source>二维码结果保存</source>
+        <translation>QR Code Result Saving</translation>
     </message>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="314"/>
-        <source>启用本机 CSV 记录</source>
-        <translation>Enable local CSV recording</translation>
+        <source>保存二维码结果到本机（CSV）</source>
+        <translation>Save QR code results locally (CSV)</translation>
     </message>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="321"/>
-        <source>输出目录</source>
-        <translation>Output directory</translation>
+        <source>保存文件夹</source>
+        <translation>Save folder</translation>
     </message>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="349"/>

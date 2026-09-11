@@ -1,6 +1,7 @@
 #include "result_receiver_server.h"
 
 #include <QHostAddress>
+#include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -25,8 +26,13 @@ bool ResultReceiverServer::listen(quint16 port,
     }
     m_store.setOutputDirectory(outputDirectory);
     if (!m_server->listen(QHostAddress::AnyIPv4, port)) {
+        qWarning().noquote()
+                << QStringLiteral("result receiver listen failed: port=%1 error=%2")
+                   .arg(port)
+                   .arg(m_server->errorString());
         if (errorMessage) {
-            *errorMessage = m_server->errorString();
+            *errorMessage = QStringLiteral(
+                        "无法开始接收，请检查端口是否被占用。");
         }
         return false;
     }
@@ -118,7 +124,12 @@ void ResultReceiverServer::processLine(const QByteArray &line)
     const QJsonDocument document = QJsonDocument::fromJson(line, &parseError);
     if (parseError.error != QJsonParseError::NoError
             || !document.isObject()) {
-        emit errorOccurred(QStringLiteral("收到坏 JSON，已关闭当前客户端。"));
+        qWarning().noquote()
+                << QStringLiteral("invalid result JSON: offset=%1 error=%2")
+                   .arg(parseError.offset)
+                   .arg(parseError.errorString());
+        emit errorOccurred(QStringLiteral(
+                               "收到的结果数据格式不正确，当前连接已断开。"));
         if (m_client) {
             m_client->abort();
         }
@@ -136,21 +147,37 @@ void ResultReceiverServer::processLine(const QByteArray &line)
     if (!idValue.isString() || idValue.toString().trimmed().isEmpty()
             || !timeValue.isString()
             || !okValue.isBool() || !contentValue.isString()) {
-        emit errorOccurred(QStringLiteral("产品 JSON 字段无效，不返回 ACK。"));
+        qWarning().noquote()
+                << QStringLiteral(
+                    "invalid product result fields: idType=%1 idEmpty=%2 timeType=%3 overallOkType=%4 qrContentType=%5")
+                   .arg(static_cast<int>(idValue.type()))
+                   .arg(idValue.toString().trimmed().isEmpty())
+                   .arg(static_cast<int>(timeValue.type()))
+                   .arg(static_cast<int>(okValue.type()))
+                   .arg(static_cast<int>(contentValue.type()));
+        emit errorOccurred(QStringLiteral(
+                               "收到的产品结果格式不正确，未确认接收。"));
         return;
     }
     const bool overallOk = okValue.toBool();
     const QString qrContent = contentValue.toString();
     if ((overallOk && qrContent.isEmpty())
             || (!overallOk && !qrContent.isEmpty())) {
-        emit errorOccurred(QStringLiteral("产品 JSON 的 OK/NG 与 qrContent 组合无效。"));
+        qWarning().noquote()
+                << QStringLiteral(
+                    "inconsistent product result: id=%1 overallOk=%2 qrContentEmpty=%3")
+                   .arg(idValue.toString())
+                   .arg(overallOk)
+                   .arg(qrContent.isEmpty());
+        emit errorOccurred(QStringLiteral(
+                               "收到的产品判定与二维码内容不一致，未确认接收。"));
         return;
     }
     bool duplicate = false;
     QString error;
     if (!m_store.acceptProduct(object, &duplicate, &error)) {
         emit errorOccurred(error.isEmpty()
-                           ? QStringLiteral("JSONL 写入失败，不返回 ACK。")
+                           ? QStringLiteral("结果记录保存失败，未确认接收。")
                            : error);
         return;
     }

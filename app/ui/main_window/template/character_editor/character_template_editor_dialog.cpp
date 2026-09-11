@@ -1,7 +1,3 @@
-// 文件作用：本文件用于提供字符模板切分、命名和编辑所需的对话框交互。
-// 主要职责：提供字符模板切分、命名和编辑所需的对话框交互。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/main_window/template/character_editor/character_template_editor_dialog.h"
 #include "ui/main_window/template/character_editor/character_crop_label.h"
 #include "ui_character_template_editor_dialog.h"

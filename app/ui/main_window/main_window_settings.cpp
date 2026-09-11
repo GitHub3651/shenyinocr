@@ -1,12 +1,3 @@
-// 文件作用：本文件用于实现主窗口中机器设置、PLC参数和软件数据相关的交互槽。
-// 主要职责：实现主窗口中机器设置、PLC参数和软件数据相关的交互槽。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
-/**
- * @file ui/main_window/main_window_settings.cpp
- * @brief 主窗口设置、模板页面命令与硬件按钮薄协调。
- */
-
 #include "ui/main_window/main_window.h"
 #include "ui_detection_settings_page.h"
 #include "ui_image_settings_page.h"
@@ -86,7 +77,7 @@ void MainWindow::on_pushButton_clearSoftwareData_clicked()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
                 this,
-                "清空当前软件数据",
+                "删除已保存的软件设置",
                 "将删除当前 Windows 用户保存的软件设置。\n\n"
                 "下次启动将使用默认设置。\n"
                 "产品模板、识别图片、授权文件和日志不会被删除。\n\n"
@@ -102,10 +93,13 @@ void MainWindow::on_pushButton_clearSoftwareData_clicked()
             .filePath(QStringLiteral("settings/app_settings.json"));
     QFile settingsFile(settingsPath);
     if (settingsFile.exists() && !settingsFile.remove()) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.delete_failed path=%1 diagnostic=%2")
+                   .arg(settingsPath, settingsFile.errorString());
         showParameterCritical(
                     "删除失败",
-                    QString("无法删除软件设置：\n%1")
-                    .arg(settingsFile.errorString()));
+                    QStringLiteral("无法删除软件设置，请检查文件权限。"));
         return;
     }
 
@@ -213,10 +207,9 @@ bool MainWindow::saveAppliedHardwareSettings(
                .arg(keys.join(QStringLiteral(",")),
                     saved.error.code, saved.error.userMessage);
     showParameterWarning(
-                QStringLiteral("配置保存失败"),
+                QStringLiteral("软件设置保存失败"),
                 QStringLiteral(
-                    "参数已下发，但保存配置失败，重启后可能不会保留。\n\n%1")
-                .arg(saved.error.userMessage));
+                    "参数已应用到设备，但未保存到软件设置。"));
     return false;
 }
 
@@ -263,8 +256,8 @@ bool MainWindow::applyCameraExposureFromUi(
 {
     QString error;
     if (!applyCameraExposureValue(m_imageSettingsUi->spinBox_cameraExposure->value(), &error)) {
-        const QString message = error.isEmpty()
-                ? QString("相机曝光设置失败") : error;
+        const QString message = QStringLiteral(
+                    "相机曝光设置失败，请检查输入值和相机状态。");
         if (errors) errors->append(message);
         if (showSuccessMessage) showParameterWarning("提示", message);
         m_machineSettingsPage->restoreAppliedValue("camera.exposure");
@@ -305,9 +298,11 @@ bool MainWindow::applyCameraGainFromUi(
                    .arg(gainValue)
                    .arg(result.nativeErrorCode)
                    .arg(result.diagnostic);
-        if (errors) errors->append(result.diagnostic);
+        const QString message = QStringLiteral(
+                    "相机增益设置失败，请检查输入值和相机状态。");
+        if (errors) errors->append(message);
         if (showSuccessMessage) {
-            showParameterWarning("提示", result.diagnostic);
+            showParameterWarning("提示", message);
         }
         m_machineSettingsPage->restoreAppliedValue("camera.gain");
         return false;
@@ -405,29 +400,17 @@ bool MainWindow::applyPlcRunSettingsFromUi(QStringList *errors, bool showSuccess
 
     const bool persisted = saveAppliedHardwareSettings(keys);
     if (showSuccessMessage && persisted) {
-        showParameterInfo("提示", "所有设置已经完成！");
+        showParameterInfo("提示", "PLC 运行参数已应用。");
     }
     return true;
 }
 
-/**
- * @brief 曝光确定按钮点击槽函数
- * @details 设置相机曝光值
- */
 void MainWindow::on_pushButton_applyCameraExposure_clicked()
 {
     QStringList errors;
     applyCameraExposureFromUi(&errors, true);
 }
 
-/**
- * @brief 获取目标字符串
- * @return QString 目标字符串
- */
-/**
- * @brief PLC连接按钮点击槽函数
- * @details 连接到西门子PLC
- */
 void MainWindow::on_pushButton_connectPlc_clicked()
 {
     const QStringList connectionKeys =
@@ -464,9 +447,6 @@ void MainWindow::on_pushButton_connectPlc_clicked()
     }
 }
 
-/**
- * @brief PLC断开按钮点击槽函数
- */
 void MainWindow::on_pushButton_disconnectPlc_clicked()
 {
     const OperationResult result =
@@ -485,10 +465,6 @@ void MainWindow::on_pushButton_disconnectPlc_clicked()
     }
 }
 
-/**
- * @brief 写入批次时间按钮点击槽函数
- * @details 向PLC DB1.982写入WORD值（批次时间）
- */
 void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 {
     QStringList errors;
@@ -530,10 +506,6 @@ void MainWindow::on_toolButton_stopInspection_clicked()
     finishInspectionStopUi(
                 m_inspectionApplicationService->stop(command));
 }
-/**
- * @brief 设置非公共配置初始值
- * @details 公共配置统一由 AppSettings::defaults() 提供
- */
 void MainWindow::setupNonPersistentDefaults()
 {
     m_detectionSettingsUi->lineEdit_imageThreshold->setText(QString::number(
@@ -541,7 +513,6 @@ void MainWindow::setupNonPersistentDefaults()
     m_detectionSettingsUi->textEdit_targetText->setPlainText("");
 }
 
-// ================= 拦截滚轮误操作事件 =================
 void MainWindow::on_pushButton_applyColorChannel_clicked()
 {
     const QStringList keys = QStringList() << "image.color_channel";
@@ -571,9 +542,6 @@ void MainWindow::on_pushButton_applyColorChannel_clicked()
                         QStringLiteral("image.color_channel")));
     showParameterInfo("提示", "颜色通道设置成功");
 }
-
-
-//设置相机增益
 void MainWindow::on_pushButton_applyCameraGain_clicked()
 {
     QStringList errors;
@@ -592,16 +560,13 @@ void MainWindow::on_pushButton_applyPhotoDistance_clicked()
     const OperationResult result =
             m_inspectionApplicationService
             ->writePlcPhotoDistance(value);
-// 判断写入结果
     if (!result.isSuccess())
     {
-        // 写入失败
         m_machineSettingsPage->restoreAppliedValue("plc.photo_distance");
         showParameterWarning("错误", result.error.userMessage);
     }
     else
     {
-        // 写入成功
         if (saveAppliedHardwareSettings(
                     QStringList() << "plc.photo_distance")) {
             showParameterInfo("提示", "拍照距离设置成功");

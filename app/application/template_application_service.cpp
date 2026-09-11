@@ -1,7 +1,7 @@
-// 文件作用：实现模板编辑草稿和 TemplateStore 之间的应用用例。
 #include "application/template_application_service.h"
 
 #include "engines/barcode/barcode_decoder.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -24,19 +24,19 @@ QString barcodeFailureMessage(const BarcodeReadResult &result)
 {
     switch (result.status) {
     case BarcodeReadStatus::DecoderUnavailable:
-        return result.errorReason.trimmed().isEmpty()
-                ? QStringLiteral("BarcodeDecoder.dll 不可用，无法验证二维码。")
-                : QStringLiteral("BarcodeDecoder.dll 不可用：%1")
-                  .arg(result.errorReason);
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral("event=template.barcode_decoder_unavailable diagnostic=%1")
+                   .arg(result.errorReason);
+        return QStringLiteral("二维码识别组件无法使用");
     case BarcodeReadStatus::InvalidRoi:
         return QStringLiteral("二维码框选区域无效，请重新框选。");
     case BarcodeReadStatus::Timeout:
         return QStringLiteral("二维码扫描超时，请重新框选完整、清晰的二维码区域。");
     case BarcodeReadStatus::InternalError:
-        return result.errorReason.trimmed().isEmpty()
-                ? QStringLiteral("二维码解码器发生内部错误。")
-                : QStringLiteral("二维码解码器发生内部错误：%1")
-                  .arg(result.errorReason);
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral("event=template.barcode_decode_failed diagnostic=%1")
+                   .arg(result.errorReason);
+        return QStringLiteral("二维码识别异常，请联系维护人员");
     case BarcodeReadStatus::NotFound:
         return QStringLiteral("当前框选区域内没有扫描到可读的二维码。");
     case BarcodeReadStatus::Success:
@@ -193,7 +193,12 @@ TemplateSummary TemplateApplicationService::readSummary(
         DetectionMode expectedMode,
         TemplateStoreError *error) const
 {
-    return m_store->readSummary(directoryPath, expectedMode, error);
+    const TemplateSummary summary = m_store->readSummary(
+                directoryPath, expectedMode, error);
+    if (!summary.valid && error) {
+        storeErrorMessage(*error);
+    }
+    return summary;
 }
 
 bool TemplateApplicationService::loadPreparedTemplate(
@@ -232,8 +237,8 @@ bool TemplateApplicationService::updateTemplates(
         TemplateStoreError error;
         if (!m_store->loadEditable(path, expectedMode, &value, &error)) {
             failures.append(
-                        QStringLiteral("%1\n%2\n%3")
-                        .arg(QFileInfo(path).fileName(), path,
+                        QStringLiteral("%1\n%2")
+                        .arg(QFileInfo(path).fileName(),
                              storeErrorMessage(error)));
             continue;
         }
@@ -245,10 +250,14 @@ bool TemplateApplicationService::updateTemplates(
                         value.settings.targetText);
             if (!value.settings.targetText.trimmed().isEmpty()
                     && targetUnits.isEmpty()) {
+                qCWarning(logTemplate).noquote()
+                        << QStringLiteral(
+                            "event=template.target_invalid path=%1 diagnostic=no_detectable_character")
+                           .arg(path);
                 failures.append(
                             QStringLiteral(
-                                "%1\n%2\n目标文字不包含可检测字符。")
-                            .arg(QFileInfo(path).fileName(), path));
+                                "%1\n目标文字不包含可检测字符。")
+                            .arg(QFileInfo(path).fileName()));
                 continue;
             }
             const QString missingTarget = missingTemplateTargetUnit(
@@ -256,18 +265,22 @@ bool TemplateApplicationService::updateTemplates(
                         targetUnits,
                         value.characterAssets);
             if (!missingTarget.isEmpty()) {
+                qCWarning(logTemplate).noquote()
+                        << QStringLiteral(
+                            "event=template.character_missing path=%1 target=%2")
+                           .arg(path, missingTarget);
                 failures.append(
                             QStringLiteral(
-                                "%1\n%2\n模板缺少目标文字所需字符：“%3”。")
-                            .arg(QFileInfo(path).fileName(), path,
+                                "%1\n模板缺少目标文字所需字符：“%2”。")
+                            .arg(QFileInfo(path).fileName(),
                                  missingTarget));
                 continue;
             }
         }
         if (!m_store->save(path, value, true, &error)) {
             failures.append(
-                        QStringLiteral("%1\n%2\n%3")
-                        .arg(QFileInfo(path).fileName(), path,
+                        QStringLiteral("%1\n%2")
+                        .arg(QFileInfo(path).fileName(),
                              storeErrorMessage(error)));
             continue;
         }
@@ -303,7 +316,7 @@ bool TemplateApplicationService::stageInitialAssets(
                + assets.trackingImageRect.width > assets.rawImage.cols
             || assets.trackingImageRect.y
                + assets.trackingImageRect.height > assets.rawImage.rows) {
-        setError(errorMessage, QStringLiteral("模板原图或定位区域无效。"));
+        setError(errorMessage, QStringLiteral("模板图像或定位参考区域无效。"));
         return false;
     }
     EditableTemplate candidate = *value;
@@ -329,7 +342,7 @@ bool TemplateApplicationService::stageCharacterAssets(
         QString *errorMessage) const
 {
     if (!value) {
-        setError(errorMessage, QStringLiteral("字符模板写入目标无效。"));
+        setError(errorMessage, QStringLiteral("字符模板保存失败，请联系维护人员。"));
         return false;
     }
     QVector<TemplateCharacterAsset> assets;
@@ -446,12 +459,6 @@ QString TemplateApplicationService::currentDirectoryPath() const
     return m_currentDirectoryPath;
 }
 
-PreparedTemplateSnapshot
-TemplateApplicationService::activePreparedTemplate() const
-{
-    return m_activePreparedTemplate;
-}
-
 void TemplateApplicationService::setActivePreparedTemplate(
         const PreparedTemplateSnapshot &preparedTemplate)
 {
@@ -461,17 +468,11 @@ void TemplateApplicationService::setActivePreparedTemplate(
 QString TemplateApplicationService::storeErrorMessage(
         const TemplateStoreError &error)
 {
-    QStringList lines;
-    lines.append(error.userMessage.isEmpty()
-                 ? (error.code.isEmpty()
-                    ? QStringLiteral("模板操作失败。") : error.code)
-                 : error.userMessage);
-    if (!error.path.isEmpty()) {
-        lines.append(error.path);
-    }
-    if (!error.diagnostic.isEmpty()
-            && error.diagnostic != error.path) {
-        lines.append(error.diagnostic);
-    }
-    return lines.join(QStringLiteral("\n"));
+    qCWarning(logTemplate).noquote()
+            << QStringLiteral(
+                "event=template.store_failed code=%1 path=%2 diagnostic=%3")
+               .arg(error.code, error.path, error.diagnostic);
+    return error.userMessage.isEmpty()
+            ? QStringLiteral("模板操作失败。")
+            : error.userMessage;
 }

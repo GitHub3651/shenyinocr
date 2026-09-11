@@ -1,7 +1,3 @@
-// 文件作用：本文件用于执行钢印模板定位、字符匹配、重叠检查和最终判定。
-// 主要职责：执行钢印模板定位、字符匹配、重叠检查和最终判定。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "stamp_detection_pipeline.h"
 #include "contracts/detection_mode.h"
 
@@ -9,7 +5,6 @@
 
 #include <stdexcept>
 
-// 函数说明：detect 函数执行对应事件或业务处理。
 StampDetectionResult StampDetectionPipeline::detect(
         cv::Mat &dateRoi,
         const cv::Mat &sourceImage,
@@ -39,7 +34,6 @@ StampDetectionResult StampDetectionPipeline::detect(
     return result;
 }
 
-// 函数说明：detect 函数执行对应事件或业务处理。
 StampDetectionWorkOutput StampDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const QStringList &targetUnits,

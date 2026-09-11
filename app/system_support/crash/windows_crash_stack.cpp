@@ -1,7 +1,3 @@
-// 文件作用：本文件用于收集Windows线程调用栈和模块信息，生成可排查的崩溃记录。
-// 主要职责：收集Windows线程调用栈和模块信息，生成可排查的崩溃记录。
-// 模块位置：系统支撑层；提供设置、日志、授权和崩溃诊断等基础能力。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "system_support/crash/windows_crash_stack.h"
 #include <tlhelp32.h>
 #include <stdio.h>
@@ -10,13 +6,11 @@
 #include <comdef.h>
 #include <Wbemidl.h>
 
-// 函数说明：WindowsCrashStack 构造函数创建组件并初始化其依赖和初始状态。
 WindowsCrashStack::WindowsCrashStack(PEXCEPTION_POINTERS pException)
 {
     m_pException = pException;
 }
 
-// 函数说明：moduleByReturnAddress 函数实现名称所表示的处理步骤。
 QString WindowsCrashStack::moduleByReturnAddress(PBYTE Ret_Addr, PBYTE & Module_Addr)
 {
     MODULEENTRY32   M = {sizeof(M)};
@@ -46,7 +40,6 @@ QString WindowsCrashStack::moduleByReturnAddress(PBYTE Ret_Addr, PBYTE & Module_
     return sRet;
 }
 
-// 函数说明：callStack 函数实现名称所表示的处理步骤。
 QString WindowsCrashStack::callStack(PEXCEPTION_POINTERS pException)
 {
     PBYTE   Module_Addr_1;
@@ -115,7 +108,6 @@ QString WindowsCrashStack::callStack(PEXCEPTION_POINTERS pException)
     return sRet;
 } // Get_Call_Stack
 
-// 函数说明：versionString 函数实现名称所表示的处理步骤。
 QString WindowsCrashStack::versionString()
 {
     OSVERSIONINFOEX V = {sizeof(OSVERSIONINFOEX)};  // EX for NT 5.0 and later
@@ -138,7 +130,6 @@ QString WindowsCrashStack::versionString()
     return sRet;
 }
 
-// 函数说明：exceptionInformation 函数实现名称所表示的处理步骤。
 QString WindowsCrashStack::exceptionInformation()
 {
     WCHAR       Module_Name[MAX_PATH];

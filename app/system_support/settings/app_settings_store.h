@@ -1,4 +1,3 @@
-// 文件作用：负责 AppSettings Schema 8 的严格读取、校验和原子保存。
 #pragma once
 
 #include "system_support/settings/app_settings.h"

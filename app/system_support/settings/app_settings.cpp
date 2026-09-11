@@ -1,4 +1,3 @@
-// 文件作用：实现应用设置默认值、检测方案路径规则和相等比较。
 #include "system_support/settings/app_settings.h"
 
 #include <QDir>

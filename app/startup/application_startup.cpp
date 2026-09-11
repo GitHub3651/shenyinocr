@@ -1,7 +1,3 @@
-// 文件作用：本文件用于组装设置、模板、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
-// 主要职责：组装设置、模板、设备、运行时、应用服务和界面对象，建立程序唯一对象图。
-// 模块位置：启动层；只负责进程初始化和对象组装，不放置业务规则。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "startup/application_startup.h"
 
 #include "startup/runtime_guard.h"
@@ -55,7 +51,6 @@ QString settingsLoadStatusName(AppSettingsLoadStatus status)
     return QStringLiteral("unknown");
 }
 
-// 函数说明：showRuntimeGuardExitMessage 函数实现名称所表示的处理步骤。
 void showRuntimeGuardExitMessage(const QString &message)
 {
     QMessageBox messageBox(
@@ -70,7 +65,6 @@ void showRuntimeGuardExitMessage(const QString &message)
     messageBox.exec();
 }
 
-// 函数说明：installQtTranslations 函数实现名称所表示的处理步骤。
 void installQtTranslations(QApplication *application,
                            QTranslator *qtBaseTranslator,
                            QTranslator *qtTranslator,
@@ -103,7 +97,6 @@ void installQtTranslations(QApplication *application,
 
 } // namespace
 
-// 函数说明：run 函数执行对应事件或业务处理。
 int ApplicationStartup::run(int argc, char *argv[])
 {
     QApplication application(argc, argv);
@@ -153,7 +146,7 @@ int ApplicationStartup::run(int argc, char *argv[])
         QMessageBox::warning(
                     nullptr,
                     QStringLiteral("警告"),
-                    QStringLiteral("程序运行中避免重复打开"));
+                    QStringLiteral("软件已在运行，请勿重复打开。"));
         return 0;
     }
 
@@ -188,7 +181,7 @@ int ApplicationStartup::run(int argc, char *argv[])
             QMessageBox::critical(
                         nullptr,
                         QStringLiteral("设置错误"),
-                        QStringLiteral("无法确定当前用户的应用数据目录。"));
+                        QStringLiteral("无法访问软件设置文件夹，软件不能启动。"));
             qCInfo(logStartup).noquote()
                     << "event=app.stop result=-1 reason=settings_directory_unavailable";
             ApplicationLogger::stop();
@@ -212,15 +205,16 @@ int ApplicationStartup::run(int argc, char *argv[])
                 } else {
                     qCCritical(logStartup).noquote()
                             << QStringLiteral(
-                                "event=settings.reset_failed code=%1 reason=%2")
+                                "event=settings.reset_failed code=%1 path=%2 diagnostic=%3")
                                .arg(settingsError.code,
-                                    settingsError.userMessage);
+                                    settingsStore->settingsFilePath(),
+                                    settingsError.diagnostic);
                     QMessageBox::critical(
                                 nullptr,
-                                QStringLiteral("设置清空失败"),
-                                settingsError.userMessage
-                                + QStringLiteral("\n\n")
-                                + settingsError.code);
+                                QStringLiteral("软件设置更新失败"),
+                                settingsError.userMessage.isEmpty()
+                                ? QStringLiteral("软件设置保存失败。")
+                                : settingsError.userMessage);
                     qCInfo(logStartup).noquote()
                             << "event=app.stop result=-1 reason=settings_reset_failed";
                     ApplicationLogger::stop();
@@ -229,14 +223,16 @@ int ApplicationStartup::run(int argc, char *argv[])
             } else {
             qCCritical(logStartup).noquote()
                     << QStringLiteral(
-                        "event=settings.load_failed code=%1 reason=%2")
-                       .arg(settingsError.code, settingsError.userMessage);
+                        "event=settings.load_failed code=%1 path=%2 diagnostic=%3")
+                       .arg(settingsError.code,
+                            settingsStore->settingsFilePath(),
+                            settingsError.diagnostic);
             QMessageBox::critical(
                         nullptr,
-                        QStringLiteral("设置文件损坏"),
-                        settingsError.userMessage
-                        + QStringLiteral("\n\n")
-                        + settingsError.code);
+                        QStringLiteral("设置错误"),
+                        settingsError.userMessage.isEmpty()
+                        ? QStringLiteral("软件设置读取失败，请联系维护人员。")
+                        : settingsError.userMessage);
             qCInfo(logStartup).noquote()
                     << "event=app.stop result=-1 reason=settings_load_failed";
             ApplicationLogger::stop();

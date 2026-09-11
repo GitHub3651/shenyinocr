@@ -1,4 +1,3 @@
-// 文件作用：收集并校验产品模板名称和保存目录。
 #pragma once
 
 #include <QDialog>

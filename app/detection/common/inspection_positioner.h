@@ -1,7 +1,3 @@
-// 文件作用：本文件用于根据当前模板选择定位方式，并输出检测区域对应的位置姿态。
-// 主要职责：根据当前模板选择定位方式，并输出检测区域对应的位置姿态。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/common/detection_pose.h"
@@ -12,7 +8,6 @@
 
 #include <vector>
 
-// 组件说明：InspectionPositioner 组件提供对应设备或检测能力的统一实现。
 class InspectionPositioner
 {
 public:

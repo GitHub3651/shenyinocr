@@ -1,7 +1,3 @@
-// 文件作用：本文件用于把运行时故障快照转换为界面可显示的故障文字。
-// 主要职责：把运行时故障快照转换为状态、结果和操作员提示文字。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "ui/main_window/inspection/inspection_fault_presenter.h"
 
 #include <QStringList>
@@ -28,31 +24,27 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
     QString reasonText;
     switch (snapshot.reason) {
     case InspectionFaultReason::CameraDisconnected:
-        reasonText = QStringLiteral("相机断连或正式采集异常");
+        reasonText = QStringLiteral("相机连接或图像采集异常");
         break;
     case InspectionFaultReason::PlcDisconnected:
-        reasonText = QStringLiteral("PLC连接或结果输出异常");
+        reasonText = QStringLiteral("PLC 连接或检测结果发送异常");
         break;
     case InspectionFaultReason::HardTriggerQueueOverflow:
-        reasonText = QStringLiteral("硬触发检测队列已满");
+        reasonText = QStringLiteral("待检测图像过多，系统已暂停");
         break;
     case InspectionFaultReason::ProductIdentityAmbiguous:
-        reasonText = QStringLiteral("产品身份无法唯一确定");
+        reasonText = QStringLiteral("无法确定当前图像对应的产品");
         break;
     case InspectionFaultReason::RuntimeInvariantViolation:
-        reasonText = QStringLiteral("检测运行约束被破坏");
+        reasonText = QStringLiteral("系统状态异常，检测已暂停");
         break;
     case InspectionFaultReason::BarcodeCsvUnavailable:
-        reasonText = QStringLiteral("二维码 CSV 写入不可用");
+        reasonText = QStringLiteral("二维码结果无法保存到本机");
         break;
     case InspectionFaultReason::None:
         break;
     }
     details << QStringLiteral("故障原因：%1").arg(reasonText);
-    if (!snapshot.diagnostic.isEmpty()) {
-        details << QStringLiteral("诊断信息：%1")
-                   .arg(snapshot.diagnostic);
-    }
     details << QStringLiteral(
                    "本次运行已接收 %1 件，已完成 %2 件。")
                .arg(snapshot.acceptedProductCount)
@@ -61,7 +53,7 @@ InspectionFaultPresentation InspectionFaultPresenter::create(
                    "输送线状态未知，请使用输送线自身控制确认停线，"
                    "并隔离故障期间的产品。");
     details << QStringLiteral(
-                   "确认现场已安全处理后，点击【确认故障并恢复】解除软件锁定。");
+                   "确认现场已安全处理后，点击【确认故障并恢复】恢复检测操作。");
     presentation.operatorMessage = details.join(QStringLiteral("\n\n"));
     return presentation;
 }

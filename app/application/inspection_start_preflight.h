@@ -1,4 +1,3 @@
-// 文件作用：在检测启动前检查运行状态和已经集中准备好的模板资源。
 #pragma once
 
 #include "contracts/detection_mode.h"

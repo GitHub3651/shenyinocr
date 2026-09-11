@@ -1,7 +1,3 @@
-// 文件作用：本文件用于通过模板匹配计算跟踪区域的位置、角度和变换矩阵。
-// 主要职责：通过模板匹配计算跟踪区域的位置、角度和变换矩阵。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #pragma once
 
 #include "detection/common/detection_pose.h"
@@ -10,7 +6,6 @@
 
 #include <vector>
 
-// 组件说明：TrackingPoseMatcher 组件提供对应设备或检测能力的统一实现。
 class TrackingPoseMatcher
 {
 public:

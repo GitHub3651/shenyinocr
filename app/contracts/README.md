@@ -1,6 +1,6 @@
 # contracts：稳定合同
 
-本目录保存多个模块共同依赖、但不拥有运行副作用的稳定定义。当前只有五模式元数据和二维码默认参数。
+本目录保存多个模块共同依赖、但不拥有运行副作用的稳定定义，包括五模式元数据、二维码默认参数、相机操作结果和检测呈现数据。
 
 ## 文件
 
@@ -8,12 +8,14 @@
 |---|---|
 | `detection_mode.h/.cpp` | 唯一登记 `DetectionMode`、稳定 `modeId/uiId`、中文名、定位类型、资源要求、呈现和存图策略。 |
 | `barcode_parameter_defaults.h` | 二维码格式掩码、ROI 外扩、解码预算和回退开关的唯一默认值。 |
+| `camera_operation_result.h` | 相机打开、参数设置和停止后恢复结果的唯一跨层纯数据合同。 |
+| `inspection_presentation.h` | Runtime 向 UI 发布的检测结果纯数据合同。 |
 
 ## 五模式唯一分类
 
 | 模式 | `modeId` | 定位类型 | 模板数量 |
 |---|---|---|---|
-| 刚印检测 | `stamp` | `SingleTemplate` | 0 或 1 |
+| 钢印检测 | `stamp` | `SingleTemplate` | 0 或 1 |
 | 字库匹配 | `word` | `MultipleTemplates` | 0 到多个 |
 | 深度 OCR | `ocr` | `SingleTemplate` | 0 或 1 |
 | 纸巾检测 | `tissue` | `WholeFrame` | 无模板 |

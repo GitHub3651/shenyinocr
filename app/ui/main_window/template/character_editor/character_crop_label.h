@@ -1,4 +1,3 @@
-// 文件作用：显示字符模板源图，并维护用户框选的字符区域。
 #pragma once
 
 #include "templates/template_store.h"

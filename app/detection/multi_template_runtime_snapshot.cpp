@@ -1,4 +1,3 @@
-// 文件作用：实现多模板定位和字符检测快照的构造。
 #include "detection/multi_template_runtime_snapshot.h"
 
 namespace {

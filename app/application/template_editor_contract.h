@@ -1,4 +1,3 @@
-// 文件作用：定义模板编辑页面与应用服务之间的轻量命令。
 #pragma once
 
 #include "contracts/barcode_parameter_defaults.h"

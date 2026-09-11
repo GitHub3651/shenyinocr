@@ -908,18 +908,18 @@
     <name>DetectionSettingsPage</name>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="308"/>
-        <source>二维码结果本机记录</source>
-        <translation>二维码结果本机记录</translation>
+        <source>二维码结果保存</source>
+        <translation>二维码结果保存</translation>
     </message>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="314"/>
-        <source>启用本机 CSV 记录</source>
-        <translation>启用本机 CSV 记录</translation>
+        <source>保存二维码结果到本机（CSV）</source>
+        <translation>保存二维码结果到本机（CSV）</translation>
     </message>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="321"/>
-        <source>输出目录</source>
-        <translation>输出目录</translation>
+        <source>保存文件夹</source>
+        <translation>保存文件夹</translation>
     </message>
     <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="349"/>

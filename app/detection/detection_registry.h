@@ -1,4 +1,3 @@
-// 文件作用：本文件是五种检测模式的唯一装配边界。
 #pragma once
 
 #include "contracts/detection_mode.h"

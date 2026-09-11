@@ -1,15 +1,11 @@
-// 文件作用：本文件用于组织软件设置读取与保存用例。
-// 主要职责：维护当前软件设置，并协调设置与模板配置持久化。
-// 模块位置：应用层；负责组织用户用例，并用结构化结果连接界面、运行时、模板和设置。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "application/settings_application_service.h"
+#include "system_support/logging/log_categories.h"
 
 #include <QDir>
 #include <QFileInfo>
 
 #include <cmath>
 
-// 函数说明：SettingsApplicationService 构造函数创建组件并初始化其依赖和初始状态。
 SettingsApplicationService::SettingsApplicationService(
     const std::shared_ptr<AppSettingsStore> &store,
     const AppSettings &loadedSettings)
@@ -18,7 +14,6 @@ SettingsApplicationService::SettingsApplicationService(
 {
 }
 
-// 函数说明：current 函数读取、等待或计算对应的数据。
 const AppSettings &SettingsApplicationService::current() const
 {
     return m_current;
@@ -29,6 +24,12 @@ OperationResult SettingsApplicationService::saveConfiguration(
 {
     AppSettingsStoreError error;
     if (!m_store || !m_store->save(candidate, &error)) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.save_failed code=%1 path=%2 diagnostic=%3")
+                   .arg(error.code,
+                        m_store ? m_store->settingsFilePath() : QString(),
+                        error.diagnostic);
         return storeFailure(error);
     }
     m_current = candidate;
@@ -41,18 +42,22 @@ OperationResult SettingsApplicationService::commitAppliedHardwareSettings(
     m_current = appliedSettings;
     AppSettingsStoreError error;
     if (!m_store || !m_store->save(m_current, &error)) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=settings.hardware_persist_failed code=%1 path=%2 diagnostic=%3")
+                   .arg(error.code,
+                        m_store ? m_store->settingsFilePath() : QString(),
+                        error.diagnostic);
         return storeFailure(error);
     }
     return OperationResult::accepted();
 }
 
-// 函数说明：applicationDataRoot 函数实现名称所表示的处理步骤。
 QString SettingsApplicationService::applicationDataRoot() const
 {
     return m_store ? m_store->applicationDataRoot() : QString();
 }
 
-// 函数说明：storeFailure 函数保存或发布对应的数据和资源。
 OperationResult SettingsApplicationService::storeFailure(
     const AppSettingsStoreError &error)
 {
@@ -61,7 +66,7 @@ OperationResult SettingsApplicationService::storeFailure(
                 ? QStringLiteral("APP_SETTINGS_STORE_UNAVAILABLE")
                 : error.code,
                 error.userMessage.isEmpty()
-                ? QStringLiteral("应用设置保存失败。")
+                ? QStringLiteral("软件设置保存失败。")
                 : error.userMessage,
                 error.diagnostic);
 }

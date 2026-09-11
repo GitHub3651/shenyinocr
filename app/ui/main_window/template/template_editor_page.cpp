@@ -1,4 +1,3 @@
-// 文件作用：实现统一模板选择、当前编辑模板、取景和参数保存。
 #include "ui/main_window/template/template_editor_page.h"
 
 #include "application/inspection_application_service.h"
@@ -84,7 +83,7 @@ QString templateGuideTitle(DetectionMode mode)
 {
     switch (mode) {
     case DetectionMode::Stamp:
-        return QStringLiteral("刚印检测模板制作");
+        return QStringLiteral("钢印检测模板制作");
     case DetectionMode::Word:
         return QStringLiteral("字库匹配模板制作");
     case DetectionMode::Ocr:
@@ -101,7 +100,7 @@ QString templateGuideDetectionRegionName(DetectionMode mode)
 {
     switch (mode) {
     case DetectionMode::Stamp:
-        return QStringLiteral("刚印检测区域");
+        return QStringLiteral("钢印检测区域");
     case DetectionMode::Word:
         return QStringLiteral("文字检测区域");
     case DetectionMode::Ocr:
@@ -147,26 +146,26 @@ QString drawingRegionName(DetectionMode mode, InspectionImageCanvas::DrawingStep
     case InspectionImageCanvas::DrawingStep::TrackingAnchor:
         switch (mode) {
         case DetectionMode::Word:
-            return QStringLiteral("文字检测区域定位锚点");
+            return QStringLiteral("文字检测区域定位参考区域");
         case DetectionMode::Ocr:
-            return QStringLiteral("OCR 检测区域定位锚点");
+            return QStringLiteral("OCR 检测区域定位参考区域");
         case DetectionMode::BarcodeWord:
-            return QStringLiteral("二维码与生产日期区域定位锚点");
+            return QStringLiteral("二维码与生产日期区域定位参考区域");
         case DetectionMode::Stamp:
         case DetectionMode::Tissue:
             break;
         }
-        return QStringLiteral("定位锚点");
+        return QStringLiteral("定位参考区域");
     case InspectionImageCanvas::DrawingStep::DetectionPolygon:
         return templateGuideDetectionRegionName(mode);
     case InspectionImageCanvas::DrawingStep::BarcodeRegion:
         return QStringLiteral("二维码区域");
     case InspectionImageCanvas::DrawingStep::StampAnchor:
-        return QStringLiteral("钢印区域定位锚点（吸管口）");
+        return QStringLiteral("钢印区域定位参考区域（吸管口）");
     case InspectionImageCanvas::DrawingStep::StampPolygon:
         return QStringLiteral("钢印检测区域");
     case InspectionImageCanvas::DrawingStep::DateAnchor:
-        return QStringLiteral("生产日期检测区域定位锚点");
+        return QStringLiteral("生产日期检测区域定位参考区域");
     case InspectionImageCanvas::DrawingStep::DatePolygon:
         return QStringLiteral("生产日期检测区域");
     case InspectionImageCanvas::DrawingStep::Idle:
@@ -367,7 +366,7 @@ bool TemplateEditorPage::startTemplatePreview()
                    .arg(result.error.code, result.error.userMessage);
         showWarning(QStringLiteral("实时取景失败"),
                     result.error.userMessage.isEmpty()
-                    ? QStringLiteral("实时取景线程启动失败。")
+                    ? QStringLiteral("无法开始实时取景，请重试。")
                     : result.error.userMessage);
         return false;
     }
@@ -831,7 +830,7 @@ void TemplateEditorPage::saveCurrentTemplate()
             || ring.y + ring.height > rawImage.rows) {
             showWarning(QStringLiteral("钢印标定无效"),
                         QStringLiteral(
-                            "请重新选择有效的钢印区域定位锚点（吸管口）。"));
+                            "请重新选择有效的钢印区域定位参考区域（吸管口）。"));
             return;
         }
         assets.stampRing = rawImage(ring).clone();
@@ -1228,11 +1227,6 @@ void TemplateEditorPage::applyTemplateSettingsToUi(
                 QString::number(settings.imageThresholdPercent));
 }
 
-PreparedTemplateSnapshot TemplateEditorPage::activePreparedTemplate() const
-{
-    return m_templateService.activePreparedTemplate();
-}
-
 void TemplateEditorPage::adjustTemplateGuideHeight()
 {
     m_mainWindowUi.frame_templateGuide->updateGeometry();
@@ -1495,10 +1489,10 @@ void TemplateEditorPage::askToSaveCompletedTemplate(DetectionMode mode)
         saveMessageBox.setText(
                     mode == DetectionMode::Stamp
                     ? QStringLiteral(
-                          "钢印区域定位锚点（吸管口）、钢印检测区域、生产日期检测区域定位锚点和生产日期检测区域均已完成。\n\n是否立即保存当前模板？")
+                          "钢印区域定位参考区域（吸管口）、钢印检测区域、生产日期检测区域定位参考区域和生产日期检测区域均已完成。\n\n是否立即保存当前模板？")
                     : mode == DetectionMode::BarcodeWord
                       ? QStringLiteral(
-                            "二维码与生产日期区域定位锚点、二维码区域和生产日期检测区域均已完成。\n\n是否立即保存当前模板？")
+                            "二维码与生产日期区域定位参考区域、二维码区域和生产日期检测区域均已完成。\n\n是否立即保存当前模板？")
                       : QStringLiteral(
                             "%1和%2均已完成。\n\n是否立即保存当前模板？")
                         .arg(drawingRegionName(

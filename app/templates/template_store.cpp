@@ -1,4 +1,3 @@
-// 文件作用：实现模板 JSON、固定资源、严格运行准备和目录事务保存。
 #include "templates/template_store.h"
 
 #include <QDir>
@@ -60,7 +59,7 @@ bool hasOnlyKeys(const QJsonObject &object,
     for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
         if (!allowed.contains(it.key())) {
             return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MALFORMED"),
-                        QStringLiteral("模板配置包含不支持的字段。"),
+                        QStringLiteral("模板文件内容不完整或格式不正确。"),
                         QStringLiteral("%1.%2").arg(context, it.key()),
                         path);
         }
@@ -100,7 +99,7 @@ bool validateStructure(const TemplateSettings &settings,
 {
     if (settings.schemaVersion != TemplateSettings::CurrentSchemaVersion) {
         return fail(error, QStringLiteral("TEMPLATE_SCHEMA_UNSUPPORTED"),
-                    QStringLiteral("模板配置版本不受支持。"),
+                    QStringLiteral("模板版本与当前软件不兼容。"),
                     QStringLiteral("schemaVersion=%1")
                     .arg(settings.schemaVersion), path);
     }
@@ -117,7 +116,7 @@ bool validateStructure(const TemplateSettings &settings,
             || settings.characterSourceSize.width() < 0
             || settings.characterSourceSize.height() < 0) {
         return fail(error, QStringLiteral("TEMPLATE_FIELD_INVALID"),
-                    QStringLiteral("模板参数超出合法范围。"),
+                    QStringLiteral("模板参数或检测区域无效，请重新制作模板。"),
                     QStringLiteral("Invalid ROI, threshold, or character size."),
                     path);
     }
@@ -125,7 +124,7 @@ bool validateStructure(const TemplateSettings &settings,
             || !finitePolygon(settings.barcodePolygon)
             || !finitePolygon(settings.stampPolygon)) {
         return fail(error, QStringLiteral("TEMPLATE_REGION_INVALID"),
-                    QStringLiteral("模板区域中存在无效坐标。"),
+                    QStringLiteral("模板参数或检测区域无效，请重新制作模板。"),
                     QStringLiteral("Non-finite polygon point."), path);
     }
     if (settings.detectionMode != DetectionMode::BarcodeWord
@@ -321,26 +320,26 @@ bool parseSettings(const QByteArray &bytes,
     const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
         return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MALFORMED"),
-                    QStringLiteral("模板配置文件已损坏。"),
+                    QStringLiteral("模板文件已损坏。"),
                     parseError.errorString(), path);
     }
     const QJsonObject root = document.object();
     int schemaVersion = 0;
     if (!readInt(root, "schemaVersion", &schemaVersion)) {
         return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MALFORMED"),
-                    QStringLiteral("模板配置缺少有效版本号。"),
+                    QStringLiteral("模板文件内容不完整或格式不正确。"),
                     QStringLiteral("schemaVersion"), path);
     }
     if (schemaVersion != TemplateSettings::CurrentSchemaVersion) {
         return fail(error, QStringLiteral("TEMPLATE_SCHEMA_UNSUPPORTED"),
-                    QStringLiteral("模板配置版本不受支持。"),
+                    QStringLiteral("模板版本与当前软件不兼容。"),
                     QStringLiteral("schemaVersion=%1").arg(schemaVersion), path);
     }
     const QJsonValue modeValue = root.value(QStringLiteral("detectionMode"));
     const QJsonValue targetValue = root.value(QStringLiteral("targetText"));
     if (!modeValue.isString() || !targetValue.isString()) {
         return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MALFORMED"),
-                    QStringLiteral("模板模式或目标文字字段无效。"),
+                    QStringLiteral("模板文件内容不完整或格式不正确。"),
                     QStringLiteral("detectionMode/targetText"), path);
     }
     TemplateSettings candidate;
@@ -378,13 +377,13 @@ bool parseSettings(const QByteArray &bytes,
             && !readInt(root, "imageThresholdPercent",
                         &candidate.imageThresholdPercent)) {
         return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MALFORMED"),
-                    QStringLiteral("模板图像阈值字段无效。"),
+                    QStringLiteral("模板文件内容不完整或格式不正确。"),
                     QStringLiteral("imageThresholdPercent"), path);
     }
     if (!readRect(root.value(QStringLiteral("trackingRoi")),
                   &candidate.trackingRoi)) {
         return fail(error, QStringLiteral("TEMPLATE_FIELD_INVALID"),
-                    QStringLiteral("模板定位区域字段无效。"),
+                    QStringLiteral("模板文件内容不完整或格式不正确。"),
                     QStringLiteral("trackingRoi"), path);
     }
     const QJsonValue regionsValue = root.value(QStringLiteral("regions"));
@@ -415,7 +414,7 @@ bool parseSettings(const QByteArray &bytes,
                 && !readPolygon(regions.value(QStringLiteral("stampPolygon")),
                                 &candidate.stampPolygon))) {
         return fail(error, QStringLiteral("TEMPLATE_REGION_INVALID"),
-                    QStringLiteral("模板区域点集格式无效。"),
+                    QStringLiteral("模板文件内容不完整或格式不正确。"),
                     QStringLiteral("regions"), path);
     }
     if (characterMode) {
@@ -425,7 +424,7 @@ bool parseSettings(const QByteArray &bytes,
                     QStringLiteral("characterBoxes"));
         if (!sizeValue.isObject() || !boxesValue.isArray()) {
             return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                        QStringLiteral("模板字符配置格式无效。"),
+                        QStringLiteral("模板文件内容不完整或格式不正确。"),
                         QStringLiteral("characterSourceSize/characterBoxes"), path);
         }
         const QJsonObject size = sizeValue.toObject();
@@ -437,14 +436,14 @@ bool parseSettings(const QByteArray &bytes,
                 || !readInt(size, "width", &width)
                 || !readInt(size, "height", &height)) {
             return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                        QStringLiteral("字符源图尺寸无效。"),
+                        QStringLiteral("模板文件内容不完整或格式不正确。"),
                         QStringLiteral("characterSourceSize"), path);
         }
         candidate.characterSourceSize = QSize(width, height);
         for (const QJsonValue &item : boxesValue.toArray()) {
             if (!item.isObject()) {
                 return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                            QStringLiteral("字符框格式无效。"),
+                            QStringLiteral("模板文件内容不完整或格式不正确。"),
                             QStringLiteral("characterBoxes"), path);
             }
             const QJsonObject object = item.toObject();
@@ -461,7 +460,7 @@ bool parseSettings(const QByteArray &bytes,
                     || rect.width() != std::floor(rect.width())
                     || rect.height() != std::floor(rect.height())) {
                 return fail(error, QStringLiteral("TEMPLATE_CHARACTER_INVALID"),
-                            QStringLiteral("字符框格式无效。"),
+                            QStringLiteral("模板文件内容不完整或格式不正确。"),
                             QStringLiteral("characterBoxes"), path);
             }
             TemplateCharacterBox box;
@@ -475,7 +474,7 @@ bool parseSettings(const QByteArray &bytes,
                     QStringLiteral("barcodeParameters"));
         if (!barcodeValue.isObject()) {
             return fail(error, QStringLiteral("TEMPLATE_FIELD_INVALID"),
-                        QStringLiteral("二维码参数格式无效。"),
+                        QStringLiteral("模板文件内容不完整或格式不正确。"),
                         QStringLiteral("barcodeParameters"), path);
         }
         const QJsonObject barcode = barcodeValue.toObject();
@@ -494,7 +493,7 @@ bool parseSettings(const QByteArray &bytes,
                             &candidate.barcodeParameters.maxDecodeTimeMs)
                 || !barcode.value(QStringLiteral("enableFallback")).isBool()) {
             return fail(error, QStringLiteral("TEMPLATE_FIELD_INVALID"),
-                        QStringLiteral("二维码参数格式无效。"),
+                        QStringLiteral("模板文件内容不完整或格式不正确。"),
                         QStringLiteral("barcodeParameters"), path);
         }
         candidate.barcodeParameters.formatMask =
@@ -517,12 +516,12 @@ bool readSettings(const QString &directory,
     QFile file(path);
     if (!file.exists()) {
         return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MISSING"),
-                    QStringLiteral("模板缺少 template_settings.json。"),
+                    QStringLiteral("模板文件内容不完整。"),
                     path, path);
     }
     if (!file.open(QIODevice::ReadOnly)) {
         return fail(error, QStringLiteral("TEMPLATE_SETTINGS_MALFORMED"),
-                    QStringLiteral("无法读取模板配置。"),
+                    QStringLiteral("无法读取模板文件。"),
                     file.errorString(), path);
     }
     return parseSettings(file.readAll(), settings, error, path);
@@ -541,7 +540,7 @@ bool readImage(const QString &path,
     }
     if (!file.open(QIODevice::ReadOnly)) {
         return fail(error, QStringLiteral("TEMPLATE_RESOURCE_MISSING"),
-                    QStringLiteral("模板缺少必需图片资源。"),
+                    QStringLiteral("模板缺少检测所需图片。"),
                     file.errorString(), path);
     }
     const QByteArray bytes = file.readAll();
@@ -574,7 +573,7 @@ bool loadCharacters(const QString &directory,
             return true;
         }
         return fail(error, QStringLiteral("TEMPLATE_RESOURCE_MISSING"),
-                    QStringLiteral("模板缺少字符模板目录。"), path, path);
+                    QStringLiteral("模板缺少字符图片。"), path, path);
     }
     const QFileInfoList files = characterDirectory.entryInfoList(
                 QStringList() << QStringLiteral("*.png")
@@ -710,12 +709,12 @@ bool writeImage(const QString &path,
                   + QFileInfo(path).suffix().toStdString();
         if (!cv::imencode(extension, image, encoded)) {
             return fail(error, QStringLiteral("TEMPLATE_SAVE_FAILED"),
-                        QStringLiteral("模板图片编码失败。"),
+                        QStringLiteral("模板图片保存失败。"),
                         QString::fromStdString(extension), path);
         }
     } catch (const cv::Exception &exception) {
         return fail(error, QStringLiteral("TEMPLATE_SAVE_FAILED"),
-                    QStringLiteral("模板图片编码失败。"),
+                    QStringLiteral("模板图片保存失败。"),
                     QString::fromStdString(exception.what()), path);
     }
     return writeBytes(path,
@@ -734,7 +733,7 @@ bool copyDirectoryContents(const QString &source,
     }
     if (!QDir().mkpath(target)) {
         return fail(error, QStringLiteral("TEMPLATE_SAVE_FAILED"),
-                    QStringLiteral("无法创建模板临时目录。"), target, target);
+                    QStringLiteral("模板保存失败，请检查保存文件夹权限和磁盘空间。"), target, target);
     }
     const QFileInfoList entries = sourceDirectory.entryInfoList(
                 QDir::NoDotAndDotDot | QDir::AllEntries | QDir::Hidden
@@ -743,7 +742,7 @@ bool copyDirectoryContents(const QString &source,
         const QString destination = QDir(target).filePath(entry.fileName());
         if (entry.isSymLink()) {
             return fail(error, QStringLiteral("TEMPLATE_PATH_INVALID"),
-                        QStringLiteral("模板目录不能包含符号链接。"),
+                        QStringLiteral("所选模板文件夹包含不支持的链接，请选择普通文件夹。"),
                         entry.absoluteFilePath(), entry.absoluteFilePath());
         }
         if (entry.isDir()) {
@@ -846,7 +845,7 @@ TemplateSummary TemplateStore::readSummary(
     TemplateSettings settings;
     if (!readSettings(summary.directoryPath, &settings, error)) {
         summary.message = error ? error->userMessage
-                                : QStringLiteral("模板配置无效。");
+                                : QStringLiteral("模板文件内容无效。");
         return summary;
     }
     summary.detectionMode = settings.detectionMode;
@@ -864,7 +863,7 @@ TemplateSummary TemplateStore::readSummary(
     if (!loadEditable(summary.directoryPath, expectedMode,
                       &editable, error)) {
         summary.message = error ? error->userMessage
-                                : QStringLiteral("模板资源已损坏。");
+                                : QStringLiteral("模板文件已损坏。");
         return summary;
     }
     summary.valid = true;
@@ -875,7 +874,7 @@ TemplateSummary TemplateStore::readSummary(
             ? QStringLiteral("模板可用于检测。")
             : (error && !error->userMessage.isEmpty()
                ? error->userMessage
-               : QStringLiteral("模板资源尚未制作完整。"));
+               : QStringLiteral("模板尚未制作完整。"));
     return summary;
 }
 
@@ -887,7 +886,7 @@ bool TemplateStore::loadEditable(const QString &directoryPath,
     clearError(error);
     if (!value) {
         return fail(error, QStringLiteral("TEMPLATE_FIELD_INVALID"),
-                    QStringLiteral("模板加载目标无效。"),
+                    QStringLiteral("模板加载失败，请联系维护人员。"),
                     QStringLiteral("Null EditableTemplate output."));
     }
     const QString directory = normalizedDirectoryPath(directoryPath);
@@ -935,7 +934,7 @@ bool TemplateStore::loadPrepared(const QString &directoryPath,
     clearError(error);
     if (!value) {
         return fail(error, QStringLiteral("TEMPLATE_FIELD_INVALID"),
-                    QStringLiteral("运行模板加载目标无效。"),
+                    QStringLiteral("模板加载失败，请联系维护人员。"),
                     QStringLiteral("Null PreparedTemplate output."));
     }
     EditableTemplate editable;
@@ -1038,11 +1037,11 @@ bool TemplateStore::save(const QString &directoryPath,
     if (target.isEmpty() || !targetInfo.isAbsolute()
             || targetInfo.isSymLink()) {
         return fail(error, QStringLiteral("TEMPLATE_PATH_INVALID"),
-                    QStringLiteral("模板保存路径无效。"), target, target);
+                    QStringLiteral("请选择有效的模板保存文件夹"), target, target);
     }
     if (targetInfo.exists() && !targetInfo.isDir()) {
         return fail(error, QStringLiteral("TEMPLATE_PATH_INVALID"),
-                    QStringLiteral("模板保存目标不是文件夹。"),
+                    QStringLiteral("所选模板保存位置不是文件夹。"),
                     target, target);
     }
     if (preserveExistingContents && !targetInfo.exists()) {
@@ -1056,7 +1055,7 @@ bool TemplateStore::save(const QString &directoryPath,
     const QString parent = targetInfo.absolutePath();
     if (!QDir().mkpath(parent)) {
         return fail(error, QStringLiteral("TEMPLATE_SAVE_FAILED"),
-                    QStringLiteral("无法创建模板上级目录。"), parent, parent);
+                    QStringLiteral("无法创建模板保存文件夹。"), parent, parent);
     }
     const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString temporary = QDir(parent).filePath(
@@ -1067,7 +1066,7 @@ bool TemplateStore::save(const QString &directoryPath,
                 .arg(targetInfo.fileName(), token));
     if (!QDir().mkdir(temporary)) {
         return fail(error, QStringLiteral("TEMPLATE_SAVE_FAILED"),
-                    QStringLiteral("无法创建模板临时目录。"),
+                    QStringLiteral("模板保存失败，请检查保存文件夹权限和磁盘空间。"),
                     temporary, temporary);
     }
     if (preserveExistingContents && targetInfo.exists()
@@ -1090,25 +1089,25 @@ bool TemplateStore::save(const QString &directoryPath,
     if (hadPrevious && !QDir().rename(target, backup)) {
         removeDirectory(temporary);
         return fail(error, QStringLiteral("TEMPLATE_COMMIT_FAILED"),
-                    QStringLiteral("无法备份原模板，未修改原目录。"),
+                    QStringLiteral("模板保存失败，原模板仍可使用。"),
                     target, target);
     }
     if (!QDir().rename(temporary, target)) {
         const bool rolledBack = !hadPrevious || QDir().rename(backup, target);
         if (!rolledBack) {
             return fail(error, QStringLiteral("TEMPLATE_ROLLBACK_FAILED"),
-                        QStringLiteral("模板提交和回滚均失败，需要人工恢复。"),
+                        QStringLiteral("模板保存失败，原模板可能不可用，请联系维护人员。"),
                         QStringLiteral("temporary=%1; backup=%2")
                         .arg(temporary, backup), target);
         }
         removeDirectory(temporary);
         return fail(error, QStringLiteral("TEMPLATE_COMMIT_FAILED"),
-                    QStringLiteral("模板提交失败，原模板已恢复。"),
+                    QStringLiteral("模板保存失败，原模板仍可使用。"),
                     temporary, target);
     }
     if (hadPrevious && !removeDirectory(backup)) {
         return fail(error, QStringLiteral("TEMPLATE_SAVE_FAILED"),
-                    QStringLiteral("模板已保存，但旧备份目录清理失败。"),
+                    QStringLiteral("模板已保存，但旧备份文件未能清理，请联系维护人员。"),
                     backup, backup);
     }
     return true;

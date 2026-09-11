@@ -132,7 +132,7 @@
           <item row="2" column="0">
            <widget class="QLabel" name="label_plcRackSlot">
             <property name="text">
-             <string>Rack/Slot:</string>
+             <string>机架/槽位（Rack/Slot）：</string>
             </property>
            </widget>
           </item>

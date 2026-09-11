@@ -1,4 +1,3 @@
-// 文件作用：提供字符模板切分、命名和编辑所需的对话框交互。
 #pragma once
 
 #include "templates/template_store.h"

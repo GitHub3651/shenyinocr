@@ -1,7 +1,3 @@
-// 文件作用：本文件用于按保存策略异步写入原图和标注图，并通过有界队列提供写盘反压。
-// 主要职责：按保存策略异步写入原图和标注图，并通过有界队列提供写盘反压。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/image_save_service.h"
 
 #include "system_support/logging/log_categories.h"
@@ -15,7 +11,6 @@ namespace {
 
 constexpr int kImageJpegQuality = 80;
 
-// 函数说明：frameImage 函数实现名称所表示的处理步骤。
 QImage frameImage(const cv::Mat &image)
 {
     if (image.type() == CV_8UC1) {
@@ -49,7 +44,6 @@ QImage frameImage(const cv::Mat &image)
 }
 }
 
-// 函数说明：ImageSaveService 构造函数创建组件并初始化其依赖和初始状态。
 ImageSaveService::ImageSaveService(
     std::size_t capacity,
     const WriteFunction &writeFunction,
@@ -82,13 +76,11 @@ ImageSaveService::ImageSaveService(
     }
 }
 
-// 函数说明：~ImageSaveService 析构函数按生命周期要求释放组件持有的资源。
 ImageSaveService::~ImageSaveService()
 {
     shutdown();
 }
 
-// 函数说明：submit 函数执行对应事件或业务处理。
 ImageSaveSubmitResult ImageSaveService::submit(const ImageSaveTask &task)
 {
     ImageSaveSubmitResult result;
@@ -116,19 +108,11 @@ ImageSaveSubmitResult ImageSaveService::submit(const ImageSaveTask &task)
     return result;
 }
 
-// 函数说明：capacity 函数实现名称所表示的处理步骤。
 std::size_t ImageSaveService::capacity() const
 {
     return m_capacity;
 }
 
-// 函数说明：workerCount 函数实现名称所表示的处理步骤。
-std::size_t ImageSaveService::workerCount() const
-{
-    return m_workerCount;
-}
-
-// 函数说明：shutdown 函数实现名称所表示的处理步骤。
 void ImageSaveService::shutdown()
 {
     {
@@ -148,7 +132,6 @@ void ImageSaveService::shutdown()
     }
 }
 
-// 函数说明：writeImage 函数保存或发布对应的数据和资源。
 bool ImageSaveService::writeImage(
     const ImageSaveItem &item,
     QString *errorMessage)
@@ -195,7 +178,6 @@ bool ImageSaveService::writeImage(
     return true;
 }
 
-// 函数说明：workerLoop 函数实现名称所表示的处理步骤。
 void ImageSaveService::workerLoop()
 {
     for (;;) {

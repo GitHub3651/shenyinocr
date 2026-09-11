@@ -1,4 +1,3 @@
-// 文件作用：集中定义外部模板文件夹的数据和唯一磁盘访问接口。
 #pragma once
 
 #include "contracts/barcode_parameter_defaults.h"

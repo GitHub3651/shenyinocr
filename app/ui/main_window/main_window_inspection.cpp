@@ -1,12 +1,3 @@
-// 文件作用：本文件用于实现主窗口中相机、模板、启动停止和检测结果相关的交互槽。
-// 主要职责：实现主窗口中相机、模板、启动停止和检测结果相关的交互槽。
-// 模块位置：界面层；负责收集用户操作和显示应用层返回的数据，不拥有设备或生产线程。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
-/**
- * @file ui/main_window/main_window_inspection.cpp
- * @brief 主窗口检测、运行状态与窗口生命周期薄协调。
- */
-
 #include "ui/main_window/main_window.h"
 #include "ui_detection_settings_page.h"
 #include "ui_image_settings_page.h"
@@ -106,12 +97,8 @@ void MainWindow::presentStartFailure(
     case InspectionStartIssue::TemplateMissing:
         QMessageBox::warning(
                     this,
-                    QStringLiteral("启动资源预检失败"),
-                    result.error.diagnostic.isEmpty()
-                    ? result.error.userMessage
-                    : result.error.userMessage
-                      + QStringLiteral("\n\n")
-                      + result.error.diagnostic);
+                    QStringLiteral("无法开始检测"),
+                    result.error.userMessage);
         break;
     case InspectionStartIssue::TemplatesMissing:
         QMessageBox::warning(
@@ -120,25 +107,20 @@ void MainWindow::presentStartFailure(
     case InspectionStartIssue::TemplateResourcesInvalid:
         QMessageBox::warning(
                     this,
-                    "二维码+三期模板预检失败",
-                    QString("以下问题必须处理后才能启动检测：\n\n%1")
-                    .arg(result.details.join("\n")));
+                    QStringLiteral("无法开始检测"),
+                    result.error.userMessage);
         break;
     case InspectionStartIssue::TemplateIncomplete:
         QMessageBox::warning(
                     this,
-                    "操作规范",
-                    QString("当前模板无法启动检测。\n\n"
-                            "具体原因：\n%1\n\n"
-                            "请编辑该模板，或重新选择一个完整模板。")
-                    .arg(result.details.join("\n")));
+                    QStringLiteral("无法开始检测"),
+                    result.error.userMessage);
         break;
     case InspectionStartIssue::TemplatesIncomplete:
         QMessageBox::warning(
                     this,
-                    "提示",
-                    QString("当前选择中没有可用模板：\n%1")
-                    .arg(result.details.join("\n")));
+                    QStringLiteral("无法开始检测"),
+                    result.error.userMessage);
         break;
     case InspectionStartIssue::DirtySettingsConfirmationRequired:
     case InspectionStartIssue::None:
@@ -164,6 +146,10 @@ void MainWindow::finishInspectionStopUi(
                 .arg(result.error.userMessage.trimmed().isEmpty()
                      ? result.reconciliationSummary
                      : result.error.userMessage);
+        if (!result.error.diagnostic.trimmed().isEmpty()) {
+            summary += QStringLiteral(" diagnostic=%1")
+                    .arg(result.error.diagnostic.trimmed());
+        }
         qCWarning(logRuntime).noquote()
                 << summary;
     }
@@ -176,6 +162,10 @@ void MainWindow::finishInspectionStopUi(
 
     if (result.cameraRecovery.issue
             == CameraRecoveryIssueDto::ExposureRejected) {
+        qCWarning(logDevice).noquote()
+                << QStringLiteral(
+                    "event=camera.exposure_recovery_failed diagnostic=%1")
+                   .arg(result.cameraRecovery.errorMessage);
         {
             QSignalBlocker blocker(m_imageSettingsUi->spinBox_cameraExposure);
             m_imageSettingsUi->spinBox_cameraExposure->setRange(
@@ -187,8 +177,8 @@ void MainWindow::finishInspectionStopUi(
         QMessageBox::warning(
                     this,
                     "警告",
-                    QString("停止识别后恢复相机曝光失败：\n%1")
-                    .arg(result.cameraRecovery.errorMessage));
+                    QStringLiteral(
+                        "停止检测后，相机曝光恢复失败，请检查相机状态。"));
     } else if (result.cameraRecovery.isRecovered()
                && result.cameraRecovery.recoveryAttempted) {
         m_inspectionInfoUi->label_runtimeStatus->setText("相机已打开");
@@ -211,8 +201,8 @@ void MainWindow::finishInspectionStopUi(
         if (!result.error.diagnostic.isEmpty()) {
             QMessageBox::critical(
                         this,
-                        QStringLiteral("故障产品收口失败"),
-                        result.error.diagnostic);
+                        QStringLiteral("故障产品处理失败"),
+                        result.error.userMessage);
         }
         return;
     }
@@ -225,16 +215,13 @@ void MainWindow::finishInspectionStopUi(
     if (!result.reconciliationSummary.isEmpty()) {
         QMessageBox::warning(
                     this,
-                    QStringLiteral("故障产品收口结果"),
+                    QStringLiteral("故障产品处理结果"),
                     result.reconciliationSummary);
     }
     m_inspectionInfoUi->label_runtimeStatus->setText("已停止");
     updateOperationUiState();
 }
 
-/**
- * @brief 呈现模板预览帧
- */
 void MainWindow::presentTemplatePreviewFrame(const cv::Mat &image)
 {
     DetectionMode activeMode = DetectionMode::Word;
@@ -356,11 +343,6 @@ void MainWindow::showParameterCritical(const QString &title, const QString &mess
     QMessageBox::critical(this, title, message);
 }
 
-/**
- * @brief 窗口关闭事件
- * @param event 关闭事件对象
- * @details 关闭时停止运行服务并保存设置
- */
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     if (m_applicationExitInProgress) {
@@ -389,9 +371,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     event->accept();
 }
 
-/**
- * @brief 选择保存文件夹按钮点击槽函数
- */
 void MainWindow::on_pushButton_browseImageSavePath_clicked()
 {
     const QString dirPath = QFileDialog::getExistingDirectory(
@@ -414,9 +393,6 @@ void MainWindow::on_pushButton_browseImageSavePath_clicked()
 
 
 
-/**
- * @brief 清空总数统计按钮点击槽函数
- */
 void MainWindow::on_pushButton_resetTotalCount_clicked()
 {
     const OperationResult result =
@@ -433,9 +409,6 @@ void MainWindow::on_pushButton_resetTotalCount_clicked()
     }
 }
 
-/**
- * @brief 清空NG数统计按钮点击槽函数
- */
 void MainWindow::on_pushButton_resetNgCount_clicked()
 {
     const OperationResult result =
@@ -452,10 +425,6 @@ void MainWindow::on_pushButton_resetNgCount_clicked()
     }
 }
 
-/**
- * @brief 旋转角度确定按钮点击槽函数
- * @details 设置图像旋转角度（0°、90°、180°、270°）
- */
 void MainWindow::on_pushButton_applyImageRotation_clicked()
 {
     const QStringList keys = QStringList() << "image.rotation";
@@ -483,10 +452,6 @@ void MainWindow::on_pushButton_applyImageRotation_clicked()
                .arg(candidate.imageRotationId);
     showParameterInfo("提示", "旋转角度设置成功");
 }
-
-
-
-//关闭相机按钮
 void MainWindow::on_toolButton_closeCamera_clicked()
 {
     const OperationResult closeResult =
@@ -563,11 +528,10 @@ void MainWindow::on_toolButton_startInspection_clicked()
     m_inspectionInfoUi->label_runtimeStatus->setText(
                 result.acquisitionKind
                 == InspectionAcquisitionDto::HardwareTrigger
-                ? "触发模式运行中"
+                ? "硬触发模式运行中"
                 : "软触发模式运行中");
     updateOperationUiState();
 }
-// 检测相机
 void MainWindow::on_toolButton_openCamera_clicked()
 {
     PlcConnectionCommand plcCommand;
@@ -595,12 +559,14 @@ void MainWindow::on_toolButton_openCamera_clicked()
     if (result.plcConnectionFailed)
     {
         m_machineSettingsPage->restoreAppliedValues(
-                    QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+                    QStringList()
+                    << "plc.ip" << "plc.rack" << "plc.slot");
         QMessageBox::critical(this, "错误", "PLC连接失败");
     }
     else{
     saveAppliedHardwareSettings(
-                QStringList() << "plc.ip" << "plc.rack" << "plc.slot");
+                QStringList()
+                << "plc.ip" << "plc.rack" << "plc.slot");
     }
     updateOperationUiState();
 
@@ -626,7 +592,7 @@ void MainWindow::on_toolButton_openCamera_clicked()
         QMessageBox::warning(
             this,
             "警告",
-            "相机异常！");
+            "相机打开失败，请检查相机连接和参数。");
         return;
     }
 
@@ -648,14 +614,12 @@ void MainWindow::on_toolButton_openCamera_clicked()
     QMessageBox::information(this, "提示", openMessage);
 }
 
-// PLC模式选择
 void MainWindow::on_pushButton_applyPlcTriggerMode_clicked()
 {
     QStringList errors;
     applyPlcTriggerModeFromUi(&errors, true);
 }
 
-//剔除队列复位 清空还未发出的剔除信号
 void MainWindow::on_pushButton_resetRejectQueue_clicked()
 {
     const OperationResult result =
@@ -671,7 +635,6 @@ void MainWindow::on_pushButton_resetRejectQueue_clicked()
         return;
     }
     qCInfo(logRuntime).noquote() << "event=plc.reject_queue_reset";
-    QMessageBox::information(this, "提示", "剔除队列已清空！");
+    QMessageBox::information(
+                this, "提示", "待执行的剔除动作已清除。");
 }
-
-//设置颜色通道

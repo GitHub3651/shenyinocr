@@ -1,6 +1,4 @@
 #ifndef OCRGANGYIN_UI_INSPECTION_IMAGE_CANVAS_H
-// 文件作用：显示检测图像，并处理模板制作时的模式化矩形、多边形和鼠标键盘交互。
-// 模块位置：界面层；只保存显示坐标和绘制状态，不拥有模板业务、磁盘或检测算法。
 #define OCRGANGYIN_UI_INSPECTION_IMAGE_CANVAS_H
 
 #include "contracts/detection_mode.h"

@@ -1,4 +1,3 @@
-// 文件作用：实现模板路径展示、增加和批量引用移除。
 #include "ui/main_window/template/selection/template_selection_dialog.h"
 
 #include "application/settings_application_service.h"
@@ -117,11 +116,9 @@ void TemplateSelectionDialog::addTemplateFolder()
     if (!summary.valid) {
         QMessageBox::warning(
                     this, QStringLiteral("模板不可用"),
-                    (error.userMessage.isEmpty()
-                     ? QStringLiteral("所选文件夹不是当前模式的有效模板。")
-                     : error.userMessage)
-                    + QStringLiteral("\n\n")
-                    + QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
+                    error.userMessage.isEmpty()
+                    ? QStringLiteral("所选文件夹不是当前模式的有效模板。")
+                    : error.userMessage);
         return;
     }
     addPath(path);

@@ -1,4 +1,3 @@
-// 文件作用：实现检测启动前的轻量状态检查；模板字段校验由 TemplateStore 负责。
 #include "application/inspection_start_preflight.h"
 
 namespace {
@@ -49,7 +48,7 @@ InspectionStartPreflightResult InspectionStartPreflight::evaluateResources(
         return rejected(
                     InspectionStartIssue::TemplateResourcesInvalid,
                     QStringList()
-                    << QStringLiteral("读码组件不可用：%1")
+                    << QStringLiteral("二维码识别组件无法使用。%1")
                        .arg(input.barcodeDecoderError));
     }
     return InspectionStartPreflightResult();

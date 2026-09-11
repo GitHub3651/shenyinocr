@@ -1,7 +1,3 @@
-// 文件作用：本文件用于在后台等待相机帧，并按软触发、硬触发或预览模式提交采集结果。
-// 主要职责：在后台等待相机帧，并按软触发、硬触发或预览模式提交采集结果。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/capture_worker.h"
 
 #include <chrono>
@@ -16,7 +12,6 @@ constexpr int kSoftwareTriggerIntervalMs = 180;
 
 } // namespace
 
-// 函数说明：CaptureWorker 构造函数创建组件并初始化其依赖和初始状态。
 CaptureWorker::CaptureWorker(
     const std::shared_ptr<ICameraDevice> &cameraDevice)
     : m_cameraDevice(cameraDevice)
@@ -27,13 +22,11 @@ CaptureWorker::CaptureWorker(
     }
 }
 
-// 函数说明：~CaptureWorker 析构函数按生命周期要求释放组件持有的资源。
 CaptureWorker::~CaptureWorker()
 {
     stop();
 }
 
-// 函数说明：start 函数创建、准备或启动对应流程。
 bool CaptureWorker::start(
     CaptureMode mode,
     const CaptureWorkerCallbacks &callbacks)
@@ -52,7 +45,6 @@ bool CaptureWorker::start(
     return true;
 }
 
-// 函数说明：stop 函数停止流程、清理状态或释放对应资源。
 void CaptureWorker::stop()
 {
     m_stopRequested.store(true);
@@ -63,13 +55,11 @@ void CaptureWorker::stop()
     m_running.store(false);
 }
 
-// 函数说明：isRunning 函数检查相关状态并返回判断结果。
 bool CaptureWorker::isRunning() const
 {
     return m_running.load();
 }
 
-// 函数说明：run 函数执行对应事件或业务处理。
 void CaptureWorker::run()
 {
     int consecutiveFailures = 0;

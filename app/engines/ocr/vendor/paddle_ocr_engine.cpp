@@ -1,7 +1,3 @@
-// 文件作用：本文件用于把PaddleOCR实现封装为项目统一OCR引擎端口。
-// 主要职责：把PaddleOCR实现封装为项目统一OCR引擎端口。
-// 模块位置：引擎层；通过统一端口隔离OCR和二维码供应商实现。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "paddle_ocr_engine.h"
 
 #include "engines/ocr/vendor/paddle/include/config.h"
@@ -10,7 +6,6 @@
 
 #include "system_support/logging/log_categories.h"
 
-// 组件说明：PaddleOcrEngine 组件提供对应识别或解码能力的统一实现。
 struct PaddleOcrEngine::Impl
 {
     std::unique_ptr<PaddleOCR::OCRConfig> config;
@@ -19,7 +14,6 @@ struct PaddleOcrEngine::Impl
     std::unique_ptr<PaddleOCR::CRNNRecognizer> recognizer;
 };
 
-// 函数说明：PaddleOcrEngine 构造函数创建组件并初始化其依赖和初始状态。
 PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
     : m_impl(new Impl)
 {
@@ -81,7 +75,6 @@ PaddleOcrEngine::PaddleOcrEngine(const QString &configPath)
 
 PaddleOcrEngine::~PaddleOcrEngine() = default;
 
-// 函数说明：recognize 函数实现名称所表示的处理步骤。
 std::vector<std::string> PaddleOcrEngine::recognize(cv::Mat &image)
 {
     std::vector<std::vector<std::vector<int>>> boxes;

@@ -39,7 +39,7 @@
      <item row="1" column="0">
       <widget class="QLabel" name="label_outputDirectory">
        <property name="text">
-        <string>输出目录</string>
+        <string>结果保存文件夹</string>
        </property>
        <property name="buddy">
         <cstring>lineEdit_outputDirectory</cstring>

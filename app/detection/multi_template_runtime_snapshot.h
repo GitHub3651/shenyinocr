@@ -1,4 +1,3 @@
-// 文件作用：把已加载模板转换为检测线程直接读取的只读快照。
 #pragma once
 
 #include "detection/detectionmode/barcode_word/barcode_word_detection_pipeline.h"

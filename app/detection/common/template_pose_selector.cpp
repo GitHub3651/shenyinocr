@@ -1,4 +1,3 @@
-// 文件作用：从全部有效定位结果中选择最高分模板。
 #include "detection/common/template_pose_selector.h"
 
 bool TemplatePoseSelector::consider(

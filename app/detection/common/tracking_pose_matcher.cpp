@@ -1,7 +1,3 @@
-// 文件作用：本文件用于通过模板匹配计算跟踪区域的位置、角度和变换矩阵。
-// 主要职责：通过模板匹配计算跟踪区域的位置、角度和变换矩阵。
-// 模块位置：检测层；只处理图像、定位和判定，不访问界面、磁盘、PLC或相机SDK。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "detection/common/tracking_pose_matcher.h"
 
 #include <opencv2/imgproc.hpp>
@@ -10,7 +6,6 @@
 #include <cmath>
 #include <mutex>
 
-// 函数说明：init 函数创建、准备或启动对应流程。
 bool TrackingPoseMatcher::init(const cv::Mat &trackingTemplateBgr)
 {
     clear();
@@ -83,7 +78,6 @@ bool TrackingPoseMatcher::init(const cv::Mat &trackingTemplateBgr)
     return isReady();
 }
 
-// 函数说明：clear 函数停止流程、清理状态或释放对应资源。
 void TrackingPoseMatcher::clear()
 {
     m_templateGray.release();
@@ -92,7 +86,6 @@ void TrackingPoseMatcher::clear()
     m_smallRotatedTemplates.clear();
 }
 
-// 函数说明：isReady 函数检查相关状态并返回判断结果。
 bool TrackingPoseMatcher::isReady() const
 {
     return !m_templateGray.empty()
@@ -101,7 +94,6 @@ bool TrackingPoseMatcher::isReady() const
                == m_smallRotatedTemplates.size();
 }
 
-// 函数说明：prepareFrame 函数创建、准备或启动对应流程。
 bool TrackingPoseMatcher::prepareFrame(
     const cv::Mat &frameBgr,
     cv::Mat *gray,
@@ -129,7 +121,6 @@ bool TrackingPoseMatcher::prepareFrame(
     return !smallGray->empty();
 }
 
-// 函数说明：match 函数执行对应事件或业务处理。
 DetectionPose TrackingPoseMatcher::match(
     const cv::Mat &frameBgr,
     const std::vector<cv::Point2f> &relativeDatePolygon) const
@@ -143,7 +134,6 @@ DetectionPose TrackingPoseMatcher::match(
     return matchPrepared(gray, smallGray, relativeDatePolygon);
 }
 
-// 函数说明：matchPrepared 函数执行对应事件或业务处理。
 DetectionPose TrackingPoseMatcher::matchPrepared(
     const cv::Mat &gray,
     const cv::Mat &smallGray,

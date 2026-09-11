@@ -1,4 +1,3 @@
-// 文件作用：构造主窗口、连接页面和应用服务，并维护顶层界面生命周期。
 #pragma once
 
 #ifndef GLOG_NO_ABBREVIATED_SEVERITIES

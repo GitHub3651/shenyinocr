@@ -7,7 +7,7 @@
 | 文件 | 职责 |
 |---|---|
 | `inspection_runtime.h/.cpp` | 唯一运行实例；创建不可变 `InspectionRunContext`，启停工作线程和 Fault。 |
-| `camera_session.h/.cpp` | 相机预览/正式采集会话，向 Runtime 提交帧。 |
+| `camera_session.h/.cpp` | 相机预览/正式采集会话，复用 `contracts/camera_operation_result.h` 并向 Runtime 提交帧。 |
 | `capture_worker.h/.cpp` | 采集线程。 |
 | `frame_queue.h/.cpp` | 有界帧队列。 |
 | `detection_worker.h/.cpp` | 单检测工作线程和执行器。 |
@@ -15,7 +15,7 @@
 | `inspection_plc_controller.h/.cpp` | PLC 运行写入和延迟剔除队列。 |
 | `image_save_service.h/.cpp` | 原图/标注图保存。 |
 | `result_presentation_mailbox.h/.cpp` | 工作线程到 UI 的有界结果邮箱。 |
-| `inspection_presentation.h`、`inspection_presentation_renderer.*` | 结果显示数据和渲染。 |
+| `contracts/inspection_presentation.h`、`inspection_presentation_renderer.*` | 跨层结果显示数据和运行时渲染。 |
 
 ## 生命周期
 

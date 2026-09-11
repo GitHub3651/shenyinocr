@@ -1,14 +1,9 @@
-// 文件作用：本文件用于把检测结果、原图和覆盖图形组合成统一的界面呈现数据。
-// 主要职责：把检测结果、原图和覆盖图形组合成统一的界面呈现数据。
-// 模块位置：运行时层；负责编排采集、检测、结果、PLC和存图生命周期。
-// 协作说明：本文件只通过明确的接口与其他模块协作，不改变既有业务行为。
 #include "runtime/inspection_presentation_renderer.h"
 
 #include <algorithm>
 #include <string>
 
 namespace {
-// 函数说明：polygonTopCenter 函数实现名称所表示的处理步骤。
 cv::Point polygonTopCenter(const std::vector<cv::Point> &polygon)
 {
     if (polygon.empty()) {
@@ -33,7 +28,6 @@ cv::Point polygonTopCenter(const std::vector<cv::Point> &polygon)
         (sorted[0].y + sorted[1].y) / 2);
 }
 
-// 函数说明：drawPolygon 函数实现名称所表示的处理步骤。
 void drawPolygon(
     cv::Mat &image,
     const std::vector<cv::Point> &polygon,
@@ -47,7 +41,6 @@ void drawPolygon(
     cv::polylines(image, polygons, true, color, thickness);
 }
 
-// 函数说明：drawCharacter 函数实现名称所表示的处理步骤。
 void drawCharacter(
     cv::Mat &image,
     const DetectionOverlayPolygon &polygon,
@@ -132,14 +125,12 @@ void drawTissueEllipse(
 }
 }
 
-// 函数说明：renderRawFrame 函数把原图转换为界面图像，不绘制检测覆盖层。
 QImage InspectionPresentationRenderer::renderRawFrame(
     const cv::Mat &image)
 {
     return renderDetectionFrame(image, DetectionOverlay());
 }
 
-// 函数说明：renderDetectionFrame 函数只绘制与本次图像同时传入的检测覆盖层。
 QImage InspectionPresentationRenderer::renderDetectionFrame(
     const cv::Mat &image,
     const DetectionOverlay &overlay)

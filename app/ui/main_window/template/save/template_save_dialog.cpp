@@ -1,4 +1,3 @@
-// 文件作用：实现产品模板保存位置对话框。
 #include "ui/main_window/template/save/template_save_dialog.h"
 
 #include "ui_template_save_dialog.h"

@@ -1,4 +1,3 @@
-// 文件作用：把Qt日志同步写入会话文件和stderr，并控制新格式日志占用空间。
 #include "system_support/logging/application_logger.h"
 
 #include "system_support/logging/log_categories.h"
