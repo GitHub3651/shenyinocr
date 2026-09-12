@@ -54,7 +54,7 @@ MainWindow::MainWindow(
         ui->splitter_leftDrawerMain->setSizes(
                     QList<int>()
                     << 400
-                    << ui->splitter_leftDrawerMain->width() - 400);
+                    << 1200);
     } else {
         ui->splitter_leftDrawerMain->restoreState(
                     m_settingsApplicationService->current()
