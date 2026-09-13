@@ -81,7 +81,7 @@ EditableTemplate::rawImage
 | 模板实时取景 | 当前模式模板制作标题 | `实时取景中，调整产品位置后点击拍照并开始框选。` | 显示 |
 | 模板冻结并框选 | 当前模式模板制作标题 | 当前步骤、区域、点数或错误提示 | 显示 |
 | 正式识别 | `【当前状态】` | `正在检测中...` | 显示 |
-| 停止中或故障 | 无 | 停止或故障状态只走原有状态/故障呈现 | 隐藏 |
+| 停止中或故障自动停止 | 无 | 统一按停止中状态呈现 | 隐藏 |
 | 停止识别后仍显示最后一帧相机图像 | 无 | 不把相机图像冒充成模板原图 | 隐藏 |
 | 模板不存在、加载失败或没有原图 | 无 | 原有错误提示保持 | 隐藏 |
 | 纸巾模式 | 无 | 纸巾不使用模板 | 隐藏 |
@@ -99,7 +99,7 @@ EditableTemplate::rawImage
 
 ## 5. 简洁实现原则
 
-1. `InspectionPage` 直接更新自己已经持有的 `label_runtimeStatus`，`OperationUiPolicy` 继续管理相机、识别、停止、故障和模板取景等统一操作状态；两者都不再把普通运行状态转发给 `TemplateEditorPage`。
+1. `InspectionPage` 直接更新自己已经持有的 `label_runtimeStatus`，`OperationUiPolicy` 继续管理相机、识别、停止和模板取景等统一操作状态；故障自动停止按停止中呈现。
 2. `TemplateEditorPage` 只管理图像上下文提示栏中的正式检测状态、模板来源、模板实时取景说明和绘图向导，不写普通运行状态栏。
 3. 四种模板模式只在公共 `loadTemplateAtIndex()` 增加一次来源显示，不按模式复制代码。
 4. 模板名称复用现有 `QFileInfo(path).fileName()` 和 `m_currentTemplateDisplayName`，不新增正式状态字段。
@@ -120,7 +120,7 @@ EditableTemplate::rawImage
 1. `present()` 显示有效检测图像后，直接把“正在显示相机采集图像...”写入现有 `label_runtimeStatus`。
 2. 删除唯一用途为转发该文字的 `InspectionPage::Callbacks::updateImageDisplayStatus`。
 3. 如果 `Callbacks` 删除该字段后为空，则删除整个 `Callbacks` 结构、构造参数和成员，不保留空壳。
-4. 保持现有 ROI 警告、Fault 样式、识别结果、模板名称、统计和耗时呈现不变。
+4. 保持现有 ROI 警告、普通运行状态样式、识别结果、模板名称、统计和耗时呈现不变。
 
 目标调用链：
 
@@ -233,7 +233,7 @@ showTemplateImageSource(QFileInfo(path).fileName())
 - 模板原图为空或无法显示；
 - 移除最后一个模板；
 - 切换到纸巾模式；
-- 正式识别停止中或进入 Fault；
+- 正式识别停止中或触发故障自动停止；
 - 关闭相机；
 - 模板预览失败或退出模板制作且当前画面不是磁盘模板原图。
 
@@ -280,7 +280,7 @@ showTemplateImageSource(QFileInfo(path).fileName())
 - 模板 Schema、AppSettings、模板目录和资源文件名。
 - 正式识别算法、结果、阈值、模板最高分选择、统计、耗时、PLC 和存图合同。
 - OperationUiPolicy 的按钮文字、启用状态和禁用原因。
-- Fault 呈现和现场安全提示。
+- 故障自动停止和现场安全提示。
 - 正式样式继续只来自 `app_theme.qss`。
 
 允许改变的用户可观察行为只有：
@@ -328,7 +328,7 @@ showTemplateImageSource(QFileInfo(path).fileName())
 ### 步骤 3.1：补充正式检测状态
 
 1. 让 `TemplateEditorPage::applyOperationState()` 接收现有强类型 `OperationUiState`。
-2. `Detecting` 时显示固定检测状态；`Stopping/Fault` 时复用 `cancelTemplateDrawing()` 隐藏。
+2. `Detecting` 时显示固定检测状态；停止中（包括故障自动停止）复用 `cancelTemplateDrawing()` 隐藏。
 3. 不新增状态字段、字符串回调、管理类、`.ui` 控件或 QSS。
 
 ### 步骤 4：静态收口
@@ -369,7 +369,7 @@ showTemplateImageSource(QFileInfo(path).fileName())
 - `updateImageDisplayStatusText`、`InspectionPage::Callbacks`、`updateImageDisplayStatus` 和 `inspectionPageCallbacks` 在生产代码中均为零引用。
 - “正在显示相机采集图像...”在生产代码中仅剩 `InspectionPage::present()` 一处；模板来源文案仅剩 `TemplateEditorPage` 一处。
 - `showTemplateImageSource()` 只有公共模板加载成功链的一处运行调用；`showTemplateCaptureStatus()` 只有实时取景的一处运行调用并包含 `Previewing/Frozen` 门禁。
-- `showInspectionStatus()` 只有统一操作状态入口的一处运行调用，`Stopping/Fault` 复用 `cancelTemplateDrawing()` 隐藏。
+- `showInspectionStatus()` 只有统一操作状态入口的一处运行调用，停止中（包括故障自动停止）复用 `cancelTemplateDrawing()` 隐藏。
 - `TemplateEditorPage` 已不再持有或访问 `label_runtimeStatus`，四个显示函数均只操作现有图像上下文提示栏。
 - 生产代码差异严格限定为第 7 节所列七个 C++ 文件；预计不修改模块差异为零，没有新增生产文件、类、状态、持久化字段或资源。
 - 严格 UTF-8 解码、文件末尾换行和 `git diff --check` 已通过。

@@ -6,7 +6,7 @@
 - 审查日期：2026-08-21。
 - 审查范围：`app/AutoOCRproject.pro`、`app/runtime`、`app/application`、`app/contracts`，并反向检查其对 `ui`、`startup`、`templates`、`detection`、`devices` 和 `engines` 的影响。
 - 本文性质：只记录当前代码事实、问题判断和推荐精简顺序，不代表已经实施这些修改。
-- 行为边界：不建议删除已经验证的 Runtime 状态机、产品身份、故障锁定、设备异常保护、有界队列、异步存图和模板安全保存机制。
+- 行为边界：不建议删除已经验证的 Runtime 状态机、产品身份、故障自动停止、设备异常保护、有界队列、异步存图和模板安全保存机制。
 
 ## 2. 总体结论
 
@@ -234,7 +234,7 @@ application/
 - 有界队列和反压。
 - `InspectionRuntime` 状态机。
 - 产品 `ProductKey` 和一次结果去重。
-- Fault 锁定和人工确认恢复。
+- Fault 首因记录和自动停止。
 - `InspectionPlcController`。
 - 异步 `ImageSaveService`。
 - 软触发和硬触发的不同队列策略。
@@ -402,7 +402,6 @@ readSettings()
 - `clearImageLabelRects`。
 - `showRoiWarningOnCancelled`。
 - `saveRawOnly`。
-- `saveNotEvaluatedAsNg`。
 - `elapsedDecimals`。
 
 这些大部分是当前运行模式的固定策略，却被复制到每一件产品的检测结果中，再由 `app/detection/detection_registry.cpp:78` 的 `applyDescriptorPolicy()` 每次写入。
@@ -465,7 +464,7 @@ readSettings()
 
 - Runtime 状态机。
 - 产品身份和一次结果约束。
-- Fault 锁定与人工确认恢复。
+- Fault 首因记录和自动停止。
 - 相机和 PLC 设备异常保护。
 - 有界检测队列和 UI 反压。
 - 异步图像保存。

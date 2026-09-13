@@ -1,6 +1,6 @@
 # OCRGangYin 现有功能对照表
 
-> 原始功能基线版本：`1c8d564fe42ce5717b7606513cc2b426a367ff4b`；2026-08-16 新终局治理基准：`8595cb2`。本表按当前生产源码、UI、工程、资源和脚本人工反向核对；不以目标架构推测现有行为。2026-08-16 用户批准删除 `MC-001..003`，并批准 Fault 不再对唯一未结论产品猜测性补发 NG；本阶段只更新治理状态，不表示删除代码已经完成。
+> 原始功能基线版本：`1c8d564fe42ce5717b7606513cc2b426a367ff4b`；2026-08-16 新终局治理基准：`8595cb2`。本表按当前生产源码、UI、工程、资源和脚本人工反向核对；不以目标架构推测现有行为。运行 Fault 保留已有算法结论，未完成产品统一记为 `Unconfirmed`。
 
 ## 状态与证据约定
 
@@ -22,35 +22,35 @@
 
 | 范围 | 当前唯一正式路径 | 已删除的旧路径 | 待用户统一验证 |
 |---|---|---|---|
-| 导航与抽屉 | 80px 左侧导航栏控制同一个五页抽屉；抽屉与主画面由 `splitter_leftDrawerMain` 承载 | 右侧方向对象名、方法名和 QSS 选择器均已删除，不保留别名或转发层 | 五入口打开、切换、再次点击收起及 Fault 首次打开检测信息页 |
+| 导航与抽屉 | 80px 左侧导航栏控制同一个五页抽屉；抽屉与主画面由 `splitter_leftDrawerMain` 承载 | 右侧方向对象名、方法名和 QSS 选择器均已删除，不保留别名或转发层 | 五入口打开、切换、再次点击收起及故障自动停止后保持当前抽屉 |
 | 宽度保存 | 正常关闭时用 `QSplitter::saveState()` 保存到 `AppSettings::leftDrawerSplitterState`，JSON 只写 `ui.leftDrawerSplitterStateBase64` | 不连接 `splitterMoved`，不保存独立宽度，不迁移或兼容读取 Schema 7 | 首次 400px、拖动及重启恢复 |
 | 文字显示 | `label_recognitionText` 和四个统计值使用 20px；识别结果允许任意字符换行，目标文字使用 `WrapAtWordBoundaryOrAnywhere` | 无第二份识别结果，不改变原始检测文字 | 长二维码、序列号和目标文字不再撑出页面横向滚动条 |
-| 判定栏 | 闲置为空且与主画布同为 `#202830`；OK/NG 使用 56px 绿色“正确”和红色“错误”；Fault 保持原深红样式 | `showWaitingResult()` 及“等待检测/等待结果”文字已删除 | 首次启动、视图清空、OK/NG、Fault 和恢复显示 |
+| 判定栏 | 闲置为空且与主画布同为 `#202830`；OK/NG 使用 56px 绿色“正确”和红色“错误” | `showWaitingResult()` 及“等待检测/等待结果”文字已删除 | 首次启动、视图清空、OK/NG 和故障自动停止 |
 
 主程序已通过 qmake、MSVC x64 Release 编译、链接和运行库部署；真实交互、重启状态和长文本效果等待用户统一验证。
 
 ## 二维码结果本机 CSV 直写（2026-09-03，代码实施完成待统一验证）
 
-二维码+三期的结果输出已从远程 TCP 发送替换为主程序本机每日 CSV 直接追加。本节是当前实现事实，覆盖后文历史条目中关于 `resultExport`、连接状态、ACK、内存 FIFO、传输 Fault 和退出待发送提示的描述；`tools/result_receiver/` 不在本轮范围内。
+二维码+三期的结果输出使用主程序本机每日 CSV 直接追加；`tools/result_receiver/` 独立维护。
 
-| 范围 | 当前唯一正式路径 | 已删除的旧路径 | 待用户统一验证 |
+| 范围 | 当前正式路径 | 当前行为 | 待用户统一验证 |
 |---|---|---|---|
-| 设置与 UI | 严格 AppSettings Schema 8 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期页只保留启用、只读目录和选择目录 | `resultExport`、IP、端口、连接/断开、状态和延迟 UI | Schema 7 整体重置、目录与启用状态保存/恢复、未选目录时拒绝启用 |
-| 启动与运行配置 | 启用时开始识别只调用 `QDir::mkpath()` 准备目录；本轮配置冻结开关和目录；不创建测试文件或写探针 | TCP 已连接门禁、连接状态快照和专用 Fault 恢复门禁 | 目录可创建/不可创建、其他四模式无 CSV、运行中控件禁用 |
-| 正式结果事务 | `ResultService::process()` 在 `claimResult()` 后按本机日期追加 `qr_results_YYYYMMDD.csv`，成功后才 `finalizeResultClaim()`；OK 写二维码原文，整体 NG 写 `noQR` | 发送记录、ACK、内存队列及网络 Worker | BOM、无表头、转义、逐行 flush、同日续写和跨日新文件 |
-| 失败与关闭 | 打开、写入或 flush 失败记录 ERROR 并进入 `BarcodeCsvUnavailable` 通用 Fault；关闭流程无待发送数据 | `ResultExportUnavailable`、pending 查询和退出丢失提示 | 首件和运行中写入失败弹出 Fault、统计/PLC/呈现停止、确认后 Unconfirmed reconciliation |
+| 设置与 UI | 严格 AppSettings Schema 8 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期页只保留启用、只读目录和选择目录 | 运行期间按统一权限规则禁用修改 | Schema 7 整体重置、目录与启用状态保存/恢复、未选目录时拒绝启用 |
+| 启动与运行配置 | 启用时开始识别只调用 `QDir::mkpath()` 准备目录；本轮配置冻结开关和目录 | 目录准备不创建测试文件或写探针 | 目录可创建/不可创建、其他四模式无 CSV、运行中控件禁用 |
+| 正式结果事务 | `ResultService::process()` 在 `claimResult()` 后按本机日期追加 `qr_results_YYYYMMDD.csv`，成功后才 `finalizeResultClaim()`；OK 写二维码原文，整体 NG 写 `noQR` | 每件正式结果只追加一次 | BOM、无表头、转义、逐行 flush、同日续写和跨日新文件 |
+| 失败与关闭 | 打开、写入或 flush 失败记录 ERROR 并进入 `BarcodeCsvUnavailable` 通用 Fault；自动停止后回到 Idle | 关闭流程不保留待发送数据 | 首件和运行中写入失败自动停止，统计/PLC/呈现停止，未完成产品记为未确认 |
 
 Agent 已完成旧业务符号、旧网络依赖、工程清单、UI/翻译 XML、UTF-8、末尾换行、`git diff --check` 和接收端零差异静态检查；未运行 qmake、构建、测试程序或主程序。
 
 ## 正式产品失效安全 A2（2026-08-30，代码实施完成待统一验证）
 
-A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEvaluated`、二维码日期结果回调包装和所有 ROI 专用警告链路。无定位、ROI 无效、OCR 空文本、二维码不可读/正常超时均形成普通 NG；执行期引擎异常、有效定位后的非法模板下标、预处理失败和无效 completion 进入现有 Runtime Fault，不伪造产品 NG。`label_runtimeStatus` 不再显示 ROI 无效提示，仍保留运行中、停止、Fault、模板制作和存图失败等既有状态。
+A2 的正式产品结果固定为 `Ok/Ng`。无定位、ROI 无效、OCR 空文本、二维码不可读/正常超时均形成普通 NG；执行期引擎异常、有效定位后的非法模板下标、预处理失败和无效 completion 进入现有 Runtime Fault，不伪造产品 NG。`label_runtimeStatus` 保留运行中、停止、模板制作和存图失败等状态。
 
 | A2 范围 | 当前唯一正式路径 | 本轮代码证据 | 待用户统一验证 |
 |---|---|---|---|
 | 结果契约与五种 Pipeline | `DetectionResult` 仅 `AlgorithmVerdict::Ok/Ng`；五种 Pipeline 明确区分普通 NG 与异常抛出 | A2-1/A2-2 已完成；旧状态符号静态零引用 | Qt Creator qmake、Clean/Rebuild、五模式软触发 OK/NG、无定位/ROI 边界 |
 | Registry、ResultService 与 Fault | 合法 completion 只有一个 `process()` 出口；Fault 复用 Worker→Runtime 主链；取消只在队列/生命周期层 | A2-3/A2-4 已完成；无取消结果事务和无 ROI 发布调用 | OCR/二维码引擎异常、模板下标越界、预处理失败、延迟 NG 顺序 |
-| ROI 与 UI 警告 | 所有模式 ROI 无效只形成 NG，不更新 `label_runtimeStatus`；其他存图、模板制作和 Fault 提示保留 | A2-5 已完成；ROI 警告符号、信号、方法和主窗口连接均为零 | 软/硬触发连续运行时状态显示，存图失败与 Fault 提示不回归 |
+| ROI 与 UI 警告 | 所有模式 ROI 无效只形成 NG，不更新 `label_runtimeStatus`；存图失败和模板制作提示保持 | A2-5 已完成；ROI 警告符号、信号、方法和主窗口连接均为零 | 软/硬触发连续运行时状态显示，存图失败和故障自动停止不回归 |
 
 本表新增 A2 条目在用户统一验证通过前保持“迁移中/待验证”语义；Agent 未执行 Qt Creator 构建、真实相机、PLC 或机械现场验证。
 
@@ -100,7 +100,7 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | 影响功能ID | 当前唯一正式路径 | 本阶段已删除的旧路径 | 本轮门禁重点 |
 |---|---|---|---|
 | `RUN-001..003` | `InspectionApplicationService::start/stop`统一完成访问预检、当前UUID配方重新准备、五模式资源预检、`InspectionRunContext`快照建立、运行事务和协作停止；检测状态只来自`InspectionRuntimeController`并通过只读`RuntimeSnapshot`投影给UI | `InspectionStartController`、`InspectionStopController`、两个业务`friend`、`isCollecting`、`m_operationState`、`m_bOpenDevice`、`hasRunningInspectionThread`及停止中的`QCoreApplication::processEvents`兜底已删除 | 五模式启动/停止/重启；快速重复启动只形成一条运行链；停止后可再次启动；线程退出无残留 |
-| `UI-002、SET-004..005` | Widget只收集脏参数名称、展示确认/错误并调用应用服务；继续运行时由`SettingsApplicationService`丢弃草稿，按钮状态由`RuntimeSnapshot`和模板编辑状态计算；设置页的保存、默认、清空继续只经设置应用服务写Store | UI不再自行决定检测运行状态，也不直接构造启停控制器；设置页不再持有或写`MachineSettingsStore` | 预检提示顺序、未应用参数取消/继续及原值恢复；运行中关键参数禁用；普通停止不误触发Fault样式复位 |
+| `UI-002、SET-004..005` | Widget只收集脏参数名称、展示确认/错误并调用应用服务；继续运行时由`SettingsApplicationService`丢弃草稿，按钮状态由`RuntimeSnapshot`和模板编辑状态计算；设置页的保存、默认、清空继续只经设置应用服务写Store | UI不再自行决定检测运行状态，也不直接构造启停控制器；设置页不再持有或写`MachineSettingsStore` | 预检提示顺序、未应用参数取消/继续及原值恢复；运行中关键参数禁用；正常停止与故障自动停止均回到空闲界面 |
 | `CAM-001..002` | 打开/关闭命令统一进入`InspectionApplicationService`并返回结构化结果；保持先尝试PLC连接、PLC失败不阻止打开首台相机、曝光越界调整后事务保存以及忙碌时拒绝关闭的既有语义 | 相机开关状态不再由Widget布尔字段保存；开关入口不再自行判定重复运行状态 | 无PLC开相机、相机枚举/打开/曝光失败提示、空闲关闭、检测中和模板制作中拒绝关闭 |
 | `PLC-001..004` | 延迟连接、打开相机附带连接、手动连接/断开、触发模式、工艺参数和拍照距离命令统一经`InspectionApplicationService`进入既有Runtime/PLC端口；启动执行使用本次MachineSettings快照下发 | UI入口不再直接调用PLC连接、断开、触发和工艺参数命令；失败不更新已应用值 | Fake验证连接/断开、0/1触发值、固定地址与大端顺序、首错停止；真实PLC和现场时序继续标为待验 |
 
@@ -122,16 +122,16 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 
 ### 阶段4已验证调用链覆盖
 
-阶段4曾建立`InspectionRuntime`、`PipelineRegistry`、`ResultService`、`RuntimeSnapshot`和`InspectionPresentation`，并删除旧Runtime Controller/Transaction/Fault/Reconciler、自动补建会话、UI结果协调以及UI侧PLC/存图编排。2026-08-18架构精简S2～S7又将模式装配和Profile快照迁入Detection，删除Runtime中的`PipelineRegistry/InspectionProfileSnapshot`，并统一五模式结果入口。下表覆盖后续各ID行保留的阶段0历史基线描述；发生冲突时以下表为当前事实。正常算法、统计、PLC 0/49→约100ms→0、存图和UI语义保持；Fault只停止新正式受理、保留已有算法结论并把未完成产品记为`Unconfirmed`，不补发兜底49。
+当前运行链由 `InspectionRuntime`、`ResultService`、`RuntimeSnapshot` 和 `InspectionPresentation` 组成；模式装配和 Profile 快照归 Detection 管理，五种模式共用统一结果入口。下表以当前事实为准：正常算法、统计、PLC 0/49→约100ms→0、存图和 UI 语义保持；Fault 停止新的正式受理，保留已有算法结论，并将未完成产品记为 `Unconfirmed`。
 
 | 影响功能ID | 当前唯一正式路径 | 本阶段已删除的旧路径 | 本轮门禁重点 |
 |---|---|---|---|
 | `SYS-008、CAM-001..002、PLC-001..004` | 延迟连接、相机附带连接、手动连接/断开、触发模式和工艺参数继续由`InspectionApplicationService`命令进入唯一`InspectionRuntime`与`InspectionPlcController`；启动参数只取本次MachineSettings快照 | `InspectionRuntimeController`及UI侧启动PLC参数编排已删除；Widget不再持有PLC结果脉冲状态 | 无PLC不阻止主窗/开相机；Fake连接、断开、0/1、固定地址/大端顺序；真实PLC仍不冒充验收 |
 | `SYS-010、UI-001..003、SET-005` | 五模式使用稳定`DetectionMode`；运行状态与只读`RuntimeSnapshot`来自唯一Runtime；结果图由Runtime内纯渲染器生成，再由UI绑定应用；运行中硬件参数门禁继续查询同一状态 | 旧模式整数Worker工厂、UI目录反向依赖、第二套结果状态和运行Controller查询已删除 | Release Run qmake/Rebuild；五模式控件/图像/Overlay；运行中参数禁用和退出释放 |
-| `UI-004..005、RES-001..005` | 每个`ProductKey`只允许一次`ResultService`事务：形成完整`InspectionPresentation`，正常统计更新一次，再经容量1邮箱整体呈现；Fault使用独立异常统计和“视觉检测已暂停、输送线状态未知”说明 | `InspectionResultCoordinator`、`DetectionCompletionController`、旧ResultHandler、分散五模式收尾和Fault兜底计数展示已删除 | 五模式图文/模板名/判定/耗时/统计同产品；重复结果只呈现/统计一次；Fault不改变已有判定 |
+| `UI-004..005、RES-001..005` | 每个`ProductKey`只允许一次`ResultService`事务：形成完整`InspectionPresentation`，正常统计更新一次，再经容量1邮箱整体呈现；运行故障自动停止，未完成产品记为未确认 | `InspectionResultCoordinator`、`DetectionCompletionController`、旧ResultHandler、分散五模式收尾和兜底计数展示已删除 | 五模式图文/模板名/判定/耗时/统计同产品；重复结果只呈现/统计一次；故障不改变已有判定 |
 | `DET-001..008` | `DetectionRegistry`按PreparedRecipe和唯一`DetectionModeDescriptor`选择纸巾、钢印、字库、OCR或二维码+三期Pipeline；全部Worker容量1并把同一种`DetectionCompletion`交给唯一ResultService | Runtime旧`PipelineRegistry`、五种结果Consumer/收尾函数、`DetectionModeWorkerFactory`、`DetectionSession`及Widget中的模式装配/结果出口已删除；算法失败不切换其他算法 | 五模式固定样本与资源；定位失败仍形成既有NG；系统故障与产品NG严格分离 |
-| `RUN-001..006` | 每次启动只创建一个不可变`InspectionRunContext`，冻结runId、开始时间、MachineSettings、PreparedRecipe和Profile；Runtime唯一拥有Worker、产品账本、Fault和容量1呈现邮箱；停止按采集→Worker→相机恢复协作完成 | 启动/停止Transaction、旧FaultState、ProductReconciler、自动补建运行会话和并行运行状态已删除 | 五模式启停/重启、软硬触发背压、重复结果、Fault首因、停止后线程退出及下一次预检 |
-| `PLC-005..007` | 正常OK写0；正常NG写49并由ResultService约100ms后写0；延迟NG队列携带原始ProductKey且只输出一次；任一写失败进入Fault并停止新的正式受理 | UI回调写PLC、旧完成控制器/ResultHandler队列及“唯一未结论产品兜底49”分支已删除 | Fake锁定0、49→0、延迟位置、重复去重、写失败零兜底；不声称机械剔除成功 |
+| `RUN-001..006` | 每次启动只创建一个不可变`InspectionRunContext`，冻结runId、开始时间、MachineSettings、PreparedRecipe和Profile；Runtime唯一拥有Worker、产品账本、Fault和容量1呈现邮箱；停止按采集→Worker→相机恢复协作完成，故障后自动回到Idle | 单一运行会话和状态边界 | 五模式启停/重启、软硬触发背压、重复结果、Fault首因、停止后线程退出及下一次预检 |
+| `PLC-005..007` | 正常OK写0；正常NG写49并由ResultService约100ms后写0；延迟NG队列携带原始ProductKey且只输出一次；任一写失败进入Fault并停止新的正式受理 | PLC 输出由 ResultService 与运行控制器统一编排 | Fake锁定0、49→0、延迟位置、重复去重和写失败自动停止；不声称机械剔除成功 |
 | `SAVE-001..005` | ResultService按运行设置快照每产品最多提交一个`ImageSaveTask`；`ImageSaveService`保持容量32、两个写线程、队满阻塞且不丢任务，原图/标注图仍来自同一帧 | UI侧保存模式判断、任务拼装和结果协调器私有存图服务已删除 | 四种策略、三种图像组合、OCR同帧原图、JPEG 92、不可写报警和慢盘反压 |
 
 正式功能当前状态为待盘点0、已基线0、迁移中0、已验证87、已延期0、已确认删除3。2026-08-18用户确认Runtime/Recipes认知精简S8统一门禁通过；本轮实际调用链影响`SYS-007、SYS-010、UI-001..002、SET-003、SET-008..010、TPL-001..016、CAM-003..004、RUN-001..006`共32项，已全部从`迁移中`恢复为`已验证`。其余55项持续保持`已验证`；真实PLC、机械剔除和现场恢复仍单列待验。
@@ -169,10 +169,10 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | ID | 功能分类 | 当前入口/触发 | 前置条件和操作步骤 | 当前文件、关键函数和调用链 | 输入/设置、默认值及生效时机 | 当前正常结果和失败路径 | 副作用（磁盘/统计/PLC/线程） | 当前基线 | 目标模块/位置 | 动作 | 从原入口执行的验证方法 | 状态 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | UI-001 | 模式与参数页面 | “识别模式”下拉框 | 非检测/非模板忙碌状态 | `comboBox_4::currentIndexChanged`→`setupDetectModeChangeTracking`→存旧模式路径→`restoreTemplatesForMode`→更新可见参数；本切片统一钢印与字库家族的当前模板编辑区并恢复钢印字符切割入口 | 界面固定顺序：模板匹配、字库匹配、深度模型、纸巾检测、二维码+三期；内部ID依次为stamp/word/ocr/tissue/barcode_word | 切换对应参数和模板历史；钢印显示单Profile编辑选择及字符切割；无效历史保留空状态并可提示 | 保存当前模式和模板历史 | 五个现有入口不可丢失，钢印不能退化为仅重叠检测 | `ui/main_window/settings/` | 保留 | 依次切换五模式，核对控件显隐、模板名、历史恢复；钢印编辑区与字库家族布局一致 | 已验证 | S；U；2026-08-13用户确认钢印编辑区、字符裁切入口及两种单模板模式切换均正常；2026-08-15用户确认最终Qt Creator门禁通过：detection_completion_test 112项、recipe_store_test 31项及主程序操作状态、未应用参数和跨模式模板记忆均正常 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 ；2026-08-15固定四轮第3轮集中门禁通过（详见执行记录）；2026-08-18用户确认S8统一门禁通过 |
-| UI-002 | 操作状态与按钮使能 | 开相机、预览、冻结、检测、停止、关闭 | 任意主流程状态变化 | `updateOperationUiState`+`updateHardwareParameterUiEnabled`；检测ROI外扩碰边时直接裁到原图边界；Fault人工恢复只有在产品收口完成后才能解除锁定 | `CameraClosed/CameraReady/TemplatePreviewing/TemplateFrozen/Detecting/Stopping/Fault` | 只允许当前状态合法动作；Fault只保留人工确认恢复入口；未收口产品或PLC复位失败继续保持Fault；边缘ROI继续检测 | 控件enable/style变化 | 状态机可观察行为保持；Fault必须人工确认且产品收口完成 | `ui/controllers/main_page_controller.*`+运行控制器 | Stage 4异常恢复迁移 | 喷码区域靠四边连续检测并点击停止；制造PLC断连或硬触发过载，核对Fault锁定、产品收口和人工恢复 | 已验证 | S；T；U；第三轮130项自动测试及无PLC主程序门禁通过；真实PLC Fault锁定/恢复继续延期补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 ；2026-08-15固定四轮第2轮：146项运行测试及主程序集中门禁通过 ；2026-08-15固定四轮第3轮集中门禁通过（详见执行记录）；2026-08-18用户确认S8统一门禁通过 |
+| UI-002 | 操作状态与按钮使能 | 开相机、预览、冻结、检测、停止、关闭 | 任意主流程状态变化 | `updateOperationUiState`+`updateHardwareParameterUiEnabled`；检测ROI外扩碰边时直接裁到原图边界；运行故障对外映射为`Stopping`，自动停止完成后回到`Idle` | `CameraClosed/CameraReady/TemplatePreviewing/TemplateFrozen/Detecting/Stopping` | 只允许当前状态合法动作；故障触发自动停止并清理未完成产品；边缘ROI继续检测 | 控件enable/style变化 | 状态机可观察行为保持；故障不暴露为长期界面状态 | `ui/controllers/main_page_controller.*`+运行控制器 | Stage 4异常停止收口 | 喷码区域靠四边连续检测并点击停止；制造PLC断连或硬触发过载，核对自动停止、一次警告和回到Idle | 已验证 | S；T；U；第三轮130项自动测试及无PLC主程序门禁通过；真实PLC自动停止继续待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 ；2026-08-15固定四轮第2轮：146项运行测试及主程序集中门禁通过 ；2026-08-15固定四轮第3轮集中门禁通过（详见执行记录）；2026-08-18用户确认S8统一门禁通过 |
 | UI-003 | 图像自适应显示 | 相机帧、检测结果、模板原图 | `InspectionImageCanvas`有图像 | `DetectionResultPresenter`按原图绘制结果Overlay并输出QImage，Widget薄桥继续交给`InspectionImageCanvas::setAutoFitPixmap/resizeEvent`按宽高比缩放居中 | 当前控件尺寸 | 缩放但不改变原图；空图清空 | Presenter短期生成QImage，`InspectionImageCanvas`仅缓存QPixmap | 保持缩放、居中和重绘 | `ui/presenters/detection_result_presenter.*`+`ui/main_window/inspection_image_canvas.*` | Stage 3结果绘制职责已迁移 | 用横图/竖图并调整窗口，核对比例、居中和Overlay位置 | 已验证 | S；T；U；2026-08-15用户确认五模式结果图、Overlay及窗口缩放均正常，ImageLabel物理移动留后续独立切片 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
 | UI-004 | 结果帧绑定显示 | 任一模式产生正式检测结果 | 检测运行 | 容量1 `UiCompletionMailbox`整体交付结果→五模式收尾生成同一`ProductKey`只读呈现快照→`DetectionResultPresenter::present`一次应用 | 生产检测启用结果绑定；邮箱满时检测线程等待 | 结果图不被实时帧覆盖；图片、框、文字、模板名、判定、统计和耗时在同一UI调用中替换 | 容量1 UI完成邮箱反压检测线程；快照短期持有最终QImage | 保持画面、框、OK/NG、统计和耗时来自同一`ProductKey` | `ui/controllers/detection_completion_controller.*`+`runtime/result_presentation_mailbox.*`+`ui/presenters/detection_result_presenter.*` | Stage 3检测完成协调迁移 | 软硬触发连续检测并移动产品，确认图像、框、模板名、OK/NG、统计和耗时同步替换 | 已验证 | S；T；U；用户确认Qt Creator集中门禁无问题；本轮将五模式结果快照、统计、存图及PLC副作用顺序从Widget迁入统一完成控制器，门禁已通过 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
-| UI-005 | 结果与状态展示 | 任一检测完成或状态变化 | 已启动检测 | 正常结果仍由`DetectionResultPresenter`统一显示“正确/错误”；系统Fault由`InspectionFaultPresenter`生成红色持续告警，恢复时显示兜底NG请求数和未确认产品数 | 识别文本、模板Profile、耗时、判定或Fault快照 | 正常五模式继续统一“正确/错误”；Fault明确输送线状态未知，未确认产品要求现场隔离且不伪装产品NG | 正常结果同一UI调用整体更新；Fault冻结正式结果画面并锁定普通操作 | 正常判定样式不变；系统故障不得伪装产品NG或声称输送线已停 | 两类Presenter+运行控制器+Widget恢复薄桥 | Stage 4异常提示迁移 | 五模式正常结果回归；制造PLC断连或硬触发过载核对红色持续告警、收口摘要和人工恢复 | 已验证 | S；T；U；第三轮130项自动测试及无PLC主程序门禁通过；真实PLC红色告警、摘要和恢复继续延期补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
+| UI-005 | 结果与状态展示 | 任一检测完成或状态变化 | 已启动检测 | 正常结果统一显示“正确/错误”；运行故障自动停止完成后由 MainWindow 显示一次固定警告 | 识别文本、模板Profile、耗时和判定 | 正常五模式继续统一“正确/错误”；故障不伪装产品NG，未完成产品只记未确认 | 正常结果同一UI调用整体更新；停止完成后保留既有正式结果 | 正常判定样式不变；故障不长期占用判定栏 | Runtime + MainWindow + InspectionPage | Stage 4异常停止收口 | 五模式正常结果回归；制造PLC断连或硬触发过载核对自动停止和一次警告 | 已验证 | S；T；U；第三轮130项自动测试及无PLC主程序门禁通过；真实PLC自动停止继续待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
 | UI-006 | 模板引导与提示 | 制作模板、绘图事件、悬停 | 模板预览或冻结 | `setupTemplateGuide`→`handleTemplateGuideEvent`→`updateTemplateGuideText`；`eventFilter`延迟500ms工具提示 | 当前模式与已画点数 | 显示分步引导和模式专用说明；离开隐藏 | 创建/调整引导Frame | 保持中文提示和步骤含义 | `ui/main_window/template/` | 保留 | 五模式进入制作模板，悬停按钮并执行绘图，核对引导变化 | 已验证 | S；U ；2026-08-15固定四轮第3轮集中门禁通过（详见执行记录） |
 | UI-007 | 防滚轮误改参数 | 鼠标滚轮经过下拉框/SpinBox | 主窗活动 | `Widget::eventFilter`拦截`QComboBox/QAbstractSpinBox`的Wheel | 所有安装事件过滤器的控件 | 滚轮被丢弃，点击/键盘仍可修改 | 无 | 防误操作行为保持 | `ui/` | 保留 | 记录值，滚轮后不变；点击选择后可变 | 已验证 | S；U ；2026-08-15固定四轮第2轮：146项运行测试及主程序集中门禁通过 |
 | UI-008 | 软件数据目录快捷打开 | 双击只读目录框 | AppData目录可创建/打开 | `eventFilter`→`QDir::mkpath`→`QDesktopServices::openUrl` | `AppSettingsManager::globalSettingsDirPath()` | 打开目录；创建/打开失败弹提示 | 可能创建目录并启动资源管理器 | 保留入口 | `ui/settings_page.*` | 保留 | 双击目录，核对资源管理器路径；只读失败场景记录提示 | 已验证 | S；U ；2026-08-15固定四轮第2轮：146项运行测试及主程序集中门禁通过 |
@@ -228,7 +228,7 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | DET-005 | 纸巾卷粗糙度模式 | 模式3采集线程 | 相机帧；不需传统模板 | Widget只提供运行阈值，运行时分发器装配`TissueDetectionPipeline` Worker并把纸巾完整输出交给统一完成控制器 | 运行参数副本中的粗糙度阈值；算法找内孔、外圆和环粗糙度 | 找到卷且score<threshold为OK；空图、无圆、外轮廓失败或score>=阈值为NG并带诊断 | Overlay、统计、存图、PLC | 当前边界是`>=`判NG；不改纸巾算法和阈值 | `runtime/detection_mode_worker_factory.*`+`detection/detectionmode/tissue/`+统一完成控制器 | Stage 3检测完成协调迁移 | 纸巾Pipeline/工厂/分发合同测试；主程序连续OK/NG、停止、重启，核对score/阈值/圆框/统计/存图/PLC | 已验证 | S；T；U；用户确认Qt Creator集中门禁无问题；本轮仅迁移检测后副作用编排，粗糙度算法和阈值边界不变，门禁已通过 |
 | DET-006 | 二维码优先+三期模式 | 界面“二维码+三期”（索引4）检测帧 | Profile含tracking、二维码4点、日期多边形、字符模板，DLL可用 | 一次生成同序定位/检测快照，运行时分发器负责Profile门禁、策略状态、二维码优先Pipeline并把完整输出交给统一完成控制器 | 仅Data Matrix、padding8%、预算60ms、七路预处理、运行内首选策略；每次DLL调用libdmtx先行、ZXing Data Matrix后备 | 配方装配、资源、DLL、ROI或快照预检失败不启动；读码失败短路日期并形成一次NG | 显示码内容/日期状态、统计、存图、PLC只在统一结果入口执行一次 | “最高分Profile、读码优先、失败短路”和硬触发取帧条件保持 | 公共Selector+`runtime/inspection_profile_snapshot.*`+`detection/detectionmode/barcode_word/`+统一完成控制器 | Data Matrix解码优先级调整 | 快照/分发/Pipeline合同测试；固定Data Matrix与QR样本；硬触发可读日期OK/NG、不可读/定位失败逐触发收尾、停止重启和软触发回归 | 代码已实施，待用户验证 | S；静态确认libdmtx先行、ZXing仅Data Matrix后备，QR生产符号已删除；待用户重建DLL并完成真实样本验证 |
 | DET-007 | 定位失败收尾 | 字库家族采集时无有效pose | 已启动检测 | 普通字库和二维码软硬触发均把无效Pose作为同一产品工作项提交Worker并形成一次NG | 软触发由正式链反压形成节拍；硬触发每个新回调帧 | 显示定位失败NG；二维码硬触发保证本次触发有且只有一次收尾 | 增总数/NG、可存图、PLC或排队 | 软硬触发差异和Stage 4异常归类边界保持 | `runtime/result_handler.*`+各模式Pipeline | Stage 3软硬触发失败收尾已验证 | 移出视野：软触发保持；硬触发逐次打光记录结果数和PLC | 已验证 | S；T；U；2026-08-15用户确认硬触发集中门禁无问题，定位失败正式出口已统一 |
-| DET-008 | 算法/系统失败当前统计语义 | 模板缺失、读码失败、无圆、无定位、PLC断连或硬触发FIFO满 | 检测已启动或启动预检 | 算法失败仍按现有NG收尾；基础设施故障进入Fault；`InspectionProductReconciler`按ProductKey区分未检测、算法已完成和已正式记录产品 | 系统故障、取消、未确认与Fault后丢弃独立统计 | 普通算法失败继续计入产品NG；算法结论已完成但尚未正式记录时只记未确认，不用系统NG覆盖 | Fault取消Worker/UI邮箱并拒收新正式帧；收口账本只持有身份不持图；普通存图失败只报警 | 产品NG、已提交算法结论与系统Fault严格分离 | `runtime/inspection_fault_state.*`+`inspection_product_reconciler.*`+`result_handler.*` | Stage 4异常分类迁移 | 回归五模式算法NG；覆盖Fault前未检测、算法已完成、正式结果PLC失败和Fault后新帧 | 已验证 | S；T；U；新增7项收口合同并由用户确认总计130项通过；真实PLC异常仍延期补验 |
+| DET-008 | 算法/系统失败当前统计语义 | 模板缺失、读码失败、无圆、无定位、PLC断连或硬触发FIFO满 | 检测已启动或启动预检 | 算法失败仍按现有NG收尾；基础设施故障进入Fault并自动停止 | 系统故障、取消、未确认与Fault后丢弃独立统计 | 普通算法失败继续计入产品NG；算法结论已完成但尚未正式记录时只记未确认，不用系统NG覆盖 | Fault取消Worker/UI邮箱并拒收新正式帧；普通存图失败只报警 | 产品NG、已提交算法结论与系统Fault严格分离 | `inspection_runtime.*`+`result_service.*` | Stage 4异常分类收口 | 回归五模式算法NG；覆盖Fault前未检测、算法已完成、正式结果PLC失败和Fault后新帧 | 已验证 | S；T；U；异常收口合同已由用户确认；真实PLC异常仍待补验 |
 
 ## 6. 相机、采集线程与运行控制
 
@@ -240,10 +240,10 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | CAM-004 | 硬触发采集 | 勾“启用触发”并启动，外部Line触发 | PLC已连、相机支持Line0 | `InspectionRunPlan`生成HardwareTrigger；停止采集后切Line0，应用曝光/增益及海康`TriggerDelay`，再注册回调并启动采集，正式帧提交容量1检测链 | `LineDebouncerTime=5000`；界面“硬触发延时(ms)”乘1000写入MVS `TriggerDelay`（µs） | 外部沿到达后由相机按TriggerDelay延时曝光；正常节拍每个有效硬触发按序处理新帧；初始化失败提示；队列溢出进入Fault | MVS回调进入采集线程并向有界FIFO提交 | 保持Line参数、注册/启动顺序和正式帧受理规则 | `runtime/camera_session.*`+`capture_worker.*`+`frame_queue.*`+`devices/camera/` | 当前正式采集链 | 真实相机分别设置0/1/300ms核对MVS节点和成像时刻；停止/再次启动 | 已验证 | S；U；2026-08-18用户批准由该参数控制海康`TriggerDelay`，待Qt Creator真实相机复验；2026-08-18用户确认S8统一门禁通过 |
 | CAM-005 | 帧读取与停止唤醒 | 采集线程调用或停止 | 相机抓图中 | `CMvCamera`原回调与条件变量保留→`HikvisionCameraDevice`委托帧读取/序号/停止唤醒→软硬触发线程 | 超时/非阻塞模式 | 返回克隆最新帧；停止请求唤醒等待；空帧/超时返回失败 | 持有最新cv::Mat和序号 | 不允许`QThread::terminate()` | `devices/camera/hikvision_camera_device.*` | Stage 3停止协调器接管调用顺序 | 连续采集、无帧超时、等待中停止，核对退出延迟 | 已验证 | S；T；U；2026-08-15用户确认软硬线程停止无超时、相机正常恢复且可再次启动；适配器和条件变量行为未改 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
 | CAM-006 | 采集前图像变换 | 每帧进入定位/算法前 | 已设置旋转/通道 | 启动时由`InspectionRunConfiguration`统一生成原0..3运行码，仍经原信号写入`MyThread/CameraThread`，线程内rotate/channel分支与先后顺序不改 | SET-008/009应用值 | 输出彩色或单通道派生图、指定方向；异常帧不进入正常检测 | 新cv::Mat临时内存 | 变换实现、顺序与方向保持 | `runtime/inspection_run_configuration.*`+后续`detection/input_transform.*` | Stage 2配置统一、Stage 3迁移变换 | 纯逻辑映射测试；代表旋转/通道主程序回归 | 已验证 | S；T；U；2026-08-14用户确认代表旋转/通道及两种采集模式画面正常 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
-| RUN-001 | 启动预检与快照 | “启动识别” | 相机开、非忙碌且非Fault | 原预检和硬件下发顺序保持；`InspectionRuntimeController`在Starting建立Worker/UI邮箱并为新运行清空产品收口账本 | 已应用设置、模式资源、非活动Fault | Fault未人工确认或仍有未收口产品时禁止重启；恢复后仍按原预检和参数快照启动 | 控制器持有Worker、模式、UI邮箱、Fault快照和小型ProductKey账本 | 正常启动时序保持；Fault恢复前零重新启动 | 既有运行配置+运行控制器+产品收口器 | Stage 4恢复门禁迁移 | 五模式正常启动回归；Fault未收口时确认失败、收口后再次启动且新账本为空 | 已验证 | S；T；U；第三轮130项自动测试及无PLC主程序门禁通过；真实PLC恢复后重启待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
-| RUN-002 | 停止识别 | 顶栏“停止识别”或Fault“确认故障并恢复” | 检测中、线程运行或Fault锁定 | 正常停止保持原事务；Fault恢复先人工确认，再停止采集/Worker、恢复相机、完成产品收口，最后`acknowledgeFault` | 原采集等待上限；Fault首因、未收口ProductKey、PLC可写状态 | 取消、线程超时、PLC复位失败或仍有未收口产品均继续Fault；完成后才回Idle | 停采集/Worker并释放队列；收口只记录兜底请求或未确认 | 不使用`terminate()`；解除软件锁定不表示输送线已停 | 运行控制器+产品收口器+相机恢复转换器+Fault Presenter | Stage 4人工恢复迁移 | 正常停止；Fault确认取消/确认；单未结论、多未结论、复位失败和再次恢复 | 已验证 | S；T；U；正常停止和130项合同门禁通过；真实PLC复位失败及人工恢复继续延期补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
-| RUN-003 | 线程重建与信号接回 | 启动前、旧线程结束后、Fault进入和恢复 | 主窗存活 | Fault立即取消Worker/UI邮箱；等待实际退出后对Fault前身份收口；账本只存ProductKey，队列/邮箱/外部引用释放后不保留图像 | 相机接口、模板、运行参数、Fault状态 | Fault后Direct信号只登记丢弃帧；收口完成才能确认；后续启动重建全新队列、Worker和账本 | 取消队列和邮箱，释放帧引用，重建Worker | 不重复连接、不残留线程、不重复分发或持图 | 运行控制器+产品收口器+采集停止协调器 | Stage 4异常线程恢复迁移 | Fault前帧释放weak_ptr合同；Fault后持续进帧、确认恢复、再次启动 | 已验证 | S；T；U；图像引用释放和新运行空账本合同包含在用户确认的130项中；真实PLC恢复待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
-| RUN-004 | 流帧与结果内存持有 | 相机持续采集/检测完成 | 主窗活动 | 软触发阻塞提交；硬触发非阻塞`trySubmit`满即Fault；Fault前已受理身份进入收口器，Fault后新帧只登记丢弃 | 软触发背压；硬触发容量1；PLC是否可写；未收口数量 | 单个无结论且PLC可写才允许一次兜底NG；已有算法结论或多产品只记未确认；Fault后零正式结果 | Fault取消队列/UI邮箱；收口器不持图；新帧不创建`ProductKey` | 软触发正常不丢；硬触发过载安全暂停且每个Fault前身份只收口一次 | 帧队列+Worker+运行控制器+产品收口器 | Stage 4硬触发过载迁移 | 非阻塞FIFO、单/多未收口、算法已完成、重复收口及图像释放合同 | 已验证 | S；T；U；单/多件、算法结论、重复收口和释放合同均在130项中通过；真实硬触发过载继续延期补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
+| RUN-001 | 启动预检与快照 | “启动识别” | 相机开且 Runtime 空闲 | 原预检和硬件下发顺序保持；启动创建新的Worker、UI邮箱和产品账本 | 已应用设置和模式资源 | 自动停止完成后按原预检和参数快照再次启动 | Runtime持有Worker、模式、UI邮箱、Fault快照和小型ProductKey账本 | 正常启动时序保持 | 既有运行配置+Runtime | Stage 4启动边界 | 五模式正常启动回归；Fault 自动停止后再次启动且新账本为空 | 已验证 | S；T；U；第三轮130项自动测试及无PLC主程序门禁通过；真实PLC自动停止后重启待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
+| RUN-002 | 停止识别 | 顶栏“停止识别”或 Fault 自动停止 | 检测中或线程运行 | 正常停止与故障停止共用采集停止、Worker 等待、相机恢复和 `finishStop()` 收口；自动停止后回到Idle | 原采集等待上限；Fault首因和未收口ProductKey | 取消、线程超时或相机恢复失败按现有停止结果处理；未完成产品只记未确认 | 停采集/Worker并释放队列；收口只记录未确认 | 不使用`terminate()` | Runtime + 应用服务 + 相机恢复 | Stage 4停止链收口 | 正常停止；相机、PLC或硬触发异常自动停止；单未结论、多未结论和复位失败 | 已验证 | S；T；U；正常停止和130项合同门禁通过；真实PLC复位失败及自动停止继续待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
+| RUN-003 | 线程重建与信号接回 | 启动前、旧线程结束后和 Fault 自动停止 | 主窗存活 | Fault立即取消Worker/UI邮箱；等待实际退出后收口已受理身份；账本只存ProductKey，队列/邮箱/外部引用释放后不保留图像 | 相机接口、模板和运行参数 | Fault后新帧只登记丢弃；自动停止完成后，后续启动重建全新队列、Worker和账本 | 取消队列和邮箱，释放帧引用，重建Worker | 不重复连接、不残留线程、不重复分发或持图 | Runtime + 采集停止边界 | Stage 4异常线程收口 | Fault前帧释放weak_ptr合同；Fault后持续进帧和再次启动 | 已验证 | S；T；U；图像引用释放和新运行空账本合同包含在用户确认的130项中；真实PLC自动停止继续待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
+| RUN-004 | 流帧与结果内存持有 | 相机持续采集/检测完成 | 主窗活动 | 软触发阻塞提交；硬触发非阻塞`trySubmit`满即Fault；Fault前已受理身份进入停止收口，Fault后新帧只登记丢弃 | 软触发背压；硬触发容量1和未收口数量 | 已有算法结论保持；无结论产品记未确认；Fault后不产生正式结果 | Fault取消队列/UI邮箱；新帧不创建`ProductKey` | 软触发正常不丢；硬触发过载自动停止且每个Fault前身份只收口一次 | 帧队列+Worker+Runtime | Stage 4硬触发过载收口 | 非阻塞FIFO、单/多未收口、算法已完成、重复收口及图像释放合同 | 已验证 | S；T；U；单/多件、算法结论、重复收口和释放合同均在用户确认门禁中通过；真实硬触发过载继续待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
 | RUN-005 | 采集节拍与硬触发延时 | 软/硬触发正式采集 | 运行参数已应用 | 软触发按“软触发命令→新帧→正式检测链完成受理”串行循环；硬触发启动配置将机器设置ms值换算为µs写入相机 | 软触发无人工间隔；硬触发延时默认300ms、0表示相机不增加触发延时 | 软触发吞吐由相机、检测队列、UI邮箱及存图反压决定；硬触发由MVS节点延后曝光 | 软触发影响吞吐；硬触发参数影响外部沿到曝光的时刻 | 保持设置值单位为ms，设备边界显式使用µs | MachineSettings+CameraSession | 当前正式采集链 | 软触发在参数0/非0时吞吐不变；硬触发0/1/300ms核对节点与实际时序 | 已验证 | S；U；2026-08-18语义经用户批准，待Qt Creator真实相机复验；2026-08-18用户确认S8统一门禁通过 |
 | RUN-006 | 最近Overlay随位姿逻辑 | 非结果绑定模式收到新pose | 有上一检测框和pose | `slot_saveBoxesFromThread`→按角差/中心差旋转平移`g_lastDrawResults/g_lastStampPoly` | 新旧`DetectionPose` | pose无效清框；有效时框跟随；字库结果绑定时直接抑制 | 更新全局Overlay缓存 | 保持模式差异 | `ui/presenters/` | 保留后拆分 | 移动/旋转产品并移出视野，核对框跟随和清除 | 已验证 | S；U ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过；2026-08-18用户确认S8统一门禁通过 |
 
@@ -256,14 +256,14 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | PLC-003 | 触发工作模式下发 | 工作模式“确认”或启动 | PLC已连接 | UI读取模式→`InspectionRuntimeController::writePlcTriggerMode`→控制器内部编码并写`DB1.DBB1032` | 连续=0、间歇=1 | 成功保存设置；无连接/写失败提示且不更新已应用值 | PLC写`DB1.DBB1032` | 地址和值不变 | `runtime/inspection_plc_controller.*` | 最终架构PLC业务命令收口 | Fake锁定0/1字节；现场读回延期 | 已验证 | S；T；U；136项运行测试确认0/1字节合同；现场读回延期 |
 | PLC-004 | 工艺参数下发 | “PLC参数→设置”或启动 | PLC已连接、整数可解析 | UI构造`PlcRunSettingsCommand`→应用服务→PLC控制器内部大端编码和固定顺序写入 | 剔除时间DB980 Word、剔除距离DB920 DWord、拍照时间DB982 Word、拍照距离DB924 DWord；“硬触发延时”只保存为机器设置并在硬触发启动时写相机，不下发PLC | 全部成功后保存；任一写失败提示并返回失败字段 | 多次PLC写入 | PLC地址、长度、顺序和值保持 | `runtime/inspection_plc_controller.*` | 当前正式PLC链 | 边界值、正常值和中途写失败；真实PLC读回延期 | 已验证 | S；T；U；2026-08-18明确硬触发延时归属相机MVS节点而非PLC |
 | PLC-005 | OK输出 | 正式结果OK且PLC连接 | 检测收尾 | 完成控制器携带`ProductKey`→运行控制器类型化结果输出→PLC控制器写`DB1.DBB1033=0` | DB1偏移1033一字节，值0；PLC连接/返回码、产品身份 | 成功写0；失败不重复写、不覆盖算法OK、不静默继续生产 | PLC写0或Fault取消正式检测链；失败增加异常未确认数 | 正常OK值和唯一请求保持；失败归系统Fault | 完成控制器+运行控制器+PLC控制器 | 最终架构PLC输出收口 | Fake写0失败与去重合同；真实PLC延期 | 已验证 | S；T；U；136项运行测试确认固定地址和值0；真实PLC输出延期 |
-| PLC-006 | NG脉冲输出 | 立即剔除NG或Fault单件兜底 | PLC连接 | 正常NG保持按`ProductKey`请求49→约100ms→0；具体字节写经运行控制器与PLC控制器，Widget不接触设备接口 | DB1.DBB1033；49持续约100ms；PLC可写和唯一身份 | 正常脉冲保持；49失败记未确认；49成功但0失败保持Fault直至复位，不伪造剔除成功 | PLC两次写；成功兜底记取消产品，失败记未确认 | 正常值/顺序/脉冲保持；Fault不会重复或盲发PLC | 完成控制器+产品收口器+运行控制器+PLC控制器 | 最终架构PLC输出收口 | 正常NG、失败和兜底合同；真实PLC延期 | 已验证 | S；T；U；136项运行测试确认固定地址和值49/0，既有约100ms合同保留；真实PLC延期 |
+| PLC-006 | NG脉冲输出 | 正常产品NG | PLC连接 | 正常NG保持按`ProductKey`请求49→约100ms→0；具体字节写经Runtime与PLC控制器，Widget不接触设备接口 | DB1.DBB1033；49持续约100ms | 正常脉冲保持；49或0失败进入Fault自动停止，不伪造剔除成功 | PLC两次写；失败产品记未确认 | 正常值、顺序和脉冲保持；Fault不重复或盲发PLC | ResultService + Runtime + PLC控制器 | 最终架构PLC输出收口 | 正常NG及写入失败合同；真实PLC延期 | 已验证 | S；T；U；136项运行测试确认固定地址和值49/0，既有约100ms合同保留；真实PLC延期 |
 | PLC-007 | 延迟剔除队列与复位 | NG结果、每次产品收尾、“剔除复位” | `wrongindex`可能>0 | 原到期公式和顺序保持；到期输出携带原始`ProductKey`，具体写入经运行控制器PLC命令 | 剔除位置输入；PLC连接/返回码、原始产品身份 | 正常到目标计数触发一次49→0；到期输出失败进入Fault，不把当前产品误记为失败产品 | 运行层身份队列、PLC脉冲或Fault | 延迟公式和值不变 | 完成控制器+ResultHandler+运行控制器+PLC控制器 | 最终架构PLC输出收口 | wrongindex回归；Fake断线核对原始身份 | 已验证 | S；T；U；既有延迟身份合同与136项运行测试通过；真实PLC复位延期 |
 
 ## 8. 结果、统计与存图
 
 | ID | 功能分类 | 当前入口/触发 | 前置条件和操作步骤 | 当前文件、关键函数和调用链 | 输入/设置、默认值及生效时机 | 当前正常结果和失败路径 | 副作用（磁盘/统计/PLC/线程） | 当前基线 | 目标模块/位置 | 动作 | 从原入口执行的验证方法 | 状态 | 证据 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| RES-001 | 总数、NG与合格率 | 每个正式检测收尾或Fault产品收口 | 结果到达UI槽或操作员确认恢复 | 正常完成仍唯一更新产品统计；Fault兜底NG记入异常取消数，无法唯一收口或PLC失败记未确认数，均不写正常产品统计 | 正常产品结论、Fault收口类型、ProductKey | 正常总数/NG/合格率公式不变；同一Fault产品重复收口被拒绝；未确认不伪装产品NG | 正常统计与异常统计独立；UI恢复摘要显示本次收口数量 | 产品质量合格率只使用OK与产品NG | 完成控制器+运行控制器+产品收口器+Presenter | Stage 4异常统计收口迁移 | 正常OK/NG；单件兜底、多件未确认、重复解析和统计清零相互独立 | 已验证 | S；T；U；正常统计既有门禁和第三轮130项异常收口合同均通过；真实PLC摘要待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
+| RES-001 | 总数、NG与合格率 | 每个正式检测收尾或 Fault 自动停止 | 结果到达唯一结果事务或停止收口 | 正常完成唯一更新产品统计；未完成产品和PLC失败只记未确认，均不写正常产品统计 | 正常产品结论、Fault首因和ProductKey | 正常总数/NG/合格率公式不变；同一产品只收口一次；未确认不伪装产品NG | 正常统计与异常统计独立 | 产品质量合格率只使用OK与产品NG | ResultService + Runtime | Stage 4异常统计收口 | 正常OK/NG；单件、多件未确认、重复解析和统计清零相互独立 | 已验证 | S；T；U；正常统计既有门禁和异常收口合同均通过；真实PLC待补验 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
 | RES-002 | 总数清零 | 总数旁“清零” | 任意空闲/运行状态当前可点击性依UI状态 | 按钮薄桥→协调器`resetStatistics`→Presenter只刷新总数和NG | 无 | 总数和NG同时置0；合格率框仍不在该槽重算 | 清运行层统计并刷新指定控件 | 精确清理范围保持 | Widget薄桥+runtime协调器+UI Presenter | Stage 3检测完成协调回归 | 先产生多结果再清零，核对三个统计字段和下一帧 | 已验证 | S；T；U；用户确认Qt Creator集中门禁无问题；本轮结果统计写入路径迁移，清零入口作为回归门禁，现有不对称规则不改；Stage 4第一轮扩展统计结构，现有UI清零行为通过119项运行测试及主工程门禁确认 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
 | RES-003 | NG数清零 | NG旁“清零” | 同上 | 按钮薄桥→协调器`resetNgCount`→Presenter只刷新NG | 无 | 仅NG置0；总数保持；合格率仍不在该槽重算 | 改运行层NG统计并刷新指定控件 | 当前不对称行为纳入基线 | Widget薄桥+runtime协调器+UI Presenter | Stage 3检测完成协调回归 | 产生2NG/1OK后清NG，核对总数/NG/合格率及下一帧 | 已验证 | S；T；U；用户确认Qt Creator集中门禁无问题；本轮结果统计写入路径迁移，NG清零入口作为回归门禁，规则不改；Stage 4第一轮确认异常计数与NG清零相互独立，119项运行测试及主工程门禁通过 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
 | RES-004 | 检测耗时 | 五模式检测完成 | 正式检测执行 | 各模式原计时范围→统一完成控制器的同产品呈现快照→Presenter更新`speedLabel`；中文格式文字使用代码页无关Unicode转义 | 各模式当前计时范围不同 | 保持各模式当前整数/两位小数和“毫秒/ms”格式 | UI/日志 | 不在结构切片统一计时口径 | `ui/controllers/detection_completion_controller.*`+`ui/presenters/detection_result_presenter.*` | Stage 3检测完成协调迁移 | 每模式连续检测核对格式、刷新和日志耗时 | 已验证 | S；T；U；用户确认Qt Creator集中门禁无问题；本轮仅迁移耗时文本提交位置，五模式计时范围和格式不改，门禁已通过 ；2026-08-15固定四轮第1轮：139项运行测试及无PLC主程序集中门禁通过 |
@@ -295,8 +295,6 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | `Widget::on_eliminatebutton_clicked` | `.ui`不存在名为`eliminatebutton`的控件，全仓无显式连接；实际剔除位置通过PLC参数应用和`wrongindex`路径生效 | 保留孤立槽，当前不登记成可达按钮功能 |
 | `lineBoxIndex` | `.ui`中明确`visible=false`，源码无读写；实际合格率使用`lineBoxIndex_6` | 保留隐藏占位，不登记成当前可见功能 |
 | PaddleOCR和Snap7内部实现 | 作为第三方/现有集成源码分别由DET-004和PLC-001..007的调用链覆盖，无额外用户入口 | 保留原位；本轮不把库内部辅助函数逐一伪装成业务功能 |
-| `InspectionRuntimeController::markFault` | Stage 4第三轮复核为零引用兼容别名；正式故障入口已全部使用带原因和诊断的`enterFault` | 已删除别名；不改变任何可观察功能或故障原因 |
-| 控制器直接`recordCancelledProduct/recordUnconfirmedProduct` | 生产路径零引用，且直接调用会绕过`ProductKey`唯一收口账本 | 已删除控制器公开入口；改由产品收口器解析后驱动内部异常统计，不登记为功能删除 |
 
 ## 入口覆盖检查
 
@@ -333,7 +331,7 @@ A2 已将正式产品结果收敛为 `Ok/Ng`，删除 `DetectionStatus`、`NotEv
 | DIFF-007 | 相机和PLC边界后续分离 | “打开相机”会先尝试连接PLC，PLC失败仍继续开相机 | 影响设备操作时序 | Stage 1-3保持，Stage 2只用适配器复现现有顺序 | CAM-001/PLC-001 |
 | DIFF-008 | 检测ROI外扩碰边时裁到原图边界 | 原模板匹配日期ROI外扩20像素后若整体落到图外会逐帧弹窗并跳过检测 | 按用户明确要求，20像素改为期望边距；边缘不足时使用0..width-1/height-1边界，只在裁剪后无有效面积时失败 | `DetectionRoiGeometry`统一模板匹配、字库和二维码日期ROI边界；2026-08-14离线边界测试及主程序靠边模板由用户确认通过 | DET-002、DET-003、DET-006、UI-002、RUN-002 |
 | DIFF-009 | 五模式生产存图统一使用JPEG质量92 | 原钢印、字库、二维码和纸巾请求PNG，深度OCR请求未显式质量的JPG | 用户明确选择JPEG 90～95并采用中间值92，以降低PNG编码积压；不改变保存范围、原图/标注图组合、目录和失败报警 | `DetectionCompletionSaveOptions`显式传递quality，`ImageSaveService`调用三参数`QImage::save`；2026-08-15运行测试136项及主程序集中门禁通过 | SAVE-001..005 |
-| DIFF-010 | Fault不发送猜测性兜底NG | 阶段4前`InspectionProductReconciler`曾在恰有一个未结论产品且PLC可写时允许请求一次49→约100ms→0 | 已实现的计划内行为变化：`InspectionRuntime`保留已有算法结论，未完成产品统一记`Unconfirmed`，不计入产品NG或合格率，不冒充机械剔除 | 2026-08-16用户批准；阶段4已删除收口器及兜底分支，测试源码覆盖PLC写失败只进入Fault且不产生猜测性49；2026-08-18用户统一门禁通过 | `UI-002、UI-005、RUN-001..004、PLC-005..007、RES-001`；新终局方案阶段4 |
+| DIFF-010 | Fault不发送猜测性NG | 运行故障进入自动停止 | `InspectionRuntime`保留已有算法结论，未完成产品统一记`Unconfirmed`，不计入产品NG或合格率，不冒充机械剔除 | PLC写失败只进入Fault并自动停止，不产生猜测性49 | `UI-002、UI-005、RUN-001..004、PLC-005..007、RES-001` |
 | DIFF-011 | “相机延时(ms)”与SDK `TriggerDelay`语义 | 历史UI `cameraDelay`作为软件线程节流，SDK `TriggerDelay`固定为0 | 2026-08-18用户明确批准：软触发不受该参数控制；参数改名“硬触发延时(ms)”并控制海康`TriggerDelay` | 已修改正式消费者：软触发删除最小间隔；硬触发启动时ms×1000写入MVS µs节点；Schema 1历史JSON键名暂不改，避免制造第二份设置格式 | 已解决；关联`CAM-003..004、RUN-005、PLC-004` |
 
 ## 基线资源

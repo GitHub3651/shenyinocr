@@ -7,7 +7,7 @@
 - 权威范围：将右侧抽屉的五个内容页从当前 `app/ui/main_window.ui` 拆成五个独立 `.ui` 文件；将选择模板、保存模板和分割字符模板三处固定弹窗界面拆成三个独立 `.ui` 文件；把 MainWindow 核心文件以及检测、设置、模板相关 UI 文件统一归入 `app/ui/main_window/` 功能域，保留 `app/ui/README.md` 作为整个 UI 模块说明；将职责不清的 `ImageLabel` 完整改名为 `InspectionImageCanvas`；删除右侧抽屉重复的标题标签和独立收起按钮，以及按技术类型划分的旧目录、单体 UI 结构产生的控件打包、回调包装、手写固定界面和无效防御代码。
 - 当前进度：SUI-0 至 SUI-5 已按本文最终结构完成；九个 `.ui`、最终目录、生成 Ui 所有权、直接连接、qmake 清单、正式 QSS、翻译源路径、维护文档和计划删除项已完成静态检查。SUI-6 中由用户执行的 Qt Creator 构建和第 15 节人工交互验证尚未完成。
 - 实施顺序：本方案先于 `OCRGangYin主控操作台按钮分组界面优化方案.md` 实施。主控按钮分组不并入本批次。
-- 目标行为基线：保护右侧导航、默认展开检测信息、运行成功后收起、Fault 首次展开检测信息、显著判定栏、模板选择、模板保存、字符框选/排序/命名、设置应用、相机、PLC、统计和结果传输行为。
+- 目标行为基线：保护右侧导航、默认展开检测信息、运行成功后收起、显著判定栏、模板选择、模板保存、字符框选/排序/命名、设置应用、相机、PLC、统计和结果传输行为。
 
 ## 2. 替代关系
 
@@ -100,7 +100,7 @@ MainWindow 还构造：
 
 ### 3.7 当前目录和主图像控件
 
-当前五个 MainWindow 核心文件和 UI README 直接位于 `app/ui/`；三个逻辑 Page 位于 `app/ui/pages/`；两个已有模板弹窗类位于 `app/ui/dialogs/`；两个 UI 状态类位于 `app/ui/controllers/`；Fault 呈现类位于 `app/ui/presenters/`；`ImageLabel` 位于 `app/ui/widgets/`。这些目录按控件、页面、控制器、呈现器等技术类型划分，使同一个检测、设置或模板功能的强关联文件分散在多个目录中。
+当前五个 MainWindow 核心文件和 UI README 直接位于 `app/ui/`；三个逻辑 Page 位于 `app/ui/pages/`；两个已有模板弹窗类位于 `app/ui/dialogs/`；两个 UI 状态类位于 `app/ui/controllers/`；`ImageLabel` 位于 `app/ui/widgets/`。这些目录按控件、页面和控制器等技术类型划分，使同一个检测、设置或模板功能的强关联文件分散在多个目录中。
 
 当前 `ImageLabel` 不是普通标签：它同时负责检测图像等比例显示、模板图像显示、鼠标矩形框选、多边形绘制、模板绘制步骤和几何状态。实施时完整改名为：
 
@@ -241,9 +241,7 @@ app/ui/
    ├─ inspection/
    │  ├─ inspection_info_page.ui
    │  ├─ inspection_page.h
-   │  ├─ inspection_page.cpp
-   │  ├─ inspection_fault_presenter.h
-   │  └─ inspection_fault_presenter.cpp
+   │  └─ inspection_page.cpp
    ├─ settings/
    │  ├─ detection_settings_page.ui
    │  ├─ image_settings_page.ui
@@ -272,7 +270,7 @@ app/ui/
          └─ character_crop_label.cpp
 ```
 
-`main_window/` 是主窗口完整功能域：根目录只放 MainWindow 骨架、跨检测/模板共用的主图像画布，以及统一控制主控按钮状态的 `OperationUiPolicy`。`inspection/` 收拢检测信息页、检测呈现逻辑和 Fault 呈现；`settings/` 收拢四个设置页、设置逻辑和设置编辑状态；`template/` 收拢模板编辑逻辑及三个模板弹窗。`CharacterCropLabel` 只服务字符模板编辑，因此与字符模板弹窗同目录。`app/ui/README.md` 保持在 UI 根目录，说明整个 UI 模块而不是单独说明 MainWindow。
+`main_window/` 是主窗口完整功能域：根目录只放 MainWindow 骨架、跨检测/模板共用的主图像画布，以及统一控制主控按钮状态的 `OperationUiPolicy`。`inspection/` 收拢检测信息页和检测呈现逻辑；`settings/` 收拢四个设置页、设置逻辑和设置编辑状态；`template/` 收拢模板编辑逻辑及三个模板弹窗。`CharacterCropLabel` 只服务字符模板编辑，因此与字符模板弹窗同目录。`app/ui/README.md` 保持在 UI 根目录，说明整个 UI 模块而不是单独说明 MainWindow。
 
 实施后不再保留 `pages/`、`dialogs/`、`controllers/`、`presenters/`、`widgets/` 这些按技术类型划分的目录，也不建立 `main_window/widgets/`、`main_window/controllers/` 等替代性技术目录。三个功能子目录只对应当前真实功能边界，不增加页面工厂、通用基类或目录级包装类。
 
@@ -358,11 +356,11 @@ class SoftwareSettingsPage;
 
 项目当前使用 C++11，因此构造函数初始化继续使用 `ui(new Ui::MainWindow)` 以及相同形式的五个页面 Ui 初始化，不为使用 `std::make_unique` 升级语言标准，也不增加工厂函数。
 
-MainWindow 成员按依赖关系声明：主窗口生成 Ui 在前，三个 Page 使用的服务、状态和 `m_faultAlarmPresented` 位于三个 Page 成员之前，五个页面生成 Ui 位于三个 Page 成员之前，三个逻辑 Page 的 `std::unique_ptr` 位于这些依赖之后。关键相对顺序固定为：
+MainWindow 成员按依赖关系声明：主窗口生成 Ui 在前，三个 Page 使用的服务和状态位于三个 Page 成员之前，五个页面生成 Ui 位于三个 Page 成员之前，三个逻辑 Page 的 `std::unique_ptr` 位于这些依赖之后。关键相对顺序固定为：
 
 ```text
 std::unique_ptr<Ui::MainWindow> ui
-服务、SettingsEditState、m_faultAlarmPresented
+服务、SettingsEditState
 五个页面生成 Ui 的 std::unique_ptr
 InspectionPage / MachineSettingsPage / TemplateEditorPage 的 std::unique_ptr
 ```
@@ -387,7 +385,7 @@ C++ 按成员声明的相反顺序析构，因此三个逻辑 Page 自动先销�
 7. 初始化页面数据、样式、Page 逻辑和信号槽
 ```
 
-所有页面在 MainWindow 第一次访问 `resultExportIp`、`comboBox_detectionMode`、`label_runtimeStatus` 等控件之前完成 `setupUi()`。不按导航点击延迟加载，不保存“是否已加载”状态，也不增加页面加载失败回退。
+所有页面在 MainWindow 第一次访问 `barcodeCsvEnable`、`comboBox_detectionMode`、`label_runtimeStatus` 等控件之前完成 `setupUi()`。不按导航点击延迟加载，不保存“是否已加载”状态，也不增加页面加载失败回退。
 
 MainWindow 析构函数体只保留停止模板制作预览和关闭应用服务等真实业务清理，直接调用最终 Page 和服务方法；不负责释放任何生成 Ui 或逻辑 Page。析构函数体结束后，三个逻辑 Page、五个页面生成 Ui 和主窗口生成 Ui 按第 6.1 节的成员顺序自动析构，随后由 QWidget 父子对象树销毁实际控件。删除当前三个 Page 的手工 `reset()`、`delete ui` 和 `ui = nullptr`，不得以其他手工释放代码替代。
 
@@ -467,22 +465,7 @@ m_softwareSettingsUi.pushButton_clearSoftwareData
 
 `MachineSettingsPage` 和 `TemplateEditorPage` 的 QObject 父对象不是业务依赖，也不是生命周期依赖。两者构造函数不再接收 `QObject *parent`，实现中不保留 `QObject(parent)` 初始化；MainWindow 只通过各自的 `std::unique_ptr` 管理其生命周期，不同时使用 QObject 父子对象树管理这两个逻辑 Page。
 
-`InspectionPage` 的 MainWindow 窗口对象同样是必需依赖，构造参数和成员由 `QWidget *` 改为 `QWidget &`。模板提示计时器和开关改为 `InspectionPage` 自有的值成员：
-
-```cpp
-QTimer m_templateAttentionTimer;
-bool m_templateAttentionOn = false;
-```
-
-`presentFault()` 继续复用 MainWindow 唯一的 `m_faultAlarmPresented`，但参数改为必需引用：
-
-```cpp
-void presentFault(
-    const InspectionFaultSnapshot &snapshot,
-    bool &alarmPresented);
-```
-
-因此删除 `if (!m_rootWidget)`、外部计时器判空和外部布尔指针是否存在的判断，但保留 Fault 首次提示这一业务条件。当前 `if (alarmPresented && !*alarmPresented)` 在改为引用后必须准确变为 `if (!alarmPresented)`，并在首次提示前把该引用设为 `true`；不得把整个条件删除，也不在 `InspectionPage` 内复制第二份 Fault 是否已提示状态。
+`InspectionPage` 的 MainWindow 窗口对象同样是必需依赖，构造参数和成员由 `QWidget *` 改为 `QWidget &`。
 
 `TemplateEditorPage` 删除 `TemplateEditorViewBindings::parentWidget` 后，直接保存构造时传入的 `QWidget &` 作为所有模板弹窗和消息框的父窗口。删除仅返回旧指针的 `dialogParent()`；不得用父对象遍历、类型转换或空父窗口作为替代路径。
 
@@ -491,7 +474,7 @@ void presentFault(
 - 用户输入的数值格式与范围。
 - 模板几何完整性。
 - 模板、设置、相机、PLC 和文件操作返回的失败。
-- 运行时快照、Fault 和图片有效性。
+- 运行时快照、故障数据和图片有效性。
 
 只删除对项目自身固定创建的 Ui 控件和必需服务的“可能为空”防护，不删除业务规则。
 
@@ -581,18 +564,6 @@ MainWindow 分别直接连接到现有状态刷新逻辑和预览显示逻辑。
 
 弹窗内包含实际逻辑的方法可以保留或使用明确名称，不为连接按钮新增只调用另一个方法的一行中转槽。
 
-## 9. 模板按钮闪烁状态收口
-
-当前模板制作按钮闪烁由 MainWindow 创建 `QTimer`，再把计时器和 `bool*` 传给 `InspectionPage`。这是单体 UI 绑定遗留。
-
-实施时由 `InspectionPage` 直接持有模板按钮闪烁计时器和布尔状态：
-
-- `applyOperationState()` 进入模板预览状态时启动计时器。
-- 离开模板预览状态时停止计时器并清除按钮临时属性。
-- 计时器触发时只切换按钮的 `uiState` 和刷新样式。
-
-MainWindow 中对应计时器、布尔成员、构造连接、关闭时停止代码以及构造参数全部删除。不新增第二份操作状态；是否启动和停止仍由传入的唯一 `OperationUiState` 决定。
-
 ## 10. 必须完全删除的旧代码
 
 ### 10.1 旧 UI 内容
@@ -635,17 +606,14 @@ MainWindow::templateEditorPageCallbacks()
 MainWindow::imageLabel
 MainWindow::m_softwareDataDirLineEdit
 MachineSettingsPage::setSoftwareDataDirectoryEditor()
-MainWindow::m_templateCaptureAttentionTimer
-MainWindow::m_templateCaptureAttentionOn
 MainWindow::slot_displayAndDetect(cv::Mat *)
 MainWindow::on_toolButton_createTemplate_clicked()
 MainWindow::resetTemplateCaptureState()
-MainWindow::confirmInspectionFaultRecovery()
 ```
 
 TemplateEditorPage 内与生成 Ui 控件重复的别名成员也全部删除，不保留一套 `m_xxxButton` 和一套 `m_pageUi.xxxButton` 并存。
 
-上述三个 MainWindow 方法在当前代码中只调用 `TemplateEditorPage` 或 `InspectionPage` 的同一最终方法，没有额外状态计算或跨区域协调。它们的调用点改为直接调用最终 Page 方法；制作模板按钮按第 8.1 节直接连接最终处理方法。不保留同名转发、旧槽或兼容入口。
+上述两个 MainWindow 方法在当前代码中只调用 `TemplateEditorPage` 的同一最终方法，没有额外状态计算或跨区域协调。它们的调用点改为直接调用最终 Page 方法；制作模板按钮按第 8.1 节直接连接最终处理方法。不保留同名转发、旧槽或兼容入口。
 
 MainWindow 的生成 Ui 所有权同时一次性改为最终形式：
 
@@ -689,13 +657,11 @@ throw std::invalid_argument("... requires complete bindings");
 TemplateSelectionDialog 的 TemplateApplicationService* / SettingsApplicationService*
 TemplateSelectionDialog 的无服务默认摘要和提前返回
 InspectionPage::m_rootWidget 指针及其判空
-InspectionPage 的外部 QTimer* / bool* 模板提示状态
-InspectionPage::presentFault(..., bool*)
 TemplateEditorViewBindings::parentWidget
 TemplateEditorPage::dialogParent()
 ```
 
-最终代码直接使用必需引用、自有计时器和值状态，不保留指针重载、旧构造函数或空值兼容入口。
+最终代码直接使用必需引用，不保留指针重载、旧构造函数或空值兼容入口。
 
 ### 10.6 手写模板弹窗界面
 
@@ -738,11 +704,10 @@ app/ui/dialogs/template_selection_dialog.h/.cpp
 app/ui/dialogs/character_template_editor_dialog.h/.cpp
 app/ui/controllers/operation_ui_policy.h/.cpp
 app/ui/controllers/settings_edit_state.h/.cpp
-app/ui/presenters/inspection_fault_presenter.h/.cpp
 app/ui/widgets/image_label.h/.cpp
 ```
 
-上述文件迁入最终功能目录后，空置的 `app/ui/pages/`、`app/ui/dialogs/`、`app/ui/controllers/`、`app/ui/presenters/` 和 `app/ui/widgets/` 同时删除。`app/ui/README.md` 保持原位，不属于旧路径。
+上述文件迁入最终功能目录后，空置的 `app/ui/pages/`、`app/ui/dialogs/`、`app/ui/controllers/` 和 `app/ui/widgets/` 同时删除。`app/ui/README.md` 保持原位，不属于旧路径。
 
 主图像画布重命名后，以下旧 UI 类型标识符、对象名和 include 路径在生产代码、`.ui`、正式 QSS、qmake 清单及当前维护说明中必须消失：
 
@@ -759,16 +724,15 @@ ui/widgets/image_label.h
 | 文件 | 计划修改 |
 |---|---|
 | `app/ui/main_window/main_window.ui` | 由当前 `app/ui/main_window.ui` 原位移动；只保留主窗口骨架和五个空内容页根节点；删除五页内部 UI 定义、标题标签、独立收起按钮及其空父容器；将提升类、提升头和对象名改为 `InspectionImageCanvas`、`ui/main_window/inspection_image_canvas.h`、`inspectionImageCanvas` |
-| `app/ui/main_window/main_window.h` | 由当前 `app/ui/main_window.h` 移动；将 `Ui::MainWindow` 和五个页面生成 Ui 统一改为 `std::unique_ptr` 所有权并按依赖顺序声明；删除 ViewBindings/Callbacks 工厂、重复控件成员和模板闪烁成员；使用 `InspectionImageCanvas` 最终类型 |
+| `app/ui/main_window/main_window.h` | 由当前 `app/ui/main_window.h` 移动；将 `Ui::MainWindow` 和五个页面生成 Ui 统一改为 `std::unique_ptr` 所有权并按依赖顺序声明；删除 ViewBindings/Callbacks 工厂和重复控件成员；使用 `InspectionImageCanvas` 最终类型 |
 | `app/ui/main_window/main_window.cpp` | 由当前 `app/ui/main_window.cpp` 移动；按固定顺序装配五个生成 Ui；直接创建三个逻辑 Page；建立必要的直接连接；析构函数只保留真实业务清理并删除 Page 手工 `reset()`、`delete ui`、`ui = nullptr`；删除标题更新、独立收起按钮连接、绑定和回调构造代码；将 `showRightDrawerPage()` / `collapseRightDrawer()` 原位改名为 `showRightPanelPage()` / `hideRightPanel()` |
-| `app/ui/main_window/main_window_inspection.cpp` | 由当前 `app/ui/main_window_inspection.cpp` 移动；将页面控件访问改到对应生成 Ui；删除旧预览指针槽、固定 Ui/Page 判空和旧闪烁清理 |
+| `app/ui/main_window/main_window_inspection.cpp` | 由当前 `app/ui/main_window_inspection.cpp` 移动；将页面控件访问改到对应生成 Ui；删除旧预览指针槽和固定 Ui/Page 判空 |
 | `app/ui/main_window/main_window_settings.cpp` | 由当前 `app/ui/main_window_settings.cpp` 移动；将五页控件访问改到对应生成 Ui；保留真正跨区域协调；删除旧同页显示回调和重复控件别名 |
 | `app/ui/README.md` | 保持原位；更新最终功能目录、Designer 打开方式、直接 Ui 引用和 `InspectionImageCanvas` 职责 |
 | `app/ui/main_window/inspection_image_canvas.h/.cpp` | 由 `app/ui/widgets/image_label.h/.cpp` 移动并完整改名；类型改为 `InspectionImageCanvas`，与唯一宿主 MainWindow 放在同一目录；保持现有图像显示、模板绘制、几何状态和强类型事件行为 |
 | `app/ui/main_window/operation_ui_policy.h/.cpp` | 由 `app/ui/controllers/operation_ui_policy.h/.cpp` 移动；继续作为主控按钮状态的唯一规则，不修改状态计算行为 |
 | `app/ui/main_window/inspection/inspection_info_page.ui` | 新建；接收检测信息页完整静态内容 |
-| `app/ui/main_window/inspection/inspection_page.h/.cpp` | 由 `app/ui/pages/inspection_page.h/.cpp` 移动；直接使用 MainWindow 窗口引用及 MainWindow/检测信息生成 Ui；以值成员收回模板按钮闪烁计时器和开关；`presentFault()` 使用 `bool &`；删除 ViewBindings、外部状态指针和固定控件判空 |
-| `app/ui/main_window/inspection/inspection_fault_presenter.h/.cpp` | 由 `app/ui/presenters/inspection_fault_presenter.h/.cpp` 移动；继续负责 Fault 文本和呈现数据，不修改 Fault 规则 |
+| `app/ui/main_window/inspection/inspection_page.h/.cpp` | 由 `app/ui/pages/inspection_page.h/.cpp` 移动；直接使用 MainWindow 窗口引用及 MainWindow/检测信息生成 Ui；删除 ViewBindings、外部状态指针和固定控件判空 |
 | `app/ui/main_window/settings/detection_settings_page.ui` | 新建；接收参数设定页完整静态内容 |
 | `app/ui/main_window/settings/image_settings_page.ui` | 新建；接收图像设置页完整静态内容 |
 | `app/ui/main_window/settings/plc_settings_page.ui` | 新建；接收 PLC 通讯页完整静态内容 |
@@ -811,12 +775,12 @@ ui/widgets/image_label.h
 - 不把删除的标题标签或收起按钮复制到五个页面，不增加新标题栏、悬浮收起按钮或键盘收起入口。
 - 不保留旧 Ui 成员别名、旧对象名别名、旧槽重载或新旧调用双路径。
 - 不保留旧文件路径转发头、旧 `ImageLabel` 类型别名、旧提升控件声明或新旧 qmake 路径双登记。
-- 不保留必需窗口、必需服务、模板提示计时器和 Fault 提示状态的可空指针构造形式或兼容重载；不保留 `MachineSettingsPage`、`TemplateEditorPage` 未使用的 QObject 父对象参数，也不为二者设置 QObject 父对象。
+- 不保留必需窗口和必需服务的可空指针构造形式或兼容重载；不保留 `MachineSettingsPage`、`TemplateEditorPage` 未使用的 QObject 父对象参数，也不为二者设置 QObject 父对象。
 - 不通过 `parent()`、`window()`、`qobject_cast` 或对象查找补回已经删除的 `parentWidget` 绑定。
 - 不为页面初始化增加失败回退、空页面备用显示或重复 `setupUi()` 防护。
 - 不新增 AppSettings 字段、页面索引字段、页面加载状态或持久化数据。
 - 不为使用 `std::make_unique` 升级当前 C++11 标准；生成 Ui 的 `std::unique_ptr` 直接在构造函数初始化列表中接收 `new` 创建的对象。
-- 不改变相机、PLC、模板、检测、统计、Fault 和结果传输业务规则。
+- 不改变相机、PLC、模板、检测、统计、故障自动停止和结果传输业务规则。
 - 除同步 UI 文件的新 include 路径、MainWindow include、主图像画布类型引用和 `.ui` 翻译源位置外，不借拆分机会清理 `app/ui` 之外与本方案无关的代码。
 
 ## 13. 实施步骤
@@ -825,7 +789,7 @@ ui/widgets/image_label.h
 
 1. 建立 `app/ui/main_window/` 及其 `inspection/`、`settings/`、`template/selection/`、`template/save/`、`template/character_editor/` 最终功能目录；`app/ui/README.md` 保持原位。
 2. 将 MainWindow 的 `.ui`、`.h` 和三个 `.cpp` 移入 `app/ui/main_window/`，将 `OperationUiPolicy` 从 `app/ui/controllers/` 移入同一目录。
-3. 将 `InspectionPage` 和 `InspectionFaultPresenter` 分别从 `app/ui/pages/`、`app/ui/presenters/` 移入 `app/ui/main_window/inspection/`。
+3. 将 `InspectionPage` 从 `app/ui/pages/` 移入 `app/ui/main_window/inspection/`。
 4. 将 `MachineSettingsPage` 和 `SettingsEditState` 分别从 `app/ui/pages/`、`app/ui/controllers/` 移入 `app/ui/main_window/settings/`。
 5. 将 `TemplateEditorPage` 移入 `app/ui/main_window/template/`；将两个现有模板弹窗类移入 `selection/` 和 `character_editor/`；保存模板新类从一开始只建立在 `save/`。
 6. 将 `app/ui/widgets/image_label.h/.cpp` 直接移动并改名为 `app/ui/main_window/inspection_image_canvas.h/.cpp`，将类型 `ImageLabel` 和对象名 `imageLabel_inspection` 同步改为 `InspectionImageCanvas` 和 `inspectionImageCanvas`。
@@ -854,7 +818,7 @@ ui/widgets/image_label.h
 4. 为迁出页面且仍由 MainWindow 处理的按钮逐一使用函数指针连接到现有业务槽；不再次调用 `connectSlotsByName(this)`，不新增批量连接器或中转方法。
 5. 保持导航继续切换原五个 `page_*` 根节点。
 6. 删除收起按钮连接和标题更新语句，将导航按钮二次点击及启动识别成功后的隐藏调用统一改为 `hideRightPanel()`。
-7. 将 `showRightDrawerPage()` 原位改名为 `showRightPanelPage()`，同步修改五个导航连接和 Fault 首次展开检测信息的调用点。
+7. 将 `showRightDrawerPage()` 原位改名为 `showRightPanelPage()`，同步修改五个导航连接。
 8. 在 `TemplateEditorPage` 创建后，将仍位于主窗口的制作模板按钮直接连接到 `TemplateEditorPage::handleTemplateCaptureButton()`，并删除原 MainWindow 中转槽。
 
 ### 阶段 SUI-3：删除绑定和回调支架
@@ -866,16 +830,15 @@ ui/widgets/image_label.h
 5. TemplateEditorPage 使用两个明确 Qt 信号连接 MainWindow 的跨区域协调。
 6. `MachineSettingsPage`、`TemplateEditorPage` 和 `TemplateSelectionDialog` 的必需服务及状态全部改为引用。
 7. 删除 `MachineSettingsPage` 和 `TemplateEditorPage` 构造函数中的 `QObject *parent` 参数及实现中的 `QObject(parent)` 初始化；二者只由 MainWindow 的 `std::unique_ptr` 唯一拥有。
-8. `InspectionPage::presentFault()` 改用 `bool &` 复用 `m_faultAlarmPresented`，删除可空状态路径，同时保留并准确改写为 `if (!alarmPresented)` 的首次提示业务判断。
-9. 将保存模板按钮的 `operationUi.saveTemplate` 状态应用从 `InspectionPage` 移到已持有参数设定 Ui 的 `TemplateEditorPage`，删除原跨页访问。
-10. 删除固定 Ui 控件、必需窗口、必需服务和必需 Page 的无效判空及默认回退；辅助函数和 `installWheelProtection()` 的必需控件参数改用引用。
+8. 将保存模板按钮的 `operationUi.saveTemplate` 状态应用从 `InspectionPage` 移到已持有参数设定 Ui 的 `TemplateEditorPage`，删除原跨页访问。
+9. 删除固定 Ui 控件、必需窗口、必需服务和必需 Page 的无效判空及默认回退；辅助函数和 `installWheelProtection()` 的必需控件参数改用引用。
 
 ### 阶段 SUI-4：删除重复状态和旧引用
 
-1. 模板制作按钮闪烁计时器和开关以值成员收回 `InspectionPage`。
+1. 模板制作按钮使用固定文字和 Tooltip 表达当前阶段。
 2. 删除 MainWindow 的控件别名和软件目录控件二次绑定。
 3. 删除 TemplateEditorPage 的控件别名。
-4. 删除 `MainWindow::on_toolButton_createTemplate_clicked()`、`MainWindow::resetTemplateCaptureState()`、`MainWindow::confirmInspectionFaultRecovery()` 三个纯转发方法，调用点直接使用最终 Page 方法。
+4. 删除 `MainWindow::on_toolButton_createTemplate_clicked()`、`MainWindow::resetTemplateCaptureState()` 两个纯转发方法，调用点直接使用最终 Page 方法。
 5. 删除失效的前置声明、include、函数声明和实现。
 6. 删除标题栏三个对象的失效 QSS 选择器。
 7. 按第 6.1 节调整 MainWindow 成员声明的相对顺序，使三个逻辑 Page、五个页面生成 Ui、状态和服务、主窗口生成 Ui 自动按依赖顺序析构；删除三个 Page 的显式 `reset()`、`delete ui` 和 `ui = nullptr`，不增加生命周期包装。
@@ -903,7 +866,7 @@ Agent 只执行第 14 节静态检查。Qt Creator 的 Run qmake、构建、运�
 - qmake `FORMS` 中九个文件路径均存在、无重复。
 - `app/ui/` 根目录只保留 `README.md` 和 `main_window/`；README 未被复制或移动到功能子目录。
 - `app/ui/main_window/` 根目录只包含 MainWindow 的 `.ui`、`.h`、三个 `.cpp`、`InspectionImageCanvas`、`OperationUiPolicy` 以及 `inspection/`、`settings/`、`template/` 三个功能目录。
-- `inspection/` 只包含检测信息页、`InspectionPage` 和 `InspectionFaultPresenter`；`settings/` 只包含四个设置页、`MachineSettingsPage` 和 `SettingsEditState`。
+- `inspection/` 只包含检测信息页和 `InspectionPage`；`settings/` 只包含四个设置页、`MachineSettingsPage` 和 `SettingsEditState`。
 - 三个模板弹窗分别位于 `template/selection/`、`template/save/` 和 `template/character_editor/`，`TemplateEditorPage` 直接位于 `template/`。
 - `CharacterCropLabel` 只位于 `template/character_editor/`；`InspectionImageCanvas` 只位于 `app/ui/main_window/`。
 - `app/ui/pages/`、`dialogs/`、`controllers/`、`presenters/`、`widgets/` 均不存在，工程清单和生产源码中对应旧路径零引用。
@@ -933,26 +896,24 @@ Agent 只执行第 14 节静态检查。Qt Creator 的 Run qmake、构建、运�
 - 页面控件没有重复成员别名。
 - 固定 Ui 控件、必需服务和固定创建的三个 Page 不再做空指针防护；相关辅助函数和 `installWheelProtection()` 的必需对象参数使用引用。
 - `TemplateSelectionDialog` 的两个服务均为引用；服务指针、无服务默认摘要和提前返回零引用。
-- `InspectionPage` 的窗口对象为引用，模板提示计时器和开关为值成员；外部 `QTimer *`、模板提示 `bool *` 及对应判空零引用。
-- `InspectionPage::presentFault()` 以 `bool &` 使用 MainWindow 的 `m_faultAlarmPresented`，不存在指针重载或第二份 Fault 提示状态，并保留 `if (!alarmPresented)` 的首次提示业务判断。
+- `InspectionPage` 的窗口对象为引用。
 - `TemplateEditorPage` 的弹窗父窗口为直接引用；`TemplateEditorViewBindings::parentWidget`、`dialogParent()`、父对象遍历和类型转换零引用。
 - 保存模板按钮的 `operationUi.saveTemplate` 状态只由 `TemplateEditorPage::applyOperationState()` 通过参数设定 Ui 直接应用，`InspectionPage` 不持有或访问参数设定 Ui。
 - 页面内按钮全部存在一条可追踪的最终连接，无重复连接；迁出页面且由 MainWindow 处理的按钮使用函数指针显式连接，不依赖页面根 QWidget 的自动槽，也不对 MainWindow 重复调用 `connectSlotsByName(this)`。
-- 制作模板按钮直接连接 `TemplateEditorPage::handleTemplateCaptureButton()`；`MainWindow::on_toolButton_createTemplate_clicked()`、`MainWindow::resetTemplateCaptureState()` 和 `MainWindow::confirmInspectionFaultRecovery()` 全仓零引用。
+- 制作模板按钮直接连接 `TemplateEditorPage::handleTemplateCaptureButton()`；`MainWindow::on_toolButton_createTemplate_clicked()` 和 `MainWindow::resetTemplateCaptureState()` 全仓零引用。
 - 五个导航按钮只保留各自绑定固定页面和按钮参数的短 lambda，不存在导航槽批量包装、按钮映射结构、路由器或导航类。
 - 最终只存在 `showRightPanelPage()` 和 `hideRightPanel()`；`showRightDrawerPage()`、`collapseRightDrawer()` 全仓零引用。
-- `showRightPanelPage()` 不再更新标题；`hideRightPanel()` 由导航二次点击和启动成功后的自动隐藏流程复用，Fault 首次呈现通过 `showRightPanelPage()` 打开检测信息。
+- `showRightPanelPage()` 不再更新标题；`hideRightPanel()` 由导航二次点击和启动成功后的自动隐藏流程复用。
 - 三个模板弹窗各自只拥有自己的生成 Ui，不存在 DialogBindings、弹窗工厂或控件转发层。
 - `CharacterTemplateEditorDialog::buildUi()`、嵌套 `CropImageLabel`、`setChangedCallback()` 和内联 `QDialog saveDialog` 全仓零引用。
 - `CharacterCropLabel` 包含 `Q_OBJECT` 和唯一的 `itemsChanged()` 信号，不存在 `std::function` 变更回调备用路径。
 - `TemplateSelectionDialog` 和 `CharacterTemplateEditorDialog` 不再保存固定控件或固定布局别名。
 - `slot_displayAndDetect(cv::Mat *)` 旧签名零引用。
-- 模板按钮闪烁计时器和状态只在 `InspectionPage` 存在一份。
 
 ### 14.3 行为与范围
 
 - 右侧导航仍使用原五个 `page_*` 切换。
-- 默认打开检测信息、运行成功收起、Fault 首次打开检测信息的代码边界不变。
+- 默认打开检测信息、运行成功收起的代码边界不变。
 - `OperationUiPolicy` 和 `SettingsEditState` 仍是唯一状态规则，不增加副本。
 - 模板、相机、PLC、统计、软件设置和结果传输仍调用现有应用服务。
 - 没有 AppSettings、Schema、qrc 或 SVG 差异；正式 QSS 只删除三个失效标题栏选择器并同步主图像画布类型/对象名，翻译文件只刷新 `.ui` 源位置。
@@ -976,7 +937,7 @@ Agent 只执行第 14 节静态检查。Qt Creator 的 Run qmake、构建、运�
 12. 验证 PLC 连接、断开、触发模式和运行参数应用。
 13. 验证软件数据目录、清空软件数据和恢复默认设置。
 14. 验证二维码结果传输启用、连接、断开和状态显示。
-15. 启动识别后确认抽屉收起；制造或模拟同一次 Fault，确认只在首次呈现时打开检测信息页。
+15. 启动识别后确认抽屉收起；发生运行故障时确认停止链正常完成且抽屉不被自动打开。
 
 ## 16. 完成标准
 
@@ -991,21 +952,20 @@ Agent 只执行第 14 节静态检查。Qt Creator 的 Run qmake、构建、运�
 - 选择模板、保存模板和分割字符模板已分别存在于三个独立 `.ui` 文件中。
 - `main_window.ui` 只保留主窗口骨架和五个页面根节点，不保留任何页面内容副本。
 - `frame_rightDrawerHeader`、`label_rightDrawerTitle`、`toolButton_collapseRightDrawer` 及其连接、标题更新和专用样式已完全删除，不保留空白或页面内副本。
-- 再次点击当前导航按钮和启动识别成功都通过唯一的 `hideRightPanel()` 隐藏右侧面板；Fault 首次呈现通过 `showRightPanelPage()` 打开检测信息。
+- 再次点击当前导航按钮和启动识别成功都通过唯一的 `hideRightPanel()` 隐藏右侧面板。
 - 旧 `showRightDrawerPage()` 和 `collapseRightDrawer()` 已完全删除，不保留别名、重载、转发函数或兼容入口。
 - 五个页面全部通过生成 Ui 直接装配，没有 QWidget 空壳类、动态加载器或页面注册框架。
-- 三组 ViewBindings、两组 Callback、旧映射函数、重复控件别名和旧模板闪烁外部状态已完全删除。
+- 三组 ViewBindings、两组 Callback、旧映射函数和重复控件别名已完全删除。
 - 主窗口、五个页面和三个弹窗共九个生成 Ui 的所有权统一且唯一，全部使用 `std::unique_ptr`，不存在裸指针/智能指针并行方案或手工生命周期胶水。
 - MainWindow 的成员声明顺序保证三个逻辑 Page 先于其引用的页面生成 Ui、状态和服务销毁，`Ui::MainWindow` 最后销毁；析构函数中不存在 Page 手工 `reset()`、`delete ui` 或 `ui = nullptr`。三个弹窗的生成 Ui 均通过在 `.cpp` 定义的显式析构函数正确释放，不增加生命周期包装层。
 - `MachineSettingsPage` 和 `TemplateEditorPage` 不接收或保存 QObject 父对象，不调用 `QObject(parent)` 或 `setParent()`；两者只保留 MainWindow `std::unique_ptr` 的单一所有权路径。
 - `TemplateSelectionDialog`、`MachineSettingsPage` 和 `TemplateEditorPage` 的必需服务均使用引用，不保留无服务回退、旧指针构造函数或兼容重载。
-- `InspectionPage` 的必需窗口使用引用，模板提示计时器和开关由自身以值成员持有，Fault 提示状态通过 `bool &` 复用 MainWindow 的唯一状态。
+- `InspectionPage` 的必需窗口使用引用。
 - `TemplateEditorPage` 直接保存弹窗父窗口引用，不保留 `dialogParent()` 或父对象查找路径。
 - 固定 Ui 控件、必需窗口、必需服务和固定创建的三个 Page 的无效防御性判空已删除，辅助函数和 `installWheelProtection()` 的必需对象参数使用引用，真实业务校验仍完整保留。
-- Fault 仍以 MainWindow 唯一的 `m_faultAlarmPresented` 保证同一次故障只首次提示；删除的只是指针为空路径，不删除 `if (!alarmPresented)` 业务条件。
 - 保存模板启用状态由 `TemplateEditorPage` 通过参数设定 Ui 直接应用，`InspectionPage` 不再跨页访问保存模板按钮。
 - 页面按钮直接连接到最终处理逻辑；迁出页面按钮不依赖 MainWindow 自动槽发现，不重复调用 `connectSlotsByName(this)`，没有兼容层、转发层或新旧双路径。
-- `MainWindow::on_toolButton_createTemplate_clicked()`、`MainWindow::resetTemplateCaptureState()` 和 `MainWindow::confirmInspectionFaultRecovery()` 三个纯转发方法已删除。
+- `MainWindow::on_toolButton_createTemplate_clicked()`、`MainWindow::resetTemplateCaptureState()` 两个纯转发方法已删除。
 - 三个模板弹窗不再手写固定界面；动态条目仍由所属弹窗直接维护；字符框选控件通过 Designer 提升直接创建。
 - `CharacterCropLabel` 使用 `Q_OBJECT` 和唯一的 `itemsChanged()` 信号；旧 `buildUi()`、嵌套框选类、`std::function` 变更回调和内联保存模板对话框已完全删除，没有 DialogBindings、占位替换或弹窗工厂。
 - Agent 静态门禁通过。

@@ -67,7 +67,7 @@
 当前代码是“模块化外壳包住旧核心”，上一轮抽取没有改变以下终局问题：
 
 - `widget.cpp` 仍有约 3437 非空行，`widget.h` 直接包含算法、OpenCV Tracking、设备、配置和运行类型。
-- `Widget` 仍持有 PLC 脉冲状态、Fault 恢复、模板状态、图像缓存和大量运行字段。
+- `Widget` 仍持有 PLC 脉冲状态、运行故障界面处理、模板状态、图像缓存和大量运行字段。
 - `TemplateEditorController` 约 5333 行，并通过 `friend` 和 `Ui::Widget` 直接操作主窗口。
 - `InspectionStartController`、`InspectionStopController` 通过 `friend` 直接读取控件和 Widget 私有状态。
 - `MyThread` 与 `CameraThread` 分别实现软、硬触发采集，但复制了旋转、通道、定位、Profile 和检测分发逻辑。
@@ -205,7 +205,6 @@ app/
   - 相机帧号、采集时间、只读图像
 - `DetectionResult`
   - `AlgorithmVerdict`
-  - `DetectionStatus`
   - 识别文本、命中 Profile、Overlay、耗时
 - `InspectionPresentation`
   - 同一产品的结果图、文字、模板名、统计、耗时和状态
@@ -222,10 +221,9 @@ class InspectionApplicationService : public QObject
     Q_OBJECT
 public:
     StartInspectionResult start(const QString &recipeId);
-    StopInspectionResult stop();
+    CameraRecoveryResultDto stop();
     OperationResult openCamera();
     OperationResult closeCamera();
-    OperationResult acknowledgeFault();
 
     RuntimeSnapshot runtimeSnapshot() const;
 
@@ -373,7 +371,7 @@ CaptureWorker
 4. 已经产生的算法结果保持原结论，不重复输出。
 5. 已受理但没有最终算法结果的产品记为 `Unconfirmed`。
 6. 不补发猜测性 NG，不执行“唯一未结论产品兜底 49”。
-7. UI 显示视觉检测已暂停、输送线状态未知。
+7. MainWindow 在自动停止完成后显示一次故障警告。
 8. 操作员确认且运行线程已经退出后，恢复到 Idle。
 9. PLC 或设备仍不可用时，下一次启动由正常启动预检拒绝。
 
@@ -424,7 +422,7 @@ CaptureWorker
 - 在主升级计划中记录本方案是新的终局替换阶段。
 - 更新功能对照表：
   - `MC-001..003` 标为用户确认删除。
-  - 记录 Fault 不再发送猜测性兜底 NG。
+  - 记录运行故障自动停止，未完成产品只记为未确认。
   - 其余 87 项继续要求保持。
 - 在执行记录中新建“新架构完全替换”章节。
 - 建立旧类型删除清单和每阶段功能 ID 映射。
@@ -622,21 +620,9 @@ Schema 至少完整覆盖：
 - 一次启动创建一个不可变 `InspectionRunContext`。
 - 定位和 Pipeline 在同一检测 Worker 中串行执行。
 - 统计、存图、PLC 和呈现从统一结果入口产生。
-- Fault 使用已确认的简化策略。
+- Fault 记录首因后进入统一自动停止，未完成产品只记为未确认。
 
-同阶段删除或合并：
-
-- `InspectionRuntimeController`
-- `InspectionRuntimeStartTransaction`
-- `InspectionRuntimeStopTransaction`
-- `InspectionFaultState`
-- `InspectionProductReconciler`
-- `DetectionSession` 的自动补建逻辑
-- `InspectionResultCoordinator`
-- `DetectionCompletionController`
-- `InspectionRuntimeUiCoordinator` 中的业务状态
-- 多个重复结果收尾函数
-- UI 层对存图和 PLC 的回调编排
+同阶段形成单一的 Runtime、结果事务和 UI 呈现边界。
 
 最低影响功能：
 
@@ -785,11 +771,11 @@ rg "setParent\\(nullptr\\).*worker|release\\(\\).*buffer" app
 
 | 阶段 | 最低功能 ID | 关键用户门禁 |
 |---|---|---|
-| 阶段 0 | `MC-001..003`；Fault 决策影响 `UI-002、UI-005、RUN-001..004、PLC-005..007、RES-001` | 文档结论一致；其余 87 项基线不降级 |
+| 阶段 0 | `MC-001..003`；故障自动停止影响 `UI-002、UI-005、RUN-001..004、PLC-005..007、RES-001` | 文档结论一致；其余 87 项基线不降级 |
 | 阶段 1 | `SET-001..013、TPL-006..016`，五模式启动资源预检 | 新设置/配方唯一格式、事务保存、旧格式拒绝 |
 | 阶段 2 | `RUN-001..003、UI-002、SET-004..005、CAM-001..002、PLC-001..004` | 五模式启停重启、重复启动拒绝、提示保持 |
 | 阶段 3 | `CAM-001..006、RUN-001..006、TPL-001..002、SET-006..010、MC-001..003` | 真实相机、预览、软硬触发、停止 join、多相机删除 |
-| 阶段 4 | `DET-001..008、RES-001..005、SAVE-001..005、PLC-005..007、UI-003..005` | 五模式一致、唯一结果、PLC Fake、Fault 简化、存图反压 |
+| 阶段 4 | `DET-001..008、RES-001..005、SAVE-001..005、PLC-005..007、UI-003..005` | 五模式一致、唯一结果、PLC Fake、故障自动停止、存图反压 |
 | 阶段 5 | `TPL-001..016、UI-001、UI-006、SET-003..004` | 完整模板工作流和事务保存 |
 | 阶段 6 | 全部 UI/启动/运行可达功能 | Widget 清零、页面化、外观与入口保持 |
 | 阶段 7 | 全部 90 项及真实 PLC 现场待验记录 | 工程清单、全量自动/人工回归、旧符号零引用 |
@@ -803,7 +789,7 @@ rg "setParent\\(nullptr\\).*worker|release\\(\\).*buffer" app
 | 1 | `AppSettingsManager`、`GlobalSettings`、`TemplatePrivateSettings`、旧 INI 和旧路径兼容 | 新 Store 成为唯一读写路径；设置/配方门禁通过 |
 | 2 | `InspectionStartController`、`InspectionStopController`、对应 `friend`、重复运行状态 | 应用服务成为唯一启停入口 |
 | 3 | `MyThread`、`CameraThread`、`InspectionAcquisitionController`、`InspectionWorkerConfigurator`、旧相机 Transition、`CMvCamera`、`Zhuizong`、旧 ReadBuffer API、全部多相机类型/UI | 新相机端口、Session、CaptureWorker 接入并完成真实相机门禁 |
-| 4 | `InspectionRuntimeController`、Start/Stop Transaction、`InspectionFaultState`、`InspectionProductReconciler`、`InspectionResultCoordinator`、`DetectionCompletionController`、UI 业务协调和重复收尾函数 | 单一 Runtime 和 ResultService 通过一致性/Fake PLC/Fault 门禁 |
+| 4 | 单一 Runtime、ResultService、产品收口和 UI 呈现边界 | 一致性、Fake PLC 与运行故障自动停止门禁 |
 | 5 | `TemplateEditorController`、旧字符裁切持久化、模板编辑 `friend`、旧目录选择/保存/重发路径 | 新模板页面和应用服务完成全部模板门禁 |
 | 6 | `Widget` 三件套、`TemplateMatch`、旧 Widget 信号、根目录旧算法/类型和公共头污染 | MainWindow/页面成为唯一 UI；外观与入口回归通过 |
 | 7 | 重复 `.pro` 项、注释旧实现、无调用公共 API、重复第三方包装 | 全仓零引用、qmake 清单和最终回归通过 |

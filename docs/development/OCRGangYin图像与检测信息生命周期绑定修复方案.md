@@ -110,7 +110,7 @@ TemplateEditorPage::displayPreviewFrame
    - `updatesTemplateName == true` 时显示本次名称；
    - `updatesTemplateName == false` 时清空，禁止沿用上一张检测图片的名称。
 
-不改变检测结果统计计算、运行状态和故障呈现。
+不改变检测结果统计计算、运行状态和故障自动停止。
 
 ### 5.2 删除 `TemplateEditorPage` 对右侧模板名称的写入
 
@@ -148,13 +148,13 @@ TemplateEditorPage::displayPreviewFrame
 2. 删除 MainWindow 对 `TemplateEditorPage::updateCurrentTemplateName()` 的调用。
 3. 关闭相机和硬触发启动时，删除逐控件 `clear()`，统一调用
    `clearInspectionView(InspectionClearScope::AllDetectionData)`。
-4. 故障结果清理和故障恢复继续只清图片级检测信息，改为调用
+4. 故障自动停止只清图片级检测信息，调用
    `clearInspectionView(InspectionClearScope::ImageMetadata)`。
 5. 完整清理补齐现有遗漏的合格率和当前模板名称，不改变统计计算和重置业务。
 
 ### 5.4 `clearTransientView()` 保持独立
 
-`clearTransientView()` 不是检测数据清理方法。它只在恢复正常故障界面时执行：
+`clearTransientView()` 不是检测数据清理方法。它在运行停止后执行：
 
 1. 将 `m_detectionRoiWarningActive` 复位为 `false`；
 2. 将 `m_imageSaveWarningScheduled` 复位为 `false`；
@@ -260,7 +260,7 @@ InspectionPage::clearInspectionView(AllDetectionData)
 6. 启动硬触发识别，确认等待新图期间图片、四项图片级检测信息和三项统计均为空。
 7. 再完成一次检测，确认新图片与新判定、识别内容、耗时和模板名称同时出现。
 8. 抽查钢印、OCR、二维码和纸巾模式；纸巾模式的模板名称应为空，不沿用其他模式名称。
-9. 制造并恢复一次可控故障，确认临时运行警告被清除，检测数据清理范围没有被扩大。
+9. 制造一次可控故障，确认自动停止完成后只显示一次警告，检测数据清理范围没有被扩大。
 
 ## 12. 实施结果
 
@@ -271,7 +271,7 @@ InspectionPage::clearInspectionView(AllDetectionData)
 3. `present()` 已在每次正式检测呈现时明确写入或清空本次模板名称，不再沿用旧值。
 4. `TemplateEditorPage` 对右侧模板名称的绑定、状态、方法和调用已全部删除。
 5. 关闭相机和硬触发启动已统一执行完整清理，补齐合格率和当前模板名称。
-6. 故障结果清理和恢复已改用图片级信息范围；`clearTransientView()` 保持独立且未修改。
+6. 故障自动停止的结果清理使用图片级信息范围；`clearTransientView()` 保持独立且未修改。
 7. 六个生产文件合计新增 32 行、删除 62 行，生产代码净减少 30 行。
 8. 旧符号、模板编辑页名称绑定、MainWindow 直接清图和逐控件清理均为零引用；
    `git diff --check` 通过。

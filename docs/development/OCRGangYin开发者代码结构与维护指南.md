@@ -144,8 +144,7 @@ app/
       ├─ operation_ui_policy.h/.cpp
       ├─ inspection/
       │  ├─ inspection_info_page.ui
-      │  ├─ inspection_page.h/.cpp
-      │  └─ inspection_fault_presenter.h/.cpp
+      │  └─ inspection_page.h/.cpp
       ├─ settings/
       │  ├─ detection_settings_page.ui
       │  ├─ image_settings_page.ui
@@ -224,11 +223,11 @@ CameraSession/CaptureWorker
 
 ### 4.2.1 A2 结果与故障边界
 
-正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`；`DetectionStatus`、`NotEvaluated` 和取消/故障产品结果均已删除。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次统计、存图、PLC 和结果呈现事务，运行状态保持 Running。
+正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次统计、存图、PLC 和结果呈现事务，运行状态保持 Running。
 
 无效工作项、定位成功后模板下标越界、执行期 OCR/二维码引擎异常、预处理失败或无效 completion 不生成产品结果，由 `DetectionWorker::failureConsumer` 进入现有 Runtime Fault。队列取消只保留在 Worker/FrameQueue 生命周期层，不进入 `ResultService`。
 
-所有模式均不再发布 ROI 专用警告；`label_runtimeStatus` 只展示既有运行中、停止、Fault、模板制作和存图失败状态。二维码+三期的日期子检测直接读取字库 Pipeline 的 `DetectionResult::verdict`，最终 NG 原因统一来自 `DetectionResult::diagnostic`。
+所有模式均不再发布 ROI 专用警告；`label_runtimeStatus` 只展示运行中、停止、模板制作和存图失败状态。运行故障完成自动停止后仅显示一次系统警告。二维码+三期的日期子检测直接读取字库 Pipeline 的 `DetectionResult::verdict`，最终 NG 原因统一来自 `DetectionResult::diagnostic`。
 
 ### 4.3 模板选择、编辑和保存
 
@@ -324,7 +323,7 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `inspection_runtime.h/.cpp` | 正式 Run 唯一所有者、状态机、工作线程、Fault 和不可变运行上下文。 |
+| `inspection_runtime.h/.cpp` | 正式 Run 唯一所有者、状态机、工作线程、故障首因和不可变运行上下文。 |
 | `camera_session.h/.cpp` | 相机预览与正式采集会话、曝光调整和帧提交。 |
 | `capture_worker.h/.cpp` | 采集线程循环与协作停止。 |
 | `frame_queue.h/.cpp` | 有界线程安全帧队列。 |
@@ -384,12 +383,11 @@ toolButton_selectTemplate
 |---|---|
 | `main_window/main_window.ui` | 主窗口骨架、主控区、左侧 80px 导航、可调宽五页抽屉和五个空页面根节点。 |
 | `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权和跨页面协调。 |
-| `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、故障和窗口关闭协调。 |
+| `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、自动停止警告和窗口关闭协调。 |
 | `main_window/main_window_settings.cpp` | 设置保存、清空软件数据、模式显隐和硬件参数应用。软件设置页不提供在线恢复默认入口。 |
 | `main_window/operation_ui_policy.h/.cpp` | 唯一按钮权限矩阵和状态文字。 |
 | `main_window/inspection/inspection_info_page.ui` | 检测状态、识别内容、统计和当前模板固定界面。 |
 | `main_window/inspection/inspection_page.h/.cpp` | 检测图像、判定、统计、运行状态和主控按钮状态。 |
-| `main_window/inspection/inspection_fault_presenter.h/.cpp` | Fault 文案和恢复提示。 |
 | `main_window/settings/*.ui` | 参数、图像、PLC 和软件设置的四个独立 Designer 页面。 |
 | `main_window/settings/machine_settings_page.h/.cpp` | 整机设置绑定、验证、dirty 和硬件依赖权限。 |
 | `main_window/settings/settings_edit_state.h/.cpp` | 整机和模板未应用项记录。 |

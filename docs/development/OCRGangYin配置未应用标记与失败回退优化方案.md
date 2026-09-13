@@ -682,7 +682,7 @@ adjusted.cameraExposure = 自动调整后的曝光
     → saveConfiguration(adjusted)
 ```
 
-该内部路径继续服从现有 `CameraSession` 的整体成功/失败语义：保存失败仍由现有相机打开或恢复流程处理，不改动 `CameraSession`、相机时序或故障恢复规则，也不经过 UI 的 `saveAppliedHardwareSettings()`。
+该内部路径继续服从现有 `CameraSession` 的整体成功/失败语义：保存失败仍由现有相机打开或预览恢复流程处理，不改动 `CameraSession`、相机时序或故障自动停止规则，也不经过 UI 的 `saveAppliedHardwareSettings()`。
 
 ### 7.9 模板参数与缺字检查
 

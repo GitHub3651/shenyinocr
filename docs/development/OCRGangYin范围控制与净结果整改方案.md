@@ -114,12 +114,12 @@ MainWindow 各设置应用/失败回退调用点
 当前提示文字存在以下几类问题：
 
 - `TemplateApplicationService::storeErrorMessage()` 把用户消息、模板路径和内部诊断拼接为同一字符串，模板页面随后将其直接显示在弹窗中；
-- `InspectionFaultPresenter` 把 `InspectionFaultSnapshot::diagnostic` 作为“诊断信息”直接加入操作员故障弹窗；
+- 运行故障警告只显示固定原因、接收数和完成数，不显示 `InspectionFaultSnapshot::diagnostic`；
 - 启动失败和模板预检失败路径会把错误码或诊断字符串追加到主要提示；
 - 部分固定文字使用 Runtime、Snapshot、ROI、DLL、资源初始化和队列等实现术语；
 - 设置读写提示还直接使用“对象”“字段”“设备合同”“规范化绝对路径”和“原子提交”等存储实现术语；
 - 模板保存提示还直接使用“临时目录”“符号链接”“提交”“回滚”“加载目标”和“写入目标”等文件事务术语；
-- 检测启停和故障提示还直接使用“采集线程”“正式采集”“故障产品收口”等内部流程术语；
+- 检测启停和故障提示还直接使用“采集线程”“正式采集”等内部流程术语；
 - “刚印/钢印”、“触发模式/硬触发模式”等同一含义存在不一致表达；
 - “清空当前软件数据”“所有设置已经完成”等文字没有准确说明实际影响范围。
 
@@ -264,10 +264,10 @@ app/runtime/camera_session.h
 
 1. 新建唯一共享文件 `app/contracts/camera_operation_result.h`，原样承接现有 Application/UI 已使用的 `CameraOpenIssueDto`、`CameraParameterResultDto`、`CameraOpenResultDto`、`CameraRecoveryIssueDto` 和 `CameraRecoveryResultDto`；不让该文件 include 相机 SDK、Runtime 实现、Detection、PLC 或 QWidget。
 2. `CameraSession` 直接返回这套唯一合同，删除 `InspectionCameraOpenIssue`、`InspectionCameraParameterResult`、`InspectionCameraOpenResult`、`InspectionCameraRecoveryIssue` 和 `InspectionCameraRecoveryResult`，不保留别名或转发类型。
-3. `InspectionApplicationService` 继续返回 `OpenCameraResult`、`StopInspectionResult` 等用例级组合结果，但其相机字段直接使用唯一合同。
+3. `InspectionApplicationService` 保留 `OpenCameraResult` 用例级组合结果；停止接口直接返回 `CameraRecoveryResultDto`，其相机字段使用唯一合同。
 4. 删除 `cameraParameterDto()`、`cameraOpenIssueDto()`、`cameraOpenDto()`、`cameraRecoveryIssueDto()`、`cameraRecoveryDto()` 等机械复制函数。
 5. `InspectionAcquisitionDto` 只表示一次检测启动采用软件触发还是硬件触发，不属于相机操作结果；将它原样移入现有 `inspection_application_service.h`，保持枚举值、结果字段和 MainWindow 显示逻辑不变。
-6. `CameraCaptureStopResult` 等仅服务 Runtime 会话且没有跨层重复的类型继续留在 `camera_session.h`。
+6. `CameraSession` 同步停止采集，仅保留恢复预览所需的局部状态，不为停止结果增加跨层类型。
 7. 删除 `app/application/camera_application_contract.h` 及工程条目、include，不保留转发头。
 8. 保留 Application 的用户错误、PLC 组合结果和 RuntimeSnapshot；不把整个 CameraSession 暴露给 UI。
 9. `CameraParameterResultDto` 继续保留当前范围、实际值、原生错误码和 `diagnostic`；`CameraRecoveryResultDto` 继续只保留当前已有的 `errorMessage`，不得为日志补加原生错误码或 `diagnostic`。曝光和增益失败复用 MainWindow 现有的原生错误码与 `diagnostic` 日志，不重复记录；停止后恢复曝光失败在 MainWindow 补记现有 `errorMessage`。随后显示第 9 节对应固定提示；不新增 `userMessage` 字段、相机错误文案框架或第二套映射类型。
@@ -350,14 +350,11 @@ app/ui/main_window/settings/machine_settings_page.cpp
 2. 设置保存：`SettingsApplicationService::saveConfiguration()` 和 `commitAppliedHardwareSettings()` 在保存失败且 `AppSettingsStoreError`、`m_store` 仍可用时，先把错误码、`m_store->settingsFilePath()` 和诊断写入 `logUi`，再调用 `storeFailure()` 生成 `OperationResult`；MainWindow 删除设置文件失败时，也先把目标路径和 `QFile::errorString()` 写入 `logUi`，再显示固定文字。硬件已经生效但软件设置保存失败的分支仍保留该状态事实。
 3. 模板操作：`TemplateApplicationService::storeErrorMessage()` 在生成返回页面的文字前，先把 `TemplateStoreError` 的错误码、路径和诊断写入 `logTemplate`，随后只返回操作员文字，不再拼接路径和诊断；没有用户消息时返回固定的“模板操作失败。”。
 4. 检测启动：`presentStartFailure()` 先把 `StartInspectionResult` 的错误码、诊断和明细写入 `logRuntime`，再显示操作员文字；不得把诊断或内部明细重新拼入弹窗。
-5. 运行故障：`InspectionRuntime::enterFault()` 先把故障原因和当前快照中实际存在的诊断写入 `logRuntime`，`InspectionFaultPresenter` 随后只生成操作员正文，不再显示 `snapshot.diagnostic`。
 6. 存图失败：`ImageSaveService` 在 `image_save.failed` 记录具体错误后，状态区只显示失败数量以及检查文件夹、权限和磁盘空间的建议，不再追加 `latestError`。
 7. 相机参数与恢复：曝光和增益失败保留 MainWindow 现有 `logDevice` 记录，其中包含 `CameraParameterResultDto` 的原生错误码与 `diagnostic`，不得重复写第二条同义日志；停止后恢复曝光失败在 `CameraRecoveryResultDto::errorMessage` 仍可取得时补写一条 `logDevice`。随后按当前操作显示固定文字，不得把 `diagnostic`、`errorMessage` 直接当作弹窗正文，也不为此增加字段。
 8. 独立二维码结果接收工具：`ResultReceiverServer`、`ResultReceiverStore` 或其调用窗口在原生网络/文件错误仍可取得时先用 `qWarning()` 记录，再返回固定操作员文字；这是补齐现有 Qt 诊断输出，不新增日志文件、日志页面或错误框架。
 
 二维码+三期的普通 NG 结果当前把 `DetectionResult::diagnostic` 直接拼成“原因”。为保持现有“原因”展示而不继续混用诊断字段，只在现有 `BarcodeWordDetectionWorkOutput` 增加一个操作员原因字符串，由检测管线填写第 9.2—9.3 节的结果文字，`DetectionRegistry` 显示该字符串；`DetectionResult::diagnostic` 在错误仍完整时先写入 `detection.result` 日志。不新增跨模式错误合同或通用结果映射层。
-
-正式检测中的二维码解码器不可用或内部错误继续沿当前异常路径进入 `RuntimeInvariantViolation`，不新增专用 Fault 枚举，也不改变检测结果或停检行为。`InspectionRuntime::enterFault()` 先记录原始异常诊断，操作员只看到“系统状态异常，检测已暂停”。模板制作时的二维码校验不属于正式检测 Fault，仍按第 9.2 节显示对应操作提示。
 
 二维码结果接收工具不再把 `QTcpServer::errorString()` 或 `QFile::errorString()` 直接写入窗口和弹窗；界面按监听、结果记录保存或 CSV 生成场景显示固定结果与处理动作，原生错误先写入 Qt 警告输出。
 
@@ -372,7 +369,6 @@ app/ui/main_window/settings/machine_settings_page.cpp
 | 当前文字 | 最终文字 |
 |---|---|
 | `启用本机 CSV 记录` | `保存二维码结果到本机（CSV）` |
-| `检测运行约束被破坏` | `系统状态异常，检测已暂停` |
 | `运行模板快照未准备` | `当前模板未准备好` |
 | `运行定位资源初始化失败` | `模板定位准备失败，请重新选择或制作模板` |
 | `启动资源预检失败` | `无法开始检测` |
@@ -392,8 +388,6 @@ app/ui/main_window/settings/machine_settings_page.cpp
 模板选择表格中的“待移除”保持不变。代码标识、稳定模式 ID、文件名、类名、日志字段和开发文档中的 `stamp`、ROI、DLL、Runtime、Snapshot 等技术词不因本节机械改名。
 
 “参数已应用到设备，但未保存到软件设置。”只替换当前首段固定提示；其后不得追加路径、错误码或内部诊断。需要保留的具体原因进入现有日志。
-
-正式检测中的二维码解码器不可用或内部错误不显示“二维码识别异常，请联系维护人员”，统一显示“系统状态异常，检测已暂停”；当前错误路径实际可取得的解码异常信息先写入 Runtime 日志。
 
 ### 9.3 全仓复核补充文字
 
@@ -467,10 +461,10 @@ app/ui/main_window/settings/machine_settings_page.cpp
 | `无法创建模板上级目录。` | `无法创建模板保存文件夹。` |
 | `无法备份原模板，未修改原目录。` | `模板保存失败，原模板仍可使用。` |
 | `模板提交失败，原模板已恢复。` | `模板保存失败，原模板仍可使用。` |
-| `模板提交和回滚均失败，需要人工恢复。` | `模板保存失败，原模板可能不可用，请联系维护人员。` |
+| 模板提交或回滚失败 | `模板保存失败，原模板可能不可用，请联系维护人员。` |
 | `模板已保存，但旧备份目录清理失败。` | `模板已保存，但旧备份文件未能清理，请联系维护人员。` |
 
-#### 9.3.4 检测启停、相机与故障
+#### 9.3.4 检测启停与相机
 
 | 当前文字 | 最终文字 |
 |---|---|
@@ -488,28 +482,22 @@ app/ui/main_window/settings/machine_settings_page.cpp
 | `相机采集会话尚未准备完成。` | `相机尚未准备好，无法开始检测。` |
 | `采集线程启动失败。`、`相机采集线程启动失败。` | `图像采集启动失败。` |
 | `相机采集线程仍在运行，请先停止当前任务。` | `相机正在采集图像，请先停止检测。` |
-| `识别线程已停止` | `图像采集已停止，检测已暂停` |
 | `实时取景线程启动失败。` | `无法开始实时取景，请重试。` |
 | `实时取景线程尚未停止，请稍后重试。` | `实时取景尚未停止，请稍后重试。` |
 | `运行状态提交失败。` | `无法开始检测，请重试。` |
 | `检测运行时未处于启动状态。` | `检测尚未准备好，无法开始。` |
-| `停止过程中检测运行时进入故障状态。` | `停止检测时发生系统故障。` |
 | `未找到定位锚点` | `未找到定位参考区域` |
 | `二维码区域配置无效或未映射` | `二维码检测区域未设置或无效` |
 | `日期检测区域配置无效或未映射` | `日期检测区域未设置或无效` |
 | `相机断连或正式采集异常` | `相机连接或图像采集异常` |
 | `PLC连接或结果输出异常` | `PLC 连接或检测结果发送异常` |
-| `硬触发检测队列已满` | `待检测图像过多，系统已暂停` |
 | `产品身份无法唯一确定` | `无法确定当前图像对应的产品` |
-| `故障产品收口失败`、`故障产品收口结果` | `故障产品处理失败`、`故障产品处理结果` |
 | `请先停止当前任务再清空剔除队列。` | `请先停止检测，再清除待执行的剔除动作。` |
-| `确认现场已安全处理后，点击【确认故障并恢复】解除软件锁定。` | `确认现场已安全处理后，点击【确认故障并恢复】恢复检测操作。` |
-| `注意：解除软件锁定不代表输送线已停止。` | `注意：恢复检测操作不代表输送线已停止。` |
 | 相机曝光设置失败时直接显示 `CameraParameterResultDto::diagnostic` | `相机曝光设置失败，请检查输入值和相机状态。`；先记录原生错误码和诊断 |
 | 相机增益设置失败时直接显示 `CameraParameterResultDto::diagnostic` | `相机增益设置失败，请检查输入值和相机状态。`；先记录原生错误码和诊断 |
 | `停止识别后恢复相机曝光失败：`后直接追加恢复错误 | `停止检测后，相机曝光恢复失败，请检查相机状态。`；先记录恢复错误 |
 
-`硬触发 FIFO 无法接收新图像`、`产品结果正式认领状态提交失败`等故障诊断在第 9.1 节实施后只进入日志，不再直接显示，因此不改其诊断文本。检测模式名中的“深度 OCR”、PLC、IP、NG、CSV 等当前产品或维护操作所需名称继续保留。
+检测模式名中的“深度 OCR”、PLC、IP、NG、CSV 等当前产品或维护操作所需名称继续保留。
 
 #### 9.3.5 独立二维码结果接收工具
 
@@ -558,7 +546,6 @@ app/runtime/inspection_runtime.cpp
 app/ui/main_window/main_window.cpp
 app/ui/main_window/main_window_inspection.cpp
 app/ui/main_window/main_window_settings.cpp
-app/ui/main_window/inspection/inspection_fault_presenter.cpp
 app/ui/main_window/inspection/inspection_page.h
 app/ui/main_window/inspection/inspection_page.cpp
 app/ui/main_window/inspection/inspection_info_page.ui
@@ -580,7 +567,7 @@ tools/result_receiver/result_receiver_server.cpp
 ### 9.5 保持项
 
 - 所有按钮动作、弹窗触发条件、默认按钮和危险操作确认流程不变；
-- 故障后停检、现场停线确认、产品隔离和软件锁定流程不变；
+- 运行故障触发自动停止，尚未完成的产品记为未确认，收口后界面回到空闲；
 - 设置失败回退、硬件已生效但磁盘未保存的状态语义不变；
 - 模板加载、保存、批量处理、选择和磁盘目录语义不变；
 - 用户主动选择或查看的模板目录、存图目录和 CSV 输出目录继续在现有路径控件中显示；禁止的是把错误结构中的内部路径自动追加到提示正文；
@@ -770,7 +757,7 @@ docs/development/OCRGangYin计划索引.md
 
 - `MainWindow` 析构注释不再描述不存在的行为；
 - 根 README 不再把 `app/recipes/` 描述为当前目录；
-- 计划索引按当前代码记录软件触发阻塞提交、硬触发非阻塞提交和硬触发队列满进入 `HardTriggerQueueOverflow` Fault，不保留“过载按 NG 继续运行”等冲突描述；
+- 计划索引按当前代码记录软件触发阻塞提交和硬触发非阻塞提交；
 - 计划索引中的当前任务入口均指向真实存在的 Markdown 文件，也没有为尚未形成方案的任务预建条目、路由或现状文档；
 - 历史计划和执行记录没有被改写成当前状态。
 
@@ -781,14 +768,12 @@ docs/development/OCRGangYin计划索引.md
 - 用户可见的“定位锚点”为零，代码变量、几何合同和开发文档不做机械替换；
 - “待移除”在模板选择表格中保持不变；
 - 硬触发状态明确显示“硬触发模式运行中”，软触发状态保持“软触发模式运行中”；
-- 用户可见的“识别线程已停止”“启用存图前，请先选择图像保存路径。”“模板保存路径无效。”为零，对应文字分别为“图像采集已停止，检测已暂停”“保存图像前，请先选择保存文件夹”“请选择有效的模板保存文件夹”；
-- 硬触发队列满只显示“待检测图像过多，系统已暂停”，其停检与 Fault 行为保持当前代码不变；
-- 主程序用户消息中“原子提交”“设备合同”“规范化绝对路径”“运行模板快照”“运行定位资源初始化”“采集线程”“故障产品收口”和“检测队列”等已确认实现术语为零；同词若只存在于代码、注释、日志或诊断字段，不做机械替换；
+- 用户可见的“启用存图前，请先选择图像保存路径。”“模板保存路径无效。”为零，对应文字分别为“保存图像前，请先选择保存文件夹”“请选择有效的模板保存文件夹”；
+- 主程序用户消息中“原子提交”“设备合同”“规范化绝对路径”“运行模板快照”“运行定位资源初始化”“采集线程”和“检测队列”等实现术语为零；同词若只存在于代码、注释、日志或诊断字段，不做机械替换；
 - 二维码结果接收工具不再显示“CSV 原子替换”“坏 JSON”“不返回 ACK”等实现细节，`同步 JSONL 到 CSV`等任务所需格式名保持不变；
 - `.ui` 的 `idle`、`danger`、`primary` 仍仅作为动态属性值存在，不被误改成界面文字；
 - 二维码+三期结果中的“原因”来自现有工作输出的操作员原因字符串，不再读取 `DetectionResult::diagnostic`；内部诊断仍进入 `detection.result` 日志；
-- 正式检测中的二维码解码器不可用或内部错误仍进入 `RuntimeInvariantViolation`，原始异常先写入 Runtime 日志，操作员只看到“系统状态异常，检测已暂停”；
-- 模板、启动和 Fault 弹窗不直接拼接错误结构中的 `code`、`path` 或 `diagnostic`；存图失败状态不再追加 `latestError`；
+- 模板和启动提示不直接拼接错误结构中的 `code`、`path` 或 `diagnostic`；存图失败状态不再追加 `latestError`；
 - 相机曝光和增益失败弹窗不直接显示 `diagnostic`，并复用现有包含原生错误码与 `diagnostic` 的唯一 `logDevice` 记录；停止后恢复曝光失败不直接显示 `errorMessage`，只补写一条包含现有 `errorMessage` 的 `logDevice` 记录；
 - ResultReceiver 的监听、结果记录和 CSV 生成失败先通过 `qWarning()` 记录原生网络或文件错误，再显示固定操作员文字；
 - `tools/barcode_decoder/**`、`app/engines/barcode/**` 和 `app/contracts/barcode_parameter_defaults.h` 没有工作区差异；`app/templates/template_store.cpp` 及二维码相关应用文件的差异只涉及第 9 节文字和诊断显示边界；
@@ -821,8 +806,8 @@ docs/development/OCRGangYin计划索引.md
 ### 14.2 运行时与相机
 
 1. 对主程序执行 Run qmake、Rebuild，确认移动合同和删除接口后没有 moc、include、声明或链接错误。
-2. 验证相机打开、曝光/增益设置、模板预览、正式采集、停止和故障恢复。
-3. 验证五种模式软触发；涉及 PLC 的硬触发、结果输出和 Fault 由现场继续验证。
+2. 验证相机打开、曝光/增益设置、模板预览、正式采集和正常停止。
+3. 验证五种模式软触发；涉及 PLC 的硬触发和结果输出由现场继续验证。
 4. 验证统计清零、NG 清零、延迟 NG、存图和 Presentation 显示没有因接口清理改变。
 5. 分别触发曝光和增益失败，确认日志包含现有原生错误码与 `diagnostic`；再触发停止后恢复曝光失败，确认日志只记录当前已有的 `errorMessage`；三类弹窗均只显示对应固定操作提示。
 
@@ -831,18 +816,17 @@ docs/development/OCRGangYin计划索引.md
 1. 逐项修改需要应用的相机、图像、纸巾和 PLC 参数，确认 `*`、成功提交和失败回退。
 2. 验证检测模式、存图范围、存图内容、目录和硬触发开关的即时保存。
 3. 验证同标签多字段、启动前未应用提示、放弃未应用值和当前日志输出。
-4. 在 Idle、模板操作、Running、Stopping 和 Fault 状态检查原有控件权限。
+4. 在 Idle、模板操作、Running 和 Stopping 状态检查原有控件权限。
 
 ### 14.4 操作员提示文字
 
-1. 逐项触发第 9.2—9.3 节涉及的设置、模板、检测启动、二维码、相机、硬触发、剔除复位和故障场景，确认显示最终文字。
+1. 逐项触发第 9.2—9.3 节涉及的设置、模板、检测启动、二维码、相机、硬触发和剔除复位场景，确认显示最终文字。
 2. 确认模板选择表格仍显示“待移除”。
 3. 确认操作员弹窗不再显示文件路径、错误码、原生错误或内部诊断，但日志仍包含对应路径实际可取得的排障信息。
 4. 确认“删除已保存的软件设置”对话框继续明确说明不会删除产品模板、识别图片、授权文件和日志。
 5. 对 `tools/result_receiver/ResultReceiver.pro` 执行 Run qmake、Rebuild，再验证保存目录、接收数据、重复记录、损坏记录和 CSV 同步失败提示，同时确认接收协议及 JSONL/CSV 内容不变。
-6. 确认文字修改没有改变弹窗触发时机、默认按钮、取消路径、检测结果、设备动作和故障恢复流程。
-7. 分别触发“识别线程已停止”、未选择图像保存文件夹、模板保存路径无效和硬触发队列满，确认显示第 9.3 节指定文字。
-8. 在正式检测中模拟二维码解码器不可用或内部错误，确认运行仍进入 `RuntimeInvariantViolation`，操作员只看到“系统状态异常，检测已暂停”，Runtime 日志保留当前路径已有的解码异常信息。
+6. 确认文字修改没有改变弹窗触发时机、默认按钮、取消路径、检测结果和设备动作。
+7. 分别触发未选择图像保存文件夹和模板保存路径无效，确认显示第 9.3 节指定文字。
 9. 在 ResultReceiver 中触发监听、结果记录和 CSV 生成失败，确认 `qWarning()` 先记录原生错误，界面不显示原生错误。
 
 ## 15. 完成标准
@@ -855,7 +839,7 @@ docs/development/OCRGangYin计划索引.md
 4. 参数页保留原有集中绑定、字符串键和通用控件类型分发，现有 dirty、应用和失败回退行为保持。
 5. 第一方代码中的模板化、复述性和失真注释清理完成，必要约束注释保留。
 6. 根 README、相关模块 README、Schema、开发者指南和计划索引只描述当前最终状态；计划索引以当前代码记录软硬触发行为，所有条目和路由指向真实文件，也没有为尚未形成方案的任务预建文档。
-7. 第 9.2—9.3 节规定的使用者可见文字全部生效；正式检测中的二维码解码异常只显示“系统状态异常，检测已暂停”；所有相关路径均先记录现有错误结构和调用现场实际可取得的技术信息，再生成不含内部路径、错误码或诊断字符串的操作员文字。
+7. 第 9.2—9.3 节规定的使用者可见文字全部生效；所有相关路径均先记录现有错误结构和调用现场实际可取得的技术信息，再生成不含内部路径、错误码或诊断字符串的操作员文字。
 8. 工程清单、include、XML、UTF-8 和 Git 差异静态门禁通过。
 9. 用户完成主程序与 ResultReceiver 的 Qt Creator 构建、程序交互及必要的相机、PLC 现场验证。
 10. 未增加本方案范围外功能、抽象、兼容路径、迁移逻辑、视觉或部署内容。

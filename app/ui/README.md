@@ -16,8 +16,7 @@ ui/
    ├─ operation_ui_policy.h/.cpp
    ├─ inspection/
    │  ├─ inspection_info_page.ui
-   │  ├─ inspection_page.h/.cpp
-   │  └─ inspection_fault_presenter.h/.cpp
+   │  └─ inspection_page.h/.cpp
    ├─ settings/
    │  ├─ detection_settings_page.ui
    │  ├─ image_settings_page.ui
@@ -51,7 +50,7 @@ ui/
 - `TemplateEditorPage` 直接使用主窗口 Ui、参数设定页 Ui 和图像设置页 Ui，处理模板选择、制作、保存和参数编辑。
 - MainWindow 只保留跨页面或应用级协调；迁出页面且仍由 MainWindow 处理的按钮采用显式函数指针连接。
 
-右侧五个导航按钮切换同一个 `QStackedWidget`。启动时默认显示检测信息；再次点击当前按钮会收起右侧面板；检测启动成功后保持原有开合状态；Fault 首次呈现时自动打开检测信息。
+左侧五个导航按钮切换同一个 `QStackedWidget`。启动时默认显示检测信息；再次点击当前按钮会收起左侧面板；检测启动和故障自动停止均保持当前开合状态。
 
 ## 模板 UI
 
@@ -94,7 +93,7 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 ## 操作状态
 
-`OperationUiPolicy` 根据 `CameraClosed/CameraReady/Detecting/Stopping/Fault/TemplatePreviewing/TemplateFrozen` 统一计算权限。UI 禁用用于明确状态展示；真正影响设备和生产运行的操作仍由 Application/Runtime 检查。
+`OperationUiPolicy` 根据 `CameraClosed/CameraReady/Detecting/Stopping/TemplatePreviewing/TemplateFrozen` 统一计算权限。运行故障对界面统一表现为 `Stopping`，自动停止完成后回到 `CameraReady` 或 `CameraClosed`。UI 禁用用于明确状态展示；真正影响设备和生产运行的操作仍由 Application/Runtime 检查。
 
 ## 专用控件
 
@@ -121,8 +120,8 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 运行时视觉属性保持为：
 
-- `uiState`：运行、停止、警告、故障和模板取景状态。
-- `verdict`：`idle/ok/ng/fault` 检测判定。
+- `uiState`：运行、停止、警告和模板取景状态。
+- `verdict`：`idle/ok/ng` 检测判定。
 - `hasError`：输入校验错误。
 
 C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁用视觉由 `app_theme.qss` 决定。模板向导既有区域名称强调色和字符框选画布既有标注色除外；`CharacterCropLabel` 只通过 `QPainter::setFont(font())` 继承控件字体，不保存字号或字重值。五个左侧抽屉页面的 8px 纵向滚动条只通过对应 `QScrollArea` 对象名限定，不影响文本编辑框和模板对话框的内部滚动条。

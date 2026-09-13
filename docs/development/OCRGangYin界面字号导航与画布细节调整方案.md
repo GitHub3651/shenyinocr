@@ -172,7 +172,7 @@ app/ui/main_window/settings/software_settings_page.ui
 - 不改变四个危险按钮既有状态色阶；固定对象名只并入现有四个共享规则，不建立四份独立样式或运行时 `setStyleSheet()`。
 - 不改变其他 26px、48px 字号，不增加新的字号或字重。
 - 不改变模板向导 RichText、四种区域强调色、`emphasizedDrawingRegion()` 或 `toHtmlEscaped()`。
-- 不改变五个导航按钮的尺寸、顺序、图标、文字、Tooltip、选中逻辑、抽屉开合或 Fault 自动打开规则。
+- 不改变五个导航按钮的尺寸、顺序、图标、文字、Tooltip、选中逻辑和抽屉开合。
 - 不删除导航栏容器自身的 1px 分隔边框。
 - 不删除、移动、改写或复制 `canvas_background_grid.svg`，不修改 `image.qrc`。
 - 不把网格应用到 `label_characterCropCanvas`，不修改 `InspectionImageCanvas` 或 `CharacterCropLabel` 绘制代码。
@@ -203,7 +203,7 @@ app/ui/main_window/settings/software_settings_page.ui
 3. 检查清空软件数据、总数清零、NG 清零和剔除复位按钮，确认 Normal、Hover、Pressed、Disabled 均保持现有红色危险语义。
 4. 展开右侧抽屉，确认五个导航入口从顶部连续排列，剩余空间位于底部。
 5. 检查五个导航按钮之间没有边框或分隔线，Checked 状态左侧没有蓝条；蓝色文字和近白背景仍能区分当前入口。
-6. 逐个切换、收起和重新打开五个页面，确认现有抽屉交互、初始选中、运行时保持和 Fault 自动打开行为不变。
+6. 逐个切换、收起和重新打开五个页面，确认现有抽屉交互、初始选中和运行时保持不变。
 7. 检查主检测画布仍为深蓝灰弱网格，字符框选画布为相同的 `#202830` 纯色底；字符示例和字符预览仍为白色。
 8. 加载真实图像并操作模板绘制、字符框选和检测 Overlay，确认背景不覆盖图像，坐标、框线、序号和交互不变。
 9. 在 1600×950、1366×768 以及 Windows 100%/125%/150% 缩放下检查文字裁剪、导航排列和画布显示。

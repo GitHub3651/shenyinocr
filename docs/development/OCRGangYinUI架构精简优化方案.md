@@ -117,7 +117,7 @@ ViewBindings 和 Page 在迁移期是合理支架；错误在于迁移完成后�
 
 ### 5.1 保留三个 Page
 
-- `InspectionPage`：检测结果、统计、故障和主操作按钮呈现。
+- `InspectionPage`：检测结果、统计和主操作按钮呈现。
 - `MachineSettingsPage`：设置控件绑定、校验、已应用值和未应用状态。
 - `TemplateEditorPage`：模板选择、当前编辑模板、取景、框选和模板参数。
 
@@ -130,7 +130,7 @@ Page 的存在不是问题；问题是它们的外部创建方式和 MainWindow 
 - 控件是否可用。
 - 控件禁用原因。
 - 主按钮文字。
-- 检测、停止、故障和模板制作状态。
+- 检测、停止和模板制作状态。
 
 不得恢复各页面自行判断同一状态的方式。
 
@@ -145,18 +145,14 @@ Page 的存在不是问题；问题是它们的外部创建方式和 MainWindow 
 
 该状态被设置页、模板页和启动流程共同使用，不应为减少两个文件而复制回多个页面。
 
-### 5.4 保留 InspectionFaultPresenter
-
-故障文案包含现场安全、已受理件数、已完成件数和恢复提示，属于高风险、需要一致呈现的内容。保留集中转换，不优先为了减少两个小文件而合并。
-
-### 5.5 保留单一正式 QSS
+### 5.4 保留单一正式 QSS
 
 - 正式样式继续只从 `:/qss/app_theme.qss` 加载。
 - C++ 只设置 `uiRole/uiState/verdict/hasError` 等状态属性。
 - 不恢复控件级完整 `setStyleSheet()` 字符串。
 - 不新增 ThemeManager、样式工厂或多个运行时主题服务。
 
-### 5.6 保留应用边界
+### 5.5 保留应用边界
 
 - UI 只调用 ApplicationService、应用命令、查询和只读 DTO。
 - UI 不直接持有 TemplateStore、相机 SDK、PLC Controller、Runtime 或 Pipeline。
@@ -460,7 +456,6 @@ window.showMaximized();
 
 | 当前状态 | 目标所有者 |
 |---|---|
-| 模板按钮闪烁定时器和布尔值 | `InspectionPage` 或 MainWindow 内部直接协作，不再传给 Startup |
 | 设置页 applying/updating 标志 | `MachineSettingsPage` 私有状态 |
 | 图片保存路径 `selectedDir` | `SettingsApplicationService::editableDraft().imageSavePath` |
 | `SettingsEditState` | MainWindow 内部共享对象，直接传给内部 Page，不暴露给 Startup |
@@ -501,7 +496,7 @@ MainWindow 保留：
 - 检测启动/停止。
 - PLC连接、断开和运行写入。
 - 需要同时协调设置页、模板页和检测页的模式切换。
-- 顶层退出、故障恢复和应用生命周期。
+- 顶层退出和应用生命周期。
 
 #### 固定布局迁移
 
@@ -898,7 +893,6 @@ OpenCV 原生 UI 删除后，`template_editor_support.h/.cpp` 已经只剩页面
 | `app/ui/pages/template_editor_support.h/.cpp` | 保持初版已完成的删除，不恢复 HighGUI 或只容纳页面私有小函数的 Support 文件 |
 | `app/ui/main_window/operation_ui_policy.*` | 保持统一状态规则，只删除确认无用的 API，不拆分新文件 |
 | `app/ui/main_window/settings/settings_edit_state.*` | 保持统一未应用状态，不复制回 MainWindow/Page |
-| `app/ui/main_window/inspection/inspection_fault_presenter.*` | 保持故障呈现边界 |
 | `app/ui/main_window/inspection_image_canvas.*` | 按 `DetectionMode` 切换五模式绘图步骤；使用五个私有几何成员、对应只读 getter、模式化绘制和强类型进度事件；不新增几何快照结构，不承担提示文案、模板保存和检测业务 |
 | `app/application/template_geometry_service.*` | 在现有文件中定义并接收唯一的 `TemplateDrawingInput`，统一转换两个锚点、二维码区域和两个独立多边形，不新增 Service |
 | `app/application/template_application_service.*` | 仅按现有门面转发新的几何输入/结果并继续填充现有模板草稿，不新增保存入口 |
@@ -921,7 +915,7 @@ UI-1～UI-3 必须保持以下可观察行为完全不变：
 - 统计、耗时、合格率、当前模板名称和识别文字。
 - 图像保存范围、内容、路径和质量。
 - 未应用设置提示和放弃语义。
-- Fault 锁定、现场安全提示和恢复确认。
+- 故障自动停止、一次警告和运行收口。
 - Tooltip 禁用原因覆盖与恢复。
 - 所有正式视觉样式继续来自 `app_theme.qss`。
 
@@ -952,7 +946,7 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 - 让 `InspectionImageCanvas` 直接持有模板向导控件、显示中文业务文案、弹出 `QMessageBox` 或调用模板应用服务。
 - 把原始 `QMouseEvent*` 传给 `TemplateEditorPage` 后在 Page 中复制一套绘图状态判断。
 - 使用字符串事件名继续维持 `InspectionImageCanvas` 与模板向导之间的隐式协议。
-- 为减少行数删除 OperationUiPolicy、SettingsEditState 或 FaultPresenter 后复制逻辑。
+- 为减少行数复制 OperationUiPolicy、SettingsEditState 或运行故障逻辑。
 - 顺带修改检测算法、阈值、模板 Schema、AppSettings Schema、PLC时序或存图合同。
 - 删除图片、图标、旧主题 CSS/QSS、翻译、模型、DLL 或其他资源文件。
 
@@ -1032,7 +1026,7 @@ UI-4 允许把四种模板模式的绘图步骤统一纳入同一个模式化 `I
 11. 图片保存路径、范围、内容和输出。
 12. 统计清零、NG清零、剔除队列复位。
 13. PLC连接、断开、运行参数和现场合同。
-14. Fault 显示、现场安全提示和恢复确认。
+14. Fault 自动停止、一次警告和运行收口。
 
 ### 14.2 UI-4 额外验证
 

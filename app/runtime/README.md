@@ -6,7 +6,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| `inspection_runtime.h/.cpp` | 唯一运行实例；创建不可变 `InspectionRunContext`，启停工作线程和 Fault。 |
+| `inspection_runtime.h/.cpp` | 唯一运行实例；创建不可变 `InspectionRunContext`，启停工作线程并记录故障首因。 |
 | `camera_session.h/.cpp` | 相机预览/正式采集会话，复用 `contracts/camera_operation_result.h` 并向 Runtime 提交帧。 |
 | `capture_worker.h/.cpp` | 采集线程。 |
 | `frame_queue.h/.cpp` | 有界帧队列。 |
@@ -38,5 +38,5 @@ Idle
 
 - 不隐式创建 Run；只有 `beginStart()` 能创建。
 - 不将模板编辑状态放入 Runtime。
-- 保持一次产品一次最终结果、队列容量、Fault 人工恢复、PLC 脉冲和存图合同。
+- 保持一次产品一次最终结果、队列容量、故障自动停止、PLC 脉冲和存图合同。
 - Runtime 可以依赖 Detection 和设备抽象，不能反向依赖 Application 或 UI。

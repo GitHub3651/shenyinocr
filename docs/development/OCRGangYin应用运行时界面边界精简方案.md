@@ -6,7 +6,7 @@
 - 更新日期：2026-08-23。
 - 本文只定义目标架构、明确决策、实施顺序和验收门禁，不代表生产代码已经修改、构建或现场验证。
 - 适用范围：`app/application`、`app/contracts`、`app/runtime`、`app/detection`、`app/ui` 中与检测运行、结果呈现和模板预览有关的边界。
-- 保护范围：不改变已验证的模板终局、五种检测模式行为、PLC 时序、存图合同、设备安全和 Fault 恢复合同。
+- 保护范围：不改变已验证的模板终局、五种检测模式行为、PLC 时序、存图合同、设备安全和故障自动停止合同。
 
 本版本不再保留 A/B 可选项，固定采用以下设计。除本文列出的代码实施外，不得额外引入替代路径或过渡架构。
 
@@ -150,15 +150,15 @@ UI
 
 ### 5.1 UI
 
-UI 拥有 QWidget、页面内部控件绑定、用户输入、按钮状态、Fault 确认、UI 文案、QSS 和 `InspectionPresentation` 到控件的最终转换。UI 不拥有 Runtime 状态机、DetectionWorker、FrameQueue、ProductKey、PLC、存图服务或模板事务。
+UI 拥有 QWidget、页面内部控件绑定、用户输入、按钮状态、UI 文案、QSS 和 `InspectionPresentation` 到控件的最终转换。UI 不拥有 Runtime 状态机、DetectionWorker、FrameQueue、ProductKey、PLC、存图服务或模板事务。
 
 ### 5.2 Application
 
-Application 拥有启动前设置/模板/设备检查、多服务组合的用户用例、DTO 到运行配置的转换和错误转换；现有运行快照通知可继续由 Application 维护。产品结果、ROI/存图告警和 Fault 通知由 Runtime 直接发布给 UI；Application 不发布或转发这些数据，也不保存 UI 回调、QWidget、QLabel、ImageLabel、控件 Lambda，不持有或访问 ResultService。
+Application 拥有启动前设置/模板/设备检查、多服务组合的用户用例、DTO 到运行配置的转换和错误转换；现有运行快照通知可继续由 Application 维护。产品结果、ROI/存图告警和故障通知由 Runtime 直接发布给 UI；Application 不发布或转发这些数据，也不保存 UI 回调、QWidget、QLabel、ImageLabel、控件 Lambda，不持有或访问 ResultService。
 
 ### 5.3 Runtime
 
-Runtime 是一次生产 Run 的唯一所有者，拥有 `Idle/Starting/Running/Stopping/Fault` 状态、RunId/ProductKey、Detection/队列/ResultService 的运行顺序、设备安全规则、旧 Run 隔离和 PresentationMailbox 生命周期。它继承 `QObject`，只发布纯数据 signal；不包含 UI 头文件，不认识 Page、QLabel、QMessageBox 或 QSS。本次不改变 Application 协调 CameraSession 的现有启动、停止和恢复流程。
+Runtime 是一次生产 Run 的唯一所有者，拥有 `Idle/Starting/Running/Stopping` 公开状态；内部保留 Fault 首因并在统一停止链中收口。它还拥有 RunId/ProductKey、Detection/队列/ResultService 的运行顺序、设备安全规则、旧 Run 隔离和 PresentationMailbox 生命周期。它继承 `QObject`，只发布纯数据 signal；不包含 UI 头文件，不认识 Page、QLabel、QMessageBox 或 QSS。本次不改变 Application 协调 CameraSession 的现有启动、停止和相机预览恢复流程。
 
 ### 5.4 ResultService
 
@@ -301,7 +301,7 @@ connect(
     });
 ```
 
-同样，MainWindow 接收 `imageSaveFailed(totalFailed, latestError)` 和 `roiWarningChanged(active)` 后，再调用 `InspectionPage` 的显示方法；缺少标注图也归入 `imageSaveFailed`，不新增单独信号。MainWindow 直接连接 `faultSnapshotChanged(InspectionFaultSnapshot)` 并使用现有 Runtime Fault 数据显示/确认故障，不创建第二份 Fault DTO。
+同样，MainWindow 接收 `imageSaveFailed(totalFailed, latestError)` 和 `roiWarningChanged(active)` 后，再调用 `InspectionPage` 的显示方法；缺少标注图也归入 `imageSaveFailed`，不新增单独信号。MainWindow 直接连接 `faultSnapshotChanged(InspectionFaultSnapshot)`，立即调用现有停止链；停止完成后显示一次固定警告，不创建第二份故障 DTO。
 
 不使用 `PresentationSink`、`setPresentationSink()`、`clearPresentationSink()` 或任何 Runtime 保存的 `std::function` 数据出口。唯一允许使用连接 Lambda 的位置是 MainWindow 的 UI 装配代码；该 Lambda 由 Qt 连接和 MainWindow 生命周期管理，不被后台层保存。
 
@@ -337,7 +337,7 @@ MainWindow(
     QWidget *parent = nullptr);
 ```
 
-MainWindow 只保存 `InspectionRuntime *m_runtime`，不负责释放它。启动层继续保存 `std::shared_ptr<InspectionRuntime> runtime`，并以 `runtime.get()` 传入 MainWindow。`InspectionFaultSnapshot` 继续定义在 `app/runtime/inspection_runtime.h`，本轮不新建告警合同文件；UI 通过 Runtime 的已有 Fault 类型接收数据。Runtime 的公开 signal 连接在 Page 创建完成后进行；ResultService 不连接 UI。
+MainWindow 只保存 `InspectionRuntime *m_runtime`，不负责释放它。启动层继续保存 `std::shared_ptr<InspectionRuntime> runtime`，并以 `runtime.get()` 传入 MainWindow。`InspectionFaultSnapshot` 继续定义在 `app/runtime/inspection_runtime.h`，本轮不新建告警合同文件；UI 通过 Runtime 的已有故障快照接收数据。Runtime 的公开 signal 连接在 Page 创建完成后进行；ResultService 不连接 UI。
 
 ## 10. PresentationMailbox 最终设计
 
@@ -351,7 +351,7 @@ mailbox 是线程交接和反压工具，不是业务层。保留它是为了防
 - `submit()` 不等待 UI，不阻塞统计、PLC 或存图；
 - 若已有待显示数据，用新数据替换旧数据；
 - UI 已经取出的当前快照不再替换；它不占用“待显示”槽位，新的结果可以写入唯一的待显示槽位；
-- stop/Fault 禁止新提交并清空待显示数据；
+- 停止（包括故障自动停止）禁止新提交并清空待显示数据；
 - 新 Run 重新打开 mailbox，旧 Run 不再提交。
 
 例：UI 正显示产品 10，邮箱待显示产品 11，产品 12 到达时丢弃尚未消费的 11、保留 12。产品 11 的生产事务仍然已经完成。
@@ -434,11 +434,11 @@ CameraSession
 
 ### 15.1 CameraSession
 
-`CameraSession` 已经在 `app/runtime`。本次不移动文件、不重构内部实现，也不改变由 Application 协调相机准备、启动、停止、曝光恢复和故障恢复的现有正式采集流程。模板预览始终独立。CameraSession 不拥有统计、PLC 事务或页面。
+`CameraSession` 已经在 `app/runtime`。本次不移动文件、不重构内部实现，也不改变由 Application 协调相机准备、启动、停止、曝光恢复和故障自动停止的现有正式采集流程。模板预览始终独立。CameraSession 不拥有统计、PLC 事务或页面。
 
 ### 15.2 DetectionRunPolicy
 
-本次不引入 `DetectionRunPolicy`，也不预先承诺后续一定引入。`saveRawOnly`、`saveNotEvaluatedAsNg`、`elapsedDecimals`、`clearImageLabelRects`、`showRoiWarningOnCancelled` 等现有字段继续留在 `DetectionResult`。只有这些运行策略明显继续膨胀，或算法结果需要跨运行场景复用时，才另行立项评估拆分。
+本次不引入 `DetectionRunPolicy`，也不预先承诺后续一定引入。`saveRawOnly`、`elapsedDecimals`、`clearImageLabelRects`、`showRoiWarningOnCancelled` 等现有字段继续留在 `DetectionResult`。只有这些运行策略明显继续膨胀，或算法结果需要跨运行场景复用时，才另行立项评估拆分。
 
 ## 16. 新增检测模式的最小变更路径
 
@@ -474,11 +474,11 @@ CameraSession
 
 ### 阶段 2：删除跨层控件回调
 
-删除 `InspectionViewBindingsDto`、`InspectionPresentationViewBindings`、`ResultServiceCallbacks`、`InspectionUiCallbacks` 和 Application/Runtime/ResultService 的 `bindView`；将 Runtime 改为 `QObject`，由 MainWindow 连接 Runtime 的 `presentationReady`、存图失败、ROI 状态和 Fault signal；缺少标注图复用存图失败通知。页面内部 ViewBindings 保留。ResultService 通过 Runtime 内部方法报告数据，不保存任何 UI 函数。
+删除 `InspectionViewBindingsDto`、`InspectionPresentationViewBindings`、`ResultServiceCallbacks`、`InspectionUiCallbacks` 和 Application/Runtime/ResultService 的 `bindView`；将 Runtime 改为 `QObject`，由 MainWindow 连接 Runtime 的 `presentationReady`、存图失败、ROI 状态和故障 signal；缺少标注图复用存图失败通知。页面内部 ViewBindings 保留。ResultService 通过 Runtime 内部方法报告数据，不保存任何 UI 函数。
 
 ### 阶段 3：mailbox 数据化和非阻塞化
 
-将 `Work` 改为 `InspectionPresentation`；待显示数据只保留最新一份；UI 唤醒只排一个 queued 事件；stop/Fault 清空 mailbox；统计、PLC、存图先于 mailbox 提交。
+将 `Work` 改为 `InspectionPresentation`；待显示数据只保留最新一份；UI 唤醒只排一个 queued 事件；停止（包括故障自动停止）清空 mailbox；统计、PLC、存图先于 mailbox 提交。
 
 ### 阶段 4：隐藏 ResultService
 
@@ -498,7 +498,7 @@ CameraSession
 
 ### `app/runtime`
 
-- `inspection_runtime.*`：改为 `QObject` 并加入 `Q_OBJECT`；保持启动层 `std::shared_ptr` 为唯一所有权，QObject parent 固定为空；保留 `InspectionFaultSnapshot` 作为 Runtime 的唯一 Fault 数据类型；增加 `publishPresentation()` 等仅供 ResultService 使用的内部方法、`drainPresentationMailbox()` 私有槽和 `wakePosted` 唤醒标志；发布结果/告警数据 signal；删除公开 `resultService()`，只保留上面列出的真实业务接口。
+- `inspection_runtime.*`：改为 `QObject` 并加入 `Q_OBJECT`；保持启动层 `std::shared_ptr` 为唯一所有权，QObject parent 固定为空；保留 `InspectionFaultSnapshot` 作为 Runtime 的唯一故障数据类型；增加 `publishPresentation()` 等仅供 ResultService 使用的内部方法、`drainPresentationMailbox()` 私有槽和 `wakePosted` 唤醒标志；发布结果/告警数据 signal；删除公开 `resultService()`，只保留上面列出的真实业务接口。
 - `result_service.*`：保留单产品事务，删除 ViewBindings 和 `ResultServiceCallbacks`，生成 Presentation 并向 Runtime 报告必要告警数据。
 - `inspection_presentation_renderer.*`：删除回调成员，保留纯图像/数据转换。
 - `result_presentation_mailbox.*`：保留现有文件和 `UiCompletionMailbox` 类名；删除 `std::function<void()>`、条件变量等待和 `m_processing`，载荷改为 Presentation，容量一、非阻塞、最新待显示结果替换。
@@ -507,7 +507,7 @@ CameraSession
 ### `app/ui`
 
 - `inspection_page.*`：删除 `resultViewBindings()`，增加 `present()`。
-- `main_window.*`：接收启动层传入的非拥有 `InspectionRuntime *`，直接连接 Runtime 的 `presentationReady`、存图失败、ROI 状态和 Fault signal；保留页面内部 ViewBindings。
+- `main_window.*`：接收启动层传入的非拥有 `InspectionRuntime *`，直接连接 Runtime 的 `presentationReady`、存图失败、ROI 状态和故障 signal；保留页面内部 ViewBindings。
 - `template_editor_page.*`：继续消费独立模板预览信号。
 
 ### 工程文件
@@ -541,7 +541,7 @@ CameraSession
 
 ### 21.2 用户构建与回归
 
-由用户在 Qt Creator 执行 Run qmake、Rebuild，并验证：五种模式结果显示；软/硬触发、QueueFull、停止中帧；PLC OK/NG、延迟 NG、复位、断连；原图/标注图和异步存图失败；ROI 警告；Fault 锁定、人工确认和新 Run；模板预览隔离；UI 变慢时检测、统计、PLC、存图继续而界面只显示最新待显示结果。
+由用户在 Qt Creator 执行 Run qmake、Rebuild，并验证：五种模式结果显示；软/硬触发、QueueFull、停止中帧；PLC OK/NG、延迟 NG、复位、断连；原图/标注图和异步存图失败；ROI 警告；Fault 自动停止、一次警告和新 Run；模板预览隔离；UI 变慢时检测、统计、PLC、存图继续而界面只显示最新待显示结果。
 
 未执行的构建、真实相机、PLC、机械动作和现场异常恢复必须如实标记为待验证。
 
@@ -594,7 +594,7 @@ Camera/PLC：拥有设备适配
 
 | 名称 | 方向 | 含义 | 例子 |
 |---|---|---|---|
-| Command | UI → Application/Runtime | 操作者要求系统执行一次动作 | `StartInspectionCommand`、`StopInspectionCommand` |
+| Command | UI → Application/Runtime | 操作者要求系统执行一次动作 | 启动、停止请求 |
 | Snapshot | Application/Runtime → UI | 某一时刻的状态复制 | `RuntimeSnapshot`、`InspectionFaultSnapshot` |
 | Presentation | ResultService → UI | 一个产品最终要显示的完整结果 | `InspectionPresentation` |
 | Notification | Runtime → UI | 一次警告、故障或异步失败事件 | `imageSaveFailed(count, error)` |
@@ -658,7 +658,7 @@ MainWindow 开始关闭
  → 释放 MainWindow 的 Ui
 ```
 
-如果某一步失败，不能跳过后续的生命周期清理；但也不能在 UI 析构阶段重新启动设备或弹出新的业务对话框。关闭期间只记录诊断并保持 Fault/Stopping 语义。
+如果某一步失败，不能跳过后续的生命周期清理；但也不能在 UI 析构阶段重新启动设备或弹出新的业务对话框。关闭期间只记录诊断并保持 Stopping 语义。
 
 ### 26.3 Page 生命周期规则
 
@@ -727,7 +727,7 @@ Application 负责“能否发起这个用例”的前置组合，Runtime 负责
 
 停止不等于“把所有计数清零”。统计清零是另一个明确用例，只在 Idle 执行。
 
-### 27.4 Fault 和恢复
+### 27.4 Fault 自动停止
 
 ```text
 相机断连/PLC 写入失败/QueueFull/运行不变量失败
@@ -737,15 +737,14 @@ Application 负责“能否发起这个用例”的前置组合，Runtime 负责
  → 阻止新的 ResultService 事务
  → 取消 mailbox 待显示结果
  → 发布 FaultSnapshot
- → UI 显示故障并要求人工确认
- → 操作者确认现场已处理
- → Application::stop(acknowledgeFault=true)
- → Runtime reconcileFaultProducts()
- → Runtime::acknowledgeFault()
+ → MainWindow 调用 Application::stop()
+ → Runtime::finishStop() 统计未确认产品并清理运行数据
+ → 状态 Fault → Idle
+ → UI 显示一次故障警告
  → 新 start 创建新的 runId 和新的运行上下文
 ```
 
-Fault 的解除是 Runtime 状态转换，不是 UI 清除一个标签。旧 Run 的结果不能进入恢复后的新 Run。
+Fault 的收口由 Runtime 停止边界完成；旧 Run 的结果不能进入新的 Run。
 
 ## 28. API 合同的详细边界
 
@@ -754,7 +753,7 @@ Fault 的解除是 Runtime 状态转换，不是 UI 清除一个标签。旧 Run
 | 接口 | 输入 | 输出 | 失败如何处理 |
 |---|---|---|---|
 | `start()` | 模式变化、未应用设置等命令 | `StartInspectionResult` | UI 显示用户错误；Runtime 不进入 Running |
-| `stop()` | 是否确认 Fault | `StopInspectionResult` | UI 显示停止中、需要确认或恢复失败 |
+| `stop()` | 无 | `CameraRecoveryResultDto` | UI 显示停止中或相机恢复失败 |
 | `openCamera()` | PLC/相机连接参数 | `OpenCameraResult` | UI 显示连接失败，不自行重试设备 |
 | `connectPlc()` | 地址、rack、slot | `OperationResult` | Application 转换错误码和用户文本 |
 | `resetStatistics()` | 无 | `OperationResult` | Runtime 忙时拒绝 |
@@ -769,7 +768,7 @@ Runtime 只公开生产业务和安全能力：
 ```text
 beginStart / commitStart / rollbackStart
 beginStop / waitForStop / finishStop
-enterFault / reconcileFaultProducts / acknowledgeFault
+enterFault
 state / faultSnapshot / runId / isRunning
 acceptFrame / submitDetectionFrame
 statistics / requiresPlcForRun / resetStatistics / resetNgCount
@@ -871,7 +870,7 @@ reset / shutdown
 | `UiCompletionMailbox::Work` | `InspectionPresentation` | 载荷数据化、非阻塞、最新替换 |
 | `m_runtime->resultService().statistics()` | `m_runtime->statistics()` | 提升为业务语义查询 |
 | `m_runtime->resultService().resetStatistics()` | `m_runtime->resetStatistics()` | Runtime 内部调用 ResultService |
-| `clearResultView()` | 无 | 删除；Runtime 在停止/Fault/新 Run 内部清理后台状态，Page 决定自身显示清理 |
+| `clearResultView()` | 无 | 删除；Runtime 在停止/新 Run 内部清理后台状态，Page 决定自身显示清理 |
 | `clearTransientView()` | 无 | 删除；由 Page 清理临时提示，由 Runtime 清理 mailbox/内部状态 |
 
 ## 32. 分阶段的进入条件、保持项和退出条件
@@ -946,13 +945,13 @@ app/runtime/result_presentation_mailbox.*
 
 ### 34.1 结果已完成但尚未显示
 
-结果事务完成后，Presentation 可能仍在 mailbox 中。停止/Fault 时按固定规则直接清空未显示快照，因为生产已经完成，UI 不应阻塞停止或故障锁定。统计、PLC 和存图状态仍保留在 Runtime/ResultService 快照中。
+结果事务完成后，Presentation 可能仍在 mailbox 中。停止或故障自动停止时按固定规则直接清空未显示快照，因为生产已经完成，UI 不应阻塞停止。统计、PLC 和存图状态仍保留在 Runtime/ResultService 快照中。
 
 ### 34.2 结果在停止过程中返回
 
 ResultService 提交前必须检查当前 Run 是否仍有效。Runtime 进入 Stopping 后拒绝新的产品认领；迟到完成结果计入“未确认/丢弃”诊断，不得进入新 Run 的 Presentation。
 
-### 34.3 Fault 后的旧 queued 唤醒
+### 34.3 自动停止后的旧 queued 唤醒
 
 `cancel()` 后，已经排到 Qt 事件队列的唤醒函数仍可能执行一次，但它只能发现 mailbox 已取消并立即返回，不能访问页面，不显示旧快照，也不能重开 mailbox。
 
@@ -1011,7 +1010,7 @@ t_interval：相邻产品结果产生的时间间隔
 2. 新增结果字段是否属于完整 Presentation，而不是又增加一个单独回调？
 3. 新增检测模式是否修改了通用 ResultService 或 UI，而实际需求只是 Pipeline 差异？
 4. UI 卡顿时，统计、PLC、存图和 Fault 是否仍按原顺序完成？
-5. stop/Fault 后，旧 Run 的 Frame、Completion、Presentation 和 queued 唤醒是否都会被隔离？
+5. 正常停止或故障自动停止后，旧 Run 的 Frame、Completion、Presentation 和 queued 唤醒是否都会被隔离？
 6. 是否新增了没有状态、不变量或第二个调用者的包装类？
 7. 是否在多个层重复同一状态检查，造成不同错误文本或不同裁决？
 8. qmake 清单、include 方向和析构顺序是否与目标边界一致？
@@ -1024,7 +1023,7 @@ t_interval：相邻产品结果产生的时间间隔
 | 正常 NG 产品 | NG 统计/延迟 NG/PLC NG/存图/UI 显示 NG | ResultService + UI |
 | 重复 ProductKey | 不重复统计、不重复 PLC、不重复存图 | Runtime/ResultService |
 | UI 变慢 | UI 只显示最新待显示快照，生产事务继续 | Mailbox + ResultService |
-| PLC 断连 | Runtime 进入 Fault，停止新生产，UI 显示 Fault | Runtime + UI |
+| PLC 断连 | Runtime 进入 Fault，停止新生产并自动收口，UI 显示一次警告 | Runtime + UI |
 | 相机断连 | Runtime 进入规定故障或停止状态 | Runtime/Camera |
 | 停止后迟到结果 | 不进入新 Run，不更新 UI | Runtime/ResultService/Mailbox |
 | 模板预览 | 只更新 TemplateEditorPage，不改生产统计和 PLC | Application + TemplateEditorPage |
@@ -1041,7 +1040,7 @@ b169bb4  refactor: remove cross-layer UI callbacks
 8db119e  refactor: hide result service behind runtime
 ```
 
-阶段提交前已执行差异检查、旧符号检索、qmake 清单路径检查和 Qt moc 解析。当前尚未完成 Qt Creator 的 Run qmake/Rebuild、程序运行、相机/PLC、Fault 恢复和生产现场验证；这些验证由用户在全部阶段完成后统一执行。若构建或运行暴露源码事实与本文冲突，应暂停后续修订，核对真实调用链，不得用文档强行覆盖生产行为。
+阶段提交前已执行差异检查、旧符号检索、qmake 清单路径检查和 Qt moc 解析。当前尚未完成 Qt Creator 的 Run qmake/Rebuild、程序运行、相机/PLC、Fault 自动停止和生产现场验证；这些验证由用户在全部阶段完成后统一执行。若构建或运行暴露源码事实与本文冲突，应暂停后续修订，核对真实调用链，不得用文档强行覆盖生产行为。
 
 ## 40. 结论
 

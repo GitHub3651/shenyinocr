@@ -486,7 +486,7 @@ S9解决的是同一操作在MainWindow、Page、Application和Runtime之间重�
 |---|---|---|
 | 状态文字、提示、纯显示交互 | UI一层 | 只影响显示，不改变业务、设备或持久化状态。 |
 | 设置草稿、配方编辑和发布 | UI + Application/Store | UI根据统一快照禁用；Application/Store继续执行字段校验、Schema约束和事务保存。 |
-| 检测启停、Fault恢复、相机、模板取景、PLC、统计和剔除队列 | UI + Application + Runtime/Session/Device | UI负责可见可用性，Application负责命令当前是否允许，底层负责线程、连接、事务和SDK不变量；三层职责不同。 |
+| 检测启停、故障自动停止、相机、模板取景、PLC、统计和剔除队列 | UI + Application + Runtime/Session/Device | UI负责可见可用性，Application负责命令当前是否允许，底层负责线程、连接、事务和SDK不变量；三层职责不同。 |
 
 具体修改边界：
 

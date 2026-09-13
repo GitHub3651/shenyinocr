@@ -38,7 +38,7 @@ C++ 运行时 setStyleSheet()
 - 实施基线：`8b9ef7f`（`image → resource`目录改名已单独完成）。
 - `app/resource/qss/1.css`已正式改名为`app_theme.qss`，`.qrc`和加载代码只保留新入口。
 - `main_window.ui`原有50个`styleSheet`属性和最后1个控件字体覆盖已全部删除。
-- 业务UI C++中的`setStyleSheet()`、样式保存/恢复、故障样式DTO和状态颜色字符串已删除；只保留`qApp->setStyleSheet(qss)`唯一应用入口。
+- 业务 UI C++ 只设置状态属性，全部正式视觉由 `qApp->setStyleSheet(qss)` 的唯一主题入口定义。
 - 静态按钮只使用`primary/danger`；运行视觉只使用`uiState/verdict/hasError`。
 - 模板制作按钮原来的两组布尔样式属性已合并为一个`uiState`。
 - 当前模板、运行状态、判定结果和四个统计值使用统一可见边框；`label_recognitionText`按用户确认保持背景透明、无边框，由外层“识别内容”分组框提供区域边界。
@@ -85,8 +85,8 @@ C++ 运行时 setStyleSheet()
 
 - `OperationUiPolicy` 继续决定控件是否可以操作以及禁用原因。
 - UI 的 `setEnabled()` 语义保持，QSS 只负责视觉呈现。
-- 相机关闭、相机打开、检测中、停止中、Fault、模板预览和模板冻结状态保持。
-- 故障确认、模板移除、设置应用、模板保存和清空数据等业务行为保持。
+- 相机关闭、相机打开、检测中、停止中、模板预览和模板冻结状态保持；Runtime 内部故障在界面层按停止中显示。
+- 故障自动停止、模板移除、设置应用、模板保存和清空数据等业务行为保持。
 - 所有禁用控件仍必须提供当前已有的禁用原因提示。
 - UI 不直接拥有设备、生产线程、检测算法、PLC 时序或存图服务。
 
@@ -164,7 +164,7 @@ QWidget QPushButton {
 
 运行时代码还会覆盖以下视觉状态：
 
-- 运行状态标签的正常、故障和恢复颜色。
+- 运行状态标签的正常、停止和警告颜色。
 - OK/NG 判定文字的颜色和字号。
 - 设置控件的硬件禁用样式。
 - 清空软件数据与恢复默认按钮。
@@ -473,7 +473,6 @@ uiState = ready
 uiState = running
 uiState = stopping
 uiState = warning
-uiState = fault
 ```
 
 QSS示例：
@@ -495,10 +494,6 @@ QLabel#label_runtimeStatus[uiState="warning"] {
     background-color: #fdf6ec;
 }
 
-QLabel#label_runtimeStatus[uiState="fault"] {
-    color: #d93025;
-    background-color: #fef0f0;
-}
 ```
 
 ### 8.2 判定结果
@@ -509,7 +504,6 @@ C++只设置：
 verdict = idle
 verdict = ok
 verdict = ng
-verdict = fault
 ```
 
 QSS负责字体、背景和颜色：
@@ -527,9 +521,6 @@ QLabel#label_verdictResult[verdict="ng"] {
     color: #f56c6c;
 }
 
-QLabel#label_verdictResult[verdict="fault"] {
-    color: #d93025;
-}
 ```
 
 ### 8.3 输入校验状态
@@ -685,7 +676,6 @@ m_removeCurrentTemplateButton->setObjectName(
 | `app/ui/pages/template_editor_page.cpp` | 动态模板控件声明角色，不写局部样式 |
 | `app/ui/dialogs/template_selection_dialog.cpp` | 动态控件接入统一样式 |
 | `app/ui/dialogs/character_template_editor_dialog.cpp` | 错误、提示、预览改用属性选择器 |
-| `app/ui/presenters/inspection_fault_presenter.h/.cpp` | 故障Presenter只返回文字，不再传递QSS字符串 |
 | `app/ui/README.md` | 写入样式维护规则和角色清单 |
 
 ### 12.2 不需要新增的文件
@@ -772,8 +762,7 @@ m_removeCurrentTemplateButton->setObjectName(
 2. 相机打开、未检测。
 3. 正在检测。
 4. 正在停止。
-5. Fault。
-6. Fault确认恢复。
+5. 故障自动停止。
 7. 模板实时预览。
 8. 模板冻结等待框选。
 9. 模板保存完成。
@@ -812,8 +801,8 @@ m_removeCurrentTemplateButton->setObjectName(
 - NG结果。
 - ROI警告。
 - 图片保存失败。
-- PLC或采集Fault。
-- Fault恢复后的正常状态。
+- PLC或采集异常触发自动停止。
+- 故障自动停止完成后的空闲状态。
 
 确认颜色变化由状态属性控制，不改变统计、存图或PLC行为。
 

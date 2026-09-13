@@ -256,8 +256,8 @@ Agent 不执行构建和程序运行。Qt Creator 构建与交互验证由用户
 4. 切换五种检测模式，确认不使用模板的模式隐藏整个模板容器。
 5. 检查不需要字符模板的模板模式：保存模板保持显示，分割字符隐藏，模板容器内的保存模板按钮自动分配可用宽度。
 6. 检查需要字符模板的模式：保存模板和显示为“分割字符”的按钮均存在于同一行。
-7. 在显示模板容器的模式下验证保存模板：仅 `TemplateFrozen` 状态启用；`CameraClosed`、`CameraReady`、`Detecting`、`Stopping`、`Fault` 和 `TemplatePreviewing` 均禁用，悬停显示现有原因“请先获取并冻结模板画面。”。
-8. 在需要字符模板的模式下验证分割字符：当前模板有效时仅 `CameraClosed`、`CameraReady` 启用，`Detecting`、`Stopping`、`Fault`、`TemplatePreviewing` 和 `TemplateFrozen` 按现有忙碌原因禁用；当前模板异常时保持禁用并显示“当前模板状态异常，请移除或重新选择模板。”。
+7. 在显示模板容器的模式下验证保存模板：仅 `TemplateFrozen` 状态启用；`CameraClosed`、`CameraReady`、`Detecting`、`Stopping` 和 `TemplatePreviewing` 均禁用，悬停显示现有原因“请先获取并冻结模板画面。”。
+8. 在需要字符模板的模式下验证分割字符：当前模板有效时仅 `CameraClosed`、`CameraReady` 启用，`Detecting`、`Stopping`、`TemplatePreviewing` 和 `TemplateFrozen` 按现有忙碌原因禁用；当前模板异常时保持禁用并显示“当前模板状态异常，请移除或重新选择模板。”。
 9. 验证打开/关闭相机、选择/制作/保存模板、启动/停止识别的原有功能不变。
 10. 在右侧抽屉展开和收起状态下检查按钮文字不截断、布局不溢出。
 
