@@ -84,20 +84,6 @@ InspectionPage::InspectionPage(
       m_mainWindowUi(mainWindowUi),
       m_inspectionInfoUi(inspectionInfoUi)
 {
-    m_templateAttentionTimer.setInterval(900);
-    QObject::connect(
-        &m_templateAttentionTimer,
-        &QTimer::timeout,
-        &m_templateAttentionTimer,
-        [this]() {
-        m_templateAttentionOn = !m_templateAttentionOn;
-        setStyleProperty(
-                    *m_mainWindowUi.toolButton_createTemplate,
-                    "uiState",
-                    m_templateAttentionOn
-                    ? QStringLiteral("attention")
-                    : QStringLiteral("preview"));
-    });
 }
 
 void InspectionPage::present(const InspectionPresentation &presentation)
@@ -213,25 +199,6 @@ void InspectionPage::applyOperationState(
                     "uiState",
                     runtimeUiState(requestedState));
     }
-
-    if (requestedState == OperationUiState::TemplatePreviewing) {
-        if (!m_templateAttentionTimer.isActive()) {
-            m_templateAttentionOn = true;
-            setStyleProperty(
-                        *m_mainWindowUi.toolButton_createTemplate,
-                        "uiState",
-                        QStringLiteral("attention"));
-            m_templateAttentionTimer.start();
-        }
-    } else {
-        m_templateAttentionTimer.stop();
-        m_templateAttentionOn = false;
-        setStyleProperty(
-                    *m_mainWindowUi.toolButton_createTemplate,
-                    "uiState",
-                    QString());
-    }
-
 }
 
 void InspectionPage::presentFault(

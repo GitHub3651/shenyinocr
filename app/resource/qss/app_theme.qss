@@ -248,22 +248,6 @@ QGroupBox#groupBox_mainControls QToolButton:disabled {
     border-color: #D2D9DF;
 }
 
-QGroupBox#groupBox_mainControls QToolButton#toolButton_createTemplate[uiState="preview"] {
-    background: #F6FBFF;
-    color: #1769AA;
-    border: 2px solid #8EB7D6;
-}
-
-QGroupBox#groupBox_mainControls QToolButton#toolButton_createTemplate[uiState="attention"] {
-    background: #EAF3FA;
-    color: #1769AA;
-    border: 2px solid #1769AA;
-}
-
-QGroupBox#groupBox_mainControls QToolButton#toolButton_createTemplate:disabled {
-    color: #909DA8;
-}
-
 QWidget#widget_leftNavigationRail {
     background-color: #DBE3EA;
     border-right: 1px solid #BDC9D3;

@@ -5,7 +5,6 @@
 #include "ui/main_window/operation_ui_policy.h"
 
 #include <QString>
-#include <QTimer>
 
 class QWidget;
 
@@ -52,8 +51,6 @@ private:
     QWidget &m_rootWidget;
     Ui::MainWindow &m_mainWindowUi;
     Ui::InspectionInfoPage &m_inspectionInfoUi;
-    QTimer m_templateAttentionTimer;
-    bool m_templateAttentionOn = false;
     quint64 m_imageSaveFailedCount = 0;
     bool m_imageSaveWarningScheduled = false;
 };
