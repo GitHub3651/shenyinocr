@@ -14,7 +14,6 @@ struct InspectionRunContext
 {
     InspectionRunContext(
         const QString &runIdValue,
-        const QDateTime &startedAtUtcValue,
         const AppSettings &machineSettingsValue,
         DetectionMode modeValue,
         const QVector<PreparedTemplateSnapshot> &preparedTemplatesValue,
@@ -22,7 +21,6 @@ struct InspectionRunContext
         double tissueRoughnessThresholdValue,
         const FramePreprocessSettings &framePreprocessValue)
         : runId(runIdValue),
-          startedAtUtc(startedAtUtcValue),
           machineSettings(machineSettingsValue),
           mode(modeValue),
           preparedTemplates(preparedTemplatesValue),
@@ -33,7 +31,6 @@ struct InspectionRunContext
     }
 
     const QString runId;
-    const QDateTime startedAtUtc;
     const AppSettings machineSettings;
     const DetectionMode mode;
     const QVector<PreparedTemplateSnapshot> preparedTemplates;
@@ -55,8 +52,6 @@ QString faultReasonName(InspectionFaultReason reason)
         return QStringLiteral("plc_disconnected");
     case InspectionFaultReason::HardTriggerQueueOverflow:
         return QStringLiteral("hard_trigger_queue_overflow");
-    case InspectionFaultReason::ProductIdentityAmbiguous:
-        return QStringLiteral("product_identity_ambiguous");
     case InspectionFaultReason::RuntimeInvariantViolation:
         return QStringLiteral("runtime_invariant_violation");
     case InspectionFaultReason::BarcodeCsvUnavailable:
@@ -135,7 +130,6 @@ QString InspectionRuntime::beginStart(
     m_state = InspectionRuntimeState::Starting;
     m_runContext.reset(new InspectionRunContext(
         newRunId,
-        QDateTime::currentDateTimeUtc(),
         machineSettings,
         mode,
         preparedTemplates,
@@ -143,7 +137,7 @@ QString InspectionRuntime::beginStart(
         tissueRoughnessThreshold,
         framePreprocess));
     m_acceptedProductSequence = 0;
-    m_completedProductCount = 0;
+    m_finalizedProductCount = 0;
     m_lastCompletedProductSequence = 0;
     m_faultSnapshot = InspectionFaultSnapshot();
     m_acceptedFrames.clear();
@@ -219,103 +213,85 @@ void InspectionRuntime::finishStop(bool writeRunSummary)
     m_uiCompletionMailbox.cancel();
     m_wakePosted.store(false);
     const DetectionResultStatistics statistics = m_resultService->statistics();
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state != InspectionRuntimeState::Fault) {
-        const quint64 acceptedCount = m_acceptedProductSequence;
-        const quint64 completedCount = m_completedProductCount;
+    InspectionRuntimeState stoppedState = InspectionRuntimeState::Idle;
+    InspectionFaultSnapshot fault;
+    quint64 acceptedCount = 0;
+    quint64 finalizedCount = 0;
+    quint64 unconfirmedCount = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state == InspectionRuntimeState::Idle) {
+            return;
+        }
+        stoppedState = m_state;
+        fault = m_faultSnapshot;
+        acceptedCount = m_acceptedProductSequence;
+        finalizedCount = m_finalizedProductCount;
+        unconfirmedCount = static_cast<quint64>(m_products.size());
         m_state = InspectionRuntimeState::Idle;
         m_runContext.reset();
         m_products.clear();
         m_acceptedFrames.clear();
-        if (writeRunSummary) {
-            qCInfo(logRuntime).noquote()
-                    << QStringLiteral(
-                        "event=run.stopped accepted=%1 completed=%2 cancelled=%3 total=%4 ng=%5")
-                       .arg(acceptedCount)
-                       .arg(completedCount)
-                       .arg(acceptedCount - completedCount)
-                       .arg(statistics.totalCount)
-                       .arg(statistics.ngCount);
-        }
+        m_faultSnapshot = InspectionFaultSnapshot();
+    }
+    if (!writeRunSummary) {
+        return;
+    }
+    if (stoppedState == InspectionRuntimeState::Fault) {
+        qCInfo(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=run.stopped reason=%1 accepted=%2 finalized=%3 unconfirmed=%4 total=%5 ng=%6")
+                   .arg(faultReasonName(fault.reason))
+                   .arg(acceptedCount)
+                   .arg(finalizedCount)
+                   .arg(unconfirmedCount)
+                   .arg(statistics.totalCount)
+                   .arg(statistics.ngCount);
+    } else {
+        qCInfo(logRuntime).noquote()
+                << QStringLiteral(
+                    "event=run.stopped accepted=%1 finalized=%2 cancelled=%3 total=%4 ng=%5")
+                   .arg(acceptedCount)
+                   .arg(finalizedCount)
+                   .arg(acceptedCount - finalizedCount)
+                   .arg(statistics.totalCount)
+                   .arg(statistics.ngCount);
     }
 }
 
 bool InspectionRuntime::enterFault(
     InspectionFaultReason reason,
-    const QString &diagnostic,
-    const QDateTime &occurredAtUtc)
+    const QString &diagnostic)
 {
     InspectionFaultSnapshot enteredFault;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         if (reason == InspectionFaultReason::None
-                || m_faultSnapshot.isActive()
+                || m_faultSnapshot.reason != InspectionFaultReason::None
                 || (m_state != InspectionRuntimeState::Starting
                     && m_state != InspectionRuntimeState::Running
                     && m_state != InspectionRuntimeState::Stopping)) {
             return false;
         }
         m_faultSnapshot.reason = reason;
-        m_faultSnapshot.diagnostic = diagnostic.trimmed();
-        m_faultSnapshot.runId = m_runContext
-                ? m_runContext->runId
-                : QString();
         m_faultSnapshot.acceptedProductCount = m_acceptedProductSequence;
-        m_faultSnapshot.completedProductCount = m_completedProductCount;
-        m_faultSnapshot.postFaultDroppedFrameCount = 0;
-        m_faultSnapshot.occurredAtUtc = occurredAtUtc.isValid()
-                ? occurredAtUtc.toUTC()
-                : QDateTime::currentDateTimeUtc();
+        m_faultSnapshot.finalizedProductCount = m_finalizedProductCount;
         m_state = InspectionRuntimeState::Fault;
         enteredFault = m_faultSnapshot;
     }
 
     qCCritical(logRuntime).noquote()
             << QStringLiteral(
-                "event=run.fault reason=%1 accepted=%2 completed=%3 diagnostic=%4")
+                "event=run.fault reason=%1 accepted=%2 finalized=%3 diagnostic=%4")
                .arg(faultReasonName(enteredFault.reason))
                .arg(enteredFault.acceptedProductCount)
-               .arg(enteredFault.completedProductCount)
-               .arg(enteredFault.diagnostic);
-    m_resultService->recordSystemFault();
+               .arg(enteredFault.finalizedProductCount)
+               .arg(diagnostic.trimmed());
+    m_resultService->clearPendingDelayedNgRequests();
     m_uiCompletionMailbox.cancel();
     m_wakePosted.store(false);
-    emit faultSnapshotChanged(faultSnapshot());
+    emit faultSnapshotChanged(enteredFault);
     requestDetectionWorkerStop();
-    return true;
-}
-
-int InspectionRuntime::reconcileFaultProducts()
-{
-    int count = 0;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_state != InspectionRuntimeState::Fault) {
-            return 0;
-        }
-        count = static_cast<int>(m_products.size());
-        m_products.clear();
-        m_acceptedFrames.clear();
-    }
-    m_resultService->recordUnconfirmedProducts(count);
-    return count;
-}
-
-bool InspectionRuntime::acknowledgeFault()
-{
-    waitForDetectionWorkerStop();
-    m_uiCompletionMailbox.cancel();
-    m_wakePosted.store(false);
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state != InspectionRuntimeState::Fault
-            || !m_products.empty()
-            || m_detectionWorkerActive.load()) {
-        return false;
-    }
-    m_faultSnapshot = InspectionFaultSnapshot();
-    m_state = InspectionRuntimeState::Idle;
-    m_runContext.reset();
-    qCInfo(logRuntime).noquote() << "event=run.fault_acknowledged";
     return true;
 }
 
@@ -323,12 +299,6 @@ InspectionRuntimeState InspectionRuntime::state() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_state;
-}
-
-InspectionFaultSnapshot InspectionRuntime::faultSnapshot() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_faultSnapshot;
 }
 
 bool InspectionRuntime::isBusy() const
@@ -341,12 +311,6 @@ bool InspectionRuntime::isRunning() const
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     return m_state == InspectionRuntimeState::Running;
-}
-
-QString InspectionRuntime::runId() const
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_runContext ? m_runContext->runId : QString();
 }
 
 bool InspectionRuntime::isPlcConnected() const
@@ -566,15 +530,11 @@ std::shared_ptr<const FrameData> InspectionRuntime::acceptFrame(
     }
     const std::chrono::steady_clock::time_point processingStartedAt =
             std::chrono::steady_clock::now();
-    bool droppedAfterFault = false;
     std::shared_ptr<const FrameData> frame;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_state == InspectionRuntimeState::Fault) {
-            ++m_faultSnapshot.postFaultDroppedFrameCount;
-            droppedAfterFault = true;
-        } else if (m_state == InspectionRuntimeState::Starting
-                   || m_state == InspectionRuntimeState::Running) {
+        if (m_state == InspectionRuntimeState::Starting
+                || m_state == InspectionRuntimeState::Running) {
             ProductKey productKey;
             productKey.runId = m_runContext
                     ? m_runContext->runId
@@ -589,9 +549,6 @@ std::shared_ptr<const FrameData> InspectionRuntime::acceptFrame(
             m_acceptedFrames[productKey.sequence] = frame;
             m_products[productKey.sequence] = ProductProgress::Accepted;
         }
-    }
-    if (droppedAfterFault) {
-        m_resultService->recordPostFaultDroppedFrame();
     }
     return frame;
 }
@@ -634,7 +591,6 @@ DetectionCompletion InspectionRuntime::complete(
     m_acceptedFrames.erase(accepted);
     product->second = ProductProgress::AlgorithmCompleted;
     m_lastCompletedProductSequence = frame->productKey.sequence;
-    ++m_completedProductCount;
     return completion;
 }
 
@@ -642,6 +598,7 @@ bool InspectionRuntime::claimResult(const ProductKey &productKey)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_state == InspectionRuntimeState::Idle
+            || m_state == InspectionRuntimeState::Fault
             || !belongsToCurrentRun(productKey)) {
         return false;
     }
@@ -658,7 +615,8 @@ bool InspectionRuntime::claimResult(const ProductKey &productKey)
 bool InspectionRuntime::finalizeResultClaim(const ProductKey &productKey)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
-    if (!belongsToCurrentRun(productKey)) {
+    if (m_state == InspectionRuntimeState::Fault
+            || !belongsToCurrentRun(productKey)) {
         return false;
     }
     const std::map<quint64, ProductProgress>::iterator product =
@@ -668,6 +626,7 @@ bool InspectionRuntime::finalizeResultClaim(const ProductKey &productKey)
         return false;
     }
     m_products.erase(product);
+    ++m_finalizedProductCount;
     return true;
 }
 

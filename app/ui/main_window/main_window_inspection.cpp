@@ -27,30 +27,9 @@
 
 #include <limits>
 
-void MainWindow::presentInspectionFault()
-{
-    updateOperationUiState();
-    if (!m_faultAlarmPresented) {
-        ui->toolButton_showInspectionInfo->setChecked(true);
-        showLeftDrawerPage(
-                    ui->page_inspectionInfo,
-                    ui->toolButton_showInspectionInfo);
-    }
-    m_inspectionPage->presentFault(
-                m_runtime->faultSnapshot(),
-                m_faultAlarmPresented);
-}
-
 void MainWindow::checkInspectionPlcHealth()
 {
     m_inspectionApplicationService->checkPlcHealth();
-}
-
-void MainWindow::restoreNormalFaultUi()
-{
-    m_faultAlarmPresented = false;
-    m_inspectionPage->clearTransientView();
-    m_inspectionPage->restoreNormalFaultStyle();
 }
 
 void MainWindow::presentStartFailure(
@@ -134,38 +113,14 @@ void MainWindow::presentStartFailure(
 }
 
 void MainWindow::finishInspectionStopUi(
-    const StopInspectionResult &result)
+    const CameraRecoveryResultDto &cameraRecovery)
 {
-    if (!result.isAccepted()) {
-        QString summary = QStringLiteral("event=run.stop_incomplete");
-        if (!result.error.code.trimmed().isEmpty()) {
-            summary += QStringLiteral(" code=%1")
-                    .arg(result.error.code.trimmed());
-        }
-        summary += QStringLiteral(" reason=%1")
-                .arg(result.error.userMessage.trimmed().isEmpty()
-                     ? result.reconciliationSummary
-                     : result.error.userMessage);
-        if (!result.error.diagnostic.trimmed().isEmpty()) {
-            summary += QStringLiteral(" diagnostic=%1")
-                    .arg(result.error.diagnostic.trimmed());
-        }
-        qCWarning(logRuntime).noquote()
-                << summary;
-    }
-    if (result.issue
-            == StopInspectionIssue::AcquisitionStillStopping) {
-        m_inspectionInfoUi->label_runtimeStatus->setText("停止中，请稍后再关闭相机");
-        updateOperationUiState();
-        return;
-    }
-
-    if (result.cameraRecovery.issue
+    if (cameraRecovery.issue
             == CameraRecoveryIssueDto::ExposureRejected) {
         qCWarning(logDevice).noquote()
                 << QStringLiteral(
                     "event=camera.exposure_recovery_failed diagnostic=%1")
-                   .arg(result.cameraRecovery.errorMessage);
+                   .arg(cameraRecovery.errorMessage);
         {
             QSignalBlocker blocker(m_imageSettingsUi->spinBox_cameraExposure);
             m_imageSettingsUi->spinBox_cameraExposure->setRange(
@@ -174,50 +129,19 @@ void MainWindow::finishInspectionStopUi(
                         machineSettings().cameraExposure);
         }
         m_machineSettingsPage->refreshDirty("camera.exposure");
-        QMessageBox::warning(
-                    this,
-                    "警告",
-                    QStringLiteral(
-                        "停止检测后，相机曝光恢复失败，请检查相机状态。"));
-    } else if (result.cameraRecovery.isRecovered()
-               && result.cameraRecovery.recoveryAttempted) {
+    } else if (cameraRecovery.isRecovered()
+               && cameraRecovery.recoveryAttempted) {
         m_inspectionInfoUi->label_runtimeStatus->setText("相机已打开");
-        if (!result.cameraRecovery.adjustmentMessage.isEmpty()) {
+        if (!cameraRecovery.adjustmentMessage.isEmpty()) {
             QMessageBox::information(
                         this,
                         "提示",
-                        result.cameraRecovery.adjustmentMessage);
+                        cameraRecovery.adjustmentMessage);
         }
     }
 
     m_templateEditorPage->cancelTemplateDrawing();
     m_inspectionPage->setStatistics(m_runtime->statistics());
-    if (result.issue == StopInspectionIssue::RuntimeFault
-            || result.issue
-               == StopInspectionIssue::FaultReconciliationFailed) {
-        m_inspectionPage->clearInspectionView(
-                    InspectionClearScope::ImageMetadata);
-        presentInspectionFault();
-        if (!result.error.diagnostic.isEmpty()) {
-            QMessageBox::critical(
-                        this,
-                        QStringLiteral("故障产品处理失败"),
-                        result.error.userMessage);
-        }
-        return;
-    }
-
-    if (result.recoveredFault) {
-        m_inspectionPage->clearInspectionView(
-                    InspectionClearScope::ImageMetadata);
-        restoreNormalFaultUi();
-    }
-    if (!result.reconciliationSummary.isEmpty()) {
-        QMessageBox::warning(
-                    this,
-                    QStringLiteral("故障产品处理结果"),
-                    result.reconciliationSummary);
-    }
     m_inspectionInfoUi->label_runtimeStatus->setText("已停止");
     updateOperationUiState();
 }
@@ -246,8 +170,6 @@ OperationUiState MainWindow::operationUiState() const
         return OperationUiState::Detecting;
     case ApplicationRuntimeState::Stopping:
         return OperationUiState::Stopping;
-    case ApplicationRuntimeState::Fault:
-        return OperationUiState::Fault;
     case ApplicationRuntimeState::Idle:
     default:
         if (m_templateEditorPage->captureState()
@@ -354,14 +276,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     settings.leftDrawerSplitterState =
             ui->splitter_leftDrawerMain->saveState();
     m_settingsApplicationService->saveConfiguration(settings);
-
-    const RuntimeSnapshot beforeShutdown =
-            m_inspectionApplicationService->runtimeSnapshot();
-    if (beforeShutdown.state == ApplicationRuntimeState::Starting
-            || beforeShutdown.state == ApplicationRuntimeState::Running
-            || beforeShutdown.state == ApplicationRuntimeState::Stopping) {
-        m_inspectionApplicationService->shutdown();
-    }
 
     m_applicationExitInProgress = true;
     m_templateEditorPage->resetTemplateCaptureState();

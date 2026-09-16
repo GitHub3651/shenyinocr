@@ -7,7 +7,6 @@
 #include "runtime/inspection_runtime.h"
 #include "system_support/logging/log_categories.h"
 
-#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QVector>
@@ -25,9 +24,8 @@ ApplicationRuntimeState applicationState(
     case InspectionRuntimeState::Running:
         return ApplicationRuntimeState::Running;
     case InspectionRuntimeState::Stopping:
-        return ApplicationRuntimeState::Stopping;
     case InspectionRuntimeState::Fault:
-        return ApplicationRuntimeState::Fault;
+        return ApplicationRuntimeState::Stopping;
     case InspectionRuntimeState::Idle:
     default:
         return ApplicationRuntimeState::Idle;
@@ -158,27 +156,6 @@ QString startIssueMessage(InspectionStartIssue issue)
     }
 }
 
-QString faultReasonText(InspectionFaultReason reason)
-{
-    switch (reason) {
-    case InspectionFaultReason::CameraDisconnected:
-        return QStringLiteral("相机连接或图像采集异常");
-    case InspectionFaultReason::PlcDisconnected:
-        return QStringLiteral("PLC 连接或检测结果发送异常");
-    case InspectionFaultReason::HardTriggerQueueOverflow:
-        return QStringLiteral("待检测图像过多，系统已暂停");
-    case InspectionFaultReason::ProductIdentityAmbiguous:
-        return QStringLiteral("无法确定当前图像对应的产品");
-    case InspectionFaultReason::RuntimeInvariantViolation:
-        return QStringLiteral("系统状态异常，检测已暂停");
-    case InspectionFaultReason::BarcodeCsvUnavailable:
-        return QStringLiteral("二维码结果无法保存到本机");
-    case InspectionFaultReason::None:
-        break;
-    }
-    return QString();
-}
-
 InspectionAcquisitionDto acquisitionDto(
         bool hardwareTriggerEnabled)
 {
@@ -202,8 +179,6 @@ InspectionApplicationService::InspectionApplicationService(
       m_templates(templates)
 {
     qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
-    qRegisterMetaType<InspectionFaultReason>(
-                "InspectionFaultReason");
     CameraSessionCallbacks callbacks;
     callbacks.previewFrameReady = [this](const cv::Mat &image) {
         emit templatePreviewFrameReady(image);
@@ -211,8 +186,8 @@ InspectionApplicationService::InspectionApplicationService(
     callbacks.previewFailed = [this](const QString &reason) {
         emit templatePreviewFailed(reason);
     };
-    callbacks.captureStopped = [this](bool preview) {
-        emit captureStopped(preview);
+    callbacks.templatePreviewStopped = [this]() {
+        emit templatePreviewStopped();
     };
     callbacks.enterFault = [this](
             InspectionFaultReason reason,
@@ -472,123 +447,57 @@ StartInspectionResult InspectionApplicationService::start(
                     QStringLiteral("无法开始检测，请重试。"));
     }
 
-    m_activeTemplatePaths.clear();
-    for (const PreparedTemplateSnapshot &prepared : preparedTemplates) {
-        if (prepared) {
-            m_activeTemplatePaths.append(prepared->directoryPath);
-        }
-    }
     publishSnapshot();
     StartInspectionResult result;
     result.details = templateWarnings;
     result.acquisitionKind = acquisitionDto(hardwareTriggerEnabled);
-    result.snapshot = runtimeSnapshot();
     return result;
 }
 
-StopInspectionResult InspectionApplicationService::stop(
-    const StopInspectionCommand &command)
+CameraRecoveryResultDto InspectionApplicationService::stop(
+    InspectionFaultReason reason)
 {
-    StopInspectionResult result;
     const InspectionRuntimeState initialState = m_runtime->state();
-    const bool recoveringFault =
-            initialState == InspectionRuntimeState::Fault;
-    result.recoveredFault = recoveringFault;
-    if (recoveringFault && !command.acknowledgeFault) {
-        result.issue = StopInspectionIssue::FaultConfirmationRequired;
-        result.error.code = QStringLiteral(
-                    "INSPECTION_FAULT_CONFIRMATION_REQUIRED");
-        result.error.userMessage = QStringLiteral(
-                    "需要操作员确认后才能解除故障锁定。");
-        result.snapshot = runtimeSnapshot();
-        return result;
-    }
-    if (initialState == InspectionRuntimeState::Idle) {
-        result.snapshot = runtimeSnapshot();
-        return result;
+    const bool runtimeActive = initialState != InspectionRuntimeState::Idle;
+    const bool cameraWasOpen = m_cameraSession->isOpen();
+    if (runtimeActive) {
+        m_runtime->beginStop();
+        publishSnapshot();
+        m_cameraSession->stopInspection();
+        m_runtime->waitForStop();
     }
 
-    m_runtime->beginStop();
-    publishSnapshot();
-    const CameraCaptureStopResult acquisition =
-            m_cameraSession->stopInspection();
-    m_runtime->waitForStop();
-    if (!acquisition.allStopped()) {
-        result.issue = StopInspectionIssue::AcquisitionStillStopping;
-        result.error.code = QStringLiteral(
-                    "INSPECTION_ACQUISITION_STILL_STOPPING");
-        result.error.userMessage = QStringLiteral(
-                    "停止中，请稍后再关闭相机。");
-        result.snapshot = runtimeSnapshot();
-        return result;
-    }
-
-    const AppSettings settings = m_settings->current();
-    const CameraSession::PersistAdjustedExposure persistExposure =
-            [this](int adjustedExposure, QString *errorMessage) {
-        AppSettings adjusted = m_settings->current();
-        adjusted.cameraExposure = adjustedExposure;
-        const OperationResult saved =
-                m_settings->saveConfiguration(adjusted);
-        if (!saved.isSuccess() && errorMessage) {
-            *errorMessage = saved.error.userMessage;
-        }
-        return saved.isSuccess();
-    };
-    if (acquisition.shouldRestoreCamera()) {
-        result.cameraRecovery = m_cameraSession->restorePreviewReady(
+    CameraRecoveryResultDto recovery;
+    if (reason == InspectionFaultReason::CameraDisconnected) {
+        m_cameraSession->close();
+        recovery.cameraOpen = false;
+    } else if (runtimeActive && cameraWasOpen) {
+        const AppSettings settings = m_settings->current();
+        const CameraSession::PersistAdjustedExposure persistExposure =
+                [this](int adjustedExposure, QString *errorMessage) {
+            AppSettings adjusted = m_settings->current();
+            adjusted.cameraExposure = adjustedExposure;
+            const OperationResult saved =
+                    m_settings->saveConfiguration(adjusted);
+            if (!saved.isSuccess() && errorMessage) {
+                *errorMessage = saved.error.userMessage;
+            }
+            return saved.isSuccess();
+        };
+        recovery = m_cameraSession->restorePreviewReady(
                     settings.cameraExposure,
                     persistExposure);
     } else {
-        result.cameraRecovery.cameraOpen = m_cameraSession->isOpen();
+        recovery.cameraOpen = m_cameraSession->isOpen();
     }
-    m_runtime->finishStop();
-
-    if (!recoveringFault
-            && m_runtime->state() == InspectionRuntimeState::Fault) {
-        result.issue = StopInspectionIssue::RuntimeFault;
-        result.error.code = QStringLiteral(
-                    "INSPECTION_RUNTIME_FAULT_DURING_STOP");
-        result.error.userMessage = QStringLiteral(
-                    "停止检测时发生系统故障。");
-        result.snapshot = runtimeSnapshot();
-        publishSnapshot();
-        return result;
+    if (reason == InspectionFaultReason::PlcDisconnected) {
+        m_runtime->disconnectPlc();
     }
-
-    if (recoveringFault) {
-        const int unconfirmed = m_runtime->reconcileFaultProducts();
-        result.reconciliationSummary = QStringLiteral(
-                    "视觉检测已暂停，输送线状态未知。\n"
-                    "本次未完成产品记为未确认：%1件。\n"
-                    "请通过输送线自身控制确认停线并隔离相关产品。")
-                .arg(unconfirmed);
-        if (!m_runtime->acknowledgeFault()) {
-            result.issue = StopInspectionIssue::FaultReconciliationFailed;
-            result.error.code = QStringLiteral(
-                        "INSPECTION_FAULT_ACKNOWLEDGE_REJECTED");
-            result.error.userMessage = QStringLiteral(
-                        "故障仍有未完成产品，不能解除锁定。");
-            result.snapshot = runtimeSnapshot();
-            publishSnapshot();
-            return result;
-        }
+    if (runtimeActive) {
+        m_runtime->finishStop();
     }
-
-    m_activeTemplatePaths.clear();
-    if (result.cameraRecovery.issue
-            == CameraRecoveryIssueDto::ExposureRejected) {
-        result.issue = StopInspectionIssue::CameraRecoveryFailed;
-        result.error.code = QStringLiteral(
-                    "INSPECTION_CAMERA_EXPOSURE_RECOVERY_FAILED");
-        result.error.userMessage = QStringLiteral(
-                    "停止检测后，相机曝光恢复失败，请检查相机状态。");
-        result.error.diagnostic =
-                result.cameraRecovery.errorMessage;
-    }
-    result.snapshot = runtimeSnapshot();
     publishSnapshot();
-    return result;
+    return recovery;
 }
 
 OpenCameraResult InspectionApplicationService::openCamera(
@@ -599,14 +508,12 @@ OpenCameraResult InspectionApplicationService::openCamera(
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_RUNTIME_BUSY"),
                     QStringLiteral("当前有任务正在运行，不能重新打开相机。"));
-        result.snapshot = runtimeSnapshot();
         return result;
     }
     if (m_cameraSession->isOpen()) {
         result.operation = OperationResult::rejected(
                     QStringLiteral("CAMERA_ALREADY_OPEN"),
                     QStringLiteral("相机已连接！"));
-        result.snapshot = runtimeSnapshot();
         return result;
     }
 
@@ -616,7 +523,6 @@ OpenCameraResult InspectionApplicationService::openCamera(
                 plcCommand.rack,
                 plcCommand.slot);
     result.plcConnectionFailed = !plc.isSuccess();
-    result.plcNativeErrorCode = plc.nativeErrorCode;
 
     const CameraSession::PersistAdjustedExposure persistExposure =
             [this](int adjustedExposure, QString *errorMessage) {
@@ -636,12 +542,10 @@ OpenCameraResult InspectionApplicationService::openCamera(
                     QStringLiteral("CAMERA_OPEN_FAILED"),
                     QStringLiteral("相机打开失败，请检查相机连接和参数。"),
                     result.camera.diagnostic);
-        result.snapshot = runtimeSnapshot();
         publishSnapshot();
         return result;
     }
     result.operation = OperationResult::accepted();
-    result.snapshot = runtimeSnapshot();
     publishSnapshot();
     return result;
 }
@@ -956,38 +860,6 @@ void InspectionApplicationService::shutdown()
         m_runtime->disconnectPlc();
     }
     m_runtime->finishStop();
-    m_activeTemplatePaths.clear();
-    publishSnapshot();
-}
-
-void InspectionApplicationService::completeUnexpectedAcquisitionStop()
-{
-    const InspectionRuntimeState state = m_runtime->state();
-    if (state != InspectionRuntimeState::Running
-            && state != InspectionRuntimeState::Stopping) {
-        return;
-    }
-    m_runtime->beginStop();
-    m_cameraSession->stopInspection();
-    m_runtime->waitForStop();
-    if (m_cameraSession->isOpen()) {
-        const AppSettings settings = m_settings->current();
-        const CameraSession::PersistAdjustedExposure persistExposure =
-                [this](int adjustedExposure, QString *errorMessage) {
-            AppSettings adjusted = m_settings->current();
-            adjusted.cameraExposure = adjustedExposure;
-            const OperationResult saved =
-                    m_settings->saveConfiguration(adjusted);
-            if (!saved.isSuccess() && errorMessage) {
-                *errorMessage = saved.error.userMessage;
-            }
-            return saved.isSuccess();
-        };
-        m_cameraSession->restorePreviewReady(
-                    settings.cameraExposure, persistExposure);
-    }
-    m_runtime->finishStop();
-    m_activeTemplatePaths.clear();
     publishSnapshot();
 }
 
@@ -1064,8 +936,6 @@ RuntimeSnapshot InspectionApplicationService::runtimeSnapshot() const
     snapshot.state = applicationState(m_runtime->state());
     snapshot.cameraOpen = m_cameraSession->isOpen();
     snapshot.plcConnected = m_runtime->isPlcConnected();
-    snapshot.runId = m_runtime->runId();
-    snapshot.activeTemplatePaths = m_activeTemplatePaths;
     return snapshot;
 }
 
@@ -1082,7 +952,6 @@ StartInspectionResult InspectionApplicationService::rejectStart(
     result.error.userMessage = userMessage;
     result.error.diagnostic = diagnostic;
     result.details = details;
-    result.snapshot = runtimeSnapshot();
     return result;
 }
 

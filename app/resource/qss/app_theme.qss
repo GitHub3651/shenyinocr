@@ -499,12 +499,6 @@ QLabel#label_runtimeStatus[uiState="warning"] {
     border-color: #E9CAA0;
 }
 
-QLabel#label_runtimeStatus[uiState="fault"] {
-    background-color: #FBEAEA;
-    color: #C13F3F;
-    border-color: #D99A9A;
-}
-
 QLabel#label_verdictResult {
     background-color: #202830;
     color: #000000;
@@ -530,13 +524,6 @@ QLabel#label_verdictResult[verdict="ng"] {
     background-color: #202830;
     color: #C13F3F;
     border: none;
-}
-
-QLabel#label_verdictResult[verdict="fault"] {
-    background-color: #8F2E2E;
-    color: #FFFFFF;
-    border: 1px solid #8F2E2E;
-    font-size: 26px;
 }
 
 /* 11. 页面滚动条，仅限定左侧五页 */

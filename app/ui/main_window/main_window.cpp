@@ -125,29 +125,12 @@ MainWindow::MainWindow(
             this,
             &MainWindow::checkInspectionPlcHealth);
     m_plcHealthTimer->start();
-    connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::captureStopped,
-            this,
-            [this](bool preview) {
-        if (preview) {
-            return;
-        }
-        if (operationUiState() == OperationUiState::Detecting) {
-            m_inspectionApplicationService
-                    ->completeUnexpectedAcquisitionStop();
-            m_inspectionInfoUi->label_runtimeStatus->setText(
-                        "图像采集已停止，检测已暂停");
-            updateOperationUiState();
-        }
-    },
-    Qt::QueuedConnection);
     connect(
         m_runtime,
         &InspectionRuntime::presentationReady,
         this,
         [this](const InspectionPresentation &presentation) {
         m_inspectionPage->present(presentation);
-        m_inspectionPage->setStatistics(m_runtime->statistics());
     },
     Qt::QueuedConnection);
     connect(
@@ -164,14 +147,54 @@ MainWindow::MainWindow(
         &InspectionRuntime::faultSnapshotChanged,
         this,
         [this](const InspectionFaultSnapshot &snapshot) {
-        if (!m_faultAlarmPresented) {
-            ui->toolButton_showInspectionInfo->setChecked(true);
-            showLeftDrawerPage(
-                        ui->page_inspectionInfo,
-                        ui->toolButton_showInspectionInfo);
+        const CameraRecoveryResultDto recovery =
+                m_inspectionApplicationService->stop(snapshot.reason);
+        finishInspectionStopUi(recovery);
+
+        QString reasonText;
+        QString actionHint;
+        switch (snapshot.reason) {
+        case InspectionFaultReason::CameraDisconnected:
+            reasonText = QStringLiteral("相机连接或图像采集异常");
+            actionHint = QStringLiteral(
+                        "相机已关闭，请检查并重新连接相机后重新开始识别。");
+            break;
+        case InspectionFaultReason::PlcDisconnected:
+            reasonText = QStringLiteral("PLC 连接或检测结果发送异常");
+            actionHint = QStringLiteral(
+                        "PLC 已断开，请检查并重新连接 PLC 后重新开始识别。");
+            break;
+        case InspectionFaultReason::HardTriggerQueueOverflow:
+            reasonText = QStringLiteral("待检测图像过多");
+            actionHint = QStringLiteral(
+                        "请检查输送线节拍和图像处理速度后重新开始识别。");
+            break;
+        case InspectionFaultReason::RuntimeInvariantViolation:
+            reasonText = QStringLiteral("系统运行状态异常");
+            actionHint = QStringLiteral(
+                        "请检查运行日志和故障期间的产品后重新开始识别。");
+            break;
+        case InspectionFaultReason::BarcodeCsvUnavailable:
+            reasonText = QStringLiteral("二维码结果无法保存到本机");
+            actionHint = QStringLiteral(
+                        "请检查二维码 CSV 保存目录后重新开始识别。");
+            break;
+        case InspectionFaultReason::None:
+            return;
         }
-        m_inspectionPage->presentFault(snapshot, m_faultAlarmPresented);
-        updateOperationUiState();
+        QMessageBox::critical(
+                    this,
+                    QStringLiteral("系统故障－识别已停止"),
+                    QStringLiteral(
+                        "系统发生故障，识别已自动停止。\n\n"
+                        "故障原因：%1\n"
+                        "本次运行已接收 %2 件，已完成 %3 件。\n\n"
+                        "请检查输送线状态和故障期间的产品。\n"
+                        "%4")
+                    .arg(reasonText)
+                    .arg(snapshot.acceptedProductCount)
+                    .arg(snapshot.finalizedProductCount)
+                    .arg(actionHint));
     },
     Qt::QueuedConnection);
 }
@@ -365,12 +388,7 @@ void MainWindow::initializePages()
     });
 }
 
-MainWindow::~MainWindow()
-{
-    m_templateEditorPage->resetTemplateCaptureState();
-    m_inspectionApplicationService->shutdown();
-
-}
+MainWindow::~MainWindow() = default;
 
 void MainWindow::updateBarcodeCsvUi(const RuntimeSnapshot &snapshot)
 {

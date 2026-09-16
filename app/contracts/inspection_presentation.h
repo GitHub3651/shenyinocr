@@ -24,13 +24,6 @@ struct DetectionResultStatistics
     }
 };
 
-struct DetectionAbnormalStatistics
-{
-    quint64 systemFaultCount = 0;
-    quint64 unconfirmedProductCount = 0;
-    quint64 postFaultDroppedFrameCount = 0;
-};
-
 struct InspectionPresentation
 {
     QImage image;

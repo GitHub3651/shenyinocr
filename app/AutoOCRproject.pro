@@ -54,7 +54,6 @@ SOURCES += \
     startup/runtime_guard.cpp \
     startup/single_instance_guard.cpp \
     startup/application_startup.cpp \
-    ui/main_window/inspection/inspection_fault_presenter.cpp \
     runtime/inspection_presentation_renderer.cpp \
     engines/barcode/vendor/barcode_decoder_adapter.cpp \
     devices/camera/vendor/hikvision_camera_device.cpp \
@@ -130,7 +129,6 @@ HEADERS += \
     startup/runtime_guard.h \
     startup/single_instance_guard.h \
     startup/application_startup.h \
-    ui/main_window/inspection/inspection_fault_presenter.h \
     runtime/inspection_presentation_renderer.h \
     engines/barcode/vendor/barcode_decoder_adapter.h \
     engines/barcode/barcode_decoder.h \

@@ -102,10 +102,9 @@ private:
     bool isInspectionBusy() const;
     const AppSettings &machineSettings() const;
     void presentStartFailure(const StartInspectionResult &result);
-    void finishInspectionStopUi(const StopInspectionResult &result);
-    void presentInspectionFault();
+    void finishInspectionStopUi(
+        const CameraRecoveryResultDto &cameraRecovery);
     void checkInspectionPlcHealth();
-    void restoreNormalFaultUi();
     void showLeftDrawerPage(QWidget *page, QToolButton *button);
     void hideLeftDrawer();
     void setupDetectModeChangeTracking();
@@ -123,7 +122,6 @@ private:
     QString m_currentDetectModeId;
     SettingsEditState m_settingsEditState;
     bool m_applicationExitInProgress = false;
-    bool m_faultAlarmPresented = false;
     QTimer *m_plcHealthTimer = nullptr;
 
     std::unique_ptr<Ui::InspectionInfoPage> m_inspectionInfoUi;

@@ -15,22 +15,6 @@
 #include <mutex>
 #include <vector>
 
-struct CameraCaptureStopResult
-{
-    bool wasRunning = false;
-    bool stopped = true;
-
-    bool allStopped() const
-    {
-        return stopped;
-    }
-
-    bool shouldRestoreCamera() const
-    {
-        return wasRunning;
-    }
-};
-
 struct CameraSessionCaptureConfiguration
 {
     bool hardwareTriggerEnabled = false;
@@ -44,7 +28,7 @@ struct CameraSessionCallbacks
 {
     std::function<void(const cv::Mat &)> previewFrameReady;
     std::function<void(const QString &)> previewFailed;
-    std::function<void(bool)> captureStopped;
+    std::function<void()> templatePreviewStopped;
     std::function<void(InspectionFaultReason, const QString &)> enterFault;
 };
 
@@ -76,7 +60,7 @@ public:
         const CameraSessionCaptureConfiguration &configuration,
         QString *errorMessage);
     bool startInspection(QString *errorMessage);
-    CameraCaptureStopResult stopInspection();
+    void stopInspection();
     CameraRecoveryResultDto restorePreviewReady(
         int savedExposure,
         const PersistAdjustedExposure &persistAdjustedExposure);

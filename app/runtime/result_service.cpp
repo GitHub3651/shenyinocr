@@ -184,32 +184,6 @@ void ResultService::clearPendingDelayedNgRequests()
     m_delayedNgRequests.swap(empty);
 }
 
-void ResultService::recordSystemFault()
-{
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        ++m_abnormalStatistics.systemFaultCount;
-        std::queue<DelayedNgRequest> empty;
-        m_delayedNgRequests.swap(empty);
-    }
-}
-
-void ResultService::recordUnconfirmedProducts(int count)
-{
-    if (count <= 0) {
-        return;
-    }
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_abnormalStatistics.unconfirmedProductCount +=
-            static_cast<quint64>(count);
-}
-
-void ResultService::recordPostFaultDroppedFrame()
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    ++m_abnormalStatistics.postFaultDroppedFrameCount;
-}
-
 void ResultService::shutdown()
 {
     m_plcResetTimer.stop();
@@ -282,11 +256,17 @@ void ResultService::process(const ProcessRequest &request)
     const ProductKey productKey = request.completion.frame->productKey;
     bool barcodeCsvEnabled = false;
     QString barcodeCsvOutputDirectory;
+    bool plcOutputEnabled = false;
+    int delayedNgOffset = 0;
+    DetectionResultStatistics candidateStatistics;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         barcodeCsvEnabled = m_runConfiguration.barcodeCsvEnabled;
         barcodeCsvOutputDirectory =
                 m_runConfiguration.barcodeCsvOutputDirectory;
+        plcOutputEnabled = m_runConfiguration.plcOutputEnabled;
+        delayedNgOffset = m_runConfiguration.delayedNgOffset;
+        candidateStatistics = m_statistics;
     }
     if (barcodeCsvEnabled) {
         QString filePath;
@@ -307,39 +287,36 @@ void ResultService::process(const ProcessRequest &request)
             return;
         }
     }
-    if (!m_runtime.finalizeResultClaim(productKey)) {
-        m_runtime.enterFault(
-                    InspectionFaultReason::RuntimeInvariantViolation,
-                    QStringLiteral("产品结果正式认领状态提交失败。"));
-        return;
-    }
+
     ProductKey delayedProduct;
-    if (consumeDueDelayedNgRequest(&delayedProduct)) {
-        requestPlc(DetectionPlcAction::RequestNg, delayedProduct);
+    if (plcOutputEnabled
+            && consumeDueDelayedNgRequest(&delayedProduct)
+            && !requestPlc(DetectionPlcAction::RequestNg, delayedProduct)) {
+        return;
     }
 
     const DetectionResultSaveAction saveAction = imageSaveActionFor(
                 request.completion.result.verdict);
     DetectionPlcAction plcAction = DetectionPlcAction::NoRequest;
-    DetectionResultStatistics statistics;
-    {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        ++m_statistics.totalCount;
-        if (request.completion.result.verdict == AlgorithmVerdict::Ok) {
+    DelayedNgRequest delayedRequest;
+    bool enqueueDelayedNg = false;
+    ++candidateStatistics.totalCount;
+    if (request.completion.result.verdict == AlgorithmVerdict::Ok) {
+        if (plcOutputEnabled) {
             plcAction = DetectionPlcAction::RequestOk;
-        } else {
-            ++m_statistics.ngCount;
-            if (m_runConfiguration.delayedNgOffset == 0) {
+        }
+    } else {
+        ++candidateStatistics.ngCount;
+        if (plcOutputEnabled) {
+            if (delayedNgOffset == 0) {
                 plcAction = DetectionPlcAction::RequestNg;
             } else {
-                DelayedNgRequest delayed;
-                delayed.dueTotalCount = m_statistics.totalCount
-                        + m_runConfiguration.delayedNgOffset;
-                delayed.productKey = request.completion.frame->productKey;
-                m_delayedNgRequests.push(delayed);
+                delayedRequest.dueTotalCount =
+                        candidateStatistics.totalCount + delayedNgOffset;
+                delayedRequest.productKey = productKey;
+                enqueueDelayedNg = true;
             }
         }
-        statistics = m_statistics;
     }
 
     InspectionPresentation presentation;
@@ -363,21 +340,54 @@ void ResultService::process(const ProcessRequest &request)
 
     const bool imageSaveRequested =
             saveAction != DetectionResultSaveAction::DoNotSave;
-    if (imageSaveRequested) {
-        submitImageSave(request, saveAction, presentation.image);
+    if (imageSaveRequested
+            && !submitImageSave(request, saveAction, presentation.image)) {
+        if (m_runtime.isRunning()) {
+            m_runtime.enterFault(
+                        InspectionFaultReason::RuntimeInvariantViolation,
+                        QStringLiteral("图像保存任务提交失败。"));
+        }
+        return;
     }
 
-    presentation.statistics = statistics;
-    if (m_runtime.state() != InspectionRuntimeState::Fault) {
-        requestPlc(plcAction, request.completion.frame->productKey);
+    if (plcOutputEnabled
+            && plcAction != DetectionPlcAction::NoRequest
+            && !requestPlc(plcAction, productKey)) {
+        return;
     }
+
+    presentation.statistics = candidateStatistics;
     const double processingElapsedMs =
             std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now()
                 - request.completion.frame->processingStartedAt).count();
     presentation.elapsedText = QStringLiteral("%1 ms")
             .arg(processingElapsedMs, 0, 'f', 2);
-    m_runtime.publishPresentation(presentation);
+    if (!m_runtime.publishPresentation(presentation)) {
+        if (m_runtime.isRunning()) {
+            m_runtime.enterFault(
+                        InspectionFaultReason::RuntimeInvariantViolation,
+                        QStringLiteral("检测结果界面投递失败。"));
+        }
+        return;
+    }
+    if (m_runtime.state() == InspectionRuntimeState::Fault) {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_statistics = candidateStatistics;
+        if (enqueueDelayedNg) {
+            m_delayedNgRequests.push(delayedRequest);
+        }
+    }
+    if (!m_runtime.finalizeResultClaim(productKey)) {
+        m_runtime.enterFault(
+                    InspectionFaultReason::RuntimeInvariantViolation,
+                    QStringLiteral("产品正式结果收口失败。"));
+        return;
+    }
+
     const DetectionResult &result = request.completion.result;
     QString summary = QStringLiteral(
                 "event=frame.completed mode=%1 result=%2 ms=%3")

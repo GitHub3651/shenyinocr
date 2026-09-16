@@ -74,9 +74,6 @@ public:
     void resetStatistics();
     void resetNgCount();
     void clearPendingDelayedNgRequests();
-    void recordSystemFault();
-    void recordUnconfirmedProducts(int count);
-    void recordPostFaultDroppedFrame();
 
     void shutdown();
 
@@ -120,7 +117,6 @@ private:
     mutable std::mutex m_mutex;
     ResultServiceRunConfiguration m_runConfiguration;
     DetectionResultStatistics m_statistics;
-    DetectionAbnormalStatistics m_abnormalStatistics;
     std::queue<DelayedNgRequest> m_delayedNgRequests;
     std::vector<ProductKey> m_pendingPlcResetProducts;
     std::unique_ptr<ImageSaveService> m_imageSaveService;

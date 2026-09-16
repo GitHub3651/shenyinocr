@@ -11,7 +11,6 @@
 #include "runtime/result_service.h"
 #include "system_support/settings/app_settings.h"
 
-#include <QDateTime>
 #include <QMetaType>
 #include <QObject>
 #include <QString>
@@ -42,27 +41,15 @@ enum class InspectionFaultReason
     CameraDisconnected,
     PlcDisconnected,
     HardTriggerQueueOverflow,
-    ProductIdentityAmbiguous,
     RuntimeInvariantViolation,
     BarcodeCsvUnavailable
 };
 
-Q_DECLARE_METATYPE(InspectionFaultReason)
-
 struct InspectionFaultSnapshot
 {
     InspectionFaultReason reason = InspectionFaultReason::None;
-    QString diagnostic;
-    QString runId;
     quint64 acceptedProductCount = 0;
-    quint64 completedProductCount = 0;
-    quint64 postFaultDroppedFrameCount = 0;
-    QDateTime occurredAtUtc;
-
-    bool isActive() const
-    {
-        return reason != InspectionFaultReason::None;
-    }
+    quint64 finalizedProductCount = 0;
 };
 
 Q_DECLARE_METATYPE(InspectionFaultSnapshot)
@@ -97,16 +84,11 @@ public:
 
     bool enterFault(
         InspectionFaultReason reason,
-        const QString &diagnostic = QString(),
-        const QDateTime &occurredAtUtc = QDateTime());
-    int reconcileFaultProducts();
-    bool acknowledgeFault();
+        const QString &diagnostic = QString());
 
     InspectionRuntimeState state() const;
-    InspectionFaultSnapshot faultSnapshot() const;
     bool isBusy() const;
     bool isRunning() const;
-    QString runId() const;
     bool isPlcConnected() const;
     bool requiresPlcForRun() const;
     PlcOperationResult connectPlc(
@@ -183,7 +165,7 @@ private:
     InspectionRuntimeState m_state = InspectionRuntimeState::Idle;
     std::shared_ptr<const InspectionRunContext> m_runContext;
     quint64 m_acceptedProductSequence = 0;
-    quint64 m_completedProductCount = 0;
+    quint64 m_finalizedProductCount = 0;
     quint64 m_lastCompletedProductSequence = 0;
     InspectionFaultSnapshot m_faultSnapshot;
     std::map<quint64, std::weak_ptr<const FrameData>> m_acceptedFrames;

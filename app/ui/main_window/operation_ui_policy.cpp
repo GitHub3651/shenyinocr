@@ -24,8 +24,6 @@ QString operationBusyReason(OperationUiState state)
         return QStringLiteral("当前正在识别，请先停止识别。");
     case OperationUiState::Stopping:
         return QStringLiteral("系统正在停止，请稍候。");
-    case OperationUiState::Fault:
-        return QStringLiteral("请先确认故障并恢复。");
     case OperationUiState::TemplatePreviewing:
     case OperationUiState::TemplateFrozen:
         return QStringLiteral("请先退出模板制作。");
@@ -103,7 +101,6 @@ OperationUiSnapshot OperationUiPolicy::create(
                 QStringLiteral("请先获取并冻结模板画面。"));
     snapshot.stop = access(
                 state == OperationUiState::Detecting
-                || state == OperationUiState::Fault
                 || state == OperationUiState::TemplatePreviewing
                 || state == OperationUiState::TemplateFrozen,
                 state == OperationUiState::Stopping
@@ -142,13 +139,11 @@ OperationUiSnapshot OperationUiPolicy::create(
             state == OperationUiState::TemplatePreviewing
             || state == OperationUiState::TemplateFrozen;
     snapshot.stopText =
-            state == OperationUiState::Fault
-            ? QStringLiteral("确认故障并恢复")
-            : (state == OperationUiState::Stopping
+            state == OperationUiState::Stopping
             ? QStringLiteral("停止中...")
             : (templateOperation
                ? QStringLiteral("退出模板制作")
-               : QStringLiteral("停止识别")));
+               : QStringLiteral("停止识别"));
     snapshot.templateCaptureText =
             state == OperationUiState::TemplatePreviewing
             ? QStringLiteral("拍照并开始框选")
@@ -163,10 +158,6 @@ OperationUiSnapshot OperationUiPolicy::create(
         break;
     case OperationUiState::Detecting:
     case OperationUiState::Stopping:
-        break;
-    case OperationUiState::Fault:
-        snapshot.statusText = QStringLiteral(
-                    "系统故障：检测已暂停");
         break;
     case OperationUiState::TemplatePreviewing:
         snapshot.statusText = QStringLiteral(

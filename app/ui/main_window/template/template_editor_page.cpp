@@ -239,9 +239,9 @@ TemplateEditorPage::TemplateEditorPage(
             this, &TemplateEditorPage::handlePreviewFailure,
             Qt::QueuedConnection);
     connect(&m_inspectionService,
-            &InspectionApplicationService::captureStopped,
-            this, [this](bool preview) {
-        if (preview && m_captureState == CaptureState::Previewing) {
+            &InspectionApplicationService::templatePreviewStopped,
+            this, [this]() {
+        if (m_captureState == CaptureState::Previewing) {
             m_captureState = CaptureState::Idle;
             emit operationUiRefreshRequested();
         }
@@ -286,8 +286,7 @@ void TemplateEditorPage::applyOperationState(
                            snapshot.saveTemplate);
     if (requestedState == OperationUiState::Detecting) {
         showInspectionStatus();
-    } else if (requestedState == OperationUiState::Stopping
-               || requestedState == OperationUiState::Fault) {
+    } else if (requestedState == OperationUiState::Stopping) {
         cancelTemplateDrawing();
     }
 }

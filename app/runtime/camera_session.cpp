@@ -360,16 +360,12 @@ bool CameraSession::startInspection(QString *errorMessage)
     return true;
 }
 
-CameraCaptureStopResult CameraSession::stopInspection()
+void CameraSession::stopInspection()
 {
-    CameraCaptureStopResult result;
-    result.wasRunning = m_captureWorker.isRunning();
     m_intentionalStop = true;
     m_captureWorker.stop();
-    result.stopped = !m_captureWorker.isRunning();
     m_prepared = false;
     m_preview = false;
-    return result;
 }
 
 CameraRecoveryResultDto CameraSession::restorePreviewReady(
@@ -641,17 +637,24 @@ void CameraSession::handleCaptureStopped()
 {
     const bool preview = m_preview;
     m_preview = false;
-    if (!m_intentionalStop) {
-        qCWarning(logDevice).noquote()
-                << QStringLiteral(
-                    "event=camera.capture_stopped_unexpected context=%1")
-                   .arg(preview
-                        ? QStringLiteral("preview")
-                        : QStringLiteral("inspection"));
-        const CameraSessionCallbacks callbacks = callbacksSnapshot();
-        if (callbacks.captureStopped) {
-            callbacks.captureStopped(preview);
+    if (m_intentionalStop) {
+        return;
+    }
+    qCWarning(logDevice).noquote()
+            << QStringLiteral(
+                "event=camera.capture_stopped_unexpected context=%1")
+               .arg(preview
+                    ? QStringLiteral("preview")
+                    : QStringLiteral("inspection"));
+    const CameraSessionCallbacks callbacks = callbacksSnapshot();
+    if (preview) {
+        if (callbacks.templatePreviewStopped) {
+            callbacks.templatePreviewStopped();
         }
+    } else if (callbacks.enterFault) {
+        callbacks.enterFault(
+                    InspectionFaultReason::CameraDisconnected,
+                    QStringLiteral("正式检测图像采集意外停止。"));
     }
 }
 
@@ -659,10 +662,6 @@ void CameraSession::submitFrame(
     const cv::Mat &image)
 {
     if (image.empty()) {
-        return;
-    }
-    if (m_runtime->state() == InspectionRuntimeState::Fault) {
-        m_runtime->acceptFrame(image);
         return;
     }
     if (!m_runtime->isDetectionWorkerActive()) {

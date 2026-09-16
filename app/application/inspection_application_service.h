@@ -37,7 +37,6 @@ struct StartInspectionResult
     InspectionStartIssue issue = InspectionStartIssue::None;
     ApplicationError error;
     QStringList details;
-    RuntimeSnapshot snapshot;
     InspectionAcquisitionDto acquisitionKind =
             InspectionAcquisitionDto::SoftwareTrigger;
 
@@ -48,43 +47,11 @@ struct StartInspectionResult
     }
 };
 
-enum class StopInspectionIssue
-{
-    None,
-    FaultConfirmationRequired,
-    AcquisitionStillStopping,
-    CameraRecoveryFailed,
-    FaultReconciliationFailed,
-    RuntimeFault
-};
-
-struct StopInspectionCommand
-{
-    bool acknowledgeFault = false;
-};
-
-struct StopInspectionResult
-{
-    StopInspectionIssue issue = StopInspectionIssue::None;
-    ApplicationError error;
-    RuntimeSnapshot snapshot;
-    CameraRecoveryResultDto cameraRecovery;
-    QString reconciliationSummary;
-    bool recoveredFault = false;
-
-    bool isAccepted() const
-    {
-        return issue == StopInspectionIssue::None;
-    }
-};
-
 struct OpenCameraResult
 {
     OperationResult operation;
     CameraOpenResultDto camera;
     bool plcConnectionFailed = false;
-    int plcNativeErrorCode = 0;
-    RuntimeSnapshot snapshot;
 };
 
 struct PlcConnectionCommand
@@ -115,8 +82,7 @@ public:
     ~InspectionApplicationService() override;
 
     StartInspectionResult start(const StartInspectionCommand &command);
-    StopInspectionResult stop(const StopInspectionCommand &command =
-                              StopInspectionCommand());
+    CameraRecoveryResultDto stop(InspectionFaultReason reason);
     OpenCameraResult openCamera(const PlcConnectionCommand &plc);
     OperationResult closeCamera();
     OperationResult connectPlc(const PlcConnectionCommand &command);
@@ -136,7 +102,6 @@ public:
     cv::Mat currentCameraImageClone() const;
     bool isCameraOpen() const;
     void shutdown();
-    void completeUnexpectedAcquisitionStop();
     QImage renderPreviewFrame(
         const cv::Mat &image,
         bool tissueMode,
@@ -151,7 +116,7 @@ signals:
     void runtimeSnapshotChanged(RuntimeSnapshot snapshot);
     void templatePreviewFrameReady(cv::Mat image);
     void templatePreviewFailed(QString reason);
-    void captureStopped(bool preview);
+    void templatePreviewStopped();
 
 private:
     StartInspectionResult rejectStart(
@@ -176,5 +141,4 @@ private:
     std::shared_ptr<CameraSession> m_cameraSession;
     std::shared_ptr<SettingsApplicationService> m_settings;
     std::shared_ptr<TemplateStore> m_templates;
-    QStringList m_activeTemplatePaths;
 };

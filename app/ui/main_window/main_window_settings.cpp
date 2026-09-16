@@ -477,16 +477,6 @@ void MainWindow::on_toolButton_stopInspection_clicked()
 {
     const RuntimeSnapshot before =
             m_inspectionApplicationService->runtimeSnapshot();
-    StopInspectionCommand command;
-    if (before.state == ApplicationRuntimeState::Fault) {
-        if (!m_inspectionPage->confirmFaultRecovery(
-                m_runtime->faultSnapshot())) {
-            presentInspectionFault();
-            return;
-        }
-        command.acknowledgeFault = true;
-    }
-
     if (m_templateEditorPage->templateOperationActive()) {
         m_templateEditorPage->resetTemplateCaptureState();
         m_templateEditorPage->cancelTemplateDrawing();
@@ -504,7 +494,8 @@ void MainWindow::on_toolButton_stopInspection_clicked()
     }
 
     finishInspectionStopUi(
-                m_inspectionApplicationService->stop(command));
+                m_inspectionApplicationService->stop(
+                    InspectionFaultReason::None));
 }
 void MainWindow::setupNonPersistentDefaults()
 {

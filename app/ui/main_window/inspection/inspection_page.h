@@ -1,7 +1,6 @@
 #pragma once
 
 #include "contracts/inspection_presentation.h"
-#include "runtime/inspection_runtime.h"
 #include "ui/main_window/operation_ui_policy.h"
 
 #include <QString>
@@ -33,16 +32,9 @@ public:
     void setStatistics(const DetectionResultStatistics &statistics);
     void presentPreviewImage(const QImage &image);
     void clearInspectionView(InspectionClearScope scope);
-    void clearTransientView();
     void applyOperationState(
         OperationUiState requestedState,
         const OperationUiSnapshot &operationUi);
-    void presentFault(
-        const InspectionFaultSnapshot &snapshot,
-        bool &alarmPresented);
-    bool confirmFaultRecovery(
-        const InspectionFaultSnapshot &snapshot) const;
-    void restoreNormalFaultStyle();
     void reportImageSaveFailure(
         quint64 totalFailed,
         const QString &latestError);

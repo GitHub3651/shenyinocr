@@ -10,7 +10,6 @@ enum class OperationUiState
     CameraReady,
     Detecting,
     Stopping,
-    Fault,
     TemplatePreviewing,
     TemplateFrozen
 };

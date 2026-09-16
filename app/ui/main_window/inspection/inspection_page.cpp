@@ -1,15 +1,12 @@
 #include "ui/main_window/inspection/inspection_page.h"
 
-#include "ui/main_window/inspection/inspection_fault_presenter.h"
 #include "ui/main_window/inspection_image_canvas.h"
 #include "system_support/logging/log_categories.h"
 #include "ui_inspection_info_page.h"
 #include "ui_main_window.h"
 
-#include <QAbstractButton>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QPixmap>
 #include <QPushButton>
 #include <QStyle>
@@ -65,8 +62,6 @@ QString runtimeUiState(OperationUiState state)
         return QStringLiteral("running");
     case OperationUiState::Stopping:
         return QStringLiteral("stopping");
-    case OperationUiState::Fault:
-        return QStringLiteral("fault");
     case OperationUiState::TemplatePreviewing:
     case OperationUiState::TemplateFrozen:
         return QStringLiteral("warning");
@@ -163,12 +158,6 @@ void InspectionPage::clearInspectionView(InspectionClearScope scope)
     }
 }
 
-void InspectionPage::clearTransientView()
-{
-    m_imageSaveWarningScheduled = false;
-    m_inspectionInfoUi.label_runtimeStatus->clear();
-}
-
 void InspectionPage::applyOperationState(
     OperationUiState requestedState,
     const OperationUiSnapshot &operationUi)
@@ -199,73 +188,6 @@ void InspectionPage::applyOperationState(
                     "uiState",
                     runtimeUiState(requestedState));
     }
-}
-
-void InspectionPage::presentFault(
-    const InspectionFaultSnapshot &snapshot,
-    bool &alarmPresented)
-{
-    const InspectionFaultPresentation presentation =
-            InspectionFaultPresenter::create(snapshot);
-    if (!presentation.isValid()) {
-        return;
-    }
-    m_inspectionInfoUi.label_runtimeStatus->setText(presentation.statusText);
-    setStyleProperty(
-                *m_inspectionInfoUi.label_runtimeStatus,
-                "uiState",
-                QStringLiteral("fault"));
-    m_mainWindowUi.label_verdictResult->setText(presentation.resultText);
-    setStyleProperty(
-                *m_mainWindowUi.label_verdictResult,
-                "verdict",
-                QStringLiteral("fault"));
-
-    if (!alarmPresented) {
-        alarmPresented = true;
-        QMessageBox::critical(
-                    &m_rootWidget,
-                    QStringLiteral("系统故障－检测已暂停"),
-                    presentation.operatorMessage);
-    }
-}
-
-bool InspectionPage::confirmFaultRecovery(
-    const InspectionFaultSnapshot &snapshot) const
-{
-    const InspectionFaultPresentation presentation =
-            InspectionFaultPresenter::create(snapshot);
-    if (!presentation.isValid()) {
-        return false;
-    }
-
-    QMessageBox messageBox(
-                QMessageBox::Critical,
-                QStringLiteral("故障恢复确认"),
-                presentation.operatorMessage
-                + QStringLiteral(
-                    "\n\n注意：恢复检测操作不代表输送线已停止。"),
-                QMessageBox::Yes | QMessageBox::Cancel,
-                &m_rootWidget);
-    messageBox.setDefaultButton(QMessageBox::Cancel);
-    messageBox.button(QMessageBox::Yes)->setText(
-                QStringLiteral("确认现场已处理并恢复"));
-    messageBox.button(QMessageBox::Cancel)->setText(
-                QStringLiteral("继续保持故障锁定"));
-    return messageBox.exec() == QMessageBox::Yes;
-}
-
-void InspectionPage::restoreNormalFaultStyle()
-{
-    setStyleProperty(
-                *m_inspectionInfoUi.label_runtimeStatus,
-                "uiState",
-                QStringLiteral("ready"));
-    setStyleProperty(
-                *m_mainWindowUi.label_verdictResult,
-                "verdict",
-                QStringLiteral("idle"));
-    m_mainWindowUi.label_verdictResult->clear();
 }
 
 void InspectionPage::reportImageSaveFailure(
