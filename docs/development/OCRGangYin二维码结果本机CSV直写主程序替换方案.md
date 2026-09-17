@@ -10,8 +10,8 @@
 ## 2. 最终行为
 
 - 设置使用严格 Schema 6，仅保留 `barcodeCsv.enabled` 和 `barcodeCsv.outputDirectory`。
-- 二维码+三期启用本机记录后，启动时准备输出目录；每件正式结果直接追加到当日 `qr_results_YYYYMMDD.csv`。
-- 新文件或空文件写 UTF-8 BOM、无表头；整体 OK 写二维码原文，整体 NG 写 `noQR`；字段按 CSV 规则转义并逐产品 `flush()`。
+- 二维码+三期启用本机记录后，启动时准备输出目录；整体 OK 的正式结果直接追加到当日 `qr_results_YYYYMMDD.csv`。
+- 只在整体 OK 时追加二维码原文；整体 NG 不创建、不打开且不追加 CSV 文件。新文件或空文件写 UTF-8 BOM、无表头；字段按 CSV 规则转义并逐条 `flush()`。
 - 其他四种模式不生成本机二维码 CSV。
 - 主程序不再依赖远程连接、ACK、待发送队列或网络线程。
 
@@ -45,6 +45,6 @@
 ## 7. 用户统一验证
 
 1. 在 Qt Creator 使用 Release 执行 Run qmake、Clean、Rebuild。
-2. 验证 Schema 重置、开关和目录保存、目录准备、OK/NG、转义、BOM、续写和跨日文件。
+2. 验证 Schema 重置、开关和目录保存、目录准备、整体 OK 追加二维码内容、整体 NG 不产生任何 CSV 写入、转义、BOM、续写和跨日文件。
 3. 制造真实 CSV 写入失败，确认一次性故障警告、自动停止和未完成产品收口。
 4. 回归关闭流程、五种检测模式、统计、存图和 PLC。

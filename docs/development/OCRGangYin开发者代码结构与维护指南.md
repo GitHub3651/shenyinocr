@@ -224,7 +224,7 @@ CameraSession/CaptureWorker
 
 ### 4.2.1 A2 结果与故障边界
 
-正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次 CSV、候选统计、存图任务提交、PLC 和结果呈现事务，运行状态保持 Running；全部合同走完后才增加正式结果完成数。
+正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次候选统计、存图任务提交、PLC 和结果呈现事务，运行状态保持 Running；二维码+三期的整体 NG 跳过 CSV 写入，只有整体 OK 追加二维码内容；全部合同走完后才增加正式结果完成数。
 
 无效工作项、定位成功后模板下标越界、执行期 OCR/二维码引擎异常、预处理失败或无效 completion 不生成产品结果，由 `DetectionWorker::failureConsumer` 进入现有 Runtime Fault。队列取消只保留在 Worker/FrameQueue 生命周期层，不进入 `ResultService`。
 

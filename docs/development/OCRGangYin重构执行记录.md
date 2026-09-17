@@ -1578,10 +1578,10 @@
 ## 二维码结果本机 CSV 直写（2026-09-03，代码实施完成待统一验证）
 
 - [x] AppSettings 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期设置页直接保存本机输出开关和目录。
-- [x] 启动时准备输出目录；每件正式结果直接追加本机每日 `qr_results_YYYYMMDD.csv`，使用 UTF-8 BOM、无表头和 CSV 转义。
+- [x] 启动时准备输出目录；只对整体 OK 直接追加二维码内容到本机每日 `qr_results_YYYYMMDD.csv`，整体 NG 不产生 CSV 写入；使用 UTF-8 BOM、无表头和 CSV 转义。
 - [x] CSV 写入失败进入 `BarcodeCsvUnavailable` Runtime Fault，统一停止链完成未确认产品收口并回到 Idle。
 - [x] 主程序结果输出只维护本机 CSV；`tools/result_receiver/` 保持独立范围。
-- [ ] 待用户在 Qt Creator 使用 Release 执行 Run qmake、Clean、Rebuild，并验证 Schema、设置保存、目录准备、OK/NG、转义、BOM、续写、跨日、写入失败自动停止、关闭和五模式回归。
+- [ ] 待用户在 Qt Creator 使用 Release 执行 Run qmake、Clean、Rebuild，并验证 Schema、设置保存、目录准备、整体 OK 追加二维码内容、整体 NG 零写入、转义、BOM、续写、跨日、写入失败自动停止、关闭和五模式回归。
 
 ## 恢复默认设置范围收紧与直接应用（2026-09-08，代码实施完成待统一验证）
 

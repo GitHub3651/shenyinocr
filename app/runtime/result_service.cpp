@@ -268,7 +268,8 @@ void ResultService::process(const ProcessRequest &request)
         delayedNgOffset = m_runConfiguration.delayedNgOffset;
         candidateStatistics = m_statistics;
     }
-    if (barcodeCsvEnabled) {
+    if (barcodeCsvEnabled
+            && request.completion.result.verdict == AlgorithmVerdict::Ok) {
         QString filePath;
         QString errorMessage;
         if (!appendBarcodeCsvResult(
@@ -438,10 +439,7 @@ bool ResultService::appendBarcodeCsvResult(
     if (file.size() == 0) {
         bytes.append("\xEF\xBB\xBF", 3);
     }
-    const QString value = result.verdict == AlgorithmVerdict::Ok
-            ? result.qrContent
-            : QStringLiteral("noQR");
-    bytes.append(csvEscape(value).toUtf8());
+    bytes.append(csvEscape(result.qrContent).toUtf8());
     bytes.append('\n');
 
     if (file.write(bytes) != bytes.size()) {

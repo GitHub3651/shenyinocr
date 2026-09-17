@@ -37,7 +37,7 @@
 |---|---|---|---|
 | 设置与 UI | 严格 AppSettings Schema 8 使用 `barcodeCsv.enabled/outputDirectory`；二维码+三期页只保留启用、只读目录和选择目录 | 运行期间按统一权限规则禁用修改 | Schema 7 整体重置、目录与启用状态保存/恢复、未选目录时拒绝启用 |
 | 启动与运行配置 | 启用时开始识别只调用 `QDir::mkpath()` 准备目录；本轮配置冻结开关和目录 | 目录准备不创建测试文件或写探针 | 目录可创建/不可创建、其他四模式无 CSV、运行中控件禁用 |
-| 正式结果事务 | `ResultService::process()` 在 `claimResult()` 后按本机日期追加 `qr_results_YYYYMMDD.csv`；随后完成存图任务提交、当前 PLC 合同和结果呈现，运行未进入 Fault 时才提交统计并调用 `finalizeResultClaim()`；OK 写二维码原文，整体 NG 写 `noQR` | 每件已完成正式结果只追加一次；后续步骤失败时本件计为未确认 | BOM、无表头、转义、逐行 flush、同日续写、跨日新文件及后续步骤故障收口 |
+| 正式结果事务 | `ResultService::process()` 在 `claimResult()` 后仅对整体 OK 按本机日期追加 `qr_results_YYYYMMDD.csv`；整体 NG 不创建、不打开且不追加 CSV 文件；随后完成存图任务提交、当前 PLC 合同和结果呈现，运行未进入 Fault 时才提交统计并调用 `finalizeResultClaim()` | 每件整体 OK 的已完成正式结果只追加一次；后续步骤失败时本件计为未确认 | OK 二维码原文、NG 零写入、BOM、无表头、转义、逐行 flush、同日续写、跨日新文件及后续步骤故障收口 |
 | 失败与关闭 | 打开、写入或 flush 失败记录 ERROR 并进入 `BarcodeCsvUnavailable` 通用 Fault；自动停止后回到 Idle | 关闭流程不保留待发送数据 | 首件和运行中写入失败自动停止，统计/PLC/呈现停止，未完成产品记为未确认 |
 
 Agent 已完成旧业务符号、旧网络依赖、工程清单、UI/翻译 XML、UTF-8、末尾换行、`git diff --check` 和接收端零差异静态检查；未运行 qmake、构建、测试程序或主程序。
