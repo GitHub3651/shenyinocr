@@ -10,6 +10,7 @@
 
 class QLabel;
 class QEvent;
+class QCheckBox;
 class QWidget;
 class SettingsEditState;
 
@@ -28,6 +29,7 @@ public:
         Ui::ImageSettingsPage &imageSettingsUi,
         Ui::PlcSettingsPage &plcSettingsUi,
         Ui::SoftwareSettingsPage &softwareSettingsUi,
+        QCheckBox &hardwareTriggerEnabled,
         SettingsApplicationService &settingsService,
         SettingsEditState &editState);
 
@@ -103,6 +105,7 @@ private:
     Ui::ImageSettingsPage &m_imageSettingsUi;
     Ui::PlcSettingsPage &m_plcSettingsUi;
     Ui::SoftwareSettingsPage &m_softwareSettingsUi;
+    QCheckBox &m_hardwareTriggerEnabled;
     SettingsApplicationService &m_settingsService;
     SettingsEditState &m_editState;
     bool m_applyingSettings = false;

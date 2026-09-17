@@ -15,9 +15,17 @@ resource/
 │  ├─ sample1.png            字符模板编辑器示例图
 │  └─ unused/                未登记到 QRC 的历史 PNG
 ├─ svg/
-│  ├─ action/                八个主控操作图标
 │  ├─ navigation/            五个左侧导航图标
 │  ├─ canvas/                主图像画布背景
+│  ├─ camera_on.svg          打开相机
+│  ├─ camera_off.svg         关闭相机
+│  ├─ start.svg、stop.svg    识别启停和模板退出
+│  ├─ template_*.svg         模板选择、制作和保存
+│  ├─ character_seg.svg      分割字符
+│  ├─ toggle_off.svg         硬触发关闭状态
+│  ├─ toggle_on.svg          硬触发开启状态
+│  ├─ verdict_correct.svg    OK 判定
+│  ├─ verdict_wrong.svg      NG 判定
 │  └─ unused/                未登记到 QRC 的旧 SVG
 ├─ Img_Icon_qr.ico、Img_Icon_txt.ico
 ├─ sy.ico                    Windows 应用图标
@@ -33,11 +41,11 @@ resource/
 `qss/app_theme.qss` 是程序唯一加载的 QSS，资源路径为 `:/qss/app_theme.qss`。它统一维护：
 
 - 浅灰工业设备外壳、面板、抽屉和导航层级；
-- `Microsoft YaHei UI` 字体栈，16/18/20/26/56px 五档字号和 400/600 两档字重；
+- `Microsoft YaHei UI` 字体栈，16/18/20/26px 四档字号和 400/600 两档字重；
 - 普通黑色、禁用灰色、主操作蓝以及成功、警告、危险、反白七种通用文字角色色；
 - 边框、圆角、内边距和控件通用高度；
 - Normal、Hover、Pressed、Focus、Disabled、ReadOnly 和 Error；
-- `uiRole`、`uiState`、`verdict`、`hasError` 的视觉表现；
+- `uiRole`、`uiState`、`hasError`、`connectionState` 的视觉表现；
 - 主图像画布的深色背景和静态网格。
 
 控件样式不得复制到 `.ui` 或业务 C++，也不建立主题切换、兼容主题或运行时资源生成路径。
@@ -48,22 +56,28 @@ resource/
 
 ## SVG 资源
 
-### 主控操作图标
+### 界面操作图标
 
 以下图标由项目直接定义并以静态 SVG 交付，不依赖第三方路径或许可：
 
 | 文件 | 用途 |
 |---|---|
-| `svg/action/action_camera_open.svg` | 打开相机 |
-| `svg/action/action_camera_close.svg` | 关闭相机 |
-| `svg/action/action_template_select.svg` | 选择模板 |
-| `svg/action/action_template_create.svg` | 制作模板 |
-| `svg/action/action_template_save.svg` | 保存模板 |
-| `svg/action/action_character_split.svg` | 分割字符 |
-| `svg/action/action_inspection_start.svg` | 启动识别 |
-| `svg/action/action_inspection_stop.svg` | 停止识别 |
+| `svg/camera_on.svg` | 打开相机 |
+| `svg/camera_off.svg` | 关闭相机 |
+| `svg/template_select.svg` | 选择模板 |
+| `svg/template_make.svg` | 制作模板 |
+| `svg/template_save.svg` | 保存模板 |
+| `svg/character_seg.svg` | 分割字符 |
+| `svg/start.svg` | 启动识别 |
+| `svg/stop.svg` | 停止识别和退出模板制作 |
+| `svg/verdict_correct.svg` | OK 判定 |
+| `svg/verdict_wrong.svg` | NG 判定 |
+
+`camera_*.svg` 和 `start.svg`、`stop.svg` 由主工具栏的相机与识别按钮使用；`template_*.svg`、`character_seg.svg` 和 `stop.svg` 由参数设定页“模板管理”分组使用。`stop.svg` 同时服务停止识别和退出模板制作，不建立资源副本。
 
 `svg/canvas/canvas_background_grid.svg` 是 32×32 的透明弱网格，只供 `InspectionImageCanvas` 通过正式 QSS 平铺使用。
+
+`svg/toggle_off.svg` 和 `svg/toggle_on.svg` 是 30×16 的硬触发关闭、开启状态，只供工具栏唯一硬触发 `QCheckBox` 通过正式 QSS 切换使用。
 
 ### 左侧导航图标
 
@@ -87,10 +101,18 @@ ApplicationStartup
 └─ 在任何启动消息框之前加载 :/qss/app_theme.qss
 
 main_window.ui
-└─ 使用 :/svg/action/action_*.svg 与 :/svg/navigation/nav_*.svg
+└─ 使用主工具栏初始图标与 :/svg/navigation/nav_*.svg
+
+detection_settings_page.ui
+└─ 使用“模板管理”分组的模板选择、制作、保存、分割字符和退出图标
+
+InspectionPage
+├─ 在现有状态更新处切换相机和检测图标
+└─ 根据正式检测判定显示 :/svg/verdict_correct.svg 或 :/svg/verdict_wrong.svg
 
 app_theme.qss
-└─ 使用 :/svg/canvas/canvas_background_grid.svg
+├─ 使用 :/svg/canvas/canvas_background_grid.svg
+└─ 使用 :/svg/toggle_off.svg 与 :/svg/toggle_on.svg
 
 CharacterTemplateEditorDialog
 └─ 加载 :/png/sample1.png

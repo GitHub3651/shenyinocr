@@ -1,17 +1,18 @@
 #include "ui/main_window/inspection/inspection_page.h"
 
 #include "ui/main_window/inspection_image_canvas.h"
+#include "ui/main_window/verdict_result_label.h"
 #include "system_support/logging/log_categories.h"
 #include "ui_inspection_info_page.h"
 #include "ui_main_window.h"
 
 #include <QLabel>
 #include <QLineEdit>
+#include <QIcon>
 #include <QPixmap>
 #include <QPushButton>
 #include <QStyle>
 #include <QTimer>
-#include <QToolButton>
 #include <QVariant>
 #include <QWidget>
 
@@ -93,21 +94,8 @@ void InspectionPage::present(const InspectionPresentation &presentation)
                     *m_inspectionInfoUi.label_runtimeStatus,
                     QStringLiteral("正在显示相机采集图像..."));
     }
-    setStyleProperty(
-                *m_mainWindowUi.label_verdictResult,
-                "verdict",
-                presentation.verdictStyle
-                == DetectionVerdictViewStyle::Correct
-                ? QStringLiteral("ok")
-                : QStringLiteral("ng"));
-    setLabelTextIfChanged(
-                *m_mainWindowUi.label_verdictResult,
-                presentation.verdictText.isEmpty()
-                ? (presentation.verdictStyle
-                   == DetectionVerdictViewStyle::Correct
-                   ? QStringLiteral("正确")
-                   : QStringLiteral("错误"))
-                : presentation.verdictText);
+    m_mainWindowUi.label_verdictResult->showVerdict(
+                presentation.verdictStyle);
     setLabelTextIfChanged(
                 *m_inspectionInfoUi.label_recognitionText,
                 breakableRecognitionText(
@@ -142,14 +130,10 @@ void InspectionPage::presentPreviewImage(const QImage &image)
 
 void InspectionPage::clearInspectionView(InspectionClearScope scope)
 {
-    setLabelTextIfChanged(
-                *m_mainWindowUi.label_verdictResult,
-                QString());
+    m_mainWindowUi.label_verdictResult->clearVerdict();
     setLabelTextIfChanged(*m_inspectionInfoUi.label_recognitionText, QString());
     m_inspectionInfoUi.lineEdit_detectionDuration->clear();
     m_inspectionInfoUi.lineEdit_currentTemplateName->clear();
-    setStyleProperty(*m_mainWindowUi.label_verdictResult, "verdict", QStringLiteral("idle"));
-
     if (scope == InspectionClearScope::AllDetectionData) {
         m_mainWindowUi.inspectionImageCanvas->clear();
         m_inspectionInfoUi.lineEdit_totalCount->clear();
@@ -162,18 +146,25 @@ void InspectionPage::applyOperationState(
     OperationUiState requestedState,
     const OperationUiSnapshot &operationUi)
 {
-    m_mainWindowUi.toolButton_startInspection->setText(operationUi.startDetectionText);
-    m_mainWindowUi.toolButton_stopInspection->setText(operationUi.stopText);
-    m_mainWindowUi.toolButton_createTemplate->setText(operationUi.templateCaptureText);
-    applyOperationUiAccess(m_mainWindowUi.toolButton_openCamera, operationUi.openCamera);
+    m_mainWindowUi.toolButton_cameraAction->setText(
+                operationUi.cameraActionText);
+    m_mainWindowUi.toolButton_cameraAction->setIcon(QIcon(
+                operationUi.cameraOpen
+                ? QStringLiteral(":/svg/camera_off.svg")
+                : QStringLiteral(":/svg/camera_on.svg")));
+    m_mainWindowUi.toolButton_inspectionAction->setText(
+                operationUi.inspectionActionText);
+    m_mainWindowUi.toolButton_inspectionAction->setIcon(QIcon(
+                requestedState == OperationUiState::Detecting
+                || requestedState == OperationUiState::Stopping
+                ? QStringLiteral(":/svg/stop.svg")
+                : QStringLiteral(":/svg/start.svg")));
     applyOperationUiAccess(
-                m_mainWindowUi.toolButton_startInspection,
-                operationUi.startDetection);
-    applyOperationUiAccess(m_mainWindowUi.toolButton_stopInspection, operationUi.stop);
-    applyOperationUiAccess(m_mainWindowUi.toolButton_closeCamera, operationUi.closeCamera);
+                m_mainWindowUi.toolButton_cameraAction,
+                operationUi.cameraAction);
     applyOperationUiAccess(
-                m_mainWindowUi.toolButton_createTemplate,
-                operationUi.templateCapture);
+                m_mainWindowUi.toolButton_inspectionAction,
+                operationUi.inspectionAction);
     if (!operationUi.statusText.isEmpty()) {
         m_inspectionInfoUi.label_runtimeStatus->setText(operationUi.statusText);
     }

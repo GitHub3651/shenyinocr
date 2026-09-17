@@ -3,12 +3,12 @@
 ## 1. 文档状态
 
 - 编写日期：2026-09-13。
-- 当前状态：联合实施方案已确认，待代码实施授权。
+- 当前状态：代码实施完成，待用户统一验证。
 - 实施基线：分支 `codex/ocrgangyin-refactor`，HEAD `3115fa6`。
 - 权威范围：运行故障的首因记录、自动停止、正式采集意外停止、未完成产品收口、相机 Fault 关闭相机、PLC Fault 断开 PLC 和一次性故障警告。
 - 关联范围：`OCRGangYin图像上方常驻工具栏与设备状态重构方案.md` 负责工具栏、设备状态和硬触发位置。
 - 实施关系：本文与关联工具栏方案组成同一最终实施批次；逻辑上先收口 Fault 接口和停止链，再一次性落地最终工具栏，不保留中间兼容结构。
-- 实施门禁：本文只定义 Fault 逻辑和实施范围；当前任务不修改生产代码。
+- 实施门禁：生产代码和现行说明已完成实施；Agent 只执行静态门禁，构建、运行和真实设备验证由用户统一完成。
 
 ## 2. 实施依据
 
@@ -57,11 +57,11 @@
 
 `finishStop()` 是唯一停止收口点；完成后不再调用独立的故障产品对账、故障确认或恢复确认函数。
 
-`InspectionFaultSnapshot` 只包含 `reason`、`acceptedProductCount` 和 `finalizedProductCount`。`enterFault()` 的最终签名为 `bool enterFault(InspectionFaultReason reason, const QString &diagnostic)`，直接比较 `reason` 判断首因是否已经记录；诊断文字只在故障发生时写入日志，不保留时间参数。
+`InspectionFaultSnapshot` 只包含 `reason`、`acceptedProductCount` 和 `finalizedProductCount`。`enterFault()` 的最终签名为 `bool enterFault(InspectionFaultReason reason, const QString &diagnostic)`，直接比较 `reason` 判断首因是否已经记录；诊断文字只在故障发生时写入日志。
 
 `InspectionFaultReason` 的最终枚举为 `None`、`CameraDisconnected`、`PlcDisconnected`、`HardTriggerQueueOverflow`、`RuntimeInvariantViolation` 和 `BarcodeCsvUnavailable`。`None` 只表示正常停止，其余每个原因均对应当前生产代码中的真实故障入口。
 
-`enterFault()` 在首因被接受后、Runtime 锁外直接调用 `ResultService::clearPendingDelayedNgRequests()`，再以本次锁内复制的 `enteredFault` 发出故障快照并请求 Worker 停止。Fault 后到达的图像只经过 Worker 活动检查和 `acceptFrame()` 状态检查返回，不再累计独立的异常统计或故障后丢帧计数。
+`enterFault()` 在首因被接受后、Runtime 锁外直接调用 `ResultService::clearPendingDelayedNgRequests()`，再以本次锁内复制的 `enteredFault` 发出故障快照并请求 Worker 停止。Fault 后到达的图像由 Worker 活动检查和 `acceptFrame()` 状态检查直接拒绝。
 
 ## 5. 停止接口
 
@@ -124,9 +124,9 @@ MainWindow 构造函数中的 `faultSnapshotChanged` 排队连接是唯一界面
 
 | 文件 | 最终职责 |
 |---|---|
-| `app/runtime/inspection_runtime.h/.cpp` | Runtime 内部 Fault 收口、正式结果完成计数、最小故障快照、延迟 NG 请求清理和本次停止摘要；删除故障快照查询和故障后丢帧计数 |
+| `app/runtime/inspection_runtime.h/.cpp` | Runtime 内部 Fault 收口、正式结果完成计数、三字段故障快照、延迟 NG 请求清理和本次停止摘要 |
 | `app/runtime/camera_session.h/.cpp` | 同步停止采集、正式采集意外停止进入相机异常 Fault、相机 Fault 直接关闭、其他停止的相机预览恢复和模板预览停止回调；删除布尔型 `captureStopped` |
-| `app/runtime/result_service.h/.cpp`、`app/contracts/inspection_presentation.h` | 在现有 `process()` 内完成正式结果事务、延迟 NG 请求清理、普通检测统计和结果呈现；删除未被消费的异常统计合同及写入函数 |
+| `app/runtime/result_service.h/.cpp`、`app/contracts/inspection_presentation.h` | 在现有 `process()` 内完成正式结果事务、延迟 NG 请求清理、普通检测统计和结果呈现 |
 | `app/application/inspection_application_service.h/.cpp` | 统一 `stop(reason)`、相机恢复返回值、公开停止状态映射、相机关闭、Runtime PLC 断开和 `templatePreviewStopped()`；删除旧停止类型、`completeUnexpectedAcquisitionStop()` 和布尔型采集停止信号 |
 | `app/application/runtime_snapshot.h` | 对外发布空闲、启动、运行和停止状态以及设备连接状态 |
 | `app/ui/main_window/main_window.h/.cpp` | 在现有排队连接内自动停止并显示一次警告；删除 `m_faultAlarmPresented`、故障呈现辅助函数和旧 Fault 显示连接 |
@@ -149,7 +149,7 @@ MainWindow 构造函数中的 `faultSnapshotChanged` 排队连接是唯一界面
 
 ## 9. 联合实施顺序
 
-1. 在同一代码批次中先把算法完成与正式结果完成计数分开，将 `finalizeResultClaim()` 移到现有 `ResultService::process()` 的结果收口末尾，并删除异常统计写入链。
+1. 在同一代码批次中先把算法完成与正式结果完成计数分开，将 `finalizeResultClaim()` 移到现有 `ResultService::process()` 的结果收口末尾。
 2. 收口 `finishStop()`、最小 Fault 快照和延迟 NG 清理，再将正式采集意外停止接入 `CameraDisconnected` Fault；不保留旧停止合同。
 3. 将模板预览改为独立的无参数停止通知，并删除布尔型采集停止回调链。
 4. 把相机停止收敛为同步 `void`；应用服务按原因选择相机关闭、`m_runtime->disconnectPlc()` 或普通预览恢复，并直接返回 `CameraRecoveryResultDto`。
@@ -195,28 +195,15 @@ MainWindow 构造函数中的 `faultSnapshotChanged` 排队连接是唯一界面
   captureStopped(bool)
   completeUnexpectedAcquisitionStop()
   InspectionRuntime::faultSnapshot()
-  InspectionFaultReason::ProductIdentityAmbiguous
   Q_DECLARE_METATYPE(InspectionFaultReason)
   qRegisterMetaType<InspectionFaultReason>()
-  InspectionFaultSnapshot::diagnostic
-  InspectionFaultSnapshot::runId
-  InspectionFaultSnapshot::completedProductCount
-  InspectionFaultSnapshot::isActive()
-  DetectionAbnormalStatistics
-  ResultService::recordSystemFault()
-  ResultService::recordUnconfirmedProducts()
-  ResultService::recordPostFaultDroppedFrame()
-  ResultService::m_abnormalStatistics
-  InspectionFaultSnapshot::postFaultDroppedFrameCount
-  InspectionFaultSnapshot::occurredAtUtc
   InspectionRuntime::m_completedProductCount
-  droppedAfterFault
   beforeShutdown
   QLabel#label_runtimeStatus[uiState="fault"]
   QLabel#label_verdictResult[verdict="fault"]
   ```
 
-- 未确认数量只在 `finishStop()` 的本次 Fault 停止摘要中由剩余 `m_products.size()` 计算；不保留累计异常统计结构或写入函数。延迟 NG 请求只由 `enterFault()` 清理一次。
+- 未确认数量只在 `finishStop()` 的本次 Fault 停止摘要中由剩余 `m_products.size()` 计算。延迟 NG 请求只由 `enterFault()` 清理一次。
 - 不存在人工故障确认、恢复确认、故障锁定或第二个故障弹窗入口；`InspectionFaultPresenter` 及检测页 Fault 显示/恢复函数零引用。
 - `InspectionPage` 只负责检测结果、统计、预览图、普通运行状态和存图失败提示。
 - `OperationUiPolicy` 只处理相机、识别、停止和模板操作状态；QSS 只处理普通运行状态和产品判定样式。
@@ -237,7 +224,7 @@ MainWindow 构造函数中的 `faultSnapshotChanged` 排队连接是唯一界面
 - `faultSnapshotChanged` 的排队 lambda 直接执行自动停止和警告；每次运行只在停止及对应硬件处置完成后显示一次故障警告，故障快照只携带原因、接收数和正式结果完成数。
 - 正式采集意外停止以 `CameraDisconnected` 进入自动停止并使用同一停止链。
 - 模板预览意外停止只发出无布尔参数的 `templatePreviewStopped()`，正式采集不经过该信号。
-- 未确认数量只写入本次 Fault 停止日志，首因被接受时清空待执行的延迟 NG 请求；异常统计结构、三个异常统计写入函数和故障后丢帧计数零引用。
+- 未确认数量只写入本次 Fault 停止日志，首因被接受时清空待执行的延迟 NG 请求。
 - `CameraDisconnected` Fault 调用相机关闭操作、不调用预览恢复，并提示重新连接相机；`PlcDisconnected` Fault 调用 PLC 断开操作并提示重新连接 PLC。最终快照反映对应硬件未连接状态。
 - 非硬件 Fault 只停止识别，不主动关闭相机或断开 PLC，也不提示重新连接硬件。
 - 故障前的正式结果保持原值；未完成产品不产生 NG、重复结果、重复存图或重复 PLC 输出。

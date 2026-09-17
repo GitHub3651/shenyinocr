@@ -49,6 +49,16 @@ MainWindow::MainWindow(
     m_imageSettingsUi->setupUi(ui->page_imageSettings);
     m_plcSettingsUi->setupUi(ui->page_plcSettings);
     m_softwareSettingsUi->setupUi(ui->page_softwareSettings);
+    const auto updateHardwareTriggerText = [this](bool enabled) {
+        ui->checkBox_hardwareTriggerEnabled->setText(
+                    enabled ? QStringLiteral("开") : QStringLiteral("关"));
+    };
+    connect(ui->checkBox_hardwareTriggerEnabled,
+            &QCheckBox::toggled,
+            ui->checkBox_hardwareTriggerEnabled,
+            updateHardwareTriggerText);
+    updateHardwareTriggerText(
+                ui->checkBox_hardwareTriggerEnabled->isChecked());
     if (m_settingsApplicationService->current()
             .leftDrawerSplitterState.isEmpty()) {
         ui->splitter_leftDrawerMain->setSizes(
@@ -69,7 +79,18 @@ MainWindow::MainWindow(
                     machineSettings().barcodeCsvEnabled);
     }
     initializePages();
-
+    connect(ui->toolButton_cameraAction,
+            &QToolButton::clicked,
+            this,
+            &MainWindow::handleCameraAction);
+    connect(ui->toolButton_inspectionAction,
+            &QToolButton::clicked,
+            this,
+            &MainWindow::handleInspectionAction);
+    connect(m_detectionSettingsUi->toolButton_exitTemplate,
+            &QToolButton::clicked,
+            this,
+            &MainWindow::exitTemplate);
     connect(ui->toolButton_showInspectionInfo,
             &QToolButton::clicked,
             this,
@@ -113,8 +134,7 @@ MainWindow::MainWindow(
     connect(m_inspectionApplicationService.get(),
             &InspectionApplicationService::runtimeSnapshotChanged,
             this,
-            [this](const RuntimeSnapshot &snapshot) {
-        updateBarcodeCsvUi(snapshot);
+            [this](const RuntimeSnapshot &) {
         updateOperationUiState();
     });
 
@@ -241,6 +261,7 @@ void MainWindow::initializePages()
                 *m_imageSettingsUi,
                 *m_plcSettingsUi,
                 *m_softwareSettingsUi,
+                *ui->checkBox_hardwareTriggerEnabled,
                 *m_settingsApplicationService,
                 m_settingsEditState));
     m_templateEditorPage.reset(new TemplateEditorPage(
@@ -266,10 +287,6 @@ void MainWindow::initializePages()
     connect(m_templateEditorPage.get(),
             &TemplateEditorPage::previewFramePresentationRequested,
             this, &MainWindow::presentTemplatePreviewFrame);
-    connect(ui->toolButton_createTemplate,
-            &QToolButton::clicked,
-            m_templateEditorPage.get(),
-            &TemplateEditorPage::handleTemplateCaptureButton);
     connect(m_detectionSettingsUi->pushButton_applyPhotoDistance,
             &QPushButton::clicked,
             this, &MainWindow::on_pushButton_applyPhotoDistance_clicked);

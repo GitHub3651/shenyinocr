@@ -22,6 +22,7 @@
 #include <QComboBox>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStyle>
 #include <QTextEdit>
 #include <QCloseEvent>
 
@@ -160,10 +161,9 @@ void MainWindow::presentTemplatePreviewFrame(const cv::Mat &image)
 }
 
 
-OperationUiState MainWindow::operationUiState() const
+OperationUiState MainWindow::operationUiState(
+    const RuntimeSnapshot &snapshot) const
 {
-    const RuntimeSnapshot snapshot =
-            m_inspectionApplicationService->runtimeSnapshot();
     switch (snapshot.state) {
     case ApplicationRuntimeState::Starting:
     case ApplicationRuntimeState::Running:
@@ -209,7 +209,7 @@ void MainWindow::updateOperationUiState()
             m_inspectionApplicationService->runtimeSnapshot();
     updateBarcodeCsvUi(runtime);
     OperationUiContext context;
-    context.state = operationUiState();
+    context.state = operationUiState(runtime);
     context.cameraOpen = runtime.cameraOpen;
     context.plcConnected = runtime.plcConnected;
     const OperationUiSnapshot snapshot =
@@ -219,9 +219,41 @@ void MainWindow::updateOperationUiState()
     m_machineSettingsPage->applyOperationState(snapshot);
     m_templateEditorPage->applyOperationState(context.state, snapshot);
 
-    applyOperationUiAccess(
-                ui->toolButton_selectTemplate,
-                snapshot.templateSelection);
+    ui->label_cameraStatusText->setText(
+                runtime.cameraOpen
+                ? QStringLiteral("相机已打开")
+                : QStringLiteral("相机未打开"));
+    ui->label_plcStatusText->setText(
+                runtime.plcConnected
+                ? QStringLiteral("PLC已连接")
+                : QStringLiteral("PLC未连接"));
+    const QString cameraConnectionState = runtime.cameraOpen
+            ? QStringLiteral("connected")
+            : QStringLiteral("disconnected");
+    if (ui->frame_cameraStatusDot->property("connectionState").toString()
+            != cameraConnectionState) {
+        ui->frame_cameraStatusDot->setProperty(
+                    "connectionState", cameraConnectionState);
+        ui->frame_cameraStatusDot->style()->unpolish(
+                    ui->frame_cameraStatusDot);
+        ui->frame_cameraStatusDot->style()->polish(
+                    ui->frame_cameraStatusDot);
+        ui->frame_cameraStatusDot->update();
+    }
+    const QString plcConnectionState = runtime.plcConnected
+            ? QStringLiteral("connected")
+            : QStringLiteral("disconnected");
+    if (ui->frame_plcStatusDot->property("connectionState").toString()
+            != plcConnectionState) {
+        ui->frame_plcStatusDot->setProperty(
+                    "connectionState", plcConnectionState);
+        ui->frame_plcStatusDot->style()->unpolish(
+                    ui->frame_plcStatusDot);
+        ui->frame_plcStatusDot->style()->polish(
+                    ui->frame_plcStatusDot);
+        ui->frame_plcStatusDot->update();
+    }
+
     applyOperationUiAccess(
                 m_imageSettingsUi->pushButton_browseImageSavePath,
                 snapshot.imageSettings);
@@ -366,7 +398,39 @@ void MainWindow::on_pushButton_applyImageRotation_clicked()
                .arg(candidate.imageRotationId);
     showParameterInfo("提示", "旋转角度设置成功");
 }
-void MainWindow::on_toolButton_closeCamera_clicked()
+void MainWindow::handleCameraAction()
+{
+    const RuntimeSnapshot snapshot =
+            m_inspectionApplicationService->runtimeSnapshot();
+    switch (operationUiState(snapshot)) {
+    case OperationUiState::CameraClosed:
+        openCamera();
+        break;
+    case OperationUiState::CameraReady:
+        closeCamera();
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::handleInspectionAction()
+{
+    const RuntimeSnapshot snapshot =
+            m_inspectionApplicationService->runtimeSnapshot();
+    switch (operationUiState(snapshot)) {
+    case OperationUiState::CameraReady:
+        startInspection();
+        break;
+    case OperationUiState::Detecting:
+        stopInspection();
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::closeCamera()
 {
     const OperationResult closeResult =
             m_inspectionApplicationService->closeCamera();
@@ -391,7 +455,7 @@ void MainWindow::on_toolButton_closeCamera_clicked()
     updateOperationUiState();
 }
 
-void MainWindow::on_toolButton_startInspection_clicked()
+void MainWindow::startInspection()
 {
     updateOperationUiState();
     m_machineSettingsPage->refreshAllDirty();
@@ -446,7 +510,26 @@ void MainWindow::on_toolButton_startInspection_clicked()
                 : "软触发模式运行中");
     updateOperationUiState();
 }
-void MainWindow::on_toolButton_openCamera_clicked()
+
+void MainWindow::stopInspection()
+{
+    finishInspectionStopUi(
+                m_inspectionApplicationService->stop(
+                    InspectionFaultReason::None));
+}
+
+void MainWindow::exitTemplate()
+{
+    m_templateEditorPage->resetTemplateCaptureState();
+    m_templateEditorPage->cancelTemplateDrawing();
+    m_inspectionInfoUi->label_runtimeStatus->setText(
+                isCameraOpen()
+                ? QStringLiteral("已退出模板制作，相机已打开")
+                : QStringLiteral("已退出模板制作，相机已关闭"));
+    updateOperationUiState();
+}
+
+void MainWindow::openCamera()
 {
     PlcConnectionCommand plcCommand;
     plcCommand.address = m_plcSettingsUi->lineEdit_plcIpAddress->text();

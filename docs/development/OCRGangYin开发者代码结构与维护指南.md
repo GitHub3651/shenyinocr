@@ -141,6 +141,7 @@ app/
       ├─ main_window_inspection.cpp
       ├─ main_window_settings.cpp
       ├─ inspection_image_canvas.h/.cpp
+      ├─ verdict_result_label.h/.cpp
       ├─ operation_ui_policy.h/.cpp
       ├─ inspection/
       │  ├─ inspection_info_page.ui
@@ -161,7 +162,7 @@ app/
             └─ character_crop_label.h/.cpp
 ```
 
-当前统计：148 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
+当前统计：147 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
 
 ## 3. 程序启动和对象所有权
 
@@ -185,8 +186,8 @@ startup/main.cpp
 ### 4.1 启动检测
 
 ```text
-MainWindow::on_toolButton_startInspection_clicked
- → InspectionPage
+MainWindow::handleInspectionAction
+ → MainWindow::startInspection
  → InspectionApplicationService::start
  → InspectionStartPreflight::evaluateAccess
  → SettingsApplicationService::current
@@ -223,13 +224,21 @@ CameraSession/CaptureWorker
 
 ### 4.2.1 A2 结果与故障边界
 
-正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次统计、存图、PLC 和结果呈现事务，运行状态保持 Running。
+正式 `DetectionResult` 只允许 `AlgorithmVerdict::Ok` 或 `AlgorithmVerdict::Ng`，默认值为 `Ng`。无定位、ROI 无效、OCR 空文本、二维码不可读或正常超时属于可执行后的普通 NG，仍进入一次 CSV、候选统计、存图任务提交、PLC 和结果呈现事务，运行状态保持 Running；全部合同走完后才增加正式结果完成数。
 
 无效工作项、定位成功后模板下标越界、执行期 OCR/二维码引擎异常、预处理失败或无效 completion 不生成产品结果，由 `DetectionWorker::failureConsumer` 进入现有 Runtime Fault。队列取消只保留在 Worker/FrameQueue 生命周期层，不进入 `ResultService`。
 
 所有模式均不再发布 ROI 专用警告；`label_runtimeStatus` 只展示运行中、停止、模板制作和存图失败状态。运行故障完成自动停止后仅显示一次系统警告。二维码+三期的日期子检测直接读取字库 Pipeline 的 `DetectionResult::verdict`，最终 NG 原因统一来自 `DetectionResult::diagnostic`。
 
+运行故障由 `InspectionRuntime::enterFault()` 记录首因并发送只含原因、接收数和正式结果完成数的快照。MainWindow 收到快照后直接调用 `InspectionApplicationService::stop(reason)`；相机故障关闭相机，PLC 故障断开 PLC，其他故障按普通停止恢复相机可用状态，最后统一由 `InspectionRuntime::finishStop()` 回到空闲态并记录未确认数量。故障界面只在 MainWindow 显示一次停止完成警告。
+
+### 4.2.2 主画面工具栏
+
+`main_window.ui` 的主画面顶部固定使用一条 74px 工具栏。`toolButton_cameraAction` 和 `toolButton_inspectionAction` 分别连接 `handleCameraAction()`、`handleInspectionAction()`；相机/PLC 状态和唯一硬触发开关继续常驻该工具栏。选择、制作、保存、分割字符和退出模板制作五个入口位于 `detection_settings_page.ui` 的“模板管理”同级分组，第一行固定为制作、保存、分割字符，第二行固定为选择、退出模板制作。`updateOperationUiState()` 每次读取一份 `RuntimeSnapshot`，用同一份快照更新按钮权限、相机/PLC 状态和各 Page。硬触发设置只由工具栏中的 `checkBox_hardwareTriggerEnabled` 持有，勾选状态同时决定滑块图像和控件自身“开/关”文字；`MachineSettingsPage` 直接绑定该控件，无已保存配置时默认关闭。
+
 ### 4.3 模板选择、编辑和保存
+
+五个模板管理按钮均由 `Ui::DetectionSettingsPage` 生成。`TemplateEditorPage` 直接连接选择、制作、保存和分割字符按钮并应用五个按钮的操作状态；退出按钮由 `MainWindow::exitTemplate()` 直接收口，不设置旧主窗口副本或控件中转层。
 
 ```text
 toolButton_selectTemplate
@@ -270,8 +279,8 @@ toolButton_selectTemplate
 | `runtime_snapshot.h` | UI 可读取的相机、PLC、运行和当前模板路径快照。 |
 | `inspection_start_preflight.h` | 启动 Issue、访问输入、资源输入和结果声明。 |
 | `inspection_start_preflight.cpp` | 固定启动拒绝顺序；不重复模板字段校验。 |
-| `inspection_application_service.h` | 检测、相机和 PLC 用户用例接口。 |
-| `inspection_application_service.cpp` | 读取正式设置、准备模板、控制 Runtime/Camera、映射错误和发布快照。 |
+| `inspection_application_service.h` | 检测、相机和 PLC 用户用例接口；停止只接收本次故障原因并返回相机恢复结果。 |
+| `inspection_application_service.cpp` | 读取正式设置、准备模板、控制 Runtime/Camera、按停止原因处置相机或 PLC 并发布快照。 |
 | `settings_application_service.h` | 唯一 `AppSettings current/draft` 和分区保存接口。 |
 | `settings_application_service.cpp` | 保证模板路径保存不提交或丢弃整机草稿；写盘成功后才替换正式值。 |
 | `template_editor_contract.h` | 初始模板资产与二维码即时校验选项。 |
@@ -323,13 +332,13 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `inspection_runtime.h/.cpp` | 正式 Run 唯一所有者、状态机、工作线程、故障首因和不可变运行上下文。 |
-| `camera_session.h/.cpp` | 相机预览与正式采集会话、曝光调整和帧提交。 |
+| `inspection_runtime.h/.cpp` | 正式 Run 唯一所有者、状态机、工作线程、故障首因、接收数、正式结果完成数和不可变运行上下文。 |
+| `camera_session.h/.cpp` | 相机预览与正式采集会话、同步停止、曝光调整和帧提交；正式采集意外停止进入相机故障。 |
 | `capture_worker.h/.cpp` | 采集线程循环与协作停止。 |
 | `frame_queue.h/.cpp` | 有界线程安全帧队列。 |
 | `detection_worker.h/.cpp` | Detection Executor 工作线程和提交结果。 |
-| `result_service.h/.cpp` | 一次产品最终结果、统计、PLC、存图和 UI 投递的唯一收口点。 |
-| `inspection_plc_controller.h/.cpp` | PLC 连接、工艺参数、结果脉冲和延迟剔除队列。 |
+| `result_service.h/.cpp` | 一次产品 CSV、候选统计、存图任务提交、PLC、延迟剔除和 UI 投递的唯一正式结果收口点。 |
+| `inspection_plc_controller.h/.cpp` | PLC 连接、工艺参数和结果字节写入。 |
 | `image_save_service.h/.cpp` | 按运行快照保存原图/标注图。 |
 | `result_presentation_mailbox.h/.cpp` | 后台到 UI 的有界完成邮箱。 |
 | `contracts/inspection_presentation.h` | UI 呈现的纯数据结构。 |
@@ -381,15 +390,15 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `main_window/main_window.ui` | 主窗口骨架、主控区、左侧 80px 导航、可调宽五页抽屉和五个空页面根节点。 |
-| `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权和跨页面协调。 |
+| `main_window/main_window.ui` | 主窗口骨架、74px 常驻工具栏、相机和识别两个操作入口、设备状态、唯一硬触发开关、左侧 80px 导航、可调宽五页抽屉和五个空页面根节点。 |
+| `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权、统一相机/识别按钮连接和跨页面协调。 |
 | `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、自动停止警告和窗口关闭协调。 |
 | `main_window/main_window_settings.cpp` | 设置保存、清空软件数据、模式显隐和硬件参数应用。软件设置页不提供在线恢复默认入口。 |
-| `main_window/operation_ui_policy.h/.cpp` | 唯一按钮权限矩阵和状态文字。 |
+| `main_window/operation_ui_policy.h/.cpp` | 相机开关、识别启停、独立模板退出及其他操作的唯一权限和文字矩阵。 |
 | `main_window/inspection/inspection_info_page.ui` | 检测状态、识别内容、统计和当前模板固定界面。 |
-| `main_window/inspection/inspection_page.h/.cpp` | 检测图像、判定、统计、运行状态和主控按钮状态。 |
-| `main_window/settings/*.ui` | 参数、图像、PLC 和软件设置的四个独立 Designer 页面。 |
-| `main_window/settings/machine_settings_page.h/.cpp` | 整机设置绑定、验证、dirty 和硬件依赖权限。 |
+| `main_window/inspection/inspection_page.h/.cpp` | 检测图像、判定类型传递、统计、运行状态和主控按钮状态。 |
+| `main_window/settings/*.ui` | 参数、图像、PLC 和软件设置的四个独立 Designer 页面；参数页持有唯一“模板管理”分组及五个模板按钮。 |
+| `main_window/settings/machine_settings_page.h/.cpp` | 整机设置绑定、验证、dirty 和硬件依赖权限；直接接收工具栏唯一硬触发 `QCheckBox`，不负责模板管理按钮布局。 |
 | `main_window/settings/settings_edit_state.h/.cpp` | 整机和模板未应用项记录。 |
 | `main_window/template/template_editor_page.h/.cpp` | 模板取景、冻结、选择、编辑、保存、字符编辑和批量更新。 |
 | `main_window/template/selection/template_selection_dialog.ui/.h/.cpp` | 当前模板路径展示、添加、移除和确认应用。 |
@@ -397,6 +406,7 @@ toolButton_selectTemplate
 | `main_window/template/character_editor/character_template_editor_dialog.ui/.h/.cpp` | 字符框排序、命名、预览和字符图片结果。 |
 | `main_window/template/character_editor/character_crop_label.h/.cpp` | 字符框绘制、撤销、清空和坐标换算。 |
 | `main_window/inspection_image_canvas.h/.cpp` | 主图像显示和模式化模板区域绘制。 |
+| `main_window/verdict_result_label.h/.cpp` | 根据判定类型选择 OK/NG SVG，按标签宽度的 70% 矢量绘制并水平、垂直居中。 |
 
 ## 6. 常见修改指南
 

@@ -49,7 +49,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
             <property name="text">
@@ -62,28 +62,202 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
            </widget>
           </item>
-          <item row="1" column="0" colspan="2">
-           <widget class="QCheckBox" name="checkBox_hardwareTriggerEnabled">
+         </layout>
+       </widget>
+      </item>
+       <item row="1" column="0">
+        <widget class="QGroupBox" name="groupBox_templateManagement">
+         <property name="title">
+          <string>模板管理</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_templateManagement">
+          <property name="horizontalSpacing">
+           <number>2</number>
+          </property>
+          <item row="1" column="0">
+           <widget class="QToolButton" name="toolButton_selectTemplate">
             <property name="minimumSize">
              <size>
-              <width>0</width>
-              <height>50</height>
+              <width>76</width>
+              <height>62</height>
              </size>
             </property>
+            <property name="maximumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>选择当前检测模式使用的模板。</string>
+            </property>
             <property name="text">
-             <string>开启PLC硬触发</string>
+             <string>选择模板</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../resource/image.qrc">
+              <normaloff>:/svg/template_select.svg</normaloff>:/svg/template_select.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>27</width>
+              <height>27</height>
+             </size>
+            </property>
+            <property name="toolButtonStyle">
+             <enum>Qt::ToolButtonTextUnderIcon</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="0">
+           <widget class="QToolButton" name="toolButton_createTemplate">
+            <property name="minimumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>进入当前检测模式的模板制作流程。</string>
+            </property>
+            <property name="text">
+             <string>制作模板</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../resource/image.qrc">
+              <normaloff>:/svg/template_make.svg</normaloff>:/svg/template_make.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>27</width>
+              <height>27</height>
+             </size>
+            </property>
+            <property name="toolButtonStyle">
+             <enum>Qt::ToolButtonTextUnderIcon</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QToolButton" name="toolButton_saveTemplate">
+            <property name="minimumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>保存当前制作的模板。</string>
+            </property>
+            <property name="text">
+             <string>保存模板</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../resource/image.qrc">
+              <normaloff>:/svg/template_save.svg</normaloff>:/svg/template_save.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>27</width>
+              <height>27</height>
+             </size>
+            </property>
+            <property name="toolButtonStyle">
+             <enum>Qt::ToolButtonTextUnderIcon</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+           <widget class="QToolButton" name="toolButton_editCharacterTemplates">
+            <property name="minimumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>分割并编辑字符模板。</string>
+            </property>
+            <property name="text">
+             <string>分割字符</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../resource/image.qrc">
+              <normaloff>:/svg/character_seg.svg</normaloff>:/svg/character_seg.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>27</width>
+              <height>27</height>
+             </size>
+            </property>
+            <property name="toolButtonStyle">
+             <enum>Qt::ToolButtonTextUnderIcon</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QToolButton" name="toolButton_exitTemplate">
+            <property name="minimumSize">
+             <size>
+              <width>108</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>108</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>退出当前模板制作流程</string>
+            </property>
+            <property name="text">
+             <string>退出模板制作</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../resource/image.qrc">
+              <normaloff>:/svg/stop.svg</normaloff>:/svg/stop.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>27</width>
+              <height>27</height>
+             </size>
+            </property>
+            <property name="toolButtonStyle">
+             <enum>Qt::ToolButtonTextUnderIcon</enum>
             </property>
            </widget>
           </item>
          </layout>
         </widget>
        </item>
-       <item row="1" column="0">
+       <item row="2" column="0">
         <widget class="QGroupBox" name="groupBox_currentTemplateSettings">
          <property name="title">
           <string>当前产品模板设置</string>
@@ -113,7 +287,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
            </widget>
@@ -123,7 +297,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
             <property name="toolTip">
@@ -159,7 +333,7 @@
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>50</height>
+                <height>45</height>
                </size>
               </property>
               <property name="text">
@@ -172,7 +346,7 @@
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>50</height>
+                <height>45</height>
                </size>
               </property>
               <property name="text">
@@ -226,7 +400,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
             <property name="toolTip">
@@ -245,7 +419,7 @@
             <property name="minimumSize">
              <size>
               <width>28</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
             <property name="maximumSize">
@@ -290,7 +464,7 @@
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>50</height>
+                <height>45</height>
                </size>
               </property>
               <property name="text">
@@ -309,7 +483,7 @@
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>50</height>
+                <height>45</height>
                </size>
               </property>
               <property name="text">
@@ -322,7 +496,7 @@
          </layout>
         </widget>
        </item>
-       <item row="2" column="0">
+       <item row="3" column="0">
         <widget class="QGroupBox" name="groupBox_barcodeCsv">
          <property name="title">
           <string>二维码结果保存</string>
@@ -347,7 +521,7 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
             <property name="readOnly">
@@ -360,7 +534,7 @@
             <property name="minimumSize">
              <size>
               <width>80</width>
-              <height>50</height>
+              <height>45</height>
              </size>
             </property>
             <property name="text">
@@ -371,7 +545,7 @@
          </layout>
         </widget>
        </item>
-       <item row="3" column="0">
+       <item row="4" column="0">
         <layout class="QGridLayout" name="gridLayout_photoDistance">
          <property name="verticalSpacing">
           <number>15</number>
@@ -388,7 +562,7 @@
            <property name="minimumSize">
             <size>
              <width>0</width>
-             <height>50</height>
+             <height>45</height>
             </size>
            </property>
            <property name="text">
@@ -401,7 +575,7 @@
            <property name="minimumSize">
             <size>
              <width>0</width>
-             <height>50</height>
+             <height>45</height>
             </size>
            </property>
            <property name="text">
@@ -411,7 +585,7 @@
          </item>
         </layout>
        </item>
-       <item row="4" column="0">
+       <item row="5" column="0">
         <layout class="QGridLayout" name="gridLayout_tissueRoughnessThreshold" columnstretch="0,1,0">
          <property name="verticalSpacing">
           <number>15</number>
@@ -428,7 +602,7 @@
            <property name="minimumSize">
             <size>
              <width>0</width>
-             <height>50</height>
+             <height>45</height>
             </size>
            </property>
            <property name="text">
@@ -441,7 +615,7 @@
            <property name="minimumSize">
             <size>
              <width>0</width>
-             <height>50</height>
+             <height>45</height>
             </size>
            </property>
            <property name="text">
@@ -451,7 +625,7 @@
          </item>
         </layout>
        </item>
-       <item row="5" column="0">
+       <item row="6" column="0">
         <spacer name="verticalSpacer_detectionSettingsBottom">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -473,6 +647,8 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <resources>
+  <include location="../../../resource/image.qrc"/>
+ </resources>
  <connections/>
 </ui>

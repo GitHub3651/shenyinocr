@@ -6,13 +6,13 @@
 
 | 文件 | 职责 |
 |---|---|
-| `inspection_runtime.h/.cpp` | 唯一运行实例；创建不可变 `InspectionRunContext`，启停工作线程并记录故障首因。 |
-| `camera_session.h/.cpp` | 相机预览/正式采集会话，复用 `contracts/camera_operation_result.h` 并向 Runtime 提交帧。 |
+| `inspection_runtime.h/.cpp` | 唯一运行实例；创建不可变 `InspectionRunContext`，启停工作线程，记录三字段故障快照并统一收口运行。 |
+| `camera_session.h/.cpp` | 相机预览/正式采集会话，复用 `contracts/camera_operation_result.h` 并向 Runtime 提交帧；正式采集意外停止进入运行 Fault。 |
 | `capture_worker.h/.cpp` | 采集线程。 |
 | `frame_queue.h/.cpp` | 有界帧队列。 |
 | `detection_worker.h/.cpp` | 单检测工作线程和执行器。 |
-| `result_service.h/.cpp` | 每产品结果收口、统计、PLC、存图调用。 |
-| `inspection_plc_controller.h/.cpp` | PLC 运行写入和延迟剔除队列。 |
+| `result_service.h/.cpp` | 每产品 CSV、候选统计、存图提交、PLC、呈现和最终结果收口；持有延迟 NG 请求队列。 |
+| `inspection_plc_controller.h/.cpp` | PLC 连接和运行值写入。 |
 | `image_save_service.h/.cpp` | 原图/标注图保存。 |
 | `result_presentation_mailbox.h/.cpp` | 工作线程到 UI 的有界结果邮箱。 |
 | `contracts/inspection_presentation.h`、`inspection_presentation_renderer.*` | 跨层结果显示数据和运行时渲染。 |
@@ -38,5 +38,7 @@ Idle
 
 - 不隐式创建 Run；只有 `beginStart()` 能创建。
 - 不将模板编辑状态放入 Runtime。
+- 只有完成 CSV、统计、存图步骤、PLC 和呈现合同的产品才记为已完成；尚未收口的产品只进入本次停止日志的未确认数量。
+- 故障快照只传递原因、已接收数和已完成数；诊断文字在故障发生处直接写日志。
 - 保持一次产品一次最终结果、队列容量、故障自动停止、PLC 脉冲和存图合同。
 - Runtime 可以依赖 Detection 和设备抽象，不能反向依赖 Application 或 UI。

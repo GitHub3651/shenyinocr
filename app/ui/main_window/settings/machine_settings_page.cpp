@@ -116,12 +116,14 @@ MachineSettingsPage::MachineSettingsPage(
     Ui::ImageSettingsPage &imageSettingsUi,
     Ui::PlcSettingsPage &plcSettingsUi,
     Ui::SoftwareSettingsPage &softwareSettingsUi,
+    QCheckBox &hardwareTriggerEnabled,
     SettingsApplicationService &settingsService,
     SettingsEditState &editState)
     : m_detectionSettingsUi(detectionSettingsUi),
       m_imageSettingsUi(imageSettingsUi),
       m_plcSettingsUi(plcSettingsUi),
       m_softwareSettingsUi(softwareSettingsUi),
+      m_hardwareTriggerEnabled(hardwareTriggerEnabled),
       m_settingsService(settingsService),
       m_editState(editState)
 {
@@ -199,7 +201,7 @@ void MachineSettingsPage::setupBindings()
     registerGlobalSetting("image.save_path", m_imageSettingsUi.lineEdit_imageSavePath,
                           m_imageSettingsUi.label_imageSavePath, false,
                           HardwareDependency::ImageSettings);
-    registerGlobalSetting("trigger.enabled", m_detectionSettingsUi.checkBox_hardwareTriggerEnabled,
+    registerGlobalSetting("trigger.enabled", &m_hardwareTriggerEnabled,
                           nullptr, false);
 
     registerHardwareAction(m_imageSettingsUi.pushButton_applyCameraExposure, HardwareDependency::Camera);
@@ -299,7 +301,7 @@ void MachineSettingsPage::applyToUi(
         indexOf(rotationIds(), settings.imageRotationId, 0));
     m_plcSettingsUi.comboBox_plcTriggerMode->setCurrentIndex(
         indexOf(triggerModeIds(), settings.triggerModeId, 1));
-    m_detectionSettingsUi.checkBox_hardwareTriggerEnabled->setChecked(settings.triggerEnabled);
+    m_hardwareTriggerEnabled.setChecked(settings.triggerEnabled);
     m_imageSettingsUi.spinBox_cameraExposure->setValue(settings.cameraExposure);
     m_imageSettingsUi.lineEdit_cameraGain->setText(
         QString::number(static_cast<int>(settings.cameraGain)));
@@ -614,7 +616,7 @@ void MachineSettingsPage::copyUiValuesTo(
                     m_imageSettingsUi.lineEdit_imageSavePath->text().trimmed();
         } else if (key == "trigger.enabled") {
             settings.triggerEnabled =
-                    m_detectionSettingsUi.checkBox_hardwareTriggerEnabled->isChecked();
+                    m_hardwareTriggerEnabled.isChecked();
         } else if (key == "camera.exposure") {
             settings.cameraExposure = m_imageSettingsUi.spinBox_cameraExposure->value();
         } else if (key == "camera.gain") {
@@ -742,9 +744,7 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
             QSignalBlocker blocker(m_imageSettingsUi.lineEdit_imageSavePath);
             m_imageSettingsUi.lineEdit_imageSavePath->setText(applied.imageSavePath);
         } else if (key == "trigger.enabled") {
-            QSignalBlocker blocker(m_detectionSettingsUi.checkBox_hardwareTriggerEnabled);
-            m_detectionSettingsUi.checkBox_hardwareTriggerEnabled->setChecked(
-                        applied.triggerEnabled);
+            m_hardwareTriggerEnabled.setChecked(applied.triggerEnabled);
         } else if (key == "camera.exposure") {
             QSignalBlocker blocker(m_imageSettingsUi.spinBox_cameraExposure);
             m_imageSettingsUi.spinBox_cameraExposure->setValue(applied.cameraExposure);

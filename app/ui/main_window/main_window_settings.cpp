@@ -54,7 +54,7 @@ void MainWindow::updateTissueRoughnessUiVisibility()
             && descriptor.requiresCharacterTemplates;
     const bool showImageThreshold = usesTemplate
             && mode != DetectionMode::Ocr;
-    ui->widget_templateControls->setVisible(usesTemplate);
+    m_detectionSettingsUi->groupBox_templateManagement->setVisible(usesTemplate);
     m_inspectionInfoUi->groupBox_currentTemplate->setVisible(usesTemplate);
     m_detectionSettingsUi->groupBox_currentTemplateSettings->setVisible(usesTemplate);
     m_detectionSettingsUi->label_targetText->setVisible(usesTemplate
@@ -67,7 +67,8 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     m_detectionSettingsUi->lineEdit_imageThreshold->setVisible(showImageThreshold);
     m_detectionSettingsUi->label_imageThresholdUnit->setVisible(showImageThreshold);
     m_detectionSettingsUi->pushButton_applyImageThreshold->setVisible(showImageThreshold);
-    ui->toolButton_editCharacterTemplates->setVisible(showCharacterSettings);
+    m_detectionSettingsUi->toolButton_editCharacterTemplates->setVisible(
+                showCharacterSettings);
     m_detectionSettingsUi->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     m_detectionSettingsUi->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     m_detectionSettingsUi->pushButton_applyTissueRoughnessThreshold->setVisible(showTissueThreshold);
@@ -473,30 +474,6 @@ void MainWindow::on_pushButton_applyPlcProcessParameters_clicked()
 
 
 
-void MainWindow::on_toolButton_stopInspection_clicked()
-{
-    const RuntimeSnapshot before =
-            m_inspectionApplicationService->runtimeSnapshot();
-    if (m_templateEditorPage->templateOperationActive()) {
-        m_templateEditorPage->resetTemplateCaptureState();
-        m_templateEditorPage->cancelTemplateDrawing();
-        m_inspectionInfoUi->label_runtimeStatus->setText(
-                    isCameraOpen()
-                    ? "已退出模板制作，相机已打开"
-                    : "已退出模板制作，相机已关闭");
-        updateOperationUiState();
-        return;
-    }
-
-    if (before.state == ApplicationRuntimeState::Idle) {
-        updateOperationUiState();
-        return;
-    }
-
-    finishInspectionStopUi(
-                m_inspectionApplicationService->stop(
-                    InspectionFaultReason::None));
-}
 void MainWindow::setupNonPersistentDefaults()
 {
     m_detectionSettingsUi->lineEdit_imageThreshold->setText(QString::number(

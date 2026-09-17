@@ -72,22 +72,20 @@ OperationUiSnapshot OperationUiPolicy::create(
 
     snapshot.cameraOpen = context.cameraOpen;
     snapshot.plcConnected = context.plcConnected;
-    snapshot.openCamera = access(
-                state == OperationUiState::CameraClosed
-                && !context.cameraOpen,
+    snapshot.cameraAction = access(
+                (state == OperationUiState::CameraClosed
+                 && !context.cameraOpen)
+                || (state == OperationUiState::CameraReady
+                    && context.cameraOpen),
                 context.cameraOpen
-                ? QStringLiteral("相机已打开。") : busyReason);
-    snapshot.startDetection = access(
-                state == OperationUiState::CameraReady
-                && context.cameraOpen,
+                ? busyReason : QStringLiteral("请先等待当前操作结束。"));
+    snapshot.inspectionAction = access(
+                (state == OperationUiState::CameraReady
+                 && context.cameraOpen)
+                || state == OperationUiState::Detecting,
                 context.cameraOpen
                 ? busyReason
                 : QStringLiteral("请先打开相机。"));
-    snapshot.closeCamera = access(
-                state == OperationUiState::CameraReady
-                && context.cameraOpen,
-                context.cameraOpen
-                ? busyReason : QStringLiteral("相机未打开。"));
     snapshot.templateCapture = access(
                 context.cameraOpen
                 && (state == OperationUiState::CameraReady
@@ -99,13 +97,10 @@ OperationUiSnapshot OperationUiPolicy::create(
     snapshot.saveTemplate = access(
                 state == OperationUiState::TemplateFrozen,
                 QStringLiteral("请先获取并冻结模板画面。"));
-    snapshot.stop = access(
-                state == OperationUiState::Detecting
-                || state == OperationUiState::TemplatePreviewing
+    snapshot.templateExit = access(
+                state == OperationUiState::TemplatePreviewing
                 || state == OperationUiState::TemplateFrozen,
-                state == OperationUiState::Stopping
-                ? QStringLiteral("系统正在停止，请稍候。")
-                : QStringLiteral("当前没有需要停止的任务。"));
+                QStringLiteral("当前未进入模板制作。"));
     snapshot.generalSettings = access(idle, busyReason);
     snapshot.imageSettings = access(
                 idle || state == OperationUiState::TemplateFrozen,
@@ -128,25 +123,18 @@ OperationUiSnapshot OperationUiPolicy::create(
     snapshot.templateEditing = access(idle, busyReason);
     snapshot.statisticsReset = access(idle, busyReason);
     snapshot.rejectQueueReset = access(idle, busyReason);
-    snapshot.startDetectionText =
-            state == OperationUiState::Detecting
-            ? QStringLiteral("采集中...")
-            : (state == OperationUiState::Stopping
-               ? QStringLiteral("停止中...")
-               : QStringLiteral("启动识别"));
-
-    const bool templateOperation =
-            state == OperationUiState::TemplatePreviewing
-            || state == OperationUiState::TemplateFrozen;
-    snapshot.stopText =
+    snapshot.cameraActionText = context.cameraOpen
+            ? QStringLiteral("关闭相机")
+            : QStringLiteral("打开相机");
+    snapshot.inspectionActionText =
             state == OperationUiState::Stopping
-            ? QStringLiteral("停止中...")
-            : (templateOperation
-               ? QStringLiteral("退出模板制作")
-               : QStringLiteral("停止识别"));
+            ? QStringLiteral("停止中")
+            : (state == OperationUiState::Detecting
+               ? QStringLiteral("停止识别")
+               : QStringLiteral("启动识别"));
     snapshot.templateCaptureText =
             state == OperationUiState::TemplatePreviewing
-            ? QStringLiteral("拍照并开始框选")
+            ? QStringLiteral("拍照框选")
             : (state == OperationUiState::TemplateFrozen
                ? QStringLiteral("重新取景")
                : QStringLiteral("制作模板"));

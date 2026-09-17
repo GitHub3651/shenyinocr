@@ -68,6 +68,7 @@ QWidget#widget_leftDrawer QGroupBox::title {
 QGroupBox#groupBox_currentTemplateSettings,
 QGroupBox#groupBox_barcodeCsv,
 QGroupBox#groupBox_detectionMode,
+QGroupBox#groupBox_templateManagement,
 QGroupBox#groupBox_imageSaving,
 QGroupBox#groupBox_imageAcquisitionAndProcessing,
 QGroupBox#groupBox_softwareData,
@@ -218,34 +219,85 @@ QPushButton:disabled {
     border-color: #D4DDE5;
 }
 
-/* 5. 工具按钮 */
-QGroupBox#groupBox_mainControls QToolButton {
+/* 5. 主控工具栏与工具按钮 */
+QFrame#frame_mainToolbar {
+    background-color: #E7EDF2;
+    border: 1px solid #B8C4CE;
+}
+
+QToolButton#toolButton_cameraAction,
+QToolButton#toolButton_inspectionAction,
+QGroupBox#groupBox_templateManagement QToolButton {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFFFFF, stop:1 #EDF2F6);
     color: #000000;
     border: 1px solid #AEBCC8;
-    padding: 8px;
+    padding: 2px;
     font-size: 16px;
     font-weight: 600;
 }
 
-QGroupBox#groupBox_mainControls QToolButton:hover {
+QToolButton#toolButton_cameraAction:hover,
+QToolButton#toolButton_inspectionAction:hover,
+QGroupBox#groupBox_templateManagement QToolButton:hover {
     background: #F6FBFF;
     border-color: #6D9EC4;
 }
 
-QGroupBox#groupBox_mainControls QToolButton:pressed {
+QToolButton#toolButton_cameraAction:pressed,
+QToolButton#toolButton_inspectionAction:pressed,
+QGroupBox#groupBox_templateManagement QToolButton:pressed {
     background: #DDEAF3;
     border-color: #0E568E;
 }
 
-QGroupBox#groupBox_mainControls QToolButton:focus {
+QToolButton#toolButton_cameraAction:focus,
+QToolButton#toolButton_inspectionAction:focus,
+QGroupBox#groupBox_templateManagement QToolButton:focus {
     border-color: #1769AA;
 }
 
-QGroupBox#groupBox_mainControls QToolButton:disabled {
+QToolButton#toolButton_cameraAction:disabled,
+QToolButton#toolButton_inspectionAction:disabled,
+QGroupBox#groupBox_templateManagement QToolButton:disabled {
     background: #EDF1F4;
     color: #909DA8;
     border-color: #D2D9DF;
+}
+
+QFrame#frame_cameraStatus,
+QFrame#frame_plcStatus,
+QFrame#frame_hardwareTrigger {
+    background-color: transparent;
+    border: none;
+}
+
+QLabel#label_cameraStatusText,
+QLabel#label_plcStatusText {
+    background-color: transparent;
+    border: none;
+    color: #000000;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+QLabel#label_hardwareTriggerTitle {
+    color: #000000;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+QFrame#frame_cameraStatusDot[connectionState="connected"],
+QFrame#frame_plcStatusDot[connectionState="connected"] {
+    background-color: #17834C;
+    border: none;
+    border-radius: 5px;
+}
+
+QFrame#frame_cameraStatusDot[connectionState="disconnected"],
+QFrame#frame_plcStatusDot[connectionState="disconnected"] {
+    background-color: #C13F3F;
+    border: none;
+    border-radius: 5px;
 }
 
 QWidget#widget_leftNavigationRail {
@@ -501,28 +553,6 @@ QLabel#label_runtimeStatus[uiState="warning"] {
 
 QLabel#label_verdictResult {
     background-color: #202830;
-    color: #000000;
-    border: none;
-    padding: 10px;
-    font-size: 56px;
-    font-weight: 600;
-}
-
-QLabel#label_verdictResult[verdict="idle"] {
-    background-color: #202830;
-    color: #000000;
-    border: none;
-}
-
-QLabel#label_verdictResult[verdict="ok"] {
-    background-color: #202830;
-    color: #17834C;
-    border: none;
-}
-
-QLabel#label_verdictResult[verdict="ng"] {
-    background-color: #202830;
-    color: #C13F3F;
     border: none;
 }
 
@@ -624,23 +654,21 @@ QLineEdit#lineEdit_currentTemplateName {
 }
 
 QCheckBox#checkBox_hardwareTriggerEnabled {
-    border: 1px solid #B8C4CE;
-    padding: 6px 12px;
-    spacing: 10px;
-    font-weight: 600;
-}
-
-QCheckBox#checkBox_hardwareTriggerEnabled:hover {
-    background-color: #EAF3FA;
-}
-
-QCheckBox#checkBox_hardwareTriggerEnabled:disabled {
-    background-color: #EDF1F4;
-    color: #909DA8;
-    border-color: #D4DDE5;
+    spacing: 5px;
+    font-size: 16px;
+    font-weight: 400;
 }
 
 QCheckBox#checkBox_hardwareTriggerEnabled::indicator {
-    width: 24px;
-    height: 24px;
+    width: 30px;
+    height: 16px;
+    border: none;
+}
+
+QCheckBox#checkBox_hardwareTriggerEnabled::indicator:unchecked {
+    image: url(:/svg/toggle_off.svg);
+}
+
+QCheckBox#checkBox_hardwareTriggerEnabled::indicator:checked {
+    image: url(:/svg/toggle_on.svg);
 }

@@ -249,7 +249,6 @@ TemplateEditorPage::TemplateEditorPage(
     setupCurrentTemplateEditor();
     connect(m_mainWindowUi.inspectionImageCanvas, &InspectionImageCanvas::templateDrawingChanged,
             this, &TemplateEditorPage::handleTemplateDrawingChanged);
-    setupManualCharacterCropUi();
     setupTemplateDirtyTracking();
     connectPageActions();
 }
@@ -268,8 +267,27 @@ void TemplateEditorPage::applyOperationState(
                            snapshot.templateEditing);
     applyOperationUiAccess(m_detectionSettingsUi.toolButton_removeCurrentTemplate,
                            snapshot.templateEditing);
-    applyOperationUiAccess(m_mainWindowUi.toolButton_editCharacterTemplates,
-                           editAccess);
+    m_detectionSettingsUi.toolButton_createTemplate->setText(
+                snapshot.templateCaptureText);
+    applyOperationUiAccess(m_detectionSettingsUi.toolButton_selectTemplate,
+                           snapshot.templateSelection);
+    applyOperationUiAccess(m_detectionSettingsUi.toolButton_createTemplate,
+                           snapshot.templateCapture);
+    if (snapshot.templateCapture.enabled) {
+        m_detectionSettingsUi.toolButton_createTemplate->setToolTip(
+                    requestedState == OperationUiState::TemplatePreviewing
+                    ? QStringLiteral("拍照并开始框选模板区域。")
+                    : (requestedState == OperationUiState::TemplateFrozen
+                       ? QStringLiteral("清除当前临时框线并重新获取模板画面。")
+                       : QStringLiteral("进入当前检测模式的模板制作流程。")));
+    }
+    applyOperationUiAccess(m_detectionSettingsUi.toolButton_saveTemplate,
+                           snapshot.saveTemplate);
+    applyOperationUiAccess(
+                m_detectionSettingsUi.toolButton_editCharacterTemplates,
+                editAccess);
+    applyOperationUiAccess(m_detectionSettingsUi.toolButton_exitTemplate,
+                           snapshot.templateExit);
     applyOperationUiAccess(m_detectionSettingsUi.textEdit_targetText,
                            editAccess);
     applyOperationUiAccess(m_detectionSettingsUi.lineEdit_imageThreshold,
@@ -282,18 +300,11 @@ void TemplateEditorPage::applyOperationState(
                            editAccess);
     applyOperationUiAccess(m_detectionSettingsUi.pushButton_applyBatchImageThreshold,
                            editAccess);
-    applyOperationUiAccess(m_mainWindowUi.toolButton_saveTemplate,
-                           snapshot.saveTemplate);
     if (requestedState == OperationUiState::Detecting) {
         showInspectionStatus();
     } else if (requestedState == OperationUiState::Stopping) {
         cancelTemplateDrawing();
     }
-}
-
-bool TemplateEditorPage::isCameraOpen() const
-{
-    return m_inspectionService.isCameraOpen();
 }
 
 void TemplateEditorPage::showInfo(
@@ -312,11 +323,6 @@ void TemplateEditorPage::showCritical(
         const QString &title, const QString &message)
 {
     QMessageBox::critical(&m_dialogParent, title, message);
-}
-
-bool TemplateEditorPage::templateOperationActive() const
-{
-    return m_captureState != CaptureState::Idle;
 }
 
 TemplateEditorPage::CaptureState TemplateEditorPage::captureState() const
@@ -1512,22 +1518,21 @@ void TemplateEditorPage::askToSaveCompletedTemplate(DetectionMode mode)
     });
 }
 
-void TemplateEditorPage::setupManualCharacterCropUi()
+void TemplateEditorPage::connectPageActions()
 {
-    connect(m_mainWindowUi.toolButton_editCharacterTemplates,
+    connect(m_detectionSettingsUi.toolButton_selectTemplate,
+            &QToolButton::clicked,
+            this, &TemplateEditorPage::selectTemplatesForCurrentMode);
+    connect(m_detectionSettingsUi.toolButton_createTemplate,
+            &QToolButton::clicked,
+            this, &TemplateEditorPage::handleTemplateCaptureButton);
+    connect(m_detectionSettingsUi.toolButton_saveTemplate,
+            &QToolButton::clicked,
+            this, &TemplateEditorPage::saveCurrentTemplate);
+    connect(m_detectionSettingsUi.toolButton_editCharacterTemplates,
             &QToolButton::clicked,
             this,
             &TemplateEditorPage::showManualCharacterTemplateEditorDialog);
-}
-
-void TemplateEditorPage::connectPageActions()
-{
-    connect(m_mainWindowUi.toolButton_selectTemplate,
-            &QToolButton::clicked,
-            this, &TemplateEditorPage::selectTemplatesForCurrentMode);
-    connect(m_mainWindowUi.toolButton_saveTemplate,
-            &QToolButton::clicked,
-            this, &TemplateEditorPage::saveCurrentTemplate);
     connect(m_detectionSettingsUi.pushButton_applyTargetText,
             &QPushButton::clicked,
             this, &TemplateEditorPage::applyCurrentTargetText);

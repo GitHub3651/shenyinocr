@@ -116,7 +116,7 @@ AppSettings::AppSettings()
       cameraGain(1),
       colorChannelId(QStringLiteral("color")),
       imageRotationId(QStringLiteral("rotate_none")),
-      triggerEnabled(true),
+      triggerEnabled(false),
       cameraDelay(300),
       triggerModeId(QStringLiteral("trigger_continuous")),
       plcIp(QStringLiteral("192.168.10.10")),

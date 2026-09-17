@@ -92,6 +92,7 @@ SOURCES += \
     engines/ocr/vendor/paddle/src/utility.cpp \
     detection/detectionmode/tissue/tissue_roll_detector.cpp \
     ui/main_window/inspection_image_canvas.cpp \
+    ui/main_window/verdict_result_label.cpp \
     startup/main.cpp \
     devices/plc/vendor/snap7.cpp \
     ui/main_window/main_window.cpp \
@@ -176,6 +177,7 @@ HEADERS += \
     detection/common/detection_pose.h \
     detection/detectionmode/tissue/tissue_roll_detector.h \
     ui/main_window/inspection_image_canvas.h \
+    ui/main_window/verdict_result_label.h \
     devices/plc/vendor/snap7.h \
     ui/main_window/main_window.h
 

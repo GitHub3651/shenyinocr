@@ -3,7 +3,7 @@
 ## 1. 文档状态
 
 - 编写日期：2026-09-06。
-- 最后更新：2026-09-07。
+- 最后更新：2026-09-16。
 - 当前状态：代码已实施，待用户统一验证。
 - 实施原则：直接调整现有 Qt 控件和调用点，不复制页面，不保留旧名称兼容层，不增加 UI 管理框架。
 
@@ -17,7 +17,7 @@
 4. 将旧方向性对象名和方法名改为左侧导航对应的新名称。
 5. 将五个导航按钮固定为 80×80px，导航栏宽度固定为 80px。
 6. 调整指定文字的字号和长文本换行。
-7. 调整判定栏的底色、文字和闲置状态显示。
+7. 调整判定栏的底色、SVG 结果和闲置状态显示。
 
 五个页面自身的控件、内容和业务逻辑不变；检测、模板、相机、PLC、统计、存图和设置应用逻辑不属于本次改造范围。
 
@@ -75,9 +75,10 @@
 
 - `inspectionImageCanvas` 继续使用 `#202830` 底色和现有弱网格。
 - `label_verdictResult` 的默认、闲置、OK 和 NG 状态使用 `#202830` 底色，不显示独立边框。
-- 软件启动、检测视图清空和故障自动停止完成后，判定文字为空，不显示“等待检测”。
+- 软件启动、检测视图清空和故障自动停止完成后，判定栏为空，不显示任何文字或图像。
 - 删除检测启动后的“等待结果”逻辑：检测启动成功时不再改写判定栏，软件首次启动时判定栏为空；现有 `clearInspectionView()` 调用位置和清理范围保持不变。
-- OK 显示绿色 56px“正确”，NG 显示红色 56px“错误”。
+- `VerdictResultLabel` 按当前标签宽度的 70% 矢量绘制判定图标并水平、垂直居中；OK 使用 `:/svg/verdict_correct.svg`，NG 使用 `:/svg/verdict_wrong.svg`，不显示“正确/错误”文字。
+- `InspectionPresentation` 只保留 `verdictStyle` 传递判定类型，不保留判定文字字段、属性或 QSS 状态。
 - 运行故障不占用判定栏；自动停止期间沿用 Stopping 状态，完成后回到空闲样式。
 
 ## 4. 名称调整
@@ -118,25 +119,29 @@
 
 | 文件 | 修改内容 |
 |---|---|
-| `app/ui/main_window/main_window.ui` | 移动并改名导航栏、抽屉和主画面，加入 `QSplitter`，直接设置导航尺寸、初始页、画布和判定栏静态属性 |
+| `app/ui/main_window/main_window.ui` | 移动并改名导航栏、抽屉和主画面，加入 `QSplitter`，直接设置导航尺寸、初始页和画布静态属性，将判定栏提升为 `VerdictResultLabel` |
 | `app/ui/main_window/main_window.cpp` | 同步名称、抽屉开合调用、Splitter 状态恢复和目标文字换行，删除与 `.ui` 重复的初始页、选中状态和伸展系数设置 |
 | `app/ui/main_window/main_window.h` | 同步方法声明 |
 | `app/ui/main_window/main_window_inspection.cpp` | 同步名称、删除检测启动成功后的 `showWaitingResult()` 调用，并在关闭时保存 Splitter 状态 |
 | `app/ui/main_window/main_window_settings.cpp` | 恢复默认设置时清空并重置 Splitter 状态 |
 | `app/ui/main_window/inspection/inspection_page.h` | 删除 `showWaitingResult()` 声明 |
-| `app/ui/main_window/inspection/inspection_page.cpp` | 删除 `showWaitingResult()` 实现，调整判定栏闲置文字和识别结果换行，删除画布和判定栏静态属性的重复设置 |
+| `app/ui/main_window/inspection/inspection_page.cpp` | 删除 `showWaitingResult()` 实现，将 `verdictStyle` 直接交给 `VerdictResultLabel`，闲置和视图清空时清空判定，并保留识别结果换行 |
+| `app/ui/main_window/verdict_result_label.h/.cpp` | 唯一负责 OK/NG SVG 选择、按标签宽度的 70% 矢量绘制、水平垂直居中和清空 |
+| `app/contracts/inspection_presentation.h` | 删除只为判定文字服务的 `verdictText` |
+| `app/runtime/result_service.cpp` | 不再组装判定文字，继续以 `verdictStyle` 传递 OK/NG |
 | `app/ui/main_window/settings/detection_settings_page.ui` | 将当前模板一行直接放入外层网格，并保存图像阈值的静态输入属性 |
 | `app/ui/main_window/settings/image_settings_page.ui` | 保存浏览按钮的固定提示文字 |
 | `app/ui/main_window/settings/software_settings_page.ui` | 保存软件数据目录和两个按钮的只读、光标及固定提示属性 |
 | `app/ui/main_window/settings/machine_settings_page.cpp` | 删除固定可见状态、固定按钮文字和布局强制刷新 |
 | `app/ui/main_window/template/template_editor_page.h/.cpp` | 删除标签宽度计算、重复显隐控制和模板向导静态初始化函数 |
-| `app/resource/qss/app_theme.qss` | 将右侧方向选择器改为左侧新名称，将导航栏左边框改为右边框，保持导航按钮无边框和 Splitter Handle 透明无边框，调整字号和判定栏样式，并删除已移除中间容器的选择器 |
+| `app/resource/qss/app_theme.qss` | 将右侧方向选择器改为左侧新名称，将导航栏左边框改为右边框，保持导航按钮无边框和 Splitter Handle 透明无边框，保留判定栏深色背景并删除判定文字样式 |
+| `app/resource/image.qrc`、`app/resource/svg/verdict_correct.svg`、`app/resource/svg/verdict_wrong.svg` | 登记并提供 OK/NG 判定图像 |
 | `app/system_support/settings/app_settings.h` | Schema 8 和 Splitter 状态字段 |
 | `app/system_support/settings/app_settings.cpp` | Splitter 状态相等比较 |
 | `app/system_support/settings/app_settings_store.h` | 同步当前 Schema 8 的 Store 声明说明 |
 | `app/system_support/settings/app_settings_store.cpp` | Base64 状态的 JSON 读写 |
 
-`inspection_info_page.ui`、`plc_settings_page.ui`、图片资源、QRC 和工程文件不需要修改。
+`inspection_info_page.ui`、`plc_settings_page.ui` 和工程文件不需要修改。
 
 ### 5.2 当前文档
 
@@ -168,7 +173,7 @@
 5. 调整宽度后关闭并重新启动，Splitter 布局能够恢复；恢复默认设置后回到初始宽度。
 6. 旧方向性对象名和方法名在生产代码中不再使用。
 7. 五个指定控件的字号为 20px，两处长文本可以在空间不足时换行。
-8. 判定栏不显示“等待检测”或“等待结果”；首次启动和现有视图清空入口保持为空，OK、NG 显示符合第 3.4 节，运行故障不占用判定栏。
+8. 判定栏不显示“等待检测”、“等待结果”、“正确”或“错误”文字；首次启动和现有视图清空入口保持为空，OK、NG 分别使用第 3.4 节指定的 SVG，图标宽度始终为判定栏当前宽度的 70% 且水平、垂直居中，运行故障不占用判定栏。
 9. Schema 8 能够保存和读取 Base64 Splitter 状态，Schema 7 继续按现有流程整体重置。
 10. 页面内容、设置草稿及检测相关业务功能没有因位置迁移发生变化。
 11. Qt Designer 与运行时的静态布局和属性一致，不再引用已删除的当前模板中间容器，也不再通过 C++ 计算标签固定宽度。

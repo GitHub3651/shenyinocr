@@ -6,20 +6,24 @@
         <file>Translate_CN.qm</file>
         <file>Translate_EN.qm</file>
         <file>qss/app_theme.qss</file>
-        <file>svg/action/action_camera_open.svg</file>
-        <file>svg/action/action_camera_close.svg</file>
-        <file>svg/action/action_template_select.svg</file>
-        <file>svg/action/action_template_create.svg</file>
-        <file>svg/action/action_template_save.svg</file>
-        <file>svg/action/action_character_split.svg</file>
-        <file>svg/action/action_inspection_start.svg</file>
-        <file>svg/action/action_inspection_stop.svg</file>
+        <file>svg/camera_on.svg</file>
+        <file>svg/camera_off.svg</file>
+        <file>svg/template_select.svg</file>
+        <file>svg/template_make.svg</file>
+        <file>svg/template_save.svg</file>
+        <file>svg/character_seg.svg</file>
+        <file>svg/start.svg</file>
+        <file>svg/stop.svg</file>
         <file>svg/navigation/nav_inspection.svg</file>
         <file>svg/navigation/nav_parameters.svg</file>
         <file>svg/navigation/nav_image.svg</file>
         <file>svg/navigation/nav_plc.svg</file>
         <file>svg/navigation/nav_software.svg</file>
         <file>svg/canvas/canvas_background_grid.svg</file>
+        <file>svg/toggle_off.svg</file>
+        <file>svg/toggle_on.svg</file>
+        <file>svg/verdict_correct.svg</file>
+        <file>svg/verdict_wrong.svg</file>
     </qresource>
     <qresource prefix="/logo"/>
 </RCC>

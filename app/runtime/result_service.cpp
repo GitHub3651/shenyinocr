@@ -326,10 +326,6 @@ void ResultService::process(const ProcessRequest &request)
                 request.completion.result.overlay);
     presentation.verdictStyle = verdictStyle(
                 request.completion.result.verdict);
-    presentation.verdictText = presentation.verdictStyle
-            == DetectionVerdictViewStyle::Correct
-            ? QStringLiteral("正确")
-            : QStringLiteral("错误");
     presentation.recognitionText =
             request.completion.result.hasPresentationText
             ? request.completion.result.presentationText

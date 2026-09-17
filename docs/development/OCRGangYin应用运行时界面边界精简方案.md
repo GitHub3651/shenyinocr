@@ -255,7 +255,6 @@ struct InspectionPresentation
     QImage image;
     DetectionVerdictViewStyle verdictStyle =
         DetectionVerdictViewStyle::Error;
-    QString verdictText;
     QString recognitionText;
     bool updatesTemplateName = false;
     QString templateName;
@@ -270,7 +269,7 @@ struct InspectionPresentation
 
 ### 8.4 `InspectionPage::present()`
 
-这是生产结果唯一显示入口，固定顺序更新图片、判定样式、判定文字、识别文字、模板名、统计/合格率和耗时。它不做去重、PLC、存图、Runtime 状态裁决或模板文件操作；控件缺失只做一次 UI 级保护。统计按钮清零使用 UI 内部函数 `InspectionPage::setStatistics(const DetectionResultStatistics &statistics)`，不经过 Renderer 或 Application 的控件转发。
+这是生产结果唯一显示入口，固定顺序更新图片、判定图像、识别文字、模板名、统计/合格率和耗时。`verdictStyle` 是判定呈现的唯一数据，页面用它选择 OK/NG SVG，Presentation 不再传递判定文字。它不做去重、PLC、存图、Runtime 状态裁决或模板文件操作；控件缺失只做一次 UI 级保护。统计按钮清零使用 UI 内部函数 `InspectionPage::setStatistics(const DetectionResultStatistics &statistics)`，不经过 Renderer 或 Application 的控件转发。
 
 ## 9. Runtime 数据 signal 与 MainWindow 装配
 
@@ -810,7 +809,6 @@ reset / shutdown
 |---|---|---|
 | `image` | 原始帧 + DetectionOverlay + Renderer | ResultService 处理完成结果时 |
 | `verdictStyle` | `AlgorithmVerdict` | ResultService 组装结果时 |
-| `verdictText` | 当前模式结果和统一文案规则 | ResultService 组装时 |
 | `recognitionText` | Pipeline 的 `recognizedText` | Pipeline 完成后 |
 | `templateName` | 当前运行模板快照 | 仅 `updatesTemplateName` 时写入 |
 | `statistics` | ResultService 事务统计 | 统计更新后 |
@@ -879,7 +877,7 @@ reset / shutdown
 
 进入条件：已记录当前结果显示和统计基线。
 
-必须保持：五种模式的图片、判定、文字、模板名、统计、合格率和耗时。
+必须保持：五种模式的图片、判定图像、识别文字、模板名、统计、合格率和耗时。
 
 禁止修改：Detection 算法、PLC 时序、存图规则、Camera 正式采集、模板 Schema、QSS。
 

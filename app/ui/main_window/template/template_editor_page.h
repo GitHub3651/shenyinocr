@@ -41,13 +41,11 @@ public:
     void applyOperationState(
         OperationUiState requestedState,
         const OperationUiSnapshot &snapshot);
-    bool templateOperationActive() const;
     CaptureState captureState() const;
     bool startTemplatePreview();
     bool freezeTemplatePreview();
     bool stopTemplatePreview(bool writeLog = true);
     void resetTemplateCaptureState(bool writePreviewStopLog = true);
-    void handleTemplateCaptureButton();
     void handlePreviewFailure(const QString &reason);
 
     void updateTemplateGuideText(const QString &title,
@@ -79,7 +77,6 @@ signals:
     void previewFramePresentationRequested(const cv::Mat &image);
 
 private:
-    bool isCameraOpen() const;
     void showInfo(const QString &title, const QString &message);
     void showWarning(const QString &title, const QString &message);
     void showCritical(const QString &title, const QString &message);
@@ -105,7 +102,7 @@ private:
         QString *failureReason);
     TemplateBarcodeValidationOptions barcodeTemplateValidationOptions() const;
     void acceptBarcodeTemplateValidation(const QRect &barcodeRect);
-    void setupManualCharacterCropUi();
+    void handleTemplateCaptureButton();
     void setupTemplateDirtyTracking();
     void connectPageActions();
     QStringList currentModeTemplatePaths() const;

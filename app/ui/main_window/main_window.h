@@ -49,12 +49,6 @@ public:
         QWidget *parent = nullptr);
     ~MainWindow() override;
 
-private slots:
-    void on_toolButton_openCamera_clicked();
-    void on_toolButton_closeCamera_clicked();
-    void on_toolButton_startInspection_clicked();
-    void on_toolButton_stopInspection_clicked();
-
 protected:
     void closeEvent(QCloseEvent *event) override;
 
@@ -76,6 +70,13 @@ private:
     void on_barcodeCsvBrowseDirectory_clicked();
     void on_barcodeCsvEnable_toggled(bool enabled);
     void initializePages();
+    void handleCameraAction();
+    void handleInspectionAction();
+    void openCamera();
+    void closeCamera();
+    void startInspection();
+    void stopInspection();
+    void exitTemplate();
     void presentTemplatePreviewFrame(const cv::Mat &image);
     void showParameterInfo(const QString &title, const QString &message);
     void showParameterInfoAsError(const QString &title,
@@ -97,7 +98,8 @@ private:
     void restoreUnappliedSettingsFromApplied();
     void updateTissueRoughnessUiVisibility();
     void updateOperationUiState();
-    OperationUiState operationUiState() const;
+    OperationUiState operationUiState(
+        const RuntimeSnapshot &snapshot) const;
     bool isCameraOpen() const;
     bool isInspectionBusy() const;
     const AppSettings &machineSettings() const;

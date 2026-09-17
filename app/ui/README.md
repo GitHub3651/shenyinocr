@@ -13,6 +13,7 @@ ui/
    ├─ main_window_inspection.cpp
    ├─ main_window_settings.cpp
    ├─ inspection_image_canvas.h/.cpp
+   ├─ verdict_result_label.h/.cpp
    ├─ operation_ui_policy.h/.cpp
    ├─ inspection/
    │  ├─ inspection_info_page.ui
@@ -37,8 +38,8 @@ ui/
 
 ## Designer 编辑入口
 
-- 主窗口骨架和主控操作区：`main_window/main_window.ui`。
-- 检测信息、参数设定、图像设置、PLC 通讯和软件设置：分别打开对应功能目录中的五个页面 `.ui`。
+- 主窗口骨架和图像上方常驻工具栏：`main_window/main_window.ui`。
+- 检测信息、参数设定、图像设置、PLC 通讯和软件设置：分别打开对应功能目录中的五个页面 `.ui`；模板管理分组位于 `main_window/settings/detection_settings_page.ui`。
 - 选择模板、保存模板和分割字符模板：分别打开三个模板子目录中的弹窗 `.ui`。
 
 `main_window.ui` 只保留五个空页面根节点。`MainWindow` 依次对主窗口和五个页面生成 Ui 调用 `setupUi()`，再构造 `InspectionPage`、`MachineSettingsPage` 和 `TemplateEditorPage`。主窗口、五个页面和三个弹窗的生成 Ui 均由各自所有者使用 `std::unique_ptr` 管理。
@@ -46,13 +47,15 @@ ui/
 ## 页面协作
 
 - `InspectionPage` 直接使用主窗口 Ui 和检测信息页 Ui，更新主图像、判定、运行状态和统计。
-- `MachineSettingsPage` 直接使用四个设置页 Ui，管理参数绑定、校验、未应用状态和运行时禁用规则；完整识别模式分组和纸巾粗糙度阈值位于参数设定页，图像设置页只保留图像保存与图像采集处理参数。
-- `TemplateEditorPage` 直接使用主窗口 Ui、参数设定页 Ui 和图像设置页 Ui，处理模板选择、制作、保存和参数编辑。
+- `MachineSettingsPage` 直接使用四个设置页 Ui 和工具栏唯一硬触发开关，管理参数绑定、校验、未应用状态和运行时禁用规则；模板管理按钮的固定行列由 `detection_settings_page.ui` 定义，不由该类运行时调整。完整识别模式分组和纸巾粗糙度阈值位于参数设定页，图像设置页只保留图像保存与图像采集处理参数。
+- `TemplateEditorPage` 直接使用主窗口 Ui、参数设定页 Ui 和图像设置页 Ui，直接连接参数页中的模板选择、制作、保存和分割字符按钮，并处理模板参数编辑。
 - MainWindow 只保留跨页面或应用级协调；迁出页面且仍由 MainWindow 处理的按钮采用显式函数指针连接。
 
 左侧五个导航按钮切换同一个 `QStackedWidget`。启动时默认显示检测信息；再次点击当前按钮会收起左侧面板；检测启动和故障自动停止均保持当前开合状态。
 
 ## 模板 UI
+
+选择、制作、保存、分割字符和退出模板制作五个入口统一位于参数设定页的“模板管理”同级分组。第一行固定为制作模板、保存模板、分割字符，第二行固定为选择模板、退出模板制作；前四个按钮固定为 76×62px，退出按钮固定为 108×62px。`groupBox_templateManagement` 与 `groupBox_currentTemplateSettings` 使用同一个 QSS 卡片选择器和完全相同的 GroupBox 样式。`TemplateEditorPage` 负责前四个入口及五个按钮的操作状态，`MainWindow` 只保留退出模板制作的跨区域收口。
 
 ```text
 选择模板
@@ -71,7 +74,7 @@ ui/
  → 不读取、不移动、不删除模板文件夹
 ```
 
-单模板模式最多一项；多模板模式可包含多项；纸巾模式隐藏模板选择、名称、保存、字符和 ROI 制作控件，只显示粗糙度阈值。
+单模板模式最多一项；多模板模式可包含多项；纸巾模式隐藏模板管理分组、当前模板设置和 ROI 制作控件，只显示粗糙度阈值。
 
 四种模板模式统一使用主窗口的 `InspectionImageCanvas`，纸巾模式禁用模板绘图。字库和 OCR 使用“定位参考区域 → 检测多边形”，二维码使用“日期定位参考区域 → 二维码矩形 → 日期多边形”，钢印使用“吸管口定位参考区域 → 钢印多边形 → 日期定位参考区域 → 日期多边形”。钢印的两个参考区域和两个多边形分别保存、分别换算，不从日期多边形推导钢印区域，也不创建 OpenCV 原生交互窗口。
 
@@ -99,17 +102,19 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 `InspectionImageCanvas` 是主窗口唯一检测图像和模板绘制画布，负责图像自适应显示、绘制步骤、显示坐标和强类型绘图事件，不负责模板保存、提示文案或检测算法。
 
+`VerdictResultLabel` 是判定栏唯一显示控件，负责根据 `DetectionVerdictViewStyle` 选择 OK/NG SVG，按标签当前宽度的 70% 矢量绘制并水平、垂直居中。
+
 `CharacterCropLabel` 只服务于字符模板编辑弹窗，负责字符框绘制、撤销、清空和坐标换算，并通过 `itemsChanged()` 通知弹窗刷新动态预览。
 
 ## 统一样式
 
 唯一正式样式文件是 `app/resource/qss/app_theme.qss`，由 `ApplicationStartup` 在任何启动消息框出现前从 `:/qss/app_theme.qss` 加载一次。主题使用浅灰设备外壳、白灰内容面板、深色图像画布、钢灰边框和低饱和蓝色操作色；普通控件按控件类型自动继承样式，不在 `.ui` 或业务 C++ 中填写完整 `styleSheet`。
 
-主窗口保持 1600×950 设计尺寸，主控区固定 200px，相机/模板/检测三组保持 `1:2:1`，图像/判定保持 `3:1`。最左侧导航栏固定 80px，五个导航按钮固定为 80×80px、使用 28×28 图标并在顶部连续排列，底部伸展项吸收剩余高度；导航按钮无边框和选中蓝条，当前入口由近白背景和蓝色文字表示。导航右侧的五页抽屉与主画面由水平 `QSplitter` 承载，无已保存状态时使用 400px 抽屉宽度，正常关闭时把完整 Splitter 状态保存到 AppSettings Schema 8。
+主窗口保持 1600×950 设计尺寸，主画面顶部是固定 74px 的常驻工具栏，相机和识别两个操作按钮固定为 76×62px、使用 27×27 图标和 16px 文字；相机、PLC 状态及唯一硬触发开关位于工具栏右侧。硬触发 QCheckBox 的勾选状态同时决定滑块图像和控件自身“开/关”文字，无已保存配置时默认关闭。图像/判定保持 `3:1`。最左侧导航栏固定 80px，五个导航按钮固定为 80×80px、使用 28×28 图标并在顶部连续排列，底部伸展项吸收剩余高度；导航按钮无边框和选中蓝条，当前入口由近白背景和蓝色文字表示。导航右侧的五页抽屉与主画面由水平 `QSplitter` 承载，无已保存状态时使用 400px 抽屉宽度，正常关闭时把完整 Splitter 状态保存到 AppSettings Schema 8。
 
-八个主控按钮直接使用 `:/svg/action/action_*.svg` 静态资源，左侧导航使用 `:/svg/navigation/nav_*.svg`。`InspectionImageCanvas` 使用 `#202830` 底色，并通过正式 QSS 使用 `:/svg/canvas/canvas_background_grid.svg` 作为静态弱网格背景；`CharacterCropLabel` 使用相同的 `#202830` 纯色底，不使用网格。界面层不生成、换色或动态绘制这些资源。
+主工具栏相机和识别按钮直接使用 `:/svg/camera_on.svg`、`:/svg/camera_off.svg`、`:/svg/start.svg` 和 `:/svg/stop.svg`；参数页模板管理分组使用三个 `:/svg/template_*.svg`、`:/svg/character_seg.svg` 和 `:/svg/stop.svg`。左侧导航使用 `:/svg/navigation/nav_*.svg`，硬触发 `QCheckBox` 通过正式 QSS 使用 `:/svg/toggle_off.svg` 和 `:/svg/toggle_on.svg`。`VerdictResultLabel` 根据 `DetectionVerdictViewStyle` 将 `:/svg/verdict_correct.svg` 或 `:/svg/verdict_wrong.svg` 按标签当前宽度的 70% 矢量绘制并水平、垂直居中，闲置和清空时不显示内容。`InspectionImageCanvas` 使用 `#202830` 底色，并通过正式 QSS 使用 `:/svg/canvas/canvas_background_grid.svg` 作为静态弱网格背景；`CharacterCropLabel` 使用相同的 `#202830` 纯色底，不使用网格。界面层不生成或换色这些资源。
 
-界面文字只使用 16、18、20、26、56px 五个字号和常规 400、加重 600 两档字重。普通界面文字为 16px；18px 只用于模板制作向导标题和正文；识别内容和四个统计值为 20px；其他重要信息为 26px；最终判定为 56px。普通正文、说明、单位、只读值和普通标题统一为纯黑色；禁用、主操作、成功、警告、危险和反白文字使用正式 QSS 中的固定角色色。列表、树、表格、下拉弹出项和非原生目录选择框统一通过 `QAbstractItemView` 获得普通与选中文字规则。
+界面文字只使用 16、18、20、26px 四个字号和常规 400、加重 600 两档字重。普通界面文字为 16px；18px 只用于模板制作向导标题和正文；识别内容和四个统计值为 20px；其他重要信息为 26px。普通正文、说明、单位、只读值和普通标题统一为纯黑色；禁用、主操作、成功、警告、危险和反白文字使用正式 QSS 中的固定角色色。列表、树、表格、下拉弹出项和非原生目录选择框统一通过 `QAbstractItemView` 获得普通与选中文字规则。
 
 模板制作向导的背景、边框和基础字体由 `app_theme.qss` 的 `frame_templateGuide`、`label_templateGuideTitle` 和 `label_templateGuideBody` 选择器维护。标题和正文均为 18px，标题保持蓝色加重、正文保持黑色常规。`TemplateEditorPage` 保留现有 RichText，只在区域名称上使用四种既有强调色和加重显示；其他内容继承正式 QSS。
 
@@ -121,8 +126,8 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 运行时视觉属性保持为：
 
 - `uiState`：运行、停止、警告和模板取景状态。
-- `verdict`：`idle/ok/ng` 检测判定。
 - `hasError`：输入校验错误。
+- `connectionState`：相机和 PLC 状态圆点的 `connected/disconnected` 显示。
 
 C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁用视觉由 `app_theme.qss` 决定。模板向导既有区域名称强调色和字符框选画布既有标注色除外；`CharacterCropLabel` 只通过 `QPainter::setFont(font())` 继承控件字体，不保存字号或字重值。五个左侧抽屉页面的 8px 纵向滚动条只通过对应 `QScrollArea` 对象名限定，不影响文本编辑框和模板对话框的内部滚动条。
 
@@ -132,6 +137,7 @@ C++ 只设置状态属性并触发样式刷新；颜色、边框、字体和禁�
 - 页面类直接使用生成 Ui 引用，不增加 ViewBindings、控件 getter、Facade、页面工厂或路由器。
 - `.ui` 对象名、提升控件类名、C++ 引用、QSS 选择器和 qmake 清单必须同步。
 - 主图像提升控件固定为 `InspectionImageCanvas`，对象名固定为 `inspectionImageCanvas`。
+- 判定栏提升控件固定为 `VerdictResultLabel`，对象名固定为 `label_verdictResult`。
 - `OperationUiPolicy` 是主控按钮状态的唯一规则，`SettingsEditState` 是未应用设置状态的唯一实现。
 - Startup 只负责进程初始化、加载翻译与正式 QSS，并创建应用级服务和 MainWindow；不创建或回挂三个逻辑 Page。
 - 页面自有按钮直接连接所属 Page；MainWindow 只保留跨页面或应用级协调。

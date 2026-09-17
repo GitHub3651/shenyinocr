@@ -29,7 +29,6 @@ struct InspectionPresentation
     QImage image;
     DetectionVerdictViewStyle verdictStyle =
             DetectionVerdictViewStyle::Error;
-    QString verdictText;
     QString recognitionText;
     bool updatesTemplateName = false;
     QString templateName;

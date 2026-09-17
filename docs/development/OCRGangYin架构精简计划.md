@@ -305,8 +305,8 @@ S1不检查或删除任何资源文件，不修改`image.qrc`、翻译清单和�
 | 删除项 | 静态证据 | 保留的正式能力 |
 |---|---|---|
 | `InspectionApplicationService::queryCameraExposureRange()` | 仅有声明和定义，无UI、启动组装或生产调用 | `CameraSession::queryExposureRange()`仍由实际曝光设置流程使用 |
-| `InspectionRuntime::unresolvedFaultProductCount()` | 仅有声明和定义 | 故障产品清理及`ResultService::recordUnconfirmedProducts()`保持不变 |
-| `InspectionRuntime::faultUnconfirmedProductCount()`及只写累计字段 | 累计值除该零调用getter外无人读取 | 每次故障未确认数量仍按原逻辑写入结果服务 |
+| `InspectionRuntime::unresolvedFaultProductCount()` | 仅有声明和定义 | 故障产品由 `InspectionRuntime::finishStop()` 统一清理 |
+| `InspectionRuntime::faultUnconfirmedProductCount()`及只写累计字段 | 累计值除该零调用getter外无人读取 | 每次故障未确认数量在 `finishStop()` 中按剩余产品数写入停止日志 |
 | `InspectionRuntime::runContext()` | 仅有声明和定义 | Runtime内部不可变运行上下文及全部实际使用点保持不变 |
 | `TemplateEditorPage::validatedBarcodeText()`及只写文本字段 | 文本只被保存、清空和通过该零调用getter读取 | 二维码仍实际解码；可读状态、失败原因和已验证ROI保持不变 |
 | `TemplateBarcodeValidationResult`返回通道 | 结果DTO只把二维码文本返回给上述只写字段，无其他消费者 | 校验成功/失败、失败提示、解码参数和模板保存阻断保持不变 |

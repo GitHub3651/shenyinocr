@@ -24,11 +24,10 @@ struct OperationUiSnapshot
 
     bool cameraOpen = false;
     bool plcConnected = false;
-    Access openCamera;
-    Access startDetection;
-    Access stop;
-    Access closeCamera;
+    Access cameraAction;
+    Access inspectionAction;
     Access templateCapture;
+    Access templateExit;
     Access saveTemplate;
     Access generalSettings;
     Access imageSettings;
@@ -39,8 +38,8 @@ struct OperationUiSnapshot
     Access templateEditing;
     Access statisticsReset;
     Access rejectQueueReset;
-    QString startDetectionText;
-    QString stopText;
+    QString cameraActionText;
+    QString inspectionActionText;
     QString templateCaptureText;
     QString statusText;
 };
