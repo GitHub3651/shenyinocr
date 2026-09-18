@@ -28,7 +28,7 @@ struct CameraSessionCallbacks
 {
     std::function<void(const cv::Mat &)> previewFrameReady;
     std::function<void(const QString &)> previewFailed;
-    std::function<void()> templatePreviewStopped;
+    std::function<void()> previewStopped;
     std::function<void(InspectionFaultReason, const QString &)> enterFault;
 };
 

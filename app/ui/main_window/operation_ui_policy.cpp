@@ -24,6 +24,8 @@ QString operationBusyReason(OperationUiState state)
         return QStringLiteral("当前正在识别，请先停止识别。");
     case OperationUiState::Stopping:
         return QStringLiteral("系统正在停止，请稍候。");
+    case OperationUiState::CameraPreviewing:
+        return QStringLiteral("请先停止实时预览。");
     case OperationUiState::TemplatePreviewing:
     case OperationUiState::TemplateFrozen:
         return QStringLiteral("请先退出模板制作。");
@@ -86,6 +88,12 @@ OperationUiSnapshot OperationUiPolicy::create(
                 context.cameraOpen
                 ? busyReason
                 : QStringLiteral("请先打开相机。"));
+    snapshot.previewAction = access(
+                state == OperationUiState::CameraReady
+                || state == OperationUiState::CameraPreviewing,
+                !context.cameraOpen
+                ? QStringLiteral("请先打开相机。")
+                : busyReason);
     snapshot.templateCapture = access(
                 context.cameraOpen
                 && (state == OperationUiState::CameraReady
@@ -132,6 +140,10 @@ OperationUiSnapshot OperationUiPolicy::create(
             : (state == OperationUiState::Detecting
                ? QStringLiteral("停止识别")
                : QStringLiteral("启动识别"));
+    snapshot.previewActionText =
+            state == OperationUiState::CameraPreviewing
+            ? QStringLiteral("停止预览")
+            : QStringLiteral("预览画面");
     snapshot.templateCaptureText =
             state == OperationUiState::TemplatePreviewing
             ? QStringLiteral("拍照框选")
@@ -143,6 +155,9 @@ OperationUiSnapshot OperationUiPolicy::create(
     case OperationUiState::CameraClosed:
         break;
     case OperationUiState::CameraReady:
+        break;
+    case OperationUiState::CameraPreviewing:
+        snapshot.statusText = QStringLiteral("实时预览中");
         break;
     case OperationUiState::Detecting:
     case OperationUiState::Stopping:

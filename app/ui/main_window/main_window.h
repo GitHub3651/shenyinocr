@@ -72,12 +72,15 @@ private:
     void initializePages();
     void handleCameraAction();
     void handleInspectionAction();
+    void handlePreviewAction();
     void openCamera();
     void closeCamera();
     void startInspection();
     void stopInspection();
+    void startPreviewOnly();
+    void stopPreviewOnly();
     void exitTemplate();
-    void presentTemplatePreviewFrame(const cv::Mat &image);
+    void presentPreviewFrame(const cv::Mat &image);
     void showParameterInfo(const QString &title, const QString &message);
     void showParameterInfoAsError(const QString &title,
                                   const QString &message);
@@ -124,6 +127,7 @@ private:
     QString m_currentDetectModeId;
     SettingsEditState m_settingsEditState;
     bool m_applicationExitInProgress = false;
+    bool m_previewActive = false;
     QTimer *m_plcHealthTimer = nullptr;
 
     std::unique_ptr<Ui::InspectionInfoPage> m_inspectionInfoUi;

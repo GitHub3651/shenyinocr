@@ -87,6 +87,10 @@ MainWindow::MainWindow(
             &QToolButton::clicked,
             this,
             &MainWindow::handleInspectionAction);
+    connect(ui->toolButton_previewAction,
+            &QToolButton::clicked,
+            this,
+            &MainWindow::handlePreviewAction);
     connect(m_detectionSettingsUi->toolButton_exitTemplate,
             &QToolButton::clicked,
             this,
@@ -277,16 +281,44 @@ void MainWindow::initializePages()
             &TemplateEditorPage::operationUiRefreshRequested,
             this, &MainWindow::updateOperationUiState);
     connect(m_inspectionApplicationService.get(),
-            &InspectionApplicationService::templatePreviewFrameReady,
-            this, [this](const cv::Mat &image) {
-        if (m_templateEditorPage->captureState()
-                == TemplateEditorPage::CaptureState::Previewing) {
-            presentTemplatePreviewFrame(image);
+            &InspectionApplicationService::previewFrameReady,
+            this, &MainWindow::presentPreviewFrame,
+            Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::previewFailed,
+            this, [this](const QString &reason) {
+        if (!m_previewActive) {
+            return;
         }
+        m_previewActive = false;
+        updateOperationUiState();
+        showParameterWarning(QStringLiteral("实时预览失败"), reason);
+    }, Qt::QueuedConnection);
+    connect(m_inspectionApplicationService.get(),
+            &InspectionApplicationService::previewStopped,
+            this, [this]() {
+        if (!m_previewActive) {
+            return;
+        }
+        m_previewActive = false;
+        updateOperationUiState();
+        showParameterWarning(
+                    QStringLiteral("实时预览已停止"),
+                    QStringLiteral("相机预览已意外停止。"));
     }, Qt::QueuedConnection);
     connect(m_templateEditorPage.get(),
-            &TemplateEditorPage::previewFramePresentationRequested,
-            this, &MainWindow::presentTemplatePreviewFrame);
+            &TemplateEditorPage::templateImagePresentationRequested,
+            this, [this](const cv::Mat &image) {
+        DetectionMode activeMode = DetectionMode::Word;
+        const bool tissueMode = detectionModeFromUiId(
+                    machineSettings().detectModeId,
+                    &activeMode)
+                && activeMode == DetectionMode::Tissue;
+        const QImage preview =
+                m_inspectionApplicationService->renderPreviewFrame(
+                    image, tissueMode, false);
+        m_inspectionPage->presentPreviewImage(preview);
+    });
     connect(m_detectionSettingsUi->pushButton_applyPhotoDistance,
             &QPushButton::clicked,
             this, &MainWindow::on_pushButton_applyPhotoDistance_clicked);

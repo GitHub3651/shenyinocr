@@ -8,6 +8,7 @@ enum class OperationUiState
 {
     CameraClosed = 0,
     CameraReady,
+    CameraPreviewing,
     Detecting,
     Stopping,
     TemplatePreviewing,
@@ -26,6 +27,7 @@ struct OperationUiSnapshot
     bool plcConnected = false;
     Access cameraAction;
     Access inspectionAction;
+    Access previewAction;
     Access templateCapture;
     Access templateExit;
     Access saveTemplate;
@@ -40,6 +42,7 @@ struct OperationUiSnapshot
     Access rejectQueueReset;
     QString cameraActionText;
     QString inspectionActionText;
+    QString previewActionText;
     QString templateCaptureText;
     QString statusText;
 };

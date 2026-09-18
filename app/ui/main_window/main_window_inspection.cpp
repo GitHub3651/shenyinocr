@@ -147,8 +147,15 @@ void MainWindow::finishInspectionStopUi(
     updateOperationUiState();
 }
 
-void MainWindow::presentTemplatePreviewFrame(const cv::Mat &image)
+void MainWindow::presentPreviewFrame(const cv::Mat &image)
 {
+    const RuntimeSnapshot snapshot =
+            m_inspectionApplicationService->runtimeSnapshot();
+    const OperationUiState state = operationUiState(snapshot);
+    if (state != OperationUiState::CameraPreviewing
+            && state != OperationUiState::TemplatePreviewing) {
+        return;
+    }
     DetectionMode activeMode = DetectionMode::Word;
     const bool tissueMode = detectionModeFromUiId(
                 machineSettings().detectModeId,
@@ -162,7 +169,7 @@ void MainWindow::presentTemplatePreviewFrame(const cv::Mat &image)
 
 
 OperationUiState MainWindow::operationUiState(
-    const RuntimeSnapshot &snapshot) const
+        const RuntimeSnapshot &snapshot) const
 {
     switch (snapshot.state) {
     case ApplicationRuntimeState::Starting:
@@ -172,6 +179,9 @@ OperationUiState MainWindow::operationUiState(
         return OperationUiState::Stopping;
     case ApplicationRuntimeState::Idle:
     default:
+        if (m_previewActive) {
+            return OperationUiState::CameraPreviewing;
+        }
         if (m_templateEditorPage->captureState()
                    == TemplateEditorPage::CaptureState::Previewing) {
             return OperationUiState::TemplatePreviewing;
@@ -311,6 +321,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     m_applicationExitInProgress = true;
     m_templateEditorPage->resetTemplateCaptureState();
+    if (m_previewActive) {
+        m_inspectionApplicationService->stopPreview();
+        m_previewActive = false;
+    }
 
     m_inspectionApplicationService->shutdown();
 
@@ -428,6 +442,61 @@ void MainWindow::handleInspectionAction()
     default:
         break;
     }
+}
+
+void MainWindow::handlePreviewAction()
+{
+    const RuntimeSnapshot snapshot =
+            m_inspectionApplicationService->runtimeSnapshot();
+    switch (operationUiState(snapshot)) {
+    case OperationUiState::CameraReady:
+        startPreviewOnly();
+        break;
+    case OperationUiState::CameraPreviewing:
+        stopPreviewOnly();
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::startPreviewOnly()
+{
+    const OperationResult result = m_inspectionApplicationService->startPreview(
+                m_imageSettingsUi->comboBox_imageRotation->currentIndex(),
+                m_imageSettingsUi->comboBox_colorChannel->currentIndex());
+    if (!result.isSuccess()) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=preview.start_failed code=%1 reason=%2")
+                   .arg(result.error.code, result.error.userMessage);
+        showParameterWarning(
+                    QStringLiteral("实时预览失败"),
+                    result.error.userMessage);
+        return;
+    }
+    m_previewActive = true;
+    updateOperationUiState();
+    qCInfo(logUi).noquote() << "event=preview.started";
+}
+
+void MainWindow::stopPreviewOnly()
+{
+    const OperationResult result =
+            m_inspectionApplicationService->stopPreview();
+    if (!result.isSuccess()) {
+        qCWarning(logUi).noquote()
+                << QStringLiteral(
+                    "event=preview.stop_failed code=%1 reason=%2")
+                   .arg(result.error.code, result.error.userMessage);
+        showParameterWarning(
+                    QStringLiteral("停止实时预览失败"),
+                    result.error.userMessage);
+        return;
+    }
+    m_previewActive = false;
+    updateOperationUiState();
+    qCInfo(logUi).noquote() << "event=preview.stopped";
 }
 
 void MainWindow::closeCamera()

@@ -181,13 +181,13 @@ InspectionApplicationService::InspectionApplicationService(
     qRegisterMetaType<RuntimeSnapshot>("RuntimeSnapshot");
     CameraSessionCallbacks callbacks;
     callbacks.previewFrameReady = [this](const cv::Mat &image) {
-        emit templatePreviewFrameReady(image);
+        emit previewFrameReady(image);
     };
     callbacks.previewFailed = [this](const QString &reason) {
-        emit templatePreviewFailed(reason);
+        emit previewFailed(reason);
     };
-    callbacks.templatePreviewStopped = [this]() {
-        emit templatePreviewStopped();
+    callbacks.previewStopped = [this]() {
+        emit previewStopped();
     };
     callbacks.enterFault = [this](
             InspectionFaultReason reason,
@@ -776,23 +776,23 @@ InspectionApplicationService::applyCameraGain(int gain)
     return m_cameraSession->applyGain(gain);
 }
 
-OperationResult InspectionApplicationService::startTemplatePreview(
+OperationResult InspectionApplicationService::startPreview(
     int rotationCode,
     int colorChannelCode)
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
         return OperationResult::rejected(
-                    QStringLiteral("TEMPLATE_RUNTIME_BUSY"),
+                    QStringLiteral("PREVIEW_RUNTIME_BUSY"),
                     QStringLiteral("当前正在进行正式检测，请先停止识别。"));
     }
     if (!m_cameraSession->isOpen()) {
         return OperationResult::rejected(
-                    QStringLiteral("TEMPLATE_CAMERA_CLOSED"),
+                    QStringLiteral("PREVIEW_CAMERA_CLOSED"),
                     QStringLiteral("请先点击【打开相机】！"));
     }
     if (m_cameraSession->isCapturing()) {
         return OperationResult::rejected(
-                    QStringLiteral("TEMPLATE_CAPTURE_BUSY"),
+                    QStringLiteral("PREVIEW_CAPTURE_BUSY"),
                     QStringLiteral("相机正在采集图像，请先停止检测。"));
     }
     const CameraParameterResultDto exposure =
@@ -800,8 +800,8 @@ OperationResult InspectionApplicationService::startTemplatePreview(
                 m_settings->current().cameraExposure);
     if (!exposure.success) {
         return OperationResult::rejected(
-                    QStringLiteral("TEMPLATE_EXPOSURE_FAILED"),
-                    QStringLiteral("制作模板前应用相机曝光失败。"),
+                    QStringLiteral("PREVIEW_EXPOSURE_FAILED"),
+                    QStringLiteral("开始预览前应用相机曝光失败。"),
                     exposure.diagnostic);
     }
     FramePreprocessSettings settings;
@@ -812,25 +812,25 @@ OperationResult InspectionApplicationService::startTemplatePreview(
     if (!m_cameraSession->startPreview(
             settings, &errorMessage)) {
         return OperationResult::rejected(
-                    QStringLiteral("TEMPLATE_PREVIEW_START_FAILED"),
-                    QStringLiteral("无法开始实时取景，请重试。"),
+                    QStringLiteral("PREVIEW_START_FAILED"),
+                    QStringLiteral("无法开始实时预览，请重试。"),
                     errorMessage);
     }
     return OperationResult::accepted();
 }
 
-OperationResult InspectionApplicationService::stopTemplatePreview()
+OperationResult InspectionApplicationService::stopPreview()
 {
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
         return OperationResult::rejected(
-                    QStringLiteral("TEMPLATE_RUNTIME_BUSY"),
-                    QStringLiteral("当前正在进行正式检测，不能停止模板取景。"));
+                    QStringLiteral("PREVIEW_RUNTIME_BUSY"),
+                    QStringLiteral("当前正在进行正式检测，不能停止预览。"));
     }
     return m_cameraSession->stopPreview()
             ? OperationResult::accepted()
             : OperationResult::rejected(
-                QStringLiteral("TEMPLATE_PREVIEW_STOP_FAILED"),
-                QStringLiteral("实时取景尚未停止，请稍后重试。"));
+                QStringLiteral("PREVIEW_STOP_FAILED"),
+                QStringLiteral("实时预览尚未停止，请稍后重试。"));
 }
 
 bool InspectionApplicationService::hasCurrentCameraImage() const

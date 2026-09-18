@@ -485,6 +485,41 @@
            </widget>
           </item>
           <item>
+           <widget class="QToolButton" name="toolButton_previewAction">
+            <property name="minimumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>76</width>
+              <height>62</height>
+             </size>
+            </property>
+            <property name="toolTip">
+             <string>开始或停止实时预览。</string>
+            </property>
+            <property name="text">
+             <string>预览画面</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../resource/image.qrc">
+              <normaloff>:/svg/preview.svg</normaloff>:/svg/preview.svg</iconset>
+            </property>
+            <property name="iconSize">
+             <size>
+              <width>27</width>
+              <height>27</height>
+             </size>
+            </property>
+            <property name="toolButtonStyle">
+             <enum>Qt::ToolButtonTextUnderIcon</enum>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="horizontalSpacer_mainToolbar">
             <property name="orientation">
              <enum>Qt::Horizontal</enum>

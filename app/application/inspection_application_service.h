@@ -94,10 +94,10 @@ public:
     CameraParameterResultDto queryCameraGainRange();
     CameraParameterResultDto applyCameraExposure(int exposure);
     CameraParameterResultDto applyCameraGain(int gain);
-    OperationResult startTemplatePreview(
+    OperationResult startPreview(
         int rotationCode,
         int colorChannelCode);
-    OperationResult stopTemplatePreview();
+    OperationResult stopPreview();
     bool hasCurrentCameraImage() const;
     cv::Mat currentCameraImageClone() const;
     bool isCameraOpen() const;
@@ -114,9 +114,9 @@ public:
 
 signals:
     void runtimeSnapshotChanged(RuntimeSnapshot snapshot);
-    void templatePreviewFrameReady(cv::Mat image);
-    void templatePreviewFailed(QString reason);
-    void templatePreviewStopped();
+    void previewFrameReady(cv::Mat image);
+    void previewFailed(QString reason);
+    void previewStopped();
 
 private:
     StartInspectionResult rejectStart(

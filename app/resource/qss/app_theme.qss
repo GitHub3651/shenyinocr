@@ -227,6 +227,7 @@ QFrame#frame_mainToolbar {
 
 QToolButton#toolButton_cameraAction,
 QToolButton#toolButton_inspectionAction,
+QToolButton#toolButton_previewAction,
 QGroupBox#groupBox_templateManagement QToolButton {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFFFFF, stop:1 #EDF2F6);
     color: #000000;
@@ -238,6 +239,7 @@ QGroupBox#groupBox_templateManagement QToolButton {
 
 QToolButton#toolButton_cameraAction:hover,
 QToolButton#toolButton_inspectionAction:hover,
+QToolButton#toolButton_previewAction:hover,
 QGroupBox#groupBox_templateManagement QToolButton:hover {
     background: #F6FBFF;
     border-color: #6D9EC4;
@@ -245,6 +247,7 @@ QGroupBox#groupBox_templateManagement QToolButton:hover {
 
 QToolButton#toolButton_cameraAction:pressed,
 QToolButton#toolButton_inspectionAction:pressed,
+QToolButton#toolButton_previewAction:pressed,
 QGroupBox#groupBox_templateManagement QToolButton:pressed {
     background: #DDEAF3;
     border-color: #0E568E;
@@ -252,12 +255,14 @@ QGroupBox#groupBox_templateManagement QToolButton:pressed {
 
 QToolButton#toolButton_cameraAction:focus,
 QToolButton#toolButton_inspectionAction:focus,
+QToolButton#toolButton_previewAction:focus,
 QGroupBox#groupBox_templateManagement QToolButton:focus {
     border-color: #1769AA;
 }
 
 QToolButton#toolButton_cameraAction:disabled,
 QToolButton#toolButton_inspectionAction:disabled,
+QToolButton#toolButton_previewAction:disabled,
 QGroupBox#groupBox_templateManagement QToolButton:disabled {
     background: #EDF1F4;
     color: #909DA8;

@@ -42,9 +42,9 @@ public:
         OperationUiState requestedState,
         const OperationUiSnapshot &snapshot);
     CaptureState captureState() const;
-    bool startTemplatePreview();
+    bool startTemplateCapturePreview();
     bool freezeTemplatePreview();
-    bool stopTemplatePreview(bool writeLog = true);
+    bool stopTemplateCapturePreview(bool writeLog = true);
     void resetTemplateCaptureState(bool writePreviewStopLog = true);
     void handlePreviewFailure(const QString &reason);
 
@@ -74,7 +74,7 @@ public:
 
 signals:
     void operationUiRefreshRequested();
-    void previewFramePresentationRequested(const cv::Mat &image);
+    void templateImagePresentationRequested(const cv::Mat &image);
 
 private:
     void showInfo(const QString &title, const QString &message);

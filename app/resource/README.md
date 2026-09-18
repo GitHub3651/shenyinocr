@@ -20,6 +20,7 @@ resource/
 │  ├─ camera_on.svg          打开相机
 │  ├─ camera_off.svg         关闭相机
 │  ├─ start.svg、stop.svg    识别启停和模板退出
+│  ├─ preview.svg            主工具栏预览画面
 │  ├─ template_*.svg         模板选择、制作和保存
 │  ├─ character_seg.svg      分割字符
 │  ├─ toggle_off.svg         硬触发关闭状态
@@ -70,10 +71,11 @@ resource/
 | `svg/character_seg.svg` | 分割字符 |
 | `svg/start.svg` | 启动识别 |
 | `svg/stop.svg` | 停止识别和退出模板制作 |
+| `svg/preview.svg` | 主工具栏开始或停止实时预览 |
 | `svg/verdict_correct.svg` | OK 判定 |
 | `svg/verdict_wrong.svg` | NG 判定 |
 
-`camera_*.svg` 和 `start.svg`、`stop.svg` 由主工具栏的相机与识别按钮使用；`template_*.svg`、`character_seg.svg` 和 `stop.svg` 由参数设定页“模板管理”分组使用。`stop.svg` 同时服务停止识别和退出模板制作，不建立资源副本。
+`camera_*.svg`、`start.svg`、`stop.svg` 和 `preview.svg` 由主工具栏按钮使用；`template_*.svg`、`character_seg.svg` 和 `stop.svg` 由参数设定页“模板管理”分组使用。`stop.svg` 同时服务停止识别、停止实时预览和退出模板制作，不建立资源副本。
 
 `svg/canvas/canvas_background_grid.svg` 是 32×32 的透明弱网格，只供 `InspectionImageCanvas` 通过正式 QSS 平铺使用。
 
@@ -101,7 +103,8 @@ ApplicationStartup
 └─ 在任何启动消息框之前加载 :/qss/app_theme.qss
 
 main_window.ui
-└─ 使用主工具栏初始图标与 :/svg/navigation/nav_*.svg
+├─ 使用主工具栏相机、识别和预览图标
+└─ 使用 :/svg/navigation/nav_*.svg
 
 detection_settings_page.ui
 └─ 使用“模板管理”分组的模板选择、制作、保存、分割字符和退出图标

@@ -96,7 +96,7 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 ## 操作状态
 
-`OperationUiPolicy` 根据 `CameraClosed/CameraReady/Detecting/Stopping/TemplatePreviewing/TemplateFrozen` 统一计算权限。运行故障对界面统一表现为 `Stopping`，自动停止完成后回到 `CameraReady` 或 `CameraClosed`。UI 禁用用于明确状态展示；真正影响设备和生产运行的操作仍由 Application/Runtime 检查。
+`OperationUiPolicy` 根据 `CameraClosed/CameraReady/CameraPreviewing/Detecting/Stopping/TemplatePreviewing/TemplateFrozen` 统一计算权限。普通预览和模板预览共用应用服务的预览采集能力，普通预览由主工具栏预览按钮控制，模板预览由 `TemplateEditorPage` 控制。运行故障对界面统一表现为 `Stopping`，自动停止完成后回到 `CameraReady` 或 `CameraClosed`。UI 禁用用于明确状态展示；真正影响设备和生产运行的操作仍由 Application/Runtime 检查。
 
 ## 专用控件
 
@@ -112,7 +112,7 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 主窗口保持 1600×950 设计尺寸，主画面顶部是固定 74px 的常驻工具栏，相机和识别两个操作按钮固定为 76×62px、使用 27×27 图标和 16px 文字；相机、PLC 状态及唯一硬触发开关位于工具栏右侧。硬触发 QCheckBox 的勾选状态同时决定滑块图像和控件自身“开/关”文字，无已保存配置时默认关闭。图像/判定保持 `3:1`。最左侧导航栏固定 80px，五个导航按钮固定为 80×80px、使用 28×28 图标并在顶部连续排列，底部伸展项吸收剩余高度；导航按钮无边框和选中蓝条，当前入口由近白背景和蓝色文字表示。导航右侧的五页抽屉与主画面由水平 `QSplitter` 承载，无已保存状态时使用 400px 抽屉宽度，正常关闭时把完整 Splitter 状态保存到 AppSettings Schema 8。
 
-主工具栏相机和识别按钮直接使用 `:/svg/camera_on.svg`、`:/svg/camera_off.svg`、`:/svg/start.svg` 和 `:/svg/stop.svg`；参数页模板管理分组使用三个 `:/svg/template_*.svg`、`:/svg/character_seg.svg` 和 `:/svg/stop.svg`。左侧导航使用 `:/svg/navigation/nav_*.svg`，硬触发 `QCheckBox` 通过正式 QSS 使用 `:/svg/toggle_off.svg` 和 `:/svg/toggle_on.svg`。`VerdictResultLabel` 根据 `DetectionVerdictViewStyle` 将 `:/svg/verdict_correct.svg` 或 `:/svg/verdict_wrong.svg` 按标签当前宽度的 70% 矢量绘制并水平、垂直居中，闲置和清空时不显示内容。`InspectionImageCanvas` 使用 `#202830` 底色，并通过正式 QSS 使用 `:/svg/canvas/canvas_background_grid.svg` 作为静态弱网格背景；`CharacterCropLabel` 使用相同的 `#202830` 纯色底，不使用网格。界面层不生成或换色这些资源。
+主工具栏相机、识别和预览按钮直接使用 `:/svg/camera_on.svg`、`:/svg/camera_off.svg`、`:/svg/start.svg`、`:/svg/stop.svg` 和 `:/svg/preview.svg`；参数页模板管理分组使用三个 `:/svg/template_*.svg`、`:/svg/character_seg.svg` 和 `:/svg/stop.svg`。左侧导航使用 `:/svg/navigation/nav_*.svg`，硬触发 `QCheckBox` 通过正式 QSS 使用 `:/svg/toggle_off.svg` 和 `:/svg/toggle_on.svg`。`VerdictResultLabel` 根据 `DetectionVerdictViewStyle` 将 `:/svg/verdict_correct.svg` 或 `:/svg/verdict_wrong.svg` 按标签当前宽度的 70% 矢量绘制并水平、垂直居中，闲置和清空时不显示内容。`InspectionImageCanvas` 使用 `#202830` 底色，并通过正式 QSS 使用 `:/svg/canvas/canvas_background_grid.svg` 作为静态弱网格背景；`CharacterCropLabel` 使用相同的 `#202830` 纯色底，不使用网格。界面层不生成或换色这些资源。
 
 界面文字只使用 16、18、20、26px 四个字号和常规 400、加重 600 两档字重。普通界面文字为 16px；18px 只用于模板制作向导标题和正文；识别内容和四个统计值为 20px；其他重要信息为 26px。普通正文、说明、单位、只读值和普通标题统一为纯黑色；禁用、主操作、成功、警告、危险和反白文字使用正式 QSS 中的固定角色色。列表、树、表格、下拉弹出项和非原生目录选择框统一通过 `QAbstractItemView` 获得普通与选中文字规则。
 

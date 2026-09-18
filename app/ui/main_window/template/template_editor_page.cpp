@@ -235,11 +235,11 @@ TemplateEditorPage::TemplateEditorPage(
                 new QIntValidator(0, 100,
                                   m_detectionSettingsUi.lineEdit_imageThreshold));
     connect(&m_inspectionService,
-            &InspectionApplicationService::templatePreviewFailed,
+            &InspectionApplicationService::previewFailed,
             this, &TemplateEditorPage::handlePreviewFailure,
             Qt::QueuedConnection);
     connect(&m_inspectionService,
-            &InspectionApplicationService::templatePreviewStopped,
+            &InspectionApplicationService::previewStopped,
             this, [this]() {
         if (m_captureState == CaptureState::Previewing) {
             m_captureState = CaptureState::Idle;
@@ -330,12 +330,12 @@ TemplateEditorPage::CaptureState TemplateEditorPage::captureState() const
     return m_captureState;
 }
 
-bool TemplateEditorPage::stopTemplatePreview(bool writeLog)
+bool TemplateEditorPage::stopTemplateCapturePreview(bool writeLog)
 {
     if (m_captureState != CaptureState::Previewing) {
         return true;
     }
-    const OperationResult result = m_inspectionService.stopTemplatePreview();
+    const OperationResult result = m_inspectionService.stopPreview();
     if (writeLog) {
         if (result.isSuccess()) {
             qCInfo(logTemplate).noquote()
@@ -352,16 +352,16 @@ bool TemplateEditorPage::stopTemplatePreview(bool writeLog)
 
 void TemplateEditorPage::resetTemplateCaptureState(bool writePreviewStopLog)
 {
-    if (!stopTemplatePreview(writePreviewStopLog)) {
+    if (!stopTemplateCapturePreview(writePreviewStopLog)) {
         return;
     }
     m_captureState = CaptureState::Idle;
     emit operationUiRefreshRequested();
 }
 
-bool TemplateEditorPage::startTemplatePreview()
+bool TemplateEditorPage::startTemplateCapturePreview()
 {
-    const OperationResult result = m_inspectionService.startTemplatePreview(
+    const OperationResult result = m_inspectionService.startPreview(
                 m_imageSettingsUi.comboBox_imageRotation->currentIndex(),
                 m_imageSettingsUi.comboBox_colorChannel->currentIndex());
     if (!result.isSuccess()) {
@@ -393,14 +393,14 @@ bool TemplateEditorPage::freezeTemplatePreview()
                  QStringLiteral("相机尚未返回有效画面，请稍候再点击。"));
         return false;
     }
-    if (!stopTemplatePreview()) {
+    if (!stopTemplateCapturePreview()) {
         showWarning(QStringLiteral("提示"),
                     QStringLiteral("实时取景尚未停止，请稍后重试。"));
         return false;
     }
     const cv::Mat image = m_inspectionService.currentCameraImageClone();
     m_captureState = CaptureState::Frozen;
-    emit previewFramePresentationRequested(image);
+    emit templateImagePresentationRequested(image);
     DetectionMode mode = DetectionMode::Stamp;
     detectionModeFromUiId(currentDetectModeId(), &mode);
     clearBarcodeTemplateValidation();
@@ -432,7 +432,7 @@ void TemplateEditorPage::handleTemplateCaptureButton()
             return;
         }
     }
-    startTemplatePreview();
+    startTemplateCapturePreview();
 }
 
 void TemplateEditorPage::handlePreviewFailure(
@@ -588,7 +588,7 @@ bool TemplateEditorPage::loadTemplateAtIndex(
     const EditableTemplate &editable = m_templateService.draft();
     applyTemplateSettingsToUi(editable.settings);
     if (!editable.rawImage.empty()) {
-        emit previewFramePresentationRequested(editable.rawImage);
+        emit templateImagePresentationRequested(editable.rawImage);
         showTemplateImageSource(templateName);
     } else {
         hideTemplateGuide();

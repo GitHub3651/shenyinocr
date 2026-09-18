@@ -59,6 +59,8 @@ QString runtimeUiState(OperationUiState state)
         return QStringLiteral("idle");
     case OperationUiState::CameraReady:
         return QStringLiteral("ready");
+    case OperationUiState::CameraPreviewing:
+        return QStringLiteral("running");
     case OperationUiState::Detecting:
         return QStringLiteral("running");
     case OperationUiState::Stopping:
@@ -165,6 +167,15 @@ void InspectionPage::applyOperationState(
     applyOperationUiAccess(
                 m_mainWindowUi.toolButton_inspectionAction,
                 operationUi.inspectionAction);
+    m_mainWindowUi.toolButton_previewAction->setText(
+                operationUi.previewActionText);
+    m_mainWindowUi.toolButton_previewAction->setIcon(QIcon(
+                requestedState == OperationUiState::CameraPreviewing
+                ? QStringLiteral(":/svg/stop.svg")
+                : QStringLiteral(":/svg/preview.svg")));
+    applyOperationUiAccess(
+                m_mainWindowUi.toolButton_previewAction,
+                operationUi.previewAction);
     if (!operationUi.statusText.isEmpty()) {
         m_inspectionInfoUi.label_runtimeStatus->setText(operationUi.statusText);
     }

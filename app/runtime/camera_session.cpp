@@ -473,7 +473,7 @@ bool CameraSession::startPreview(
     if (!m_captureWorker.start(CaptureMode::Preview, callbacks)) {
         m_preview = false;
         if (errorMessage) {
-            *errorMessage = QStringLiteral("无法开始实时取景，请重试。");
+            *errorMessage = QStringLiteral("无法开始实时预览，请重试。");
         }
         return false;
     }
@@ -603,7 +603,7 @@ void CameraSession::handleCaptureError(
                 ? QStringLiteral(
                     "连续3次等待相机图像超时，请检查相机连接和触发设置。")
                 : cameraErrorText(
-                    QStringLiteral("模板实时取景失败"),
+                        QStringLiteral("实时预览失败"),
                     nativeErrorCode);
         qCWarning(logDevice).noquote()
                 << QStringLiteral(
@@ -648,8 +648,8 @@ void CameraSession::handleCaptureStopped()
                     : QStringLiteral("inspection"));
     const CameraSessionCallbacks callbacks = callbacksSnapshot();
     if (preview) {
-        if (callbacks.templatePreviewStopped) {
-            callbacks.templatePreviewStopped();
+        if (callbacks.previewStopped) {
+            callbacks.previewStopped();
         }
     } else if (callbacks.enterFault) {
         callbacks.enterFault(
