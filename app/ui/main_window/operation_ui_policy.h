@@ -45,6 +45,7 @@ struct OperationUiSnapshot
     QString previewActionText;
     QString templateCaptureText;
     QString statusText;
+    QString statusUiState;
 };
 
 struct OperationUiContext
@@ -52,6 +53,7 @@ struct OperationUiContext
     OperationUiState state = OperationUiState::CameraClosed;
     bool cameraOpen = false;
     bool plcConnected = false;
+    bool hardwareTriggerEnabled = false;
 };
 
 class OperationUiPolicy

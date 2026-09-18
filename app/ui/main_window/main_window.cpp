@@ -159,15 +159,6 @@ MainWindow::MainWindow(
     Qt::QueuedConnection);
     connect(
         m_runtime,
-        &InspectionRuntime::imageSaveFailed,
-        this,
-        [this](quint64 totalFailed, const QString &latestError) {
-        m_inspectionPage->reportImageSaveFailure(
-                    totalFailed, latestError);
-    },
-    Qt::QueuedConnection);
-    connect(
-        m_runtime,
         &InspectionRuntime::faultSnapshotChanged,
         this,
         [this](const InspectionFaultSnapshot &snapshot) {
@@ -259,7 +250,7 @@ void MainWindow::hideLeftDrawer()
 void MainWindow::initializePages()
 {
     m_inspectionPage.reset(new InspectionPage(
-                *this, *ui, *m_inspectionInfoUi));
+                *ui, *m_inspectionInfoUi));
     m_machineSettingsPage.reset(new MachineSettingsPage(
                 *m_detectionSettingsUi,
                 *m_imageSettingsUi,

@@ -132,7 +132,6 @@ public:
 
 signals:
     void presentationReady(InspectionPresentation presentation);
-    void imageSaveFailed(quint64 totalFailed, QString latestError);
     void faultSnapshotChanged(InspectionFaultSnapshot snapshot);
 
 private:
@@ -140,9 +139,6 @@ private:
 
     bool publishPresentation(
         const InspectionPresentation &presentation);
-    void publishImageSaveFailure(
-        quint64 totalFailed,
-        const QString &latestError);
 
 private slots:
     void drainPresentationMailbox();

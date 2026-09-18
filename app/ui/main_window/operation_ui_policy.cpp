@@ -153,22 +153,36 @@ OperationUiSnapshot OperationUiPolicy::create(
 
     switch (state) {
     case OperationUiState::CameraClosed:
+        snapshot.statusText = QStringLiteral("相机已关闭");
+        snapshot.statusUiState = QStringLiteral("idle");
         break;
     case OperationUiState::CameraReady:
+        snapshot.statusText = QStringLiteral("相机已打开");
+        snapshot.statusUiState = QStringLiteral("ready");
         break;
     case OperationUiState::CameraPreviewing:
         snapshot.statusText = QStringLiteral("实时预览中");
+        snapshot.statusUiState = QStringLiteral("running");
         break;
     case OperationUiState::Detecting:
+        snapshot.statusText = context.hardwareTriggerEnabled
+                ? QStringLiteral("硬触发模式运行中")
+                : QStringLiteral("软触发模式运行中");
+        snapshot.statusUiState = QStringLiteral("running");
+        break;
     case OperationUiState::Stopping:
+        snapshot.statusText = QStringLiteral("正在停止识别");
+        snapshot.statusUiState = QStringLiteral("stopping");
         break;
     case OperationUiState::TemplatePreviewing:
         snapshot.statusText = QStringLiteral(
                     "模板制作中：实时取景");
+        snapshot.statusUiState = QStringLiteral("warning");
         break;
     case OperationUiState::TemplateFrozen:
         snapshot.statusText = QStringLiteral(
                     "模板制作中：请完成框选并保存");
+        snapshot.statusUiState = QStringLiteral("warning");
         break;
     }
     return snapshot;

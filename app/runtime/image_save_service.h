@@ -4,7 +4,6 @@
 
 #include <QByteArray>
 #include <QImage>
-#include <QObject>
 #include <QString>
 
 #include <condition_variable>
@@ -65,10 +64,8 @@ struct ImageSaveSubmitResult {
     }
 };
 
-class ImageSaveService : public QObject
+class ImageSaveService
 {
-    Q_OBJECT
-
 public:
     using WriteFunction = std::function<bool(
         const ImageSaveItem &item,
@@ -77,16 +74,12 @@ public:
     explicit ImageSaveService(
         std::size_t capacity = 32,
         const WriteFunction &writeFunction = WriteFunction(),
-        std::size_t workerCount = 2,
-        QObject *parent = nullptr);
-    ~ImageSaveService() override;
+        std::size_t workerCount = 2);
+    ~ImageSaveService();
 
     ImageSaveSubmitResult submit(const ImageSaveTask &task);
     std::size_t capacity() const;
     void shutdown();
-
-signals:
-    void taskFailed(quint64 totalFailed, QString latestError);
 
 private:
     static bool writeImage(

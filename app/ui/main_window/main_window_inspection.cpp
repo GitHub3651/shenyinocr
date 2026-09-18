@@ -14,7 +14,6 @@
 
 #include <QTimer>
 #include <QFileDialog>
-#include <QLabel>
 #include <QLineEdit>
 #include <QString>
 #include <QMessageBox>
@@ -132,7 +131,6 @@ void MainWindow::finishInspectionStopUi(
         m_machineSettingsPage->refreshDirty("camera.exposure");
     } else if (cameraRecovery.isRecovered()
                && cameraRecovery.recoveryAttempted) {
-        m_inspectionInfoUi->label_runtimeStatus->setText("相机已打开");
         if (!cameraRecovery.adjustmentMessage.isEmpty()) {
             QMessageBox::information(
                         this,
@@ -143,7 +141,6 @@ void MainWindow::finishInspectionStopUi(
 
     m_templateEditorPage->cancelTemplateDrawing();
     m_inspectionPage->setStatistics(m_runtime->statistics());
-    m_inspectionInfoUi->label_runtimeStatus->setText("已停止");
     updateOperationUiState();
 }
 
@@ -222,6 +219,7 @@ void MainWindow::updateOperationUiState()
     context.state = operationUiState(runtime);
     context.cameraOpen = runtime.cameraOpen;
     context.plcConnected = runtime.plcConnected;
+    context.hardwareTriggerEnabled = machineSettings().triggerEnabled;
     const OperationUiSnapshot snapshot =
             OperationUiPolicy::create(context);
 
@@ -520,7 +518,6 @@ void MainWindow::closeCamera()
     m_inspectionPage->clearInspectionView(
                 InspectionClearScope::AllDetectionData);
     m_templateEditorPage->resetTemplateCaptureState();
-    m_inspectionInfoUi->label_runtimeStatus->setText("相机已关闭");
     updateOperationUiState();
 }
 
@@ -572,11 +569,6 @@ void MainWindow::startInspection()
                     QStringLiteral("部分模板已跳过"),
                     result.details.join(QStringLiteral("\n")));
     }
-    m_inspectionInfoUi->label_runtimeStatus->setText(
-                result.acquisitionKind
-                == InspectionAcquisitionDto::HardwareTrigger
-                ? "硬触发模式运行中"
-                : "软触发模式运行中");
     updateOperationUiState();
 }
 
@@ -591,10 +583,6 @@ void MainWindow::exitTemplate()
 {
     m_templateEditorPage->resetTemplateCaptureState();
     m_templateEditorPage->cancelTemplateDrawing();
-    m_inspectionInfoUi->label_runtimeStatus->setText(
-                isCameraOpen()
-                ? QStringLiteral("已退出模板制作，相机已打开")
-                : QStringLiteral("已退出模板制作，相机已关闭"));
     updateOperationUiState();
 }
 
@@ -671,7 +659,6 @@ void MainWindow::openCamera()
     }
     m_machineSettingsPage->refreshDirty("camera.exposure");
 
-    m_inspectionInfoUi->label_runtimeStatus->setText("相机已打开");
     updateOperationUiState();
     const QString openMessage = openResult.adjustmentMessage.isEmpty()
             ? QString("相机打开成功！")

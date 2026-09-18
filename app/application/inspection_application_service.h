@@ -20,13 +20,6 @@ class TemplateStore;
 class SettingsApplicationService;
 enum class InspectionFaultReason;
 
-enum class InspectionAcquisitionDto
-{
-    SoftwareTrigger,
-    HardwareTrigger
-};
-
-
 struct StartInspectionCommand
 {
     QStringList unappliedChanges;
@@ -37,8 +30,6 @@ struct StartInspectionResult
     InspectionStartIssue issue = InspectionStartIssue::None;
     ApplicationError error;
     QStringList details;
-    InspectionAcquisitionDto acquisitionKind =
-            InspectionAcquisitionDto::SoftwareTrigger;
 
     bool isAccepted() const
     {

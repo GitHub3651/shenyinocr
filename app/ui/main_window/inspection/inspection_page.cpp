@@ -2,7 +2,6 @@
 
 #include "ui/main_window/inspection_image_canvas.h"
 #include "ui/main_window/verdict_result_label.h"
-#include "system_support/logging/log_categories.h"
 #include "ui_inspection_info_page.h"
 #include "ui_main_window.h"
 
@@ -12,7 +11,6 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QStyle>
-#include <QTimer>
 #include <QVariant>
 #include <QWidget>
 
@@ -52,34 +50,12 @@ void setStyleProperty(
     widget.update();
 }
 
-QString runtimeUiState(OperationUiState state)
-{
-    switch (state) {
-    case OperationUiState::CameraClosed:
-        return QStringLiteral("idle");
-    case OperationUiState::CameraReady:
-        return QStringLiteral("ready");
-    case OperationUiState::CameraPreviewing:
-        return QStringLiteral("running");
-    case OperationUiState::Detecting:
-        return QStringLiteral("running");
-    case OperationUiState::Stopping:
-        return QStringLiteral("stopping");
-    case OperationUiState::TemplatePreviewing:
-    case OperationUiState::TemplateFrozen:
-        return QStringLiteral("warning");
-    }
-    return QStringLiteral("idle");
-}
-
 } // namespace
 
 InspectionPage::InspectionPage(
-    QWidget &rootWidget,
     Ui::MainWindow &mainWindowUi,
     Ui::InspectionInfoPage &inspectionInfoUi)
-    : m_rootWidget(rootWidget),
-      m_mainWindowUi(mainWindowUi),
+    : m_mainWindowUi(mainWindowUi),
       m_inspectionInfoUi(inspectionInfoUi)
 {
 }
@@ -91,11 +67,6 @@ void InspectionPage::present(const InspectionPresentation &presentation)
     }
     const QPixmap pixmap = QPixmap::fromImage(presentation.image);
     m_mainWindowUi.inspectionImageCanvas->setAutoFitPixmap(pixmap);
-    if (!m_mainWindowUi.inspectionImageCanvas->isTemplateDrawingEnabled()) {
-        setLabelTextIfChanged(
-                    *m_inspectionInfoUi.label_runtimeStatus,
-                    QStringLiteral("正在显示相机采集图像..."));
-    }
     m_mainWindowUi.label_verdictResult->showVerdict(
                 presentation.verdictStyle);
     setLabelTextIfChanged(
@@ -176,44 +147,9 @@ void InspectionPage::applyOperationState(
     applyOperationUiAccess(
                 m_mainWindowUi.toolButton_previewAction,
                 operationUi.previewAction);
-    if (!operationUi.statusText.isEmpty()) {
-        m_inspectionInfoUi.label_runtimeStatus->setText(operationUi.statusText);
-    }
-    const bool keepDetectionWarning =
-            requestedState == OperationUiState::Detecting
-            && m_inspectionInfoUi.label_runtimeStatus->property("uiState").toString()
-               == QStringLiteral("warning")
-            && operationUi.statusText.isEmpty();
-    if (!keepDetectionWarning) {
-        setStyleProperty(
-                    *m_inspectionInfoUi.label_runtimeStatus,
-                    "uiState",
-                    runtimeUiState(requestedState));
-    }
-}
-
-void InspectionPage::reportImageSaveFailure(
-    quint64 totalFailed,
-    const QString &)
-{
-    m_imageSaveFailedCount = totalFailed;
-    if (m_imageSaveWarningScheduled) {
-        return;
-    }
-    m_imageSaveWarningScheduled = true;
-    QTimer::singleShot(250, &m_rootWidget, [this]() {
-        m_imageSaveWarningScheduled = false;
-        QString warningText = m_imageSaveFailedCount == 0
-                ? QString::fromWCharArray(L"保存失败：未采集到标注图像。")
-                : QString::fromWCharArray(
-                    L"保存图像失败：累计 %1 个任务。"
-                    L"请检查保存文件夹、权限和磁盘空间。")
-                .arg(m_imageSaveFailedCount);
-        m_inspectionInfoUi.label_runtimeStatus->setWordWrap(true);
-        m_inspectionInfoUi.label_runtimeStatus->setText(warningText);
-        setStyleProperty(
-                    *m_inspectionInfoUi.label_runtimeStatus,
-                    "uiState",
-                    QStringLiteral("warning"));
-    });
+    m_inspectionInfoUi.label_runtimeStatus->setText(operationUi.statusText);
+    setStyleProperty(
+                *m_inspectionInfoUi.label_runtimeStatus,
+                "uiState",
+                operationUi.statusUiState);
 }

@@ -266,7 +266,7 @@ app/runtime/camera_session.h
 2. `CameraSession` 直接返回这套唯一合同，删除 `InspectionCameraOpenIssue`、`InspectionCameraParameterResult`、`InspectionCameraOpenResult`、`InspectionCameraRecoveryIssue` 和 `InspectionCameraRecoveryResult`，不保留别名或转发类型。
 3. `InspectionApplicationService` 保留 `OpenCameraResult` 用例级组合结果；停止接口直接返回 `CameraRecoveryResultDto`，其相机字段使用唯一合同。
 4. 删除 `cameraParameterDto()`、`cameraOpenIssueDto()`、`cameraOpenDto()`、`cameraRecoveryIssueDto()`、`cameraRecoveryDto()` 等机械复制函数。
-5. `InspectionAcquisitionDto` 只表示一次检测启动采用软件触发还是硬件触发，不属于相机操作结果；将它原样移入现有 `inspection_application_service.h`，保持枚举值、结果字段和 MainWindow 显示逻辑不变。
+5. 检测运行状态文字直接使用当前已应用的硬触发设置生成，不在启动结果中保存第二份采集类型数据。
 6. `CameraSession` 同步停止采集，仅保留恢复预览所需的局部状态，不为停止结果增加跨层类型。
 7. 删除 `app/application/camera_application_contract.h` 及工程条目、include，不保留转发头。
 8. 保留 Application 的用户错误、PLC 组合结果和 RuntimeSnapshot；不把整个 CameraSession 暴露给 UI。
@@ -295,7 +295,7 @@ app/ui/main_window/main_window_settings.cpp
 app/AutoOCRproject.pro
 ```
 
-不新增第二个并行合同文件；旧路径必须零引用且不保留转发头。`InspectionAcquisitionDto` 只移动定义位置，不改名、不复制。
+不新增第二个并行合同文件；旧路径必须零引用且不保留转发头。检测启动结果只保留启动问题、错误和明细。
 
 ## 8. 第四阶段：保持参数页现有实现
 
@@ -726,7 +726,7 @@ docs/development/OCRGangYin计划索引.md
 - 相机打开、参数和恢复结果各只有一套类型；
 - `cameraParameterDto`、`cameraOpenIssueDto`、`cameraOpenDto`、`cameraRecoveryIssueDto`、`cameraRecoveryDto` 零引用；
 - 旧合同文件路径零引用且不保留转发头；
-- `InspectionAcquisitionDto` 只在 `inspection_application_service.h` 定义一次，现有软件/硬件触发枚举值和消费路径不变；
+- 检测状态文字直接读取当前已应用的硬触发设置，不保留采集类型 DTO、结果字段或转换函数；
 - 共享合同不 include QWidget、相机 SDK、Runtime 实现或 Detection；
 - Application 的组合结果和 MainWindow 相机命令调用仍闭环；
 - 曝光和增益失败继续只有现有一条包含原生错误码与 `diagnostic` 的 `logDevice` 记录；停止后恢复曝光失败只补写一条包含现有 `errorMessage` 的 `logDevice` 记录；随后显示对应固定操作员提示；

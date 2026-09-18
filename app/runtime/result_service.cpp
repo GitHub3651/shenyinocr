@@ -122,13 +122,6 @@ ResultService::ResultService(
             &QTimer::timeout,
             this,
             &ResultService::resetPlcPulse);
-    connect(m_imageSaveService.get(),
-            &ImageSaveService::taskFailed,
-            this,
-            [this](quint64 totalFailed, const QString &latestError) {
-        m_runtime.publishImageSaveFailure(totalFailed, latestError);
-    },
-    Qt::QueuedConnection);
 }
 
 ResultService::~ResultService()
@@ -511,9 +504,6 @@ bool ResultService::submitImageSave(
         if (saveAnnotated) {
             if (annotatedImage.isNull()) {
                 annotatedImageMissing = true;
-                m_runtime.publishImageSaveFailure(
-                            0,
-                            QStringLiteral("未采集到标注图像。"));
             } else {
                 task.items.push_back(saveItem(
                     annotatedImage,

@@ -736,13 +736,6 @@ bool InspectionRuntime::publishPresentation(
     return true;
 }
 
-void InspectionRuntime::publishImageSaveFailure(
-    quint64 totalFailed,
-    const QString &latestError)
-{
-    emit imageSaveFailed(totalFailed, latestError);
-}
-
 void InspectionRuntime::drainPresentationMailbox()
 {
     m_wakePosted.store(false);

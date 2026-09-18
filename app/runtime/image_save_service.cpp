@@ -47,10 +47,8 @@ QImage frameImage(const cv::Mat &image)
 ImageSaveService::ImageSaveService(
     std::size_t capacity,
     const WriteFunction &writeFunction,
-    std::size_t workerCount,
-    QObject *parent)
-    : QObject(parent),
-      m_capacity(capacity > 0 ? capacity : 1),
+    std::size_t workerCount)
+    : m_capacity(capacity > 0 ? capacity : 1),
       m_workerCount(workerCount > 0 ? workerCount : 1),
       m_writeFunction(writeFunction ? writeFunction : &ImageSaveService::writeImage)
 {
@@ -240,7 +238,6 @@ void ImageSaveService::workerLoop()
                            .arg(totalFailed)
                            .arg(latestError);
             }
-            emit taskFailed(totalFailed, latestError);
         }
     }
 }

@@ -3,7 +3,7 @@
 ## 1. 文档状态与最终决策
 
 - 状态：架构设计和代码实施规则已由用户确认；四个代码阶段已完成并分别提交，尚待用户在 Qt Creator 统一构建、运行和现场验证。
-- 更新日期：2026-08-23。
+- 更新日期：2026-09-19。
 - 本文只定义目标架构、明确决策、实施顺序和验收门禁，不代表生产代码已经修改、构建或现场验证。
 - 适用范围：`app/application`、`app/contracts`、`app/runtime`、`app/detection`、`app/ui` 中与检测运行、结果呈现和模板预览有关的边界。
 - 保护范围：不改变已验证的模板终局、五种检测模式行为、PLC 时序、存图合同、设备安全和故障自动停止合同。
@@ -23,7 +23,7 @@
 11. `InspectionPresentationRenderer` 保留为纯图像/数据转换器，删除其 ViewBindings、控件回调和所有 `showXxx()` 方法。
 12. `InspectionRuntime::resultService()` 在本轮重构的末尾删除；先迁移真实调用，不长期保留，也不为隐藏它无原则增加 Runtime 转发接口。
 13. 删除 Application 的 `clearResultView()`、`clearTransientView()`；Runtime 在生命周期内清理后台呈现状态，Page 只清理自己明确的结果区域或临时提示。
-14. 存图失败和 ROI 警告改为少量简单数据 signal；Runtime Fault 复用 Runtime 的既有故障数据。不得增加 EventBus、告警管理器或每类告警一个复杂 Snapshot。
+14. 存图失败只记录现有日志，不进入运行状态标签，也不发布 UI signal；ROI 警告使用简单数据 signal，Runtime Fault 复用既有故障数据。不得增加 EventBus、告警管理器或复杂告警 Snapshot。
 15. 模板预览继续走独立预览链，不伪装成生产结果。
 16. `CameraSession` 已位于 `app/runtime`；本次不移动文件、不重构内部实现、不改变正式采集流程。
 17. 本次不引入 `DetectionRunPolicy`，也不预先承诺未来引入；现有策略字段继续保留在 `DetectionResult`。
@@ -280,8 +280,6 @@ Runtime 对外只发布以下纯数据 signal：
 ```cpp
 signals:
     void presentationReady(InspectionPresentation presentation);
-    void imageSaveFailed(quint64 totalFailed,
-                         const QString &latestError);
     void roiWarningChanged(bool active);
     void faultSnapshotChanged(InspectionFaultSnapshot snapshot);
 ```
@@ -300,7 +298,7 @@ connect(
     });
 ```
 
-同样，MainWindow 接收 `imageSaveFailed(totalFailed, latestError)` 和 `roiWarningChanged(active)` 后，再调用 `InspectionPage` 的显示方法；缺少标注图也归入 `imageSaveFailed`，不新增单独信号。MainWindow 直接连接 `faultSnapshotChanged(InspectionFaultSnapshot)`，立即调用现有停止链；停止完成后显示一次固定警告，不创建第二份故障 DTO。
+MainWindow 接收 `roiWarningChanged(active)` 后调用 `InspectionPage` 的显示方法。存图失败只保留现有日志，不进入运行状态标签或新增其他 UI 通知。MainWindow 直接连接 `faultSnapshotChanged(InspectionFaultSnapshot)`，立即调用现有停止链；停止完成后显示一次固定警告，不创建第二份故障 DTO。
 
 不使用 `PresentationSink`、`setPresentationSink()`、`clearPresentationSink()` 或任何 Runtime 保存的 `std::function` 数据出口。唯一允许使用连接 Lambda 的位置是 MainWindow 的 UI 装配代码；该 Lambda 由 Qt 连接和 MainWindow 生命周期管理，不被后台层保存。
 
@@ -310,8 +308,6 @@ Runtime 的内部数据出口固定为：
 
 ```cpp
 bool publishPresentation(const InspectionPresentation &presentation);
-void publishImageSaveFailure(quint64 totalFailed,
-                             const QString &latestError);
 void publishRoiWarning(bool active);
 ```
 
@@ -596,7 +592,7 @@ Camera/PLC：拥有设备适配
 | Command | UI → Application/Runtime | 操作者要求系统执行一次动作 | 启动、停止请求 |
 | Snapshot | Application/Runtime → UI | 某一时刻的状态复制 | `RuntimeSnapshot`、`InspectionFaultSnapshot` |
 | Presentation | ResultService → UI | 一个产品最终要显示的完整结果 | `InspectionPresentation` |
-| Notification | Runtime → UI | 一次警告、故障或异步失败事件 | `imageSaveFailed(count, error)` |
+| Notification | Runtime → UI | 一次仍需界面呈现的告警事件 | `roiWarningChanged(active)` |
 
 Command 不保存控件，Snapshot/Presentation/Notification 不保存函数。只有 UI 层的 Qt `connect()` 可以使用 Lambda 做装配；后台模块不能保存指向 Page 的 Lambda。
 
@@ -773,7 +769,7 @@ acceptFrame / submitDetectionFrame
 statistics / requiresPlcForRun / resetStatistics / resetNgCount
 clearPendingDelayedNgRequests
 presentPreviewFrame
-presentationReady / imageSaveFailed / roiWarningChanged / faultSnapshotChanged
+presentationReady / roiWarningChanged / faultSnapshotChanged
 ```
 
 Runtime 不公开：
@@ -863,7 +859,7 @@ reset / shutdown
 | `InspectionViewBindingsDto` | `InspectionPresentation` | 删除回调 DTO，使用纯数据 |
 | `InspectionPresentationViewBindings` | 无 | 删除第二层回调包装 |
 | `ResultService::bindView()` | `Runtime::presentationReady` | 删除绑定；ResultService 将完整 Presentation 交给 Runtime |
-| `ResultServiceCallbacks` / `InspectionUiCallbacks` | Runtime 的简单数据 signal | 删除 UI 回调；存图失败和 ROI 状态以数据通知 |
+| `ResultServiceCallbacks` / `InspectionUiCallbacks` | Runtime 的简单数据 signal | 删除 UI 回调；ROI 状态以数据通知，存图失败写日志 |
 | `Renderer::m_viewBindings` | `Renderer` 纯状态 | 删除 UI 回调成员 |
 | `UiCompletionMailbox::Work` | `InspectionPresentation` | 载荷数据化、非阻塞、最新替换 |
 | `m_runtime->resultService().statistics()` | `m_runtime->statistics()` | 提升为业务语义查询 |
@@ -963,11 +959,11 @@ ResultService 提交前必须检查当前 Run 是否仍有效。Runtime 进入 S
 
 ```cpp
 // Runtime 对 MainWindow 发布。
-void imageSaveFailed(quint64 totalFailed,
-                     const QString &latestError);
 void roiWarningChanged(bool active);
 void faultSnapshotChanged(InspectionFaultSnapshot snapshot);
 ```
+
+存图失败由现有日志记录，不发布 Runtime → UI 通知，也不占用运行状态标签。
 
 通知流固定为：
 

@@ -523,7 +523,7 @@ QPushButton#pushButton_resetRejectQueue:disabled {
 
 /* 10. 运行状态与判定 */
 QLabel#label_runtimeStatus {
-    background-color: #EEF1F4;
+    background-color: transparent;
     color: #000000;
     border: 1px solid #B8C4CE;
     padding: 10px;
@@ -532,28 +532,20 @@ QLabel#label_runtimeStatus {
 }
 
 QLabel#label_runtimeStatus[uiState="idle"] {
-    background-color: #EEF1F4;
     color: #000000;
-    border-color: #C8D1D9;
 }
 
 QLabel#label_runtimeStatus[uiState="ready"] {
-    background-color: #EAF6EF;
     color: #17834C;
-    border-color: #A8D4BC;
 }
 
 QLabel#label_runtimeStatus[uiState="running"] {
-    background-color: #EAF3FA;
     color: #1769AA;
-    border-color: #A8C9E2;
 }
 
 QLabel#label_runtimeStatus[uiState="stopping"],
 QLabel#label_runtimeStatus[uiState="warning"] {
-    background-color: #FFF4E3;
     color: #C98218;
-    border-color: #E9CAA0;
 }
 
 QLabel#label_verdictResult {

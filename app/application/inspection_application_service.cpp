@@ -156,14 +156,6 @@ QString startIssueMessage(InspectionStartIssue issue)
     }
 }
 
-InspectionAcquisitionDto acquisitionDto(
-        bool hardwareTriggerEnabled)
-{
-    return hardwareTriggerEnabled
-            ? InspectionAcquisitionDto::HardwareTrigger
-            : InspectionAcquisitionDto::SoftwareTrigger;
-}
-
 } // namespace
 
 InspectionApplicationService::InspectionApplicationService(
@@ -450,7 +442,6 @@ StartInspectionResult InspectionApplicationService::start(
     publishSnapshot();
     StartInspectionResult result;
     result.details = templateWarnings;
-    result.acquisitionKind = acquisitionDto(hardwareTriggerEnabled);
     return result;
 }
 
