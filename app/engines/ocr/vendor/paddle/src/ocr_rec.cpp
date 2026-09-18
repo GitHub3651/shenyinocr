@@ -124,12 +124,12 @@ cv::Mat CRNNRecognizer::GetRotateCropImage(
         cv::Point2f(static_cast<float>(box[3][0]),
                     static_cast<float>(box[3][1]))
     };
-    const float width = std::max(
+    const float width = static_cast<float>(std::max(
                 cv::norm(points[0] - points[1]),
-                cv::norm(points[2] - points[3]));
-    const float height = std::max(
+                cv::norm(points[2] - points[3])));
+    const float height = static_cast<float>(std::max(
                 cv::norm(points[0] - points[3]),
-                cv::norm(points[1] - points[2]));
+                cv::norm(points[1] - points[2])));
     const int outputWidth = std::max(1, static_cast<int>(width));
     const int outputHeight = std::max(1, static_cast<int>(height));
     const std::vector<cv::Point2f> destination = {

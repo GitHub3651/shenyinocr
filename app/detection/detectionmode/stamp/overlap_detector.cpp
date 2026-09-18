@@ -240,15 +240,15 @@ DetectResult OverlapDetector::processImage(const cv::Mat& bgrImage, const std::v
     // 从 47 个角度中，提取出 16 个代表性角度（每隔 6 度抽样一次）
     std::vector<int> searchIndices;
     for (size_t i = 0; i < preRotatedRingsSmall.size(); i += 3) {
-        searchIndices.push_back(i);
+        searchIndices.push_back(static_cast<int>(i));
     }
     // 把最后边界也加进去
-    if (searchIndices.back() != preRotatedRingsSmall.size() - 1) {
-        searchIndices.push_back(preRotatedRingsSmall.size() - 1);
+    if (searchIndices.back() != static_cast<int>(preRotatedRingsSmall.size() - 1)) {
+        searchIndices.push_back(static_cast<int>(preRotatedRingsSmall.size() - 1));
     }
 
     // 只让多线程去匹配这 16 个代表性角度，运算量瞬间下降 60%
-    cv::parallel_for_(cv::Range(0, searchIndices.size()), [&](const cv::Range& range) {
+    cv::parallel_for_(cv::Range(0, static_cast<int>(searchIndices.size())), [&](const cv::Range& range) {
         double localBestVal = -1.0;
         cv::Point localBestLoc;
         int localBestIdx = -1;
