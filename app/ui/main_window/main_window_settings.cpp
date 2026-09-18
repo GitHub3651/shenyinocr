@@ -67,7 +67,7 @@ void MainWindow::updateTissueRoughnessUiVisibility()
     m_detectionSettingsUi->lineEdit_imageThreshold->setVisible(showImageThreshold);
     m_detectionSettingsUi->label_imageThresholdUnit->setVisible(showImageThreshold);
     m_detectionSettingsUi->pushButton_applyImageThreshold->setVisible(showImageThreshold);
-    m_detectionSettingsUi->toolButton_editCharacterTemplates->setVisible(
+    m_detectionSettingsUi->pushButton_editCharacterTemplates->setVisible(
                 showCharacterSettings);
     m_detectionSettingsUi->label_tissueRoughnessThreshold->setVisible(showTissueThreshold);
     m_detectionSettingsUi->lineEdit_tissueRoughnessThreshold->setVisible(showTissueThreshold);

@@ -33,8 +33,8 @@
        <rect>
         <x>0</x>
         <y>0</y>
-        <width>357</width>
-        <height>761</height>
+        <width>340</width>
+        <height>846</height>
        </rect>
       </property>
       <layout class="QGridLayout" name="gridLayout_detectionSettings">
@@ -68,64 +68,29 @@
            </widget>
           </item>
          </layout>
-       </widget>
-      </item>
+        </widget>
+       </item>
        <item row="1" column="0">
         <widget class="QGroupBox" name="groupBox_templateManagement">
          <property name="title">
           <string>模板管理</string>
          </property>
-         <layout class="QGridLayout" name="gridLayout_templateManagement">
-          <property name="horizontalSpacing">
-           <number>2</number>
+         <layout class="QGridLayout" name="gridLayout_templateManagement" columnstretch="1,1">
+          <property name="spacing">
+           <number>8</number>
           </property>
-          <item row="1" column="0">
-           <widget class="QToolButton" name="toolButton_selectTemplate">
+          <item row="0" column="0" colspan="2">
+           <widget class="QPushButton" name="pushButton_createTemplate">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="minimumSize">
              <size>
-              <width>76</width>
-              <height>62</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>76</width>
-              <height>62</height>
-             </size>
-            </property>
-            <property name="toolTip">
-             <string>选择当前检测模式使用的模板。</string>
-            </property>
-            <property name="text">
-             <string>选择模板</string>
-            </property>
-            <property name="icon">
-             <iconset resource="../../../resource/image.qrc">
-              <normaloff>:/svg/template_select.svg</normaloff>:/svg/template_select.svg</iconset>
-            </property>
-            <property name="iconSize">
-             <size>
-              <width>27</width>
-              <height>27</height>
-             </size>
-            </property>
-            <property name="toolButtonStyle">
-             <enum>Qt::ToolButtonTextUnderIcon</enum>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="0">
-           <widget class="QToolButton" name="toolButton_createTemplate">
-            <property name="minimumSize">
-             <size>
-              <width>76</width>
-              <height>62</height>
-             </size>
-            </property>
-            <property name="maximumSize">
-             <size>
-              <width>76</width>
-              <height>62</height>
+              <width>0</width>
+              <height>45</height>
              </size>
             </property>
             <property name="toolTip">
@@ -140,27 +105,56 @@
             </property>
             <property name="iconSize">
              <size>
-              <width>27</width>
-              <height>27</height>
+              <width>22</width>
+              <height>22</height>
              </size>
-            </property>
-            <property name="toolButtonStyle">
-             <enum>Qt::ToolButtonTextUnderIcon</enum>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
-           <widget class="QToolButton" name="toolButton_saveTemplate">
+          <item row="1" column="0">
+           <widget class="QPushButton" name="pushButton_selectTemplate">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
             <property name="minimumSize">
              <size>
-              <width>76</width>
-              <height>62</height>
+              <width>0</width>
+              <height>45</height>
              </size>
             </property>
-            <property name="maximumSize">
+            <property name="toolTip">
+             <string>选择当前检测模式使用的模板。</string>
+            </property>
+            <property name="text">
+             <string>选择模板</string>
+            </property>
+            <property name="icon">
+             <iconset resource="../../../resource/image.qrc">
+              <normaloff>:/svg/template_select.svg</normaloff>:/svg/template_select.svg</iconset>
+            </property>
+            <property name="iconSize">
              <size>
-              <width>76</width>
-              <height>62</height>
+              <width>22</width>
+              <height>22</height>
+             </size>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QPushButton" name="pushButton_saveTemplate">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>45</height>
              </size>
             </property>
             <property name="toolTip">
@@ -175,84 +169,132 @@
             </property>
             <property name="iconSize">
              <size>
-              <width>27</width>
-              <height>27</height>
+              <width>22</width>
+              <height>22</height>
              </size>
-            </property>
-            <property name="toolButtonStyle">
-             <enum>Qt::ToolButtonTextUnderIcon</enum>
             </property>
            </widget>
           </item>
-          <item row="0" column="2">
-           <widget class="QToolButton" name="toolButton_editCharacterTemplates">
+          <item row="2" column="0" colspan="2">
+           <widget class="QFrame" name="line_templateManagementSeparator">
             <property name="minimumSize">
              <size>
-              <width>76</width>
-              <height>62</height>
+              <width>0</width>
+              <height>1</height>
              </size>
             </property>
             <property name="maximumSize">
              <size>
-              <width>76</width>
-              <height>62</height>
+              <width>16777215</width>
+              <height>1</height>
              </size>
             </property>
-            <property name="toolTip">
-             <string>分割并编辑字符模板。</string>
+            <property name="frameShape">
+             <enum>QFrame::HLine</enum>
             </property>
-            <property name="text">
-             <string>分割字符</string>
-            </property>
-            <property name="icon">
-             <iconset resource="../../../resource/image.qrc">
-              <normaloff>:/svg/character_seg.svg</normaloff>:/svg/character_seg.svg</iconset>
-            </property>
-            <property name="iconSize">
-             <size>
-              <width>27</width>
-              <height>27</height>
-             </size>
-            </property>
-            <property name="toolButtonStyle">
-             <enum>Qt::ToolButtonTextUnderIcon</enum>
+            <property name="frameShadow">
+             <enum>QFrame::Plain</enum>
             </property>
            </widget>
           </item>
-          <item row="1" column="1">
-           <widget class="QToolButton" name="toolButton_exitTemplate">
-            <property name="minimumSize">
-             <size>
-              <width>108</width>
-              <height>62</height>
-             </size>
+          <item row="3" column="0" colspan="2">
+           <layout class="QHBoxLayout" name="horizontalLayout_templateManagementFooter">
+            <property name="spacing">
+             <number>8</number>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>108</width>
-              <height>62</height>
-             </size>
+            <property name="leftMargin">
+             <number>0</number>
             </property>
-            <property name="toolTip">
-             <string>退出当前模板制作流程</string>
+            <property name="topMargin">
+             <number>0</number>
             </property>
-            <property name="text">
-             <string>退出模板制作</string>
+            <property name="rightMargin">
+             <number>0</number>
             </property>
-            <property name="icon">
-             <iconset resource="../../../resource/image.qrc">
-              <normaloff>:/svg/stop.svg</normaloff>:/svg/stop.svg</iconset>
+            <property name="bottomMargin">
+             <number>0</number>
             </property>
-            <property name="iconSize">
-             <size>
-              <width>27</width>
-              <height>27</height>
-             </size>
-            </property>
-            <property name="toolButtonStyle">
-             <enum>Qt::ToolButtonTextUnderIcon</enum>
-            </property>
-           </widget>
+            <item>
+             <widget class="QPushButton" name="pushButton_editCharacterTemplates">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>45</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>分割并编辑字符模板。</string>
+              </property>
+              <property name="text">
+               <string>分割字符</string>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../resource/image.qrc">
+                <normaloff>:/svg/character_seg.svg</normaloff>:/svg/character_seg.svg</iconset>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>22</width>
+                <height>22</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_templateManagementFooter">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeType">
+               <enum>QSizePolicy::Expanding</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pushButton_exitTemplate">
+              <property name="sizePolicy">
+               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                <horstretch>0</horstretch>
+                <verstretch>0</verstretch>
+               </sizepolicy>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>0</width>
+                <height>45</height>
+               </size>
+              </property>
+              <property name="toolTip">
+               <string>退出当前模板制作流程</string>
+              </property>
+              <property name="text">
+               <string>退出制作</string>
+              </property>
+              <property name="icon">
+               <iconset resource="../../../resource/image.qrc">
+                <normaloff>:/svg/template_exit.svg</normaloff>:/svg/template_exit.svg</iconset>
+              </property>
+              <property name="iconSize">
+               <size>
+                <width>22</width>
+                <height>22</height>
+               </size>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>

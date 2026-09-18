@@ -91,8 +91,8 @@ MainWindow::MainWindow(
             &QToolButton::clicked,
             this,
             &MainWindow::handlePreviewAction);
-    connect(m_detectionSettingsUi->toolButton_exitTemplate,
-            &QToolButton::clicked,
+    connect(m_detectionSettingsUi->pushButton_exitTemplate,
+            &QPushButton::clicked,
             this,
             &MainWindow::exitTemplate);
     connect(ui->toolButton_showInspectionInfo,

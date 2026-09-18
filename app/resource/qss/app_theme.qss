@@ -227,8 +227,7 @@ QFrame#frame_mainToolbar {
 
 QToolButton#toolButton_cameraAction,
 QToolButton#toolButton_inspectionAction,
-QToolButton#toolButton_previewAction,
-QGroupBox#groupBox_templateManagement QToolButton {
+QToolButton#toolButton_previewAction {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFFFFF, stop:1 #EDF2F6);
     color: #000000;
     border: 1px solid #AEBCC8;
@@ -239,34 +238,116 @@ QGroupBox#groupBox_templateManagement QToolButton {
 
 QToolButton#toolButton_cameraAction:hover,
 QToolButton#toolButton_inspectionAction:hover,
-QToolButton#toolButton_previewAction:hover,
-QGroupBox#groupBox_templateManagement QToolButton:hover {
+QToolButton#toolButton_previewAction:hover {
     background: #F6FBFF;
     border-color: #6D9EC4;
 }
 
 QToolButton#toolButton_cameraAction:pressed,
 QToolButton#toolButton_inspectionAction:pressed,
-QToolButton#toolButton_previewAction:pressed,
-QGroupBox#groupBox_templateManagement QToolButton:pressed {
+QToolButton#toolButton_previewAction:pressed {
     background: #DDEAF3;
     border-color: #0E568E;
 }
 
 QToolButton#toolButton_cameraAction:focus,
 QToolButton#toolButton_inspectionAction:focus,
-QToolButton#toolButton_previewAction:focus,
-QGroupBox#groupBox_templateManagement QToolButton:focus {
+QToolButton#toolButton_previewAction:focus {
     border-color: #1769AA;
 }
 
 QToolButton#toolButton_cameraAction:disabled,
 QToolButton#toolButton_inspectionAction:disabled,
-QToolButton#toolButton_previewAction:disabled,
-QGroupBox#groupBox_templateManagement QToolButton:disabled {
+QToolButton#toolButton_previewAction:disabled {
     background: #EDF1F4;
     color: #909DA8;
     border-color: #D2D9DF;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton {
+    min-height: 45px;
+    padding: 4px 10px;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_createTemplate {
+    background-color: #1769AA;
+    color: #FFFFFF;
+    border: 1px solid #1769AA;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_createTemplate:hover {
+    background-color: #247CB9;
+    border-color: #247CB9;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_createTemplate:pressed {
+    background-color: #0E568E;
+    border-color: #0E568E;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_createTemplate:focus {
+    background-color: #1769AA;
+    border-color: #0E568E;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_createTemplate:disabled {
+    background-color: #A8C7DE;
+    color: #FFFFFF;
+    border-color: #A8C7DE;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_editCharacterTemplates {
+    background-color: transparent;
+    color: #000000;
+    border: 1px solid transparent;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_editCharacterTemplates:hover {
+    background-color: #F4F9FD;
+    border-color: #6D9EC4;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_editCharacterTemplates:pressed {
+    background-color: #E2EDF5;
+    border-color: transparent;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_editCharacterTemplates:disabled {
+    background-color: transparent;
+    color: #909DA8;
+    border-color: transparent;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_exitTemplate {
+    background-color: transparent;
+    color: #C13F3F;
+    border: 1px solid transparent;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_exitTemplate:hover {
+    background-color: #FFF1F1;
+    border-color: #D9B4B4;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_exitTemplate:pressed {
+    background-color: #F8DDDD;
+    border-color: transparent;
+}
+
+QGroupBox#groupBox_templateManagement QPushButton#pushButton_exitTemplate:disabled {
+    background-color: transparent;
+    color: #909DA8;
+    border-color: transparent;
+}
+
+QFrame#line_templateManagementSeparator {
+    min-height: 1px;
+    max-height: 1px;
+    background-color: #D4DDE5;
+    border: none;
 }
 
 QFrame#frame_cameraStatus,

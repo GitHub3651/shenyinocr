@@ -912,72 +912,72 @@
         <translation>模板管理</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="97"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="129"/>
         <source>选择当前检测模式使用的模板。</source>
         <translation>选择当前检测模式使用的模板。</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="100"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="132"/>
         <source>选择模板</source>
         <translation>选择模板</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="132"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="97"/>
         <source>进入当前检测模式的模板制作流程。</source>
         <translation>进入当前检测模式的模板制作流程。</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="135"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="100"/>
         <source>制作模板</source>
         <translation>制作模板</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="167"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="161"/>
         <source>保存当前制作的模板。</source>
         <translation>保存当前制作的模板。</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="170"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="164"/>
         <source>保存模板</source>
         <translation>保存模板</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="202"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="232"/>
         <source>分割并编辑字符模板。</source>
         <translation>分割并编辑字符模板。</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="205"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="235"/>
         <source>分割字符</source>
         <translation>分割字符</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="237"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="280"/>
         <source>退出当前模板制作流程</source>
         <translation>退出当前模板制作流程</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="240"/>
-        <source>退出模板制作</source>
-        <translation>退出模板制作</translation>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="283"/>
+        <source>退出制作</source>
+        <translation>退出制作</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="502"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="544"/>
         <source>二维码结果保存</source>
         <translation>二维码结果保存</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="508"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="550"/>
         <source>保存二维码结果到本机（CSV）</source>
         <translation>保存二维码结果到本机（CSV）</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="515"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="557"/>
         <source>保存文件夹</source>
         <translation>保存文件夹</translation>
     </message>
     <message>
-        <location filename="ui/main_window/settings/detection_settings_page.ui" line="541"/>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="583"/>
         <source>选择目录</source>
         <translation>选择目录</translation>
     </message>
