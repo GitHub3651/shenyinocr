@@ -32,7 +32,7 @@ public:
         std::size_t queueCapacity,
         const Executor &executor,
         const CompletionConsumer &completionConsumer,
-        const FailureConsumer &failureConsumer = FailureConsumer());
+        const FailureConsumer &failureConsumer);
     ~DetectionWorker();
 
     bool start();

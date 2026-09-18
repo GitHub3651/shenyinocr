@@ -36,6 +36,7 @@ struct DetectionOverlayPolygon {
     std::vector<cv::Point> points;
     double score = 0.0;
     bool alarm = false;
+    QString text;
 };
 
 struct DetectionOverlayEllipse {

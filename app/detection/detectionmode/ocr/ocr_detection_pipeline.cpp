@@ -32,6 +32,20 @@ std::string cleanRecognitionText(const std::string &text)
     return cleaned;
 }
 
+std::string withoutLineBreaks(const std::string &text)
+{
+    std::string comparable = text;
+    comparable.erase(
+                std::remove_if(
+                    comparable.begin(),
+                    comparable.end(),
+                    [](char value) {
+        return value == '\r' || value == '\n';
+    }),
+                comparable.end());
+    return comparable;
+}
+
 } // namespace
 
 OcrDetectionResult OcrDetectionPipeline::detect(
@@ -44,13 +58,16 @@ OcrDetectionResult OcrDetectionPipeline::detect(
         return result;
     }
 
-    const std::vector<std::string> rawText =
+    const std::vector<OcrRecognitionItem> rawText =
             ocrEngine.recognize(croppedImage);
-    for (const std::string &line : rawText) {
-        const std::string cleaned = cleanRecognitionText(line);
+    for (const OcrRecognitionItem &item : rawText) {
+        const std::string cleaned = cleanRecognitionText(item.text);
         if (cleaned.empty()) {
             continue;
         }
+        OcrRecognitionItem cleanedItem = item;
+        cleanedItem.text = cleaned;
+        result.items.push_back(cleanedItem);
         if (!result.recognizedText.empty()) {
             result.recognizedText += '\n';
         }
@@ -58,7 +75,8 @@ OcrDetectionResult OcrDetectionPipeline::detect(
     }
 
     result.isOk = !result.recognizedText.empty()
-            && result.recognizedText == targetText;
+            && withoutLineBreaks(result.recognizedText)
+            == withoutLineBreaks(targetText);
     return result;
 }
 
@@ -92,10 +110,22 @@ DetectionResult OcrDetectionPipeline::detect(
     }
 
     cv::Mat croppedImage = oriented.croppedImage.clone();
-    const OcrDetectionResult ocrResult = detect(
+    OcrDetectionResult ocrResult = detect(
                 croppedImage,
                 targetText,
                 ocrEngine);
+    for (OcrRecognitionItem &recognition : ocrResult.items) {
+        std::vector<cv::Point> mapped;
+        mapped.reserve(recognition.box.size());
+        for (const cv::Point &point : recognition.box) {
+            mapped.push_back(cv::Point(
+                point.x + oriented.roi.x,
+                point.y + oriented.roi.y));
+        }
+        recognition.box = DetectionRoiGeometry::mapAffinePolygon(
+                    mapped,
+                    oriented.inverseRotationMatrix);
+    }
     return toDetectionResult(
                 ocrResult,
                 item.pose);
@@ -142,5 +172,15 @@ DetectionResult OcrDetectionPipeline::toDetectionResult(
                 QStringLiteral("date"),
                 pose.datePoly,
                 0.0);
+    for (const OcrRecognitionItem &item : ocrResult.items) {
+        if (item.box.size() != 4) {
+            continue;
+        }
+        DetectionOverlayPolygon polygon;
+        polygon.role = QStringLiteral("ocr");
+        polygon.points = item.box;
+        polygon.text = QString::fromStdString(item.text);
+        result.overlay.polygons.push_back(polygon);
+    }
     return result;
 }

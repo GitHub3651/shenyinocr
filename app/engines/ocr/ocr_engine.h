@@ -6,12 +6,18 @@
 #include <string>
 #include <vector>
 
+struct OcrRecognitionItem
+{
+    std::string text;
+    std::vector<cv::Point> box;
+};
+
 class IOcrEngine
 {
 public:
     virtual ~IOcrEngine() = default;
 
-    virtual std::vector<std::string> recognize(cv::Mat &image) = 0;
+    virtual std::vector<OcrRecognitionItem> recognize(cv::Mat &image) = 0;
 };
 
 #endif // DEVICES_OCR_OCR_ENGINE_H

@@ -131,6 +131,36 @@ QImage InspectionPresentationRenderer::renderRawFrame(
     return renderDetectionFrame(image, DetectionOverlay());
 }
 
+void drawOcr(
+    cv::Mat &image,
+    const DetectionOverlayPolygon &polygon,
+    double fontScale,
+    int thickness)
+{
+    if (polygon.points.size() < 4) {
+        return;
+    }
+    drawPolygon(image, polygon.points, cv::Scalar(255, 0, 255), thickness);
+    if (polygon.text.isEmpty()) {
+        return;
+    }
+    const std::string text = polygon.text.toStdString();
+    int baseline = 0;
+    const cv::Size textSize = cv::getTextSize(
+        text, cv::FONT_HERSHEY_SIMPLEX, fontScale, thickness, &baseline);
+    const cv::Point anchor = polygonTopCenter(polygon.points);
+    const int textX = std::max(
+        0,
+        std::min(anchor.x - textSize.width / 2, image.cols - textSize.width));
+    const int textY = std::max(textSize.height, anchor.y - 5);
+    cv::putText(image, text, cv::Point(textX, textY),
+                cv::FONT_HERSHEY_SIMPLEX, fontScale,
+                cv::Scalar(0, 0, 0), thickness + 2);
+    cv::putText(image, text, cv::Point(textX, textY),
+                cv::FONT_HERSHEY_SIMPLEX, fontScale,
+                cv::Scalar(255, 0, 255), thickness);
+}
+
 QImage InspectionPresentationRenderer::renderDetectionFrame(
     const cv::Mat &image,
     const DetectionOverlay &overlay)
@@ -170,6 +200,12 @@ QImage InspectionPresentationRenderer::renderDetectionFrame(
                 fontScale,
                 boxThickness,
                 textThickness);
+        } else if (polygon.role == QLatin1String("ocr")) {
+            drawOcr(
+                displayImage,
+                polygon,
+                fontScale,
+                boxThickness);
         }
     }
 

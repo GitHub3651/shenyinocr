@@ -12,6 +12,7 @@
 struct OcrDetectionResult
 {
     std::string recognizedText;
+    std::vector<OcrRecognitionItem> items;
     bool isOk = false;
 };
 

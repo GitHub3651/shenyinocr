@@ -1,171 +1,114 @@
-// Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+#include "engines/ocr/vendor/paddle/include/preprocess_op.h"
 
-#include "opencv2/core.hpp"
-#include "opencv2/imgcodecs.hpp"
-#include "opencv2/imgproc.hpp"
-#include "paddle_api.h"
-#include "paddle_inference_api.h"
-#include <chrono>
-#include <iomanip>
-#include <iostream>
-#include <ostream>
-#include <vector>
+#include <opencv2/imgproc.hpp>
 
-#include <cstring>
-#include <fstream>
-#include <numeric>
-
-#include <engines/ocr/vendor/paddle/include/preprocess_op.h>
+#include <algorithm>
+#include <cmath>
 
 namespace PaddleOCR {
 
-	void Permute::Run(const cv::Mat *im, float *data) {
-		int rh = im->rows;
-		int rw = im->cols;
-		int rc = im->channels();
-		for (int i = 0; i < rc; ++i) {
-			cv::extractChannel(*im, cv::Mat(rh, rw, CV_32FC1, data + i * rh * rw), i);
-		}
-	}
+void Normalize::Run(cv::Mat *image,
+                    const std::vector<float> &mean,
+                    const std::vector<float> &scale,
+                    bool isScale) const
+{
+    const double inputScale = isScale ? 1.0 / 255.0 : 1.0;
+    image->convertTo(*image, CV_32FC3, inputScale);
+    for (int row = 0; row < image->rows; ++row) {
+        for (int column = 0; column < image->cols; ++column) {
+            cv::Vec3f &pixel = image->at<cv::Vec3f>(row, column);
+            for (int channel = 0; channel < 3; ++channel) {
+                pixel[channel] =
+                        (pixel[channel] - mean[channel]) * scale[channel];
+            }
+        }
+    }
+}
 
-	void Normalize::Run(cv::Mat *im, const std::vector<float> &mean,
-		const std::vector<float> &scale, const bool is_scale) {
-		double e = 1.0;
-		if (is_scale) {
-			e /= 255.0;
-		}
-		(*im).convertTo(*im, CV_32FC3, e);
-		for (int h = 0; h < im->rows; h++) {
-			for (int w = 0; w < im->cols; w++) {
-				im->at<cv::Vec3f>(h, w)[0] =
-					(im->at<cv::Vec3f>(h, w)[0] - mean[0]) * scale[0];
-				im->at<cv::Vec3f>(h, w)[1] =
-					(im->at<cv::Vec3f>(h, w)[1] - mean[1]) * scale[1];
-				im->at<cv::Vec3f>(h, w)[2] =
-					(im->at<cv::Vec3f>(h, w)[2] - mean[2]) * scale[2];
-			}
-		}
-	}
+void Permute::Run(const cv::Mat *image, float *data) const
+{
+    const int channelSize = image->rows * image->cols;
+    for (int channel = 0; channel < image->channels(); ++channel) {
+        cv::extractChannel(
+                    *image,
+                    cv::Mat(image->rows,
+                            image->cols,
+                            CV_32FC1,
+                            data + channel * channelSize),
+                    channel);
+    }
+}
 
-	void ResizeImgType0::Run(const cv::Mat &img, cv::Mat &resize_img,
-		int max_size_len, float &ratio_h, float &ratio_w,
-		bool use_tensorrt) {
-		int w = img.cols;
-		int h = img.rows;
+void DetResizeImg::Run(const cv::Mat &image,
+                       cv::Mat &resizedImage,
+                       int maxSideLen) const
+{
+    cv::Mat input = image;
+    if (image.rows + image.cols < 64) {
+        const int paddedHeight = std::max(32, image.rows);
+        const int paddedWidth = std::max(32, image.cols);
+        input = cv::Mat::zeros(paddedHeight, paddedWidth, image.type());
+        image.copyTo(input(cv::Rect(0, 0, image.cols, image.rows)));
+    }
 
-		float ratio = 1.f;
-		int max_wh = w >= h ? w : h;
-		if (max_wh > max_size_len) {
-			if (h > w) {
-				ratio = float(max_size_len) / float(h);
-			}
-			else {
-				ratio = float(max_size_len) / float(w);
-			}
-		}
+    const int inputHeight = input.rows;
+    const int inputWidth = input.cols;
+    float ratio = 1.0f;
+    if (std::max(inputHeight, inputWidth) > maxSideLen) {
+        ratio = static_cast<float>(maxSideLen)
+                / static_cast<float>(std::max(inputHeight, inputWidth));
+    }
 
-		int resize_h = int(float(h) * ratio);
-		int resize_w = int(float(w) * ratio);
-		if (resize_h % 32 == 0)
-			resize_h = resize_h;
-		else if (resize_h / 32 < 1 + 1e-5)
-			resize_h = 32;
-		else
-			resize_h = (resize_h / 32) * 32;
+    const int resizedHeight = std::max(
+                static_cast<int>(
+                    std::round(inputHeight * ratio / 32.0f) * 32),
+                32);
+    const int resizedWidth = std::max(
+                static_cast<int>(
+                    std::round(inputWidth * ratio / 32.0f) * 32),
+                32);
 
-		if (resize_w % 32 == 0)
-			resize_w = resize_w;
-		else if (resize_w / 32 < 1 + 1e-5)
-			resize_w = 32;
-		else
-			resize_w = (resize_w / 32) * 32;
-		if (!use_tensorrt) {
-			cv::resize(img, resize_img, cv::Size(resize_w, resize_h));
-			ratio_h = float(resize_h) / float(h);
-			ratio_w = float(resize_w) / float(w);
-		}
-		else {
-			cv::resize(img, resize_img, cv::Size(640, 640));
-			ratio_h = float(640) / float(h);
-			ratio_w = float(640) / float(w);
-		}
-	}
+    cv::resize(input,
+               resizedImage,
+               cv::Size(resizedWidth, resizedHeight));
+}
 
-	void CrnnResizeImg::Run(const cv::Mat &img, cv::Mat &resize_img, float wh_ratio,
-		bool use_tensorrt,
-		const std::vector<int> &rec_image_shape) {
-		int imgC, imgH, imgW;
-		imgC = rec_image_shape[0];
-		imgH = rec_image_shape[1];
-		imgW = rec_image_shape[2];
+void RecResizeImg::Run(const cv::Mat &image,
+                       cv::Mat &resizedImage,
+                       const std::vector<int> &imageShape) const
+{
+    const int channels = imageShape[0];
+    const int targetHeight = imageShape[1];
+    const int baseWidth = imageShape[2];
+    const int maximumWidth = 3200;
+    const float imageRatio = static_cast<float>(image.cols)
+            / static_cast<float>(image.rows);
+    const float baseRatio = static_cast<float>(baseWidth)
+            / static_cast<float>(targetHeight);
+    const int targetWidth = std::min(
+                maximumWidth,
+                static_cast<int>(targetHeight
+                                 * std::max(baseRatio, imageRatio)));
+    const int contentWidth = std::min(
+                targetWidth,
+                static_cast<int>(std::ceil(targetHeight * imageRatio)));
 
-		imgW = int(32 * wh_ratio);
+    cv::Mat resized;
+    cv::resize(image,
+               resized,
+               cv::Size(contentWidth, targetHeight),
+               0.0,
+               0.0,
+               cv::INTER_LINEAR);
+    cv::Mat normalized;
+    resized.convertTo(normalized, CV_32FC3, 1.0 / 127.5, -1.0);
 
-		float ratio = float(img.cols) / float(img.rows);
-		int resize_w, resize_h;
-		if (ceilf(imgH * ratio) > imgW)
-			resize_w = imgW;
-		else
-			resize_w = int(ceilf(imgH * ratio));
-		if (!use_tensorrt) {
-			cv::resize(img, resize_img, cv::Size(resize_w, imgH), 0.f, 0.f,
-				cv::INTER_LINEAR);
-			cv::copyMakeBorder(resize_img, resize_img, 0, 0, 0,
-				int(imgW - resize_img.cols), cv::BORDER_CONSTANT,
-				{ 127, 127, 127 });
-		}
-		else {
-			int k = int(img.cols * 32 / img.rows);
-			if (k >= 100) {
-				cv::resize(img, resize_img, cv::Size(100, 32), 0.f, 0.f,
-					cv::INTER_LINEAR);
-			}
-			else {
-				cv::resize(img, resize_img, cv::Size(k, 32), 0.f, 0.f, cv::INTER_LINEAR);
-				cv::copyMakeBorder(resize_img, resize_img, 0, 0, 0, int(100 - k),
-					cv::BORDER_CONSTANT, { 127, 127, 127 });
-			}
-		}
-	}
-
-	void ClsResizeImg::Run(const cv::Mat &img, cv::Mat &resize_img,
-		bool use_tensorrt,
-		const std::vector<int> &rec_image_shape) {
-		int imgC, imgH, imgW;
-		imgC = rec_image_shape[0];
-		imgH = rec_image_shape[1];
-		imgW = rec_image_shape[2];
-
-		float ratio = float(img.cols) / float(img.rows);
-		int resize_w, resize_h;
-		if (ceilf(imgH * ratio) > imgW)
-			resize_w = imgW;
-		else
-			resize_w = int(ceilf(imgH * ratio));
-
-		if (!use_tensorrt) {
-			cv::resize(img, resize_img, cv::Size(resize_w, imgH), 0.f, 0.f,
-				cv::INTER_LINEAR);
-			if (resize_w < imgW) {
-				cv::copyMakeBorder(resize_img, resize_img, 0, 0, 0, imgW - resize_w,
-					cv::BORDER_CONSTANT, cv::Scalar(0, 0, 0));
-			}
-		}
-		else {
-			cv::resize(img, resize_img, cv::Size(100, 32), 0.f, 0.f, cv::INTER_LINEAR);
-		}
-	}
+    resizedImage = cv::Mat::zeros(
+                targetHeight,
+                targetWidth,
+                CV_MAKETYPE(CV_32F, channels));
+    normalized.copyTo(
+                resizedImage(cv::Rect(0, 0, contentWidth, targetHeight)));
+}
 
 } // namespace PaddleOCR

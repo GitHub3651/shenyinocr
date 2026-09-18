@@ -12,7 +12,6 @@
 #include <memory>
 
 class IBarcodeDecoder;
-class IOcrEngine;
 
 struct DetectionRuntimeReadiness
 {
@@ -48,7 +47,7 @@ class DetectionRegistry
 {
 public:
     DetectionRegistry(
-        const std::shared_ptr<IOcrEngine> &ocrEngine,
+        const QString &ocrConfigPath,
         const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder);
 
     DetectionRuntimeReadiness prepare(DetectionMode mode) const;
@@ -56,6 +55,6 @@ public:
         const DetectionRegistryRequest &request) const;
 
 private:
-    std::shared_ptr<IOcrEngine> m_ocrEngine;
+    QString m_ocrConfigPath;
     std::shared_ptr<IBarcodeDecoder> m_barcodeDecoder;
 };

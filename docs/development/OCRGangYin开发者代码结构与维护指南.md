@@ -94,7 +94,6 @@ app/
 │           ├─ include/
 │           │  ├─ clipper.h
 │           │  ├─ config.h
-│           │  ├─ ocr_cls.h
 │           │  ├─ ocr_det.h
 │           │  ├─ ocr_rec.h
 │           │  ├─ postprocess_op.h
@@ -103,7 +102,6 @@ app/
 │           └─ src/
 │              ├─ clipper.cpp
 │              ├─ config.cpp
-│              ├─ ocr_cls.cpp
 │              ├─ ocr_det.cpp
 │              ├─ ocr_rec.cpp
 │              ├─ postprocess_op.cpp
@@ -323,7 +321,7 @@ toolButton_selectTemplate
 | `detectionmode/stamp/overlap_detector.h/.cpp` | 钢印环定位、区域变换和钢印/日期重叠判断；纯内存算法。 |
 | `detectionmode/stamp/stamp_detection_pipeline.h/.cpp` | 钢印字符检测、重叠结果和统一输出。 |
 | `detectionmode/word/word_detection_pipeline.h/.cpp` | 字库字符匹配、文字组合、Overlay 和 OK/NG。 |
-| `detectionmode/ocr/ocr_detection_pipeline.h/.cpp` | 调用 OCR Engine、目标比较和结果转换。 |
+| `detectionmode/ocr/ocr_detection_pipeline.h/.cpp` | 校正 OCR ROI，调用公共 DET+REC Engine，清洗和组合片段，并在忽略双方换行后执行大小写敏感的目标比较。 |
 | `detectionmode/tissue/tissue_roll_detector.h/.cpp` | 纸巾纹理/粗糙度算法；阈值由构造参数提供。 |
 | `detectionmode/tissue/tissue_detection_pipeline.h/.cpp` | 纸巾算法适配为统一 `DetectionResult`。 |
 | `detectionmode/barcode_word/barcode_word_detection_pipeline.h/.cpp` | 二维码优先解码、日期字符检测、策略状态和综合判定。策略状态跟随运行模板条目。 |
@@ -362,16 +360,15 @@ toolButton_selectTemplate
 | `barcode/barcode_decoder.h` | 条码引擎稳定接口。 |
 | `barcode/vendor/barcode_decoder_api.h` | DLL ABI 声明。 |
 | `barcode/vendor/barcode_decoder_adapter.h/.cpp` | DLL 动态加载、调用和错误映射。 |
-| `ocr/ocr_engine.h` | OCR 稳定接口。 |
-| `ocr/vendor/paddle_ocr_engine.h/.cpp` | PaddleOCR 适配和模型配置。 |
+| `ocr/ocr_engine.h` | 唯一公共 DET+REC 接口；接收调用方准备好的图像或 ROI，返回按阅读顺序排列的逐框原始文字片段。 |
+| `ocr/vendor/paddle_ocr_engine.h/.cpp` | PP-OCRv6 tiny DET+REC 编排和模型配置，不执行业务清洗或 OK/NG 判定。 |
 | `ocr/vendor/paddle/include/clipper.h`、`src/clipper.cpp` | 文本框多边形裁切几何。 |
-| `ocr/vendor/paddle/include/config.h`、`src/config.cpp` | PaddleOCR 配置读取。 |
-| `ocr/vendor/paddle/include/ocr_cls.h`、`src/ocr_cls.cpp` | 文字方向分类器。 |
-| `ocr/vendor/paddle/include/ocr_det.h`、`src/ocr_det.cpp` | 文本检测器。 |
-| `ocr/vendor/paddle/include/ocr_rec.h`、`src/ocr_rec.cpp` | 文本识别器。 |
+| `ocr/vendor/paddle/include/config.h`、`src/config.cpp` | `config_ocr.txt` 配置读取和相对路径解析。 |
+| `ocr/vendor/paddle/include/ocr_det.h`、`src/ocr_det.cpp` | PP-OCRv6 tiny 文本检测器。 |
+| `ocr/vendor/paddle/include/ocr_rec.h`、`src/ocr_rec.cpp` | 透视裁剪、窄高图旋转和 PP-OCRv6 tiny 文本识别。 |
 | `ocr/vendor/paddle/include/postprocess_op.h`、`src/postprocess_op.cpp` | 检测后处理。 |
-| `ocr/vendor/paddle/include/preprocess_op.h`、`src/preprocess_op.cpp` | 推理预处理。 |
-| `ocr/vendor/paddle/include/utility.h`、`src/utility.cpp` | PaddleOCR 公共图像和文字工具。 |
+| `ocr/vendor/paddle/include/preprocess_op.h`、`src/preprocess_op.cpp` | DET/REC 推理预处理。 |
+| `ocr/vendor/paddle/include/utility.h`、`src/utility.cpp` | 字典读取、四点框阅读顺序排序和解码辅助。 |
 
 ### 5.9 system_support 和 startup
 

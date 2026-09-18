@@ -1,56 +1,90 @@
-// Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+#include "engines/ocr/vendor/paddle/include/config.h"
 
-#include <engines/ocr/vendor/paddle/include/config.h>
+#include "engines/ocr/vendor/paddle/include/utility.h"
+
+#include <QDir>
+#include <QFileInfo>
+#include <QString>
+
+#include <map>
+#include <sstream>
+#include <stdexcept>
+
+namespace {
+
+std::map<std::string, std::string> loadConfig(const std::string &configPath)
+{
+    const std::vector<std::string> lines =
+            PaddleOCR::Utility::ReadDict(configPath);
+    std::map<std::string, std::string> config;
+    for (const std::string &line : lines) {
+        std::istringstream stream(line);
+        std::string key;
+        std::string value;
+        if (!(stream >> key) || key[0] == '#') {
+            continue;
+        }
+        if (!(stream >> value)) {
+            throw std::runtime_error(
+                        "Invalid OCR configuration line: " + line);
+        }
+        config[key] = value;
+    }
+    return config;
+}
+
+const std::string &requiredValue(
+        const std::map<std::string, std::string> &config,
+        const std::string &key)
+{
+    const auto found = config.find(key);
+    if (found == config.end()) {
+        throw std::runtime_error(
+                    "Missing OCR configuration key: " + key);
+    }
+    return found->second;
+}
+
+std::string resolveConfigPath(
+        const QDir &configDirectory,
+        const std::string &configuredPath)
+{
+    const QString path = QString::fromStdString(configuredPath);
+    return QDir::cleanPath(
+                QDir::isAbsolutePath(path)
+                ? path
+                : configDirectory.absoluteFilePath(path)).toStdString();
+}
+
+} // namespace
 
 namespace PaddleOCR {
 
-std::vector<std::string> OCRConfig::split(const std::string &str,
-                                          const std::string &delim) {
-  std::vector<std::string> res;
-  if ("" == str)
-    return res;
-  char *strs = new char[str.length() + 1];
-  std::strcpy(strs, str.c_str());
+OCRConfig::OCRConfig(const std::string &configFile)
+{
+    const std::map<std::string, std::string> config = loadConfig(configFile);
+    const QDir configDirectory =
+            QFileInfo(QString::fromStdString(configFile)).absoluteDir();
 
-  char *d = new char[delim.length() + 1];
-  std::strcpy(d, delim.c_str());
+    cpuMathLibraryNumThreads = std::stoi(
+                requiredValue(config, "cpu_math_library_num_threads"));
+    useMkldnn = std::stoi(requiredValue(config, "use_mkldnn")) != 0;
+    maxSideLen = std::stoi(requiredValue(config, "max_side_len"));
+    detDbThresh = std::stof(requiredValue(config, "det_db_thresh"));
+    detDbBoxThresh = std::stof(
+                requiredValue(config, "det_db_box_thresh"));
+    detDbUnclipRatio = std::stof(
+                requiredValue(config, "det_db_unclip_ratio"));
 
-  char *p = std::strtok(strs, d);
-  while (p) {
-    std::string s = p;
-    res.push_back(s);
-    p = std::strtok(NULL, d);
-  }
-
-  return res;
-}
-
-std::map<std::string, std::string>
-OCRConfig::LoadConfig(const std::string &config_path) {
-  auto config = Utility::ReadDict(config_path);
-
-  std::map<std::string, std::string> dict;
-  for (int i = 0; i < config.size(); i++) {
-    // pass for empty line or comment
-    if (config[i].size() <= 1 || config[i][0] == '#') {
-      continue;
-    }
-    std::vector<std::string> res = split(config[i], " ");
-    dict[res[0]] = res[1];
-  }
-  return dict;
+    detModelDir = resolveConfigPath(
+                configDirectory,
+                requiredValue(config, "det_model_dir"));
+    recModelDir = resolveConfigPath(
+                configDirectory,
+                requiredValue(config, "rec_model_dir"));
+    charListFile = resolveConfigPath(
+                configDirectory,
+                requiredValue(config, "char_list_file"));
 }
 
 } // namespace PaddleOCR

@@ -41,7 +41,6 @@ engines/
 │        ├─ include/
 │        │  ├─ clipper.h
 │        │  ├─ config.h
-│        │  ├─ ocr_cls.h
 │        │  ├─ ocr_det.h
 │        │  ├─ ocr_rec.h
 │        │  ├─ postprocess_op.h
@@ -50,7 +49,6 @@ engines/
 │        └─ src/
 │           ├─ clipper.cpp
 │           ├─ config.cpp
-│           ├─ ocr_cls.cpp
 │           ├─ ocr_det.cpp
 │           ├─ ocr_rec.cpp
 │           ├─ postprocess_op.cpp
@@ -85,40 +83,40 @@ BarcodeWordDetectionPipeline
 | 文件 | 当前职责 | 维护边界 |
 |---|---|---|
 | `ocr/ocr_engine.h` | 定义最小 `IOcrEngine::recognize(cv::Mat)` 端口。 | 不暴露模型目录、Predictor 或 Paddle 类型。 |
-| `ocr/vendor/paddle_ocr_engine.h` | 声明 PaddleOCR 适配器，使用 PImpl 隐藏 Detector/Recognizer。 | 模型应在初始化时构造，不能每帧创建。 |
-| `ocr/vendor/paddle_ocr_engine.cpp` | 读取 `config1.txt`，构造检测器/识别器，执行文本框检测与识别并合并字符串。 | 当前部署固定 V3 模型与字典；模型变化属于算法和部署变化。 |
+| `ocr/vendor/paddle_ocr_engine.h` | 声明 PaddleOCR 适配器，使用 PImpl 隐藏 Detector/Recognizer。 | 每次检测运行创建一组模型。 |
+| `ocr/vendor/paddle_ocr_engine.cpp` | 读取 `config_ocr.txt`，构造并预热 PP-OCRv6 tiny DET/REC predictor，完成文字框检测、阅读顺序排序、透视裁剪和逐框识别。 | 预热发生在采集开始前且结果直接丢弃；每个正式 DET 框对应一个返回项；不在 Engine 内清洗文字或执行 OK/NG 判定。 |
 
 OCR 正式调用链：
 
 ```text
 OcrDetectionPipeline
 → IOcrEngine
-→ PaddleOcrEngine
+→ PaddleOcrEngine（每次检测运行独立实例）
 → DBDetector 找文字框
-→ Recognizer 识别文字
-→ Pipeline 清洗并与目标字符串比较
+→ SortQuadBoxes 按阅读顺序排序
+→ Recognizer 逐框识别文字
+→ Pipeline 清洗、组合，并在忽略双方换行后与目标字符串比较
 ```
 
 ## paddle/include 与 paddle/src
 
-下面 16 个文件是 PaddleOCR 推理示例/第三方内部实现，应当按组件成对理解：
+下面 14 个文件是当前 DET+REC 路径直接使用的 PaddleOCR vendor 实现，应当按组件成对理解：
 
 | 头/源 | 当前职责 |
 |---|---|
-| `config.h` / `config.cpp` | 解析模型、字典、CPU/GPU/MKLDNN、阈值和图像尺寸配置。 |
-| `ocr_det.h` / `ocr_det.cpp` | DB 文本检测：预处理、推理、后处理，输出文字框。 |
-| `ocr_rec.h` / `ocr_rec.cpp` | 文字框裁图、Resize、推理和字符解码。 |
-| `ocr_cls.h` / `ocr_cls.cpp` | 文本方向分类，决定是否旋转文字图。 |
-| `preprocess_op.h` / `preprocess_op.cpp` | Normalize、HWC→CHW、Detector/Recognizer/Classifier 的 Resize/Pad。 |
+| `config.h` / `config.cpp` | 解析 CPU/oneDNN、DET 参数、模型和字典路径。 |
+| `ocr_det.h` / `ocr_det.cpp` | PP-OCRv6 tiny DB 文本检测：预处理、推理和后处理，输出四点文字框。 |
+| `ocr_rec.h` / `ocr_rec.cpp` | 文字框透视裁剪、窄高图旋转、动态宽度预处理、推理和 CTC 解码。 |
+| `preprocess_op.h` / `preprocess_op.cpp` | DET/REC 的 Resize、Normalize 和 HWC→CHW。 |
 | `postprocess_op.h` / `postprocess_op.cpp` | DB 概率图二值化、轮廓、box score、unclip 和文字框回映。 |
-| `utility.h` / `utility.cpp` | 字典读取、可视化和最大值索引等 vendor 内部工具。 |
+| `utility.h` / `utility.cpp` | 字典读取、官方四点框阅读顺序排序和最大值索引。 |
 | `clipper.h` / `clipper.cpp` | 第三方多边形裁剪/偏移库，供 DB 文字框 unclip 使用。 |
 
-这些文件数量多，是因为仓库内保留了 Paddle 推理实现，并不代表项目有 16 个 OCR 模块。业务维护通常不应改动它们。
+这些文件数量多，是因为仓库内保留了 Paddle 推理实现，并不代表项目有 14 个 OCR 模块。业务维护通常不应改动它们。
 
 ## 谁构造 Engine
 
-`ApplicationStartup` 是具体实现唯一组合点：它创建 Barcode 适配器和 PaddleOCR 适配器，注入 `DetectionRegistry`。Pipeline 不应在运行中自己加载 DLL、模型或创建 Predictor。
+`ApplicationStartup` 创建 Barcode 适配器，并把 `config_ocr.txt` 路径交给 `DetectionRegistry`。每次启动 OCR 检测时，`DetectionRegistry` 在创建检测 Worker 前同步创建一个 `PaddleOcrEngine`；构造函数创建并预热 DET/REC predictor，成功后再由本次运行的 OCR 执行器持有并逐帧复用。Pipeline 不加载 DLL、模型或创建 Predictor。
 
 ## 允许放什么
 
@@ -138,6 +136,6 @@ OcrDetectionPipeline
 - Barcode ABI 改动必须同步 DLL 两端并验证位数、调用约定和结构布局。
 - Paddle 模型、字典、配置和预后处理必须整体匹配。
 - `clipper.*`、Snap7 类似的第三方源码不按自研代码风格机械重构。
-- vendor 升级要记录来源、版本、库/DLL/头文件指纹并做部署验证。
+- vendor 升级要记录来源、版本、库、DLL 和头文件对应关系并做部署验证。
 
 新增、删除或移动本目录代码文件时，请同步更新本 README、qmake 工程清单、部署脚本、第三方依赖清单和开发者维护指南。

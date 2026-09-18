@@ -10,6 +10,7 @@
 #include "detection/detectionmode/word/word_detection_pipeline.h"
 #include "engines/barcode/barcode_decoder.h"
 #include "engines/ocr/ocr_engine.h"
+#include "engines/ocr/vendor/paddle_ocr_engine.h"
 #include "system_support/logging/log_categories.h"
 
 #include <QStringList>
@@ -127,9 +128,9 @@ std::shared_ptr<const FrameData> preprocessFrame(
 } // namespace
 
 DetectionRegistry::DetectionRegistry(
-    const std::shared_ptr<IOcrEngine> &ocrEngine,
+    const QString &ocrConfigPath,
     const std::shared_ptr<IBarcodeDecoder> &barcodeDecoder)
-    : m_ocrEngine(ocrEngine),
+    : m_ocrConfigPath(ocrConfigPath),
       m_barcodeDecoder(barcodeDecoder)
 {
 }
@@ -175,7 +176,7 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         return creation;
     }
     if (request.mode == DetectionMode::Ocr
-            && (!m_ocrEngine || !first)) {
+            && (!first || m_ocrConfigPath.isEmpty())) {
         creation.errorMessage = QStringLiteral(
                     "深度 OCR 未准备好，请检查模板中的目标文字。");
         return creation;
@@ -233,23 +234,35 @@ DetectionPipelineCreationResult DetectionRegistry::create(
 
     if (request.mode == DetectionMode::Ocr) {
         const std::shared_ptr<OcrDetectionPipeline> pipeline(new OcrDetectionPipeline);
-        IOcrEngine *engine = m_ocrEngine.get();
         const std::string target = first->settings.targetText.toStdString();
         const QString templateName = first->displayName;
-        creation.executor = [pipeline, positioner, preprocess, descriptor,
-                engine, target, templateName](
-            const std::shared_ptr<const FrameData> &source) {
-            const std::shared_ptr<const FrameData> frame = preprocessFrame(source, preprocess);
-            if (!frame) return DetectionCompletion();
-            const DetectionPose pose = positioner->locate(frame->originalImage);
-            DetectionResult result = pipeline->detect(
-                        makeDetectionWorkItem(frame, pose), target, *engine);
-            result.presentationText = result.recognizedText;
-            result.hasPresentationText = true;
-            setTemplatePresentation(templateName, pose, &result);
-            applyDescriptorPolicy(descriptor, &result);
-            return completeWith(frame, result);
-        };
+        try {
+            const std::shared_ptr<IOcrEngine> ocrEngine(
+                        new PaddleOcrEngine(m_ocrConfigPath));
+            creation.executor = [pipeline, positioner, preprocess, descriptor,
+                    target, templateName, ocrEngine](
+                const std::shared_ptr<const FrameData> &source) {
+                const std::shared_ptr<const FrameData> frame = preprocessFrame(source, preprocess);
+                if (!frame) return DetectionCompletion();
+                const DetectionPose pose = positioner->locate(frame->originalImage);
+                DetectionResult result = pipeline->detect(
+                            makeDetectionWorkItem(frame, pose), target,
+                            *ocrEngine);
+                result.presentationText = result.recognizedText;
+                result.hasPresentationText = true;
+                setTemplatePresentation(templateName, pose, &result);
+                applyDescriptorPolicy(descriptor, &result);
+                return completeWith(frame, result);
+            };
+        } catch (const std::exception &error) {
+            qCWarning(logDetection).noquote()
+                    << QStringLiteral(
+                        "event=detection.prepare_failed mode=ocr diagnostic=%1")
+                       .arg(QString::fromLocal8Bit(error.what()));
+            creation.errorMessage = QStringLiteral(
+                        "深度 OCR 初始化失败，请检查配置、模型和运行库。");
+            return creation;
+        }
         return creation;
     }
 

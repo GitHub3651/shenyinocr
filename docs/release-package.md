@@ -1,18 +1,18 @@
 # 独立发布包约定
 
-正式交付目录固定为 `dist/ShengYin/`；`build/` 只用于 Qt Creator 编译，`archive/legacy-output-20260807/` 保留迁移前运行目录，不作为正式发布来源。
+正式交付目录固定为 `dist/ShengYin/`；`build/` 只用于 Qt Creator 编译，`archive/legacy-output-20260807/` 只用于历史回溯，不作为正式发布来源。
 
-## 当前 V3 发布基线
+## 当前发布基线
 
-- OCR 固定为 PP-OCRv3：英文检测、英文识别、方向分类器和 `en_dict.txt`。
-- 独立包位于 `dist/ShengYin/`，包含 `ShengYin.exe`、唯一 `config1.txt`、V3 模型、授权、二维码 DLL、Qt/Paddle/OpenCV/海康/Snap7 运行库及 `manifest.sha256`。
-- 程序从 exe 同级加载 `config1.txt`；配置中的相对模型和词典路径以该配置文件所在目录为准。
-- 2026-08-07 已从独立包直接启动，并完成五种检测模式、模板读写、相机、PLC、软硬触发、授权、二维码 DLL 和多相机入口的人工回归。
-- PP-OCRv5 服务器模型保留在 `archive/model-upgrade-v5-20260807/`，不参与当前编译、运行或发布。
+- 深度 OCR 固定使用 `PP-OCRv6_tiny_det + PP-OCRv6_tiny_rec` 和 PaddleOCR v3.7.0 官方 tiny 字典。
+- OCR 配置文件固定为 exe 同级的 `config_ocr.txt`，其中模型和字典相对路径以该配置文件所在目录为基准。
+- OCR 资产固定放在 `OCR/PP-OCRv6_tiny/`：DET 和 REC 各包含 `inference.json`、`inference.pdiparams`，字典文件为 `ppocrv6_tiny_dict.txt`。
+- Paddle Inference 运行时固定为 3.0.0 Windows x64 CPU 包所需的 `paddle_inference.dll`、`common.dll`、`mklml.dll`、`mkldnn.dll` 和 `libiomp5md.dll`。
+- 授权、二维码 DLL、Qt、OpenCV、海康、Snap7 和 Microsoft x64 运行库继续随独立包提供。
 
-## 使用和校验
+## 使用和部署
 
-1. 直接运行 `dist/ShengYin/ShengYin.exe`，不通过 Qt Creator，也不运行 `build/` 中的 exe。
-2. `manifest.sha256` 记录包内每个运行文件（不含清单自身）的 SHA-256，可用于拷贝后的完整性检查。
-3. `output/` 已归档；如需回溯旧运行环境，使用 `archive/legacy-output-20260807/`，不要将其重新作为发布目录。
+1. Release 链接后，`app/system_support/deployment/deploy_runtime.ps1` 从 `dist/ShengYin/` 复制运行资源到构建输出目录并检查必需文件。
+2. 在构建输出目录完成主程序整体验收；验收通过后，用本次生成的 `ShengYin.exe` 更新 `dist/ShengYin/`。
+3. 正式交付时直接运行 `dist/ShengYin/ShengYin.exe`，不依赖开发机源码目录。
 4. 现场模板和 AppData 配置保持原有位置，不随发布包迁移。

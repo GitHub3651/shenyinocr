@@ -84,7 +84,6 @@ SOURCES += \
     detection/detectionmode/stamp/overlap_detector.cpp \
     engines/ocr/vendor/paddle/src/clipper.cpp \
     engines/ocr/vendor/paddle/src/config.cpp \
-    engines/ocr/vendor/paddle/src/ocr_cls.cpp \
     engines/ocr/vendor/paddle/src/ocr_det.cpp \
     engines/ocr/vendor/paddle/src/ocr_rec.cpp \
     engines/ocr/vendor/paddle/src/postprocess_op.cpp \
@@ -168,7 +167,6 @@ HEADERS += \
     detection/detectionmode/stamp/overlap_detector.h \
     engines/ocr/vendor/paddle/include/clipper.h \
     engines/ocr/vendor/paddle/include/config.h \
-    engines/ocr/vendor/paddle/include/ocr_cls.h \
     engines/ocr/vendor/paddle/include/ocr_det.h \
     engines/ocr/vendor/paddle/include/ocr_rec.h \
     engines/ocr/vendor/paddle/include/postprocess_op.h \
@@ -210,14 +208,14 @@ INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/gl
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/gflags/include
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xxhash/include
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/include
-INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mkldnn/include
+INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/onednn/include
 INCLUDEPATH += $$THIRD_PARTY/opencv/include
 
 
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/paddle/lib -lpaddle_inference
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/lib -lmklml
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/lib -llibiomp5md
-LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mkldnn/lib -lmkldnn
+LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/onednn/lib -lmkldnn
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/glog/lib -lglog
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/gflags/lib -lgflags_static
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/third_party/install/protobuf/lib -llibprotobuf

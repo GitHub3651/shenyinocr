@@ -13,7 +13,7 @@ public:
     explicit PaddleOcrEngine(const QString &configPath);
     ~PaddleOcrEngine() override;
 
-    std::vector<std::string> recognize(cv::Mat &image) override;
+    std::vector<OcrRecognitionItem> recognize(cv::Mat &image) override;
 
 private:
     struct Impl;

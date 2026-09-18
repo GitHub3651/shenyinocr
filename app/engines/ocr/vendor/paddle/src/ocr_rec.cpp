@@ -1,329 +1,160 @@
-// Copyright (c) 2020 PaddlePaddle Authors. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+#include "engines/ocr/vendor/paddle/include/ocr_rec.h"
 
-#include <engines/ocr/vendor/paddle/include/ocr_rec.h>
+#include "engines/ocr/vendor/paddle/include/utility.h"
+
+#include <opencv2/imgproc.hpp>
+
+#include <algorithm>
+#include <functional>
+#include <numeric>
+#include <stdexcept>
 
 namespace PaddleOCR {
 
-	void CRNNRecognizer::Run(std::vector<std::vector<std::vector<int>>> boxes,
-        cv::Mat &img, Classifier *cls, std::vector<std::string> &list_str)
-    {
-		cv::Mat srcimg;
-		img.copyTo(srcimg);
-		cv::Mat crop_img;
-		cv::Mat resize_img;
-
-		int index = 0;
-		for (int i = boxes.size() - 1; i >= 0; i--) {
-			crop_img = GetRotateCropImage(srcimg, boxes[i]);
-			if (cls != nullptr) {
-				crop_img = cls->Run(crop_img);
-			}
-
-			float wh_ratio = float(crop_img.cols) / float(crop_img.rows);
-
-			this->resize_op_.Run(crop_img, resize_img, wh_ratio, this->use_tensorrt_);
-
-			this->normalize_op_.Run(&resize_img, this->mean_, this->scale_,
-				this->is_scale_);
-
-			std::vector<float> input(1 * 3 * resize_img.rows * resize_img.cols, 0.0f);
-
-			this->permute_op_.Run(&resize_img, input.data());
-
-			// Inference.
-			auto input_names = this->predictor_->GetInputNames();
-			auto input_t = this->predictor_->GetInputHandle(input_names[0]);
-			input_t->Reshape({ 1, 3, resize_img.rows, resize_img.cols });
-			input_t->CopyFromCpu(input.data());
-			this->predictor_->Run();
-
-			std::vector<float> predict_batch;
-			auto output_names = this->predictor_->GetOutputNames();
-			auto output_t = this->predictor_->GetOutputHandle(output_names[0]);
-			auto predict_shape = output_t->shape();
-
-			int out_num = std::accumulate(predict_shape.begin(), predict_shape.end(), 1,
-				std::multiplies<int>());
-			predict_batch.resize(out_num);
-
-			output_t->CopyToCpu(predict_batch.data());
-
-			// ctc decode
-			std::vector<std::string> str_res;
-			int argmax_idx;
-			int last_index = 0;
-			float score = 0.f;
-			int count = 0;
-			float max_value = 0.0f;
-
-			for (int n = 0; n < predict_shape[1]; n++) {
-				argmax_idx =
-					int(Utility::argmax(&predict_batch[n * predict_shape[2]],
-						&predict_batch[(n + 1) * predict_shape[2]]));
-				max_value =
-					float(*std::max_element(&predict_batch[n * predict_shape[2]],
-						&predict_batch[(n + 1) * predict_shape[2]]));
-
-				if (argmax_idx > 0 && (!(n > 0 && argmax_idx == last_index))) {
-					score += max_value;
-					count += 1;
-					str_res.push_back(label_list_[argmax_idx]);
-				}
-				last_index = argmax_idx;
-			}
-			score /= count;
-			std::string str;
-			for (int i = 0; i < str_res.size(); i++) {
-				str += str_res[i];
-			}
-			list_str.push_back(str);
-		}
-	}
-
-	void CRNNRecognizer::LoadModel(const std::string &model_dir) {
-		//   AnalysisConfig config;
-		paddle_infer::Config config;
-		config.SetModel(model_dir + "/inference.pdmodel",
-			model_dir + "/inference.pdiparams");
-
-		if (this->use_gpu_) {
-			config.EnableUseGpu(this->gpu_mem_, this->gpu_id_);
-			if (this->use_tensorrt_) {
-				config.EnableTensorRtEngine(
-					1 << 20, 10, 3,
-					this->use_fp16_ ? paddle_infer::Config::Precision::kHalf
-					: paddle_infer::Config::Precision::kFloat32,
-					false, false);
-			}
-		}
-		else {
-			config.DisableGpu();
-			if (this->use_mkldnn_) {
-				config.EnableMKLDNN();
-				// cache 10 different shapes for mkldnn to avoid memory leak
-				config.SetMkldnnCacheCapacity(10);
-			}
-			config.SetCpuMathLibraryNumThreads(this->cpu_math_library_num_threads_);
-		}
-
-		config.SwitchUseFeedFetchOps(false);
-		// true for multiple input
-		config.SwitchSpecifyInputNames(true);
-
-		config.SwitchIrOptim(true);
-
-		config.EnableMemoryOptim();
-		config.DisableGlogInfo();
-
-		this->predictor_ = CreatePredictor(config);
-	}
-
-	cv::Mat CRNNRecognizer::GetRotateCropImage(const cv::Mat &srcimage,
-		std::vector<std::vector<int>> box) {
-		cv::Mat image;
-		srcimage.copyTo(image);
-		std::vector<std::vector<int>> points = box;
-
-		int x_collect[4] = { box[0][0], box[1][0], box[2][0], box[3][0] };
-		int y_collect[4] = { box[0][1], box[1][1], box[2][1], box[3][1] };
-		int left = int(*std::min_element(x_collect, x_collect + 4));
-		int right = int(*std::max_element(x_collect, x_collect + 4));
-		int top = int(*std::min_element(y_collect, y_collect + 4));
-		int bottom = int(*std::max_element(y_collect, y_collect + 4));
-
-		cv::Mat img_crop;
-		image(cv::Rect(left, top, right - left, bottom - top)).copyTo(img_crop);
-
-		for (int i = 0; i < points.size(); i++) {
-			points[i][0] -= left;
-			points[i][1] -= top;
-		}
-
-		int img_crop_width = int(sqrt(pow(points[0][0] - points[1][0], 2) +
-			pow(points[0][1] - points[1][1], 2)));
-		int img_crop_height = int(sqrt(pow(points[0][0] - points[3][0], 2) +
-			pow(points[0][1] - points[3][1], 2)));
-
-		cv::Point2f pts_std[4];
-		pts_std[0] = cv::Point2f(0., 0.);
-		pts_std[1] = cv::Point2f(img_crop_width, 0.);
-		pts_std[2] = cv::Point2f(img_crop_width, img_crop_height);
-		pts_std[3] = cv::Point2f(0.f, img_crop_height);
-
-		cv::Point2f pointsf[4];
-		pointsf[0] = cv::Point2f(points[0][0], points[0][1]);
-		pointsf[1] = cv::Point2f(points[1][0], points[1][1]);
-		pointsf[2] = cv::Point2f(points[2][0], points[2][1]);
-		pointsf[3] = cv::Point2f(points[3][0], points[3][1]);
-
-		cv::Mat M = cv::getPerspectiveTransform(pointsf, pts_std);
-
-		cv::Mat dst_img;
-		cv::warpPerspective(img_crop, dst_img, M,
-			cv::Size(img_crop_width, img_crop_height),
-			cv::BORDER_REPLICATE);
-
-		if (float(dst_img.rows) >= float(dst_img.cols) * 1.5) {
-			cv::Mat srcCopy = cv::Mat(dst_img.rows, dst_img.cols, dst_img.depth());
-			cv::transpose(dst_img, srcCopy);
-			cv::flip(srcCopy, srcCopy, 0);
-			return srcCopy;
-		}
-		else {
-			return dst_img;
-        }
-    }
-
-    cv::Mat CRNNRecognizer::GetRotateCropImage(const cv::Mat& srcimage, std::vector<std::vector<int>> box, cv::Rect& rect)
-    {
-        cv::Mat image;
-        srcimage.copyTo(image);
-        std::vector<std::vector<int>> points = box;
-
-        int x_collect[4] = { box[0][0], box[1][0], box[2][0], box[3][0] };
-        int y_collect[4] = { box[0][1], box[1][1], box[2][1], box[3][1] };
-        int left = int(*std::min_element(x_collect, x_collect + 4));
-        int right = int(*std::max_element(x_collect, x_collect + 4));
-        int top = int(*std::min_element(y_collect, y_collect + 4));
-        int bottom = int(*std::max_element(y_collect, y_collect + 4));
-
-        cv::Mat img_crop;
-        rect = cv::Rect(left, top, right - left, bottom - top);
-        image(rect).copyTo(img_crop);
-
-        for (int i = 0; i < points.size(); i++) {
-            points[i][0] -= left;
-            points[i][1] -= top;
-        }
-
-        int img_crop_width = int(sqrt(pow(points[0][0] - points[1][0], 2) +
-            pow(points[0][1] - points[1][1], 2)));
-        int img_crop_height = int(sqrt(pow(points[0][0] - points[3][0], 2) +
-            pow(points[0][1] - points[3][1], 2)));
-
-        cv::Point2f pts_std[4];
-        pts_std[0] = cv::Point2f(0., 0.);
-        pts_std[1] = cv::Point2f(img_crop_width, 0.);
-        pts_std[2] = cv::Point2f(img_crop_width, img_crop_height);
-        pts_std[3] = cv::Point2f(0.f, img_crop_height);
-
-        cv::Point2f pointsf[4];
-        pointsf[0] = cv::Point2f(points[0][0], points[0][1]);
-        pointsf[1] = cv::Point2f(points[1][0], points[1][1]);
-        pointsf[2] = cv::Point2f(points[2][0], points[2][1]);
-        pointsf[3] = cv::Point2f(points[3][0], points[3][1]);
-
-        cv::Mat M = cv::getPerspectiveTransform(pointsf, pts_std);
-
-        cv::Mat dst_img;
-        cv::warpPerspective(img_crop, dst_img, M,
-            cv::Size(img_crop_width, img_crop_height),
-            cv::BORDER_REPLICATE);
-
-        if (float(dst_img.rows) >= float(dst_img.cols) * 1.5) {
-            cv::Mat srcCopy = cv::Mat(dst_img.rows, dst_img.cols, dst_img.depth());
-            cv::transpose(dst_img, srcCopy);
-            cv::flip(srcCopy, srcCopy, 0);
-            return srcCopy;
-        }
-        else {
-            return dst_img;
-        }
-    }
-std::vector<std::pair<std::string, cv::Rect>> CRNNRecognizer::RunOCR(std::vector<std::vector<std::vector<int>>> boxes, cv::Mat &img,
-                                                                     Classifier *cls)
+CRNNRecognizer::CRNNRecognizer(const std::string &modelDirectory,
+                               int cpuMathLibraryNumThreads,
+                               bool useMkldnn,
+                               const std::string &labelPath)
+    : cpuMathLibraryNumThreads_(cpuMathLibraryNumThreads),
+      useMkldnn_(useMkldnn),
+      labels_(Utility::ReadDict(labelPath))
 {
-    cv::Mat srcimg;
-        img.copyTo(srcimg);
-        cv::Mat crop_img;
-        cv::Mat resize_img;
+    labels_.insert(labels_.begin(), "blank");
+    labels_.push_back(" ");
+    LoadModel(modelDirectory);
+}
 
-        int index = 0;
-        std::vector<std::pair<std::string, cv::Rect>> vtsresstr;
-        std::vector<std::string> str_res;
-        cv::Rect tmprect;
-        for (int i = 0; i < boxes.size(); i++) {
-            crop_img = GetRotateCropImage(srcimg, boxes[i], tmprect);
-
-            if (cls != nullptr) {
-                crop_img = cls->Run(crop_img);
-            }
-
-            float wh_ratio = float(crop_img.cols) / float(crop_img.rows);
-
-            this->resize_op_.Run(crop_img, resize_img, wh_ratio, this->use_tensorrt_);
-
-            this->normalize_op_.Run(&resize_img, this->mean_, this->scale_,
-                this->is_scale_);
-
-            std::vector<float> input(1 * 3 * resize_img.rows * resize_img.cols, 0.0f);
-
-            this->permute_op_.Run(&resize_img, input.data());
-
-            // Inference.
-            auto input_names = this->predictor_->GetInputNames();
-            auto input_t = this->predictor_->GetInputHandle(input_names[0]);
-            input_t->Reshape({ 1, 3, resize_img.rows, resize_img.cols });
-            input_t->CopyFromCpu(input.data());
-            this->predictor_->Run();
-
-            std::vector<float> predict_batch;
-            auto output_names = this->predictor_->GetOutputNames();
-            auto output_t = this->predictor_->GetOutputHandle(output_names[0]);
-            auto predict_shape = output_t->shape();
-
-            int out_num = std::accumulate(predict_shape.begin(), predict_shape.end(), 1,
-                std::multiplies<int>());
-            predict_batch.resize(out_num);
-
-            output_t->CopyToCpu(predict_batch.data());
-
-            // ctc decode
-            int argmax_idx;
-            int last_index = 0;
-            float score = 0.f;
-            int count = 0;
-            float max_value = 0.0f;
-
-            for (int n = 0; n < predict_shape[1]; n++) {
-                argmax_idx =
-                    int(Utility::argmax(&predict_batch[n * predict_shape[2]],
-                        &predict_batch[(n + 1) * predict_shape[2]]));
-                max_value =
-                    float(*std::max_element(&predict_batch[n * predict_shape[2]],
-                        &predict_batch[(n + 1) * predict_shape[2]]));
-
-                if (argmax_idx > 0 && (!(n > 0 && argmax_idx == last_index))) {
-                    score += max_value;
-                    count += 1;
-                    str_res.push_back(label_list_[argmax_idx]);
-                }
-                last_index = argmax_idx;
-            }
-            score /= count;
-            cv::String tmpstr;
-            for (int i = index; i < str_res.size(); i++) {
-                tmpstr += str_res[i];
-            }
-            index = str_res.size();
-            std::pair<std::string, cv::Rect> tmppair;
-            tmppair.first = tmpstr;
-            tmppair.second = tmprect;
-            vtsresstr.push_back(tmppair);
-        }
-        return vtsresstr;
+void CRNNRecognizer::LoadModel(const std::string &modelDirectory)
+{
+    paddle_infer::Config config;
+    config.SetModel(modelDirectory + "/inference.json",
+                    modelDirectory + "/inference.pdiparams");
+    config.DisableGpu();
+    if (useMkldnn_) {
+        config.EnableMKLDNN();
+        config.SetMkldnnCacheCapacity(10);
     }
+    config.SetCpuMathLibraryNumThreads(cpuMathLibraryNumThreads_);
+    config.SwitchUseFeedFetchOps(false);
+    config.SwitchSpecifyInputNames(true);
+    config.SwitchIrOptim(true);
+    config.DisableGlogInfo();
+
+    predictor_ = paddle_infer::CreatePredictor(config);
+    if (!predictor_) {
+        throw std::runtime_error(
+                    "Unable to create PP-OCRv6 tiny REC predictor");
+    }
+}
+
+std::vector<std::string> CRNNRecognizer::Run(
+        const std::vector<std::vector<std::vector<int>>> &boxes,
+        const cv::Mat &image)
+{
+    std::vector<std::string> recognized;
+    recognized.reserve(boxes.size());
+    for (const std::vector<std::vector<int>> &box : boxes) {
+        const cv::Mat cropped = GetRotateCropImage(image, box);
+        cv::Mat resizedImage;
+        resize_.Run(cropped, resizedImage);
+
+        std::vector<float> input(
+                    3 * resizedImage.rows * resizedImage.cols,
+                    0.0f);
+        permute_.Run(&resizedImage, input.data());
+
+        const std::vector<std::string> inputNames =
+                predictor_->GetInputNames();
+        std::unique_ptr<paddle_infer::Tensor> inputTensor =
+                predictor_->GetInputHandle(inputNames[0]);
+        inputTensor->Reshape(
+                    {1, 3, resizedImage.rows, resizedImage.cols});
+        inputTensor->CopyFromCpu(input.data());
+        if (!predictor_->Run()) {
+            throw std::runtime_error(
+                        "PP-OCRv6 tiny REC Predictor::Run() returned false");
+        }
+
+        const std::vector<std::string> outputNames =
+                predictor_->GetOutputNames();
+        std::unique_ptr<paddle_infer::Tensor> outputTensor =
+                predictor_->GetOutputHandle(outputNames[0]);
+        const std::vector<int> outputShape = outputTensor->shape();
+        const int outputCount = std::accumulate(
+                    outputShape.begin(),
+                    outputShape.end(),
+                    1,
+                    std::multiplies<int>());
+        std::vector<float> output(outputCount);
+        outputTensor->CopyToCpu(output.data());
+
+        std::string text;
+        int previousIndex = 0;
+        for (int step = 0; step < outputShape[1]; ++step) {
+            const float *begin =
+                    &output[step * outputShape[2]];
+            const int characterIndex = static_cast<int>(
+                        Utility::Argmax(begin, begin + outputShape[2]));
+            if (characterIndex > 0
+                    && !(step > 0 && characterIndex == previousIndex)) {
+                if (characterIndex >= static_cast<int>(labels_.size())) {
+                    throw std::runtime_error(
+                                "PP-OCRv6 tiny REC output does not match dictionary");
+                }
+                text += labels_[characterIndex];
+            }
+            previousIndex = characterIndex;
+        }
+        recognized.push_back(text);
+    }
+    return recognized;
+}
+
+cv::Mat CRNNRecognizer::GetRotateCropImage(
+        const cv::Mat &image,
+        const std::vector<std::vector<int>> &box) const
+{
+    const std::vector<cv::Point2f> points = {
+        cv::Point2f(static_cast<float>(box[0][0]),
+                    static_cast<float>(box[0][1])),
+        cv::Point2f(static_cast<float>(box[1][0]),
+                    static_cast<float>(box[1][1])),
+        cv::Point2f(static_cast<float>(box[2][0]),
+                    static_cast<float>(box[2][1])),
+        cv::Point2f(static_cast<float>(box[3][0]),
+                    static_cast<float>(box[3][1]))
+    };
+    const float width = std::max(
+                cv::norm(points[0] - points[1]),
+                cv::norm(points[2] - points[3]));
+    const float height = std::max(
+                cv::norm(points[0] - points[3]),
+                cv::norm(points[1] - points[2]));
+    const int outputWidth = std::max(1, static_cast<int>(width));
+    const int outputHeight = std::max(1, static_cast<int>(height));
+    const std::vector<cv::Point2f> destination = {
+        cv::Point2f(0.0f, 0.0f),
+        cv::Point2f(static_cast<float>(outputWidth - 1), 0.0f),
+        cv::Point2f(static_cast<float>(outputWidth - 1),
+                    static_cast<float>(outputHeight - 1)),
+        cv::Point2f(0.0f, static_cast<float>(outputHeight - 1))
+    };
+
+    const cv::Mat transform =
+            cv::getPerspectiveTransform(points, destination);
+    cv::Mat cropped;
+    cv::warpPerspective(image,
+                        cropped,
+                        transform,
+                        cv::Size(outputWidth, outputHeight),
+                        cv::INTER_CUBIC,
+                        cv::BORDER_REPLICATE);
+    if (cropped.rows != 0
+            && static_cast<float>(cropped.rows)
+            / static_cast<float>(cropped.cols) >= 1.5f) {
+        cv::rotate(cropped, cropped, cv::ROTATE_90_COUNTERCLOCKWISE);
+    }
+    return cropped;
+}
 
 } // namespace PaddleOCR

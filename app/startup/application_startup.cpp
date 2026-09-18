@@ -8,7 +8,6 @@
 
 #include "engines/barcode/vendor/barcode_decoder_adapter.h"
 #include "devices/camera/vendor/hikvision_camera_device.h"
-#include "engines/ocr/vendor/paddle_ocr_engine.h"
 #include "devices/plc/vendor/snap7_plc_device.h"
 #include "application/inspection_application_service.h"
 #include "application/template_application_service.h"
@@ -276,13 +275,11 @@ int ApplicationStartup::run(int argc, char *argv[])
                     new InspectionPlcController(
                         std::move(plcDevice), plcAddresses));
         const QString ocrConfigPath = QDir(applicationDirectory).filePath(
-                    QStringLiteral("config1.txt"));
-        const std::shared_ptr<IOcrEngine> ocrEngine(
-                    new PaddleOcrEngine(ocrConfigPath));
+                    QStringLiteral("config_ocr.txt"));
         const std::shared_ptr<IBarcodeDecoder> barcodeDecoder(
                     new BarcodeDecoderAdapter);
         const std::shared_ptr<DetectionRegistry> detectionRegistry(
-                    new DetectionRegistry(ocrEngine, barcodeDecoder));
+                    new DetectionRegistry(ocrConfigPath, barcodeDecoder));
         const std::shared_ptr<InspectionRuntime>
                 runtime(
                     new InspectionRuntime(
