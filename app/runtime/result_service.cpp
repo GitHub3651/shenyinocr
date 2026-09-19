@@ -170,11 +170,14 @@ void ResultService::resetNgCount()
     m_statistics.ngCount = 0;
 }
 
-void ResultService::clearPendingDelayedNgRequests()
+int ResultService::clearPendingDelayedNgRequests()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
+    const int clearedCount =
+            static_cast<int>(m_delayedNgRequests.size());
     std::queue<DelayedNgRequest> empty;
     m_delayedNgRequests.swap(empty);
+    return clearedCount;
 }
 
 void ResultService::shutdown()

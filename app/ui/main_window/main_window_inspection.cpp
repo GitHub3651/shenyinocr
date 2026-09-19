@@ -675,8 +675,10 @@ void MainWindow::on_pushButton_applyPlcTriggerMode_clicked()
 
 void MainWindow::on_pushButton_resetRejectQueue_clicked()
 {
+    int clearedCount = 0;
     const OperationResult result =
-            m_inspectionApplicationService->clearPendingDelayedNgRequests();
+            m_inspectionApplicationService
+            ->clearPendingDelayedNgRequests(&clearedCount);
     if (!result.isSuccess()) {
         qCWarning(logRuntime).noquote()
                 << QStringLiteral(
@@ -687,7 +689,21 @@ void MainWindow::on_pushButton_resetRejectQueue_clicked()
                     result.error.userMessage);
         return;
     }
-    qCInfo(logRuntime).noquote() << "event=plc.reject_queue_reset";
+    qCInfo(logRuntime).noquote()
+            << QStringLiteral(
+                "event=plc.reject_queue_reset cleared=%1")
+               .arg(clearedCount);
+    if (clearedCount > 0) {
+        QMessageBox::information(
+                    this,
+                    QStringLiteral("提示"),
+                    QStringLiteral(
+                        "剔除复位完成，共清除 %1 个待执行的剔除动作。")
+                       .arg(clearedCount));
+        return;
+    }
     QMessageBox::information(
-                this, "提示", "待执行的剔除动作已清除。");
+                this,
+                QStringLiteral("提示"),
+                QStringLiteral("当前没有待执行的剔除动作。"));
 }

@@ -888,14 +888,21 @@ OperationResult InspectionApplicationService::resetNgCount()
 }
 
 OperationResult
-InspectionApplicationService::clearPendingDelayedNgRequests()
+InspectionApplicationService::clearPendingDelayedNgRequests(
+        int *clearedCount)
 {
+    if (clearedCount) {
+        *clearedCount = 0;
+    }
     if (m_runtime->state() != InspectionRuntimeState::Idle) {
         return OperationResult::rejected(
                     QStringLiteral("REJECT_QUEUE_RUNTIME_BUSY"),
                     QStringLiteral("请先停止检测，再清除待执行的剔除动作。"));
     }
-    m_runtime->clearPendingDelayedNgRequests();
+    const int count = m_runtime->clearPendingDelayedNgRequests();
+    if (clearedCount) {
+        *clearedCount = count;
+    }
     return OperationResult::accepted();
 }
 

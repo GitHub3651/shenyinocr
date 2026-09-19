@@ -73,7 +73,7 @@ public:
     DetectionResultStatistics statistics() const;
     void resetStatistics();
     void resetNgCount();
-    void clearPendingDelayedNgRequests();
+    int clearPendingDelayedNgRequests();
 
     void shutdown();
 

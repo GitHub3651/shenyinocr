@@ -128,7 +128,7 @@ public:
     DetectionResultStatistics statistics() const;
     void resetStatistics();
     void resetNgCount();
-    void clearPendingDelayedNgRequests();
+    int clearPendingDelayedNgRequests();
 
 signals:
     void presentationReady(InspectionPresentation presentation);

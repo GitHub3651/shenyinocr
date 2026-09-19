@@ -99,7 +99,8 @@ public:
         bool productionRunning);
     OperationResult resetStatistics();
     OperationResult resetNgCount();
-    OperationResult clearPendingDelayedNgRequests();
+    OperationResult clearPendingDelayedNgRequests(
+        int *clearedCount = nullptr);
     void checkPlcHealth();
     RuntimeSnapshot runtimeSnapshot() const;
 

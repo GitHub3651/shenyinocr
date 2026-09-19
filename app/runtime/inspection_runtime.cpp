@@ -773,7 +773,7 @@ void InspectionRuntime::resetNgCount()
     m_resultService->resetNgCount();
 }
 
-void InspectionRuntime::clearPendingDelayedNgRequests()
+int InspectionRuntime::clearPendingDelayedNgRequests()
 {
-    m_resultService->clearPendingDelayedNgRequests();
+    return m_resultService->clearPendingDelayedNgRequests();
 }
