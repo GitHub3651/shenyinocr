@@ -3,19 +3,15 @@
 #include "detection/common/detection_roi_geometry.h"
 
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 
 namespace {
 
 bool isAllowedRecognitionByte(char value)
 {
-    const unsigned char byte = static_cast<unsigned char>(value);
-    return std::isalnum(byte)
-            || (byte & 0x80) != 0
-            || value == '-'
-            || value == '.'
-            || value == ':';
+    return (value >= '0' && value <= '9')
+            || (value >= 'A' && value <= 'Z')
+            || (value >= 'a' && value <= 'z');
 }
 
 std::string cleanRecognitionText(const std::string &text)
