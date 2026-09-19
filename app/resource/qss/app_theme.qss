@@ -14,8 +14,10 @@ QMessageBox {
     background-color: #E9EEF3;
 }
 
+QWidget#widget_leftDrawer,
 QWidget#widget_mainPanel {
-    background-color: #F7F9FB;
+    background-color: #EEF3F7;
+    border: none;
 }
 
 QToolTip {
@@ -46,15 +48,18 @@ QGroupBox::title {
     font-weight: 600;
 }
 
-QWidget#widget_leftDrawer,
-QStackedWidget#stackedWidget_leftDrawer,
 QWidget#page_inspectionInfo,
 QWidget#page_detectionSettings,
 QWidget#page_imageSettings,
 QWidget#page_plcSettings,
 QWidget#page_softwareSettings {
-    background-color: #EEF3F7;
+    background: transparent;
     border: none;
+}
+
+QStackedWidget#stackedWidget_leftDrawer {
+    background: transparent;
+    border: 1px solid #B8C4CE;
 }
 
 QWidget#widget_leftDrawer QGroupBox {
@@ -72,6 +77,15 @@ QGroupBox#groupBox_templateManagement,
 QGroupBox#groupBox_imageSaving,
 QGroupBox#groupBox_imageAcquisitionAndProcessing,
 QGroupBox#groupBox_softwareData,
+QGroupBox#groupBox_imageDisplay,
+QGroupBox#groupBox_runtimeStatus,
+QGroupBox#groupBox_productionStatistics,
+QGroupBox#groupBox_totalCount,
+QGroupBox#groupBox_ngCount,
+QGroupBox#groupBox_detectionDuration,
+QGroupBox#groupBox_passRate,
+QGroupBox#groupBox_recognitionText,
+QGroupBox#groupBox_currentTemplate,
 QFrame#frame_plcTriggerMode,
 QFrame#frame_plcConnection,
 QFrame#frame_plcProcessParameters {
@@ -80,28 +94,15 @@ QFrame#frame_plcProcessParameters {
     padding: 6px;
 }
 
-QGroupBox#groupBox_productionStatistics {
-    background: transparent;
-    border: none;
-    margin-top: 18px;
-    padding: 0;
+QGroupBox#groupBox_imageDisplay {
+    margin-top: 0;
 }
 
-QGroupBox#groupBox_totalCount,
-QGroupBox#groupBox_ngCount,
-QGroupBox#groupBox_detectionDuration,
-QGroupBox#groupBox_passRate {
-    background-color: #FFFFFF;
-    border: 1px solid #C3CDD5;
-    margin-top: 16px;
-    padding: 5px 4px 4px 4px;
-}
-
-QGroupBox#groupBox_totalCount::title,
-QGroupBox#groupBox_ngCount::title,
-QGroupBox#groupBox_detectionDuration::title,
-QGroupBox#groupBox_passRate::title {
-    background-color: #FFFFFF;
+QWidget#widget_leftDrawer QGroupBox#groupBox_totalCount::title,
+QWidget#widget_leftDrawer QGroupBox#groupBox_ngCount::title,
+QWidget#widget_leftDrawer QGroupBox#groupBox_detectionDuration::title,
+QWidget#widget_leftDrawer QGroupBox#groupBox_passRate::title {
+    background-color: #F8FAFC;
 }
 
 QScrollArea#scrollArea_inspectionInfo,
@@ -118,7 +119,7 @@ QWidget#widget_detectionSettingsScrollContent,
 QWidget#widget_imageSettingsScrollContent,
 QWidget#widget_plcSettingsScrollContent,
 QWidget#widget_softwareSettingsScrollContent {
-    background-color: #EEF3F7;
+    background: transparent;
 }
 
 /* 3. 标签 */
@@ -221,16 +222,16 @@ QPushButton:disabled {
 
 /* 5. 主控工具栏与工具按钮 */
 QFrame#frame_mainToolbar {
-    background-color: #E7EDF2;
+    background-color: #F8FAFC;
     border: 1px solid #B8C4CE;
 }
 
 QToolButton#toolButton_cameraAction,
 QToolButton#toolButton_inspectionAction,
 QToolButton#toolButton_previewAction {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FFFFFF, stop:1 #EDF2F6);
+    background-color: #FFFFFF;
     color: #000000;
-    border: 1px solid #AEBCC8;
+    border: 1px solid #B8C4CE;
     padding: 2px;
     font-size: 16px;
     font-weight: 600;
@@ -239,29 +240,30 @@ QToolButton#toolButton_previewAction {
 QToolButton#toolButton_cameraAction:hover,
 QToolButton#toolButton_inspectionAction:hover,
 QToolButton#toolButton_previewAction:hover {
-    background: #F6FBFF;
+    background-color: #F4F9FD;
     border-color: #6D9EC4;
-}
-
-QToolButton#toolButton_cameraAction:pressed,
-QToolButton#toolButton_inspectionAction:pressed,
-QToolButton#toolButton_previewAction:pressed {
-    background: #DDEAF3;
-    border-color: #0E568E;
 }
 
 QToolButton#toolButton_cameraAction:focus,
 QToolButton#toolButton_inspectionAction:focus,
 QToolButton#toolButton_previewAction:focus {
+    background-color: #F4F9FD;
     border-color: #1769AA;
+}
+
+QToolButton#toolButton_cameraAction:pressed,
+QToolButton#toolButton_inspectionAction:pressed,
+QToolButton#toolButton_previewAction:pressed {
+    background-color: #E2EDF5;
+    border-color: #0E568E;
 }
 
 QToolButton#toolButton_cameraAction:disabled,
 QToolButton#toolButton_inspectionAction:disabled,
 QToolButton#toolButton_previewAction:disabled {
-    background: #EDF1F4;
+    background-color: #EDF1F4;
     color: #909DA8;
-    border-color: #D2D9DF;
+    border-color: #D4DDE5;
 }
 
 QGroupBox#groupBox_templateManagement QPushButton {
@@ -388,7 +390,9 @@ QFrame#frame_plcStatusDot[connectionState="disconnected"] {
 
 QWidget#widget_leftNavigationRail {
     background-color: #DBE3EA;
+    border-top: 1px solid #BDC9D3;
     border-right: 1px solid #BDC9D3;
+    border-bottom: 1px solid #BDC9D3;
 }
 
 QWidget#widget_leftNavigationRail QToolButton {
@@ -410,9 +414,13 @@ QWidget#widget_leftNavigationRail QToolButton:checked {
     color: #1769AA;
 }
 
-QSplitter#splitter_leftDrawerMain::handle {
-    background: transparent;
+QSplitter#splitter_leftDrawerMain::handle:horizontal {
+    background-color: #EEF3F7;
     border: none;
+}
+
+QSplitter#splitter_leftDrawerMain::handle:horizontal:hover {
+    background-color: #B8C4CE;
 }
 
 /* 6. 输入控件 */
@@ -606,7 +614,7 @@ QPushButton#pushButton_resetRejectQueue:disabled {
 QLabel#label_runtimeStatus {
     background-color: transparent;
     color: #000000;
-    border: 1px solid #B8C4CE;
+    border: none;
     padding: 10px;
     font-size: 26px;
     font-weight: 600;
@@ -631,7 +639,8 @@ QLabel#label_runtimeStatus[uiState="warning"] {
 
 QLabel#label_verdictResult {
     background-color: #202830;
-    border: none;
+    border: 1px solid #111A22;
+    border-left: none;
 }
 
 /* 11. 页面滚动条，仅限定左侧五页 */
@@ -701,10 +710,19 @@ QLineEdit#lineEdit_totalCount,
 QLineEdit#lineEdit_ngCount,
 QLineEdit#lineEdit_detectionDuration,
 QLineEdit#lineEdit_passRate {
-    background-color: #FFFFFF;
-    border: 1px solid #D0D9E0;
-    font-size: 20px;
+    background-color: transparent;
+    border: none;
     font-weight: 600;
+}
+
+QLineEdit#lineEdit_totalCount,
+QLineEdit#lineEdit_ngCount {
+    font-size: 16px;
+}
+
+QLineEdit#lineEdit_detectionDuration,
+QLineEdit#lineEdit_passRate {
+    font-size: 20px;
 }
 
 QLineEdit#lineEdit_totalCount {
@@ -726,7 +744,7 @@ QLineEdit#lineEdit_passRate {
 QLineEdit#lineEdit_currentTemplateName {
     background-color: #FFFFFF;
     color: #000000;
-    border: 1px solid #D0D9E0;
+    border: none;
     font-size: 26px;
     font-weight: 600;
 }

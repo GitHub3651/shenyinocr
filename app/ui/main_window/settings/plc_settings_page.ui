@@ -175,6 +175,9 @@
           </item>
           <item row="3" column="0" colspan="2">
            <layout class="QHBoxLayout">
+            <property name="spacing">
+             <number>16</number>
+            </property>
             <item>
              <widget class="QPushButton" name="pushButton_connectPlc">
               <property name="minimumSize">
