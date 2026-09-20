@@ -229,6 +229,7 @@ INCLUDEPATH += $$THIRD_PARTY/Libraries/win64
 DEPENDPATH += $$THIRD_PARTY/Libraries/win64
 LIBS += -L$$THIRD_PARTY/hikvision_mvs_sdk/lib/win64/ -lMvCameraControl
 LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lsnap7
+win32:LIBS += -lole32 -loleaut32 -lwbemuuid
 
 INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
 DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include

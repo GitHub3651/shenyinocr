@@ -6,7 +6,6 @@
 #include <QFileInfo>
 #include <QMap>
 #include <QSaveFile>
-#include <QStringList>
 #include <QTextStream>
 
 namespace {
@@ -29,126 +28,151 @@ QByteArray cryptData(const QByteArray &data)
     return result;
 }
 
-QMap<QString, QString> readKeyValueFile(const QString &filePath)
+QString encryptText(const QString &text)
 {
-    QMap<QString, QString> values;
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return values;
-    }
-
-    QTextStream stream(&file);
-    stream.setCodec("UTF-8");
-    while (!stream.atEnd()) {
-        const QString line = stream.readLine().trimmed();
-        if (line.isEmpty()
-                || line.startsWith(QLatin1Char('#'))
-                || line.startsWith(QLatin1Char('['))) {
-            continue;
-        }
-
-        const int separator = line.indexOf(QLatin1Char('='));
-        if (separator <= 0) {
-            continue;
-        }
-        values.insert(line.left(separator).trimmed(),
-                      line.mid(separator + 1).trimmed());
-    }
-    return values;
+    return QString::fromLatin1(
+                cryptData(text.toUtf8()).toHex().toUpper());
 }
 
-QString decryptPayload(const QString &encryptedText)
+QString decryptText(const QString &text)
 {
-    if (encryptedText.trimmed().isEmpty()) {
-        return QString();
-    }
-
-    const QByteArray encrypted = QByteArray::fromBase64(
-                encryptedText.trimmed().toLatin1());
-    if (encrypted.isEmpty()) {
-        return QString();
-    }
-    return QString::fromUtf8(cryptData(encrypted));
+    return QString::fromUtf8(cryptData(
+                QByteArray::fromHex(text.toLatin1())));
 }
 
-QDate expiresDateFromPayload(const QString &payload)
+bool containsRequiredFields(const QMap<QString, QString> &values)
 {
-    const QStringList lines = payload.split(
-                QLatin1Char('\n'), QString::SkipEmptyParts);
-    for (const QString &line : lines) {
-        const QString trimmed = line.trimmed();
-        if (!trimmed.startsWith(QStringLiteral("expires="))) {
-            continue;
-        }
-        return QDate::fromString(
-                    trimmed.mid(QStringLiteral("expires=").size()).trimmed(),
-                    QStringLiteral("yyyy-MM-dd"));
-    }
-    return QDate();
+    return values.contains(QStringLiteral("expires"))
+            && values.contains(QStringLiteral("features"))
+            && values.contains(QStringLiteral("defaultMode"))
+            && values.contains(QStringLiteral("deviceBinding"))
+            && values.contains(QStringLiteral("deviceCode"));
 }
 
-QString encryptedPayloadForDate(const QDate &expiresDate)
+QString expiresValue(const LicenseData &license)
 {
-    QByteArray payload;
-    payload += "expires=";
-    payload += expiresDate.toString(
-                QStringLiteral("yyyy-MM-dd")).toUtf8();
-    payload += "\n";
-    return QString::fromLatin1(cryptData(payload).toBase64());
+    return license.permanent
+            ? QStringLiteral("permanent")
+            : license.expiresDate.toString(QStringLiteral("yyyy-MM-dd"));
+}
+
+void appendEncryptedField(QString *content,
+                          const QString &name,
+                          const QString &value)
+{
+    content->append(encryptText(name));
+    content->append(QLatin1Char('='));
+    content->append(encryptText(value));
+    content->append(QLatin1Char('\n'));
 }
 
 } // namespace
 
-bool LicenseReadResult::succeeded() const
+bool LicenseDecodeResult::succeeded() const
 {
-    return error == LicenseFileError::None && expiresDate.isValid();
+    return status == LicenseCodecStatus::Success;
 }
 
-LicenseReadResult LicenseCodec::readFile(const QString &filePath)
+LicenseDecodeResult LicenseCodec::readFile(const QString &filePath)
 {
-    LicenseReadResult result;
-    const QMap<QString, QString> values = readKeyValueFile(filePath);
-    if (values.isEmpty()) {
-        result.error = LicenseFileError::FileReadFailed;
+    LicenseDecodeResult result;
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         return result;
     }
 
-    result.expiresDate = expiresDateFromPayload(
-                decryptPayload(values.value(QStringLiteral("data"))));
-    if (!result.expiresDate.isValid()) {
-        result.error = LicenseFileError::InvalidFormat;
+    QTextStream stream(&file);
+    stream.setCodec("UTF-8");
+    if (stream.atEnd()
+            || stream.readLine() != QStringLiteral("version=3")) {
+        result.status = LicenseCodecStatus::InvalidFormat;
         return result;
     }
 
-    result.error = LicenseFileError::None;
+    QMap<QString, QString> values;
+    while (!stream.atEnd()) {
+        const QString line = stream.readLine().trimmed();
+        if (line.isEmpty()) {
+            continue;
+        }
+        const int separator = line.indexOf(QLatin1Char('='));
+        if (separator <= 0) {
+            continue;
+        }
+        values.insert(
+                    decryptText(line.left(separator)),
+                    decryptText(line.mid(separator + 1)));
+    }
+
+    if (!containsRequiredFields(values)) {
+        result.status = LicenseCodecStatus::InvalidFormat;
+        return result;
+    }
+
+    const QString expires = values.value(QStringLiteral("expires"));
+    if (expires == QLatin1String("permanent")) {
+        result.license.permanent = true;
+    } else {
+        result.license.expiresDate = QDate::fromString(
+                    expires, QStringLiteral("yyyy-MM-dd"));
+        if (!result.license.expiresDate.isValid()
+                || result.license.expiresDate.toString(
+                    QStringLiteral("yyyy-MM-dd")) != expires) {
+            result.status = LicenseCodecStatus::InvalidFormat;
+            return result;
+        }
+    }
+
+    result.license.featureModeIds = values.value(
+                QStringLiteral("features")).split(
+                QLatin1Char(','), QString::KeepEmptyParts);
+    result.license.defaultModeId = values.value(
+                QStringLiteral("defaultMode"));
+    result.license.deviceBinding = values.value(
+                QStringLiteral("deviceBinding"));
+    result.license.deviceCode = values.value(
+                QStringLiteral("deviceCode"));
+    result.status = LicenseCodecStatus::Success;
     return result;
 }
 
-LicenseFileError LicenseCodec::writeFile(const QDate &expiresDate,
-                                         const QString &filePath)
+LicenseCodecStatus LicenseCodec::writeFile(
+        const LicenseData &license,
+        const QString &filePath)
 {
-    if (!expiresDate.isValid()) {
-        return LicenseFileError::InvalidDate;
+    if ((!license.permanent && !license.expiresDate.isValid())
+            || license.featureModeIds.isEmpty()
+            || license.defaultModeId.isEmpty()
+            || license.deviceBinding.isEmpty()
+            || license.deviceCode.isEmpty()) {
+        return LicenseCodecStatus::InvalidFormat;
     }
 
     const QFileInfo fileInfo(filePath);
     const QDir directory = fileInfo.absoluteDir();
     if (!directory.exists()
             && !QDir().mkpath(directory.absolutePath())) {
-        return LicenseFileError::FileWriteFailed;
+        return LicenseCodecStatus::FileWriteFailed;
     }
 
     QSaveFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        return LicenseFileError::FileWriteFailed;
+        return LicenseCodecStatus::FileWriteFailed;
     }
 
-    QString content;
-    content += QStringLiteral("[License]\n");
-    content += QStringLiteral("data=%1\n").arg(
-                encryptedPayloadForDate(expiresDate));
+    QString content = QStringLiteral("version=3\n");
+    appendEncryptedField(&content, QStringLiteral("expires"),
+                         expiresValue(license));
+    appendEncryptedField(&content, QStringLiteral("features"),
+                         license.featureModeIds.join(QLatin1Char(',')));
+    appendEncryptedField(&content, QStringLiteral("defaultMode"),
+                         license.defaultModeId);
+    appendEncryptedField(&content, QStringLiteral("deviceBinding"),
+                         license.deviceBinding);
+    appendEncryptedField(&content, QStringLiteral("deviceCode"),
+                         license.deviceCode);
     file.write(content.toUtf8());
     return file.commit()
-            ? LicenseFileError::None
-            : LicenseFileError::FileWriteFailed;
+            ? LicenseCodecStatus::Success
+            : LicenseCodecStatus::FileWriteFailed;
 }

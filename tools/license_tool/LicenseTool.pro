@@ -18,10 +18,12 @@ INCLUDEPATH += $$APP_ROOT
 SOURCES += \
     main.cpp \
     widget.cpp \
+    $$APP_ROOT/contracts/detection_mode.cpp \
     $$APP_ROOT/system_support/license/license_codec.cpp
 
 HEADERS += \
     widget.h \
+    $$APP_ROOT/contracts/detection_mode.h \
     $$APP_ROOT/system_support/license/license_codec.h
 
 FORMS += \

@@ -31,7 +31,8 @@ public:
         Ui::SoftwareSettingsPage &softwareSettingsUi,
         QCheckBox &hardwareTriggerEnabled,
         SettingsApplicationService &settingsService,
-        SettingsEditState &editState);
+        SettingsEditState &editState,
+        const QStringList &authorizedModeIds);
 
     void setupBindings();
     void setupNumericInputValidators();
@@ -108,6 +109,7 @@ private:
     QCheckBox &m_hardwareTriggerEnabled;
     SettingsApplicationService &m_settingsService;
     SettingsEditState &m_editState;
+    QStringList m_authorizedModeIds;
     bool m_applyingSettings = false;
     bool m_updatingSettingsUi = false;
     QMap<QString, GlobalSettingBinding> m_bindings;

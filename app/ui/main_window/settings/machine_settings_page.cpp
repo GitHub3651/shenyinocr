@@ -28,12 +28,6 @@
 
 namespace {
 
-const QStringList &detectModeIds()
-{
-    static const QStringList ids = appSettingsDetectionModeIds();
-    return ids;
-}
-
 const QStringList &imageSaveModeIds()
 {
     static const QStringList ids = appSettingsImageSaveModeIds();
@@ -118,14 +112,16 @@ MachineSettingsPage::MachineSettingsPage(
     Ui::SoftwareSettingsPage &softwareSettingsUi,
     QCheckBox &hardwareTriggerEnabled,
     SettingsApplicationService &settingsService,
-    SettingsEditState &editState)
+    SettingsEditState &editState,
+    const QStringList &authorizedModeIds)
     : m_detectionSettingsUi(detectionSettingsUi),
       m_imageSettingsUi(imageSettingsUi),
       m_plcSettingsUi(plcSettingsUi),
       m_softwareSettingsUi(softwareSettingsUi),
       m_hardwareTriggerEnabled(hardwareTriggerEnabled),
       m_settingsService(settingsService),
-      m_editState(editState)
+      m_editState(editState),
+      m_authorizedModeIds(authorizedModeIds)
 {
 }
 
@@ -139,6 +135,10 @@ void MachineSettingsPage::setupBindings()
         m_detectionSettingsUi.comboBox_detectionMode->clear();
         for (const DetectionModeDescriptor &descriptor :
              detectionModeDescriptors()) {
+            if (!m_authorizedModeIds.contains(
+                    QLatin1String(descriptor.modeId))) {
+                continue;
+            }
             m_detectionSettingsUi.comboBox_detectionMode->addItem(
                         QString::fromUtf8(descriptor.displayName),
                         QLatin1String(descriptor.uiId));
@@ -290,7 +290,8 @@ void MachineSettingsPage::applyToUi(
     QSignalBlocker detectionModeBlocker(m_detectionSettingsUi.comboBox_detectionMode);
 
     m_detectionSettingsUi.comboBox_detectionMode->setCurrentIndex(
-        indexOf(detectModeIds(), settings.detectModeId, 1));
+        m_detectionSettingsUi.comboBox_detectionMode->findData(
+            settings.detectModeId));
     m_imageSettingsUi.comboBox_imageSaveRange->setCurrentIndex(
         indexOf(imageSaveModeIds(), settings.imageSaveModeId, 0));
     m_imageSettingsUi.comboBox_imageSaveContent->setCurrentIndex(
@@ -599,9 +600,9 @@ void MachineSettingsPage::copyUiValuesTo(
 {
     for (const QString &key : keys) {
         if (key == "detect.mode") {
-            settings.detectModeId = idAt(
-                detectModeIds(), m_detectionSettingsUi.comboBox_detectionMode->currentIndex(),
-                settings.detectModeId);
+            settings.detectModeId =
+                    m_detectionSettingsUi.comboBox_detectionMode
+                    ->currentData().toString();
         } else if (key == "image.save_mode") {
             settings.imageSaveModeId = idAt(
                 imageSaveModeIds(), m_imageSettingsUi.comboBox_imageSaveRange->currentIndex(),
@@ -730,8 +731,9 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
     for (const QString &key : keys) {
         if (key == "detect.mode") {
             QSignalBlocker blocker(m_detectionSettingsUi.comboBox_detectionMode);
-            m_detectionSettingsUi.comboBox_detectionMode->setCurrentIndex(indexOf(
-                detectModeIds(), applied.detectModeId, 1));
+            m_detectionSettingsUi.comboBox_detectionMode->setCurrentIndex(
+                        m_detectionSettingsUi.comboBox_detectionMode->findData(
+                            applied.detectModeId));
         } else if (key == "image.save_mode") {
             QSignalBlocker blocker(m_imageSettingsUi.comboBox_imageSaveRange);
             m_imageSettingsUi.comboBox_imageSaveRange->setCurrentIndex(indexOf(

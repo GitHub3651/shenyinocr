@@ -2,6 +2,7 @@
 
 #include "startup/runtime_guard.h"
 #include "startup/single_instance_guard.h"
+#include "contracts/detection_mode.h"
 #include "system_support/crash/windows_crash_handler.h"
 #include "system_support/logging/application_logger.h"
 #include "system_support/logging/log_categories.h"
@@ -119,26 +120,14 @@ int ApplicationStartup::run(int argc, char *argv[])
     qRegisterMetaType<InspectionPresentation>("InspectionPresentation");
     qRegisterMetaType<InspectionFaultSnapshot>("InspectionFaultSnapshot");
     QApplication::setQuitOnLastWindowClosed(true);
-    if (!RuntimeGuard::check()) {
+    const RuntimeGuardResult license = RuntimeGuard::check();
+    if (!license.succeeded()) {
         showRuntimeGuardExitMessage(
                     QStringLiteral("系统初始化失败，"
                                    "请联系供应商。"));
         return -1;
     }
-
-    QTimer runtimeGuardTimer;
-    QObject::connect(
-                &runtimeGuardTimer,
-                &QTimer::timeout,
-                []() {
-        if (!RuntimeGuard::check()) {
-            showRuntimeGuardExitMessage(
-                        QStringLiteral("程序出错，即将退出，"
-                                       "请联系供应商。"));
-            QCoreApplication::quit();
-        }
-    });
-    runtimeGuardTimer.start(24 * 60 * 60 * 1000);
+    std::unique_ptr<QTimer> licenseExpiryTimer;
 
     SingleInstanceGuard singleInstanceGuard(QStringLiteral("ecust"));
     if (!singleInstanceGuard.acquire()) {
@@ -238,6 +227,17 @@ int ApplicationStartup::run(int argc, char *argv[])
             return -1;
             }
         }
+        DetectionMode savedMode = DetectionMode::Word;
+        const bool savedModeAuthorized = detectionModeFromUiId(
+                    startupSettings.detectModeId, &savedMode)
+                && license.authorizedModeIds.contains(
+                    detectionModeId(savedMode));
+        if (settingsStatus == AppSettingsLoadStatus::FirstRun
+                || !savedModeAuthorized) {
+            DetectionMode defaultMode = DetectionMode::Word;
+            detectionModeFromId(license.defaultModeId, &defaultMode);
+            startupSettings.detectModeId = detectionModeUiId(defaultMode);
+        }
         qCInfo(logStartup).noquote()
                 << QStringLiteral(
                     "event=settings.loaded status=%1 root=%2 mode=%3 trigger=%4 saveMode=%5")
@@ -308,8 +308,25 @@ int ApplicationStartup::run(int argc, char *argv[])
                     inspectionService,
                     runtime.get(),
                     settingsService,
-                    templateService);
+                    templateService,
+                    license.authorizedModeIds);
         window.showMaximized();
+        if (!license.permanent) {
+            const QDate expiresDate = license.expiresDate;
+            licenseExpiryTimer.reset(new QTimer);
+            QObject::connect(
+                        licenseExpiryTimer.get(),
+                        &QTimer::timeout,
+                        [expiresDate]() {
+                if (QDate::currentDate() > expiresDate) {
+                    showRuntimeGuardExitMessage(
+                                QStringLiteral("程序出错，即将退出，"
+                                               "请联系供应商。"));
+                    QCoreApplication::quit();
+                }
+            });
+            licenseExpiryTimer->start(24 * 60 * 60 * 1000);
+        }
         qCInfo(logStartup).noquote() << "event=app.ready";
         result = application.exec();
     }

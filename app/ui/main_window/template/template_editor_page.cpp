@@ -470,10 +470,7 @@ QString TemplateEditorPage::detectModeIdForIndex(int index) const
         return QString();
     }
     const QVariant data = m_detectionSettingsUi.comboBox_detectionMode->itemData(index);
-    return data.isValid() && !data.toString().isEmpty()
-            ? data.toString()
-            : detectionModeUiId(detectionModeDescriptors()
-                                .value(index).mode);
+    return data.toString();
 }
 
 QString TemplateEditorPage::currentDetectModeId() const

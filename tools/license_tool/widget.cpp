@@ -1,64 +1,81 @@
 #include "widget.h"
 #include "ui_widget.h"
+#include "contracts/detection_mode.h"
 #include "system_support/license/license_codec.h"
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDate>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QTextEdit>
 
 namespace {
 
-QString utf8Text(const char *text)
+QString modeDisplayName(const QString &modeId)
 {
-    return QString::fromUtf8(text);
-}
-
-QString hexText(const char *hex)
-{
-    return QString::fromUtf8(QByteArray::fromHex(hex));
-}
-
-bool makeLicenseFile(const QDate &expiresDate, const QString &outputPath, QString *errorMessage)
-{
-    const LicenseFileError error = LicenseCodec::writeFile(
-                expiresDate, outputPath);
-    if (error != LicenseFileError::None) {
-        if (errorMessage) {
-            *errorMessage = error == LicenseFileError::InvalidDate
-                    ? hexText("E697A5E69C9FE697A0E69588E38082")
-                    : hexText("E58699E585A5E69687E4BBB6E5A4B1E8B4A5E38082");
-        }
-        return false;
-    }
-
-    return true;
+    const DetectionModeDescriptor *descriptor =
+            detectionModeDescriptorFromId(modeId);
+    return descriptor
+            ? QString::fromUtf8(descriptor->displayName)
+            : modeId;
 }
 
 QString licenseInfoText(const QString &filePath, QString *errorMessage)
 {
-    const LicenseReadResult result = LicenseCodec::readFile(filePath);
+    const LicenseDecodeResult result = LicenseCodec::readFile(filePath);
     if (!result.succeeded()) {
         if (errorMessage) {
-            *errorMessage = result.error == LicenseFileError::FileReadFailed
-                    ? hexText("E69687E4BBB6E8AFBBE58F96E5A4B1E8B4A5E68896E58685E5AEB9E4B8BAE7A9BAE38082")
-                    : hexText("E69687E4BBB6E6A0BCE5BC8FE697A0E69588E38082");
+            *errorMessage =
+                    result.status == LicenseCodecStatus::FileReadFailed
+                    ? QStringLiteral("文件读取失败或内容为空。")
+                    : QStringLiteral("文件格式无效。");
         }
         return QString();
     }
 
-    const QString status = QDate::currentDate() <= result.expiresDate
-            ? hexText("E69C89E69588")
-            : hexText("E5B7B2E8B685E8BF87");
+    QStringList featureNames;
+    for (const QString &modeId : result.license.featureModeIds) {
+        featureNames.append(modeDisplayName(modeId));
+    }
+
+    const QString expires = result.license.permanent
+            ? QStringLiteral("长期有效")
+            : result.license.expiresDate.toString(
+                QStringLiteral("yyyy-MM-dd"));
+    const QString dateStatus = result.license.permanent
+            ? QStringLiteral("长期有效")
+            : (QDate::currentDate() <= result.license.expiresDate
+               ? QStringLiteral("有效")
+               : QStringLiteral("已超过"));
+    const bool unactivated =
+            result.license.deviceBinding == QLatin1String("UNACTIVATED")
+            && result.license.deviceCode == QLatin1String("UNACTIVATED");
+    const QString bindingMethod = unactivated
+            ? QStringLiteral("未激活")
+            : result.license.deviceBinding;
 
     QString text;
-    text += hexText("E69687E4BBB6E8B7AFE5BE84EFBC9A") + QDir::toNativeSeparators(filePath) + QStringLiteral("\n");
-    text += hexText("E588B0E69C9FE697A5E69C9FEFBC9A") + result.expiresDate.toString(QStringLiteral("yyyy-MM-dd")) + QStringLiteral("\n");
-    text += hexText("E697A5E69C9FE78AB6E68081EFBC9A") + status;
+    text += QStringLiteral("文件路径：")
+            + QDir::toNativeSeparators(filePath) + QLatin1Char('\n');
+    text += QStringLiteral("有效期：") + expires + QLatin1Char('\n');
+    text += QStringLiteral("有效期状态：") + dateStatus + QLatin1Char('\n');
+    text += QStringLiteral("授权功能：")
+            + featureNames.join(QStringLiteral("、")) + QLatin1Char('\n');
+    text += QStringLiteral("默认模式：")
+            + modeDisplayName(result.license.defaultModeId)
+            + QLatin1Char('\n');
+    text += QStringLiteral("设备绑定方式：")
+            + bindingMethod + QLatin1Char('\n');
+    text += QStringLiteral("设备绑定状态：")
+            + (unactivated ? QStringLiteral("未激活")
+                           : QStringLiteral("已激活"));
     return text;
 }
 
@@ -73,8 +90,25 @@ Widget::Widget(QWidget *parent)
     ui->outputEdit->setText(defaultLicensePath());
     ui->datEdit->setText(defaultLicensePath());
     ui->licenseInfoEdit->setReadOnly(true);
+    ui->expiresTypeComboBox->addItem(
+                QStringLiteral("具体日期"), QStringLiteral("date"));
+    ui->expiresTypeComboBox->addItem(
+                QStringLiteral("长期有效"), QStringLiteral("permanent"));
     ui->expiresEdit->setDate(QDate::currentDate().addYears(1));
-    ui->statusLabel->setText(hexText("E8AFB7E98089E68BA9E69C89E69588E69C9FE5B9B6E7949FE68890206C6963656E73652E696E69E38082"));
+    for (const DetectionModeDescriptor &descriptor
+         : detectionModeDescriptors()) {
+        QListWidgetItem *item = new QListWidgetItem(
+                    QString::fromUtf8(descriptor.displayName),
+                    ui->featuresListWidget);
+        item->setData(Qt::UserRole, QLatin1String(descriptor.modeId));
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Unchecked);
+    }
+    ui->deviceBindingEdit->setText(QStringLiteral("未激活"));
+    ui->statusLabel->setText(
+                QStringLiteral("请选择有效期、授权功能和默认模式。"));
+    refreshExpiresEditor();
+    refreshDefaultModes();
 
     connect(ui->browseOutputButton, &QPushButton::clicked,
             this, &Widget::browseOutputFile);
@@ -84,6 +118,11 @@ Widget::Widget(QWidget *parent)
             this, &Widget::browseDatFile);
     connect(ui->readDatButton, &QPushButton::clicked,
             this, &Widget::readDatFile);
+    connect(ui->expiresTypeComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) { refreshExpiresEditor(); });
+    connect(ui->featuresListWidget, &QListWidget::itemChanged,
+            this, [this](QListWidgetItem *) { refreshDefaultModes(); });
 }
 
 Widget::~Widget()
@@ -95,7 +134,7 @@ void Widget::browseOutputFile()
 {
     const QString filePath = QFileDialog::getSaveFileName(
                 this,
-                hexText("E98089E68BA9E8BE93E587BAE69687E4BBB6"),
+                QStringLiteral("选择输出文件"),
                 ui->outputEdit->text(),
                 QStringLiteral("INI Files (*.ini);;All Files (*.*)"));
     if (!filePath.isEmpty()) {
@@ -107,30 +146,54 @@ void Widget::generateLicenseFile()
 {
     const QString outputPath = ui->outputEdit->text().trimmed();
     if (outputPath.isEmpty()) {
-        QMessageBox::warning(this, utf8Text("\xE6\x8F\x90\xE7\xA4\xBA"),
-                             hexText("E8AFB7E98089E68BA9E8BE93E587BAE69687E4BBB6E38082"));
+        QMessageBox::warning(this, QStringLiteral("提示"),
+                             QStringLiteral("请选择输出文件。"));
         return;
     }
 
-    QString errorMessage;
-    if (!makeLicenseFile(ui->expiresEdit->date(), outputPath, &errorMessage)) {
-        QMessageBox::critical(this, utf8Text("\xE6\x8F\x90\xE7\xA4\xBA"), errorMessage);
+    const QStringList features = selectedFeatureModeIds();
+    if (features.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("提示"),
+                             QStringLiteral("请至少选择一个授权功能。"));
+        return;
+    }
+    const QString defaultModeId =
+            ui->defaultModeComboBox->currentData().toString();
+    if (defaultModeId.isEmpty() || !features.contains(defaultModeId)) {
+        QMessageBox::warning(this, QStringLiteral("提示"),
+                             QStringLiteral("请选择授权功能中的默认模式。"));
+        return;
+    }
+
+    LicenseData license;
+    license.permanent = ui->expiresTypeComboBox->currentData().toString()
+            == QLatin1String("permanent");
+    license.expiresDate = ui->expiresEdit->date();
+    license.featureModeIds = features;
+    license.defaultModeId = defaultModeId;
+    license.deviceBinding = QStringLiteral("UNACTIVATED");
+    license.deviceCode = QStringLiteral("UNACTIVATED");
+    if (LicenseCodec::writeFile(license, outputPath)
+            != LicenseCodecStatus::Success) {
+        const QString errorMessage = QStringLiteral("写入文件失败。");
+        QMessageBox::critical(
+                    this, QStringLiteral("提示"), errorMessage);
         ui->statusLabel->setText(errorMessage);
         return;
     }
 
-    ui->statusLabel->setText(hexText("6C6963656E73652E696E6920E5B7B2E7949FE68890E38082"));
+    ui->statusLabel->setText(QStringLiteral("license.ini 已生成。"));
     ui->datEdit->setText(outputPath);
     readDatFile();
-    QMessageBox::information(this, utf8Text("\xE6\x8F\x90\xE7\xA4\xBA"),
-                             hexText("E7949FE68890E5AE8CE68890E38082"));
+    QMessageBox::information(this, QStringLiteral("提示"),
+                             QStringLiteral("生成完成。"));
 }
 
 void Widget::browseDatFile()
 {
     const QString filePath = QFileDialog::getOpenFileName(
                 this,
-                hexText("E98089E68BA9206C6963656E73652E696E6920E69687E4BBB6"),
+                QStringLiteral("选择 license.ini 文件"),
                 QFileInfo(ui->datEdit->text()).absolutePath(),
                 QStringLiteral("INI Files (*.ini);;All Files (*.*)"));
     if (!filePath.isEmpty()) {
@@ -142,8 +205,8 @@ void Widget::readDatFile()
 {
     const QString filePath = ui->datEdit->text().trimmed();
     if (filePath.isEmpty()) {
-        QMessageBox::warning(this, utf8Text("\xE6\x8F\x90\xE7\xA4\xBA"),
-                             hexText("E8AFB7E98089E68BA9E69687E4BBB6E38082"));
+        QMessageBox::warning(this, QStringLiteral("提示"),
+                             QStringLiteral("请选择文件。"));
         return;
     }
 
@@ -151,14 +214,59 @@ void Widget::readDatFile()
     const QString text = licenseInfoText(filePath, &errorMessage);
     if (text.isEmpty()) {
         ui->licenseInfoEdit->clear();
-        QMessageBox::critical(this, utf8Text("\xE6\x8F\x90\xE7\xA4\xBA"), errorMessage);
+        QMessageBox::critical(
+                    this, QStringLiteral("提示"), errorMessage);
         return;
     }
 
     ui->licenseInfoEdit->setPlainText(text);
 }
 
+void Widget::refreshExpiresEditor()
+{
+    ui->expiresEdit->setEnabled(
+                ui->expiresTypeComboBox->currentData().toString()
+                == QLatin1String("date"));
+}
+
+void Widget::refreshDefaultModes()
+{
+    const QString previousModeId =
+            ui->defaultModeComboBox->currentData().toString();
+    const QStringList features = selectedFeatureModeIds();
+    ui->defaultModeComboBox->clear();
+    for (const DetectionModeDescriptor &descriptor
+         : detectionModeDescriptors()) {
+        const QString modeId = QLatin1String(descriptor.modeId);
+        if (features.contains(modeId)) {
+            ui->defaultModeComboBox->addItem(
+                        QString::fromUtf8(descriptor.displayName), modeId);
+        }
+    }
+    const int previousIndex =
+            ui->defaultModeComboBox->findData(previousModeId);
+    if (previousIndex >= 0) {
+        ui->defaultModeComboBox->setCurrentIndex(previousIndex);
+    }
+}
+
+QStringList Widget::selectedFeatureModeIds() const
+{
+    QStringList selected;
+    for (int index = 0;
+         index < ui->featuresListWidget->count();
+         ++index) {
+        const QListWidgetItem *item =
+                ui->featuresListWidget->item(index);
+        if (item->checkState() == Qt::Checked) {
+            selected.append(item->data(Qt::UserRole).toString());
+        }
+    }
+    return selected;
+}
+
 QString Widget::defaultLicensePath() const
 {
-    return QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("license.ini"));
+    return QDir(QCoreApplication::applicationDirPath()).filePath(
+                QStringLiteral("license.ini"));
 }

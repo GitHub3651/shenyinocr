@@ -46,6 +46,7 @@ public:
         InspectionRuntime *runtime,
         const std::shared_ptr<SettingsApplicationService> &settingsService,
         const std::shared_ptr<TemplateApplicationService> &templateService,
+        const QStringList &authorizedModeIds,
         QWidget *parent = nullptr);
     ~MainWindow() override;
 
@@ -69,7 +70,7 @@ private:
     void on_pushButton_clearSoftwareData_clicked();
     void on_barcodeCsvBrowseDirectory_clicked();
     void on_barcodeCsvEnable_toggled(bool enabled);
-    void initializePages();
+    void initializePages(const QStringList &authorizedModeIds);
     void handleCameraAction();
     void handleInspectionAction();
     void handlePreviewAction();

@@ -2,6 +2,7 @@
 #define WIDGET_H
 
 #include <QString>
+#include <QStringList>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -23,6 +24,9 @@ private:
     void generateLicenseFile();
     void browseDatFile();
     void readDatFile();
+    void refreshExpiresEditor();
+    void refreshDefaultModes();
+    QStringList selectedFeatureModeIds() const;
     QString defaultLicensePath() const;
 
 private:

@@ -30,6 +30,7 @@ MainWindow::MainWindow(
     InspectionRuntime *runtime,
     const std::shared_ptr<SettingsApplicationService> &settingsService,
     const std::shared_ptr<TemplateApplicationService> &templateService,
+    const QStringList &authorizedModeIds,
     QWidget *parent)
     : QWidget(parent),
       ui(new Ui::MainWindow),
@@ -78,7 +79,7 @@ MainWindow::MainWindow(
         m_detectionSettingsUi->barcodeCsvEnable->setChecked(
                     machineSettings().barcodeCsvEnabled);
     }
-    initializePages();
+    initializePages(authorizedModeIds);
     connect(ui->toolButton_cameraAction,
             &QToolButton::clicked,
             this,
@@ -247,7 +248,7 @@ void MainWindow::hideLeftDrawer()
     ui->toolButton_showSoftwareSettings->setChecked(false);
 }
 
-void MainWindow::initializePages()
+void MainWindow::initializePages(const QStringList &authorizedModeIds)
 {
     m_inspectionPage.reset(new InspectionPage(
                 *ui, *m_inspectionInfoUi));
@@ -258,7 +259,8 @@ void MainWindow::initializePages()
                 *m_softwareSettingsUi,
                 *ui->checkBox_hardwareTriggerEnabled,
                 *m_settingsApplicationService,
-                m_settingsEditState));
+                m_settingsEditState,
+                authorizedModeIds));
     m_templateEditorPage.reset(new TemplateEditorPage(
                 *this,
                 *ui,
