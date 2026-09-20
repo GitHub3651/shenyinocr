@@ -26,7 +26,7 @@ const qint64 kPartSizeLimit = 32LL * kMebibyte;
 const qint64 kTotalSizeLimit = 1024LL * kMebibyte;
 const qint64 kTotalSizeBeforeNewPart =
         kTotalSizeLimit - kPartSizeLimit;
-const int kRetentionDays = 90;
+const int kRetentionDays = 60;
 const QRegularExpression kNormalLogName(
             QStringLiteral(
                 "^ShengYin_\\d{8}_\\d{6}_\\d{3}_\\d+_\\d{3}\\.log$"));

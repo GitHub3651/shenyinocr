@@ -21,7 +21,7 @@
 
 namespace {
 
-const int kCrashRetentionDays = 90;
+const int kCrashRetentionDays = 60;
 const QRegularExpression kCrashFileName(
             QStringLiteral(
                 "^crash_\\d{8}_\\d{6}_\\d{3}_\\d+\\.txt$"));
