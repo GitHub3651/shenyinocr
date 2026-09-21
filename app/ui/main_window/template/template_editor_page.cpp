@@ -815,8 +815,7 @@ void TemplateEditorPage::saveCurrentTemplate()
     }
     TemplateSettings settings;
     settings.detectionMode = mode;
-    settings.targetText =
-            m_detectionSettingsUi.textEdit_targetText->toPlainText().trimmed();
+    settings.targetText = QString();
     settings.imageThresholdPercent = threshold;
     settings.trackingRoi = geometry.trackingRoi;
     InitialTemplateAssets assets;
