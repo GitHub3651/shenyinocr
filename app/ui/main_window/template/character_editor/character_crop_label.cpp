@@ -136,9 +136,11 @@ void CharacterCropLabel::mouseMoveEvent(QMouseEvent *event)
         return;
     }
 
-    QPoint imagePoint = widgetToImagePoint(event->pos());
-    imagePoint.setX(qBound(0, imagePoint.x(), m_image.width() - 1));
-    imagePoint.setY(qBound(0, imagePoint.y(), m_image.height() - 1));
+    const QRect targetRect = imageTargetRect();
+    const QPoint widgetPoint(
+                qBound(targetRect.left(), event->pos().x(), targetRect.right()),
+                qBound(targetRect.top(), event->pos().y(), targetRect.bottom()));
+    const QPoint imagePoint = widgetToImagePoint(widgetPoint);
     m_currentRect = QRect(m_startPoint, imagePoint);
     update();
     emit itemsChanged();

@@ -152,14 +152,47 @@ void CharacterTemplateEditorDialog::moveToNamingPage()
     std::sort(m_sortedBoxes.begin(), m_sortedBoxes.end(),
               [](const TemplateCharacterBox &a,
                  const TemplateCharacterBox &b) {
-        const int rowTolerance = qMax(
-                    8, qMin(a.rect.height(), b.rect.height()) / 2);
-        if (qAbs(a.rect.center().y() - b.rect.center().y())
-                > rowTolerance) {
-            return a.rect.center().y() < b.rect.center().y();
-        }
-        return a.rect.center().x() < b.rect.center().x();
+        return a.rect.center().y() < b.rect.center().y();
     });
+
+    QVector<QVector<TemplateCharacterBox>> rows;
+    for (const TemplateCharacterBox &box : m_sortedBoxes) {
+        if (rows.isEmpty()) {
+            rows.append(QVector<TemplateCharacterBox>{box});
+            continue;
+        }
+
+        const QVector<TemplateCharacterBox> &row = rows.constLast();
+        int centerYTotal = 0;
+        int heightTotal = 0;
+        for (const TemplateCharacterBox &rowBox : row) {
+            centerYTotal += rowBox.rect.center().y();
+            heightTotal += rowBox.rect.height();
+        }
+
+        const int rowAverageCenterY = centerYTotal / row.size();
+        const int rowAverageHeight = heightTotal / row.size();
+        const int rowTolerance = qMax(
+                    8, qMin(rowAverageHeight, box.rect.height()) / 2);
+        if (qAbs(box.rect.center().y() - rowAverageCenterY)
+                <= rowTolerance) {
+            rows.last().append(box);
+        } else {
+            rows.append(QVector<TemplateCharacterBox>{box});
+        }
+    }
+
+    m_sortedBoxes.clear();
+    for (QVector<TemplateCharacterBox> &row : rows) {
+        std::sort(row.begin(), row.end(),
+                  [](const TemplateCharacterBox &a,
+                     const TemplateCharacterBox &b) {
+            return a.rect.center().x() < b.rect.center().x();
+        });
+        for (const TemplateCharacterBox &box : row) {
+            m_sortedBoxes.append(box);
+        }
+    }
 
     recognizeUnnamedCharacterNames();
     rebuildNamePage();
