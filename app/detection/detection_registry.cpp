@@ -2,6 +2,7 @@
 
 #include "detection/detectionmode/barcode_word/barcode_word_detection_pipeline.h"
 #include "detection/common/character_template_matcher.h"
+#include "detection/detectionmode/ocr/deep_ocr_engine.h"
 #include "detection/detectionmode/ocr/ocr_detection_pipeline.h"
 #include "detection/common/inspection_positioner.h"
 #include "detection/detectionmode/stamp/overlap_detector.h"
@@ -9,8 +10,6 @@
 #include "detection/detectionmode/tissue/tissue_detection_pipeline.h"
 #include "detection/detectionmode/word/word_detection_pipeline.h"
 #include "engines/barcode/barcode_decoder.h"
-#include "engines/ocr/ocr_engine.h"
-#include "engines/ocr/vendor/paddle_ocr_engine.h"
 #include "system_support/logging/log_categories.h"
 
 #include <QStringList>
@@ -237,8 +236,8 @@ DetectionPipelineCreationResult DetectionRegistry::create(
         const std::string target = first->settings.targetText.toStdString();
         const QString templateName = first->displayName;
         try {
-            const std::shared_ptr<IOcrEngine> ocrEngine(
-                        new PaddleOcrEngine(m_ocrConfigPath));
+            const std::shared_ptr<DeepOcrEngine> ocrEngine(
+                        new DeepOcrEngine(m_ocrConfigPath));
             creation.executor = [pipeline, positioner, preprocess, descriptor,
                     target, templateName, ocrEngine](
                 const std::shared_ptr<const FrameData> &source) {

@@ -75,6 +75,7 @@ resource/
 | `svg/preview.svg` | 主工具栏开始或停止实时预览 |
 | `svg/verdict_correct.svg` | OK 判定 |
 | `svg/verdict_wrong.svg` | NG 判定 |
+| `svg/unused/trash.svg` | 删除字符模板预览中的字符框 |
 
 `camera_*.svg`、`start.svg`、`stop.svg` 和 `preview.svg` 由主工具栏按钮使用；`template_*.svg` 和 `character_seg.svg` 由参数设定页“模板管理”分组使用。`template_exit.svg` 只服务“退出制作”，`stop.svg` 继续服务停止识别和停止实时预览。
 
@@ -94,7 +95,7 @@ resource/
 | `svg/navigation/nav_plc.svg` | PLC 通讯 |
 | `svg/navigation/nav_software.svg` | 软件设置 |
 
-`svg/unused/` 保存五个未使用的旧 SVG：`camera.svg`、`camera-off.svg`、`file-upload.svg`、`plug-connected-x.svg` 和 `trash.svg`。这些文件不登记到 `image.qrc`。
+`svg/unused/` 中的 `trash.svg` 由字符模板预览删除按钮使用并登记到 `image.qrc`。其余四个旧 SVG：`camera.svg`、`camera-off.svg`、`file-upload.svg` 和 `plug-connected-x.svg` 不登记到 `image.qrc`。
 
 ## 资源调用边界
 

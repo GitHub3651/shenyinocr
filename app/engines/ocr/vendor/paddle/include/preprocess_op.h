@@ -32,9 +32,9 @@ public:
 class RecResizeImg
 {
 public:
-    void Run(const cv::Mat &image,
-             cv::Mat &resizedImage,
-             const std::vector<int> &imageShape = {3, 48, 320}) const;
+    int Run(const cv::Mat &image,
+            cv::Mat &resizedImage,
+            const std::vector<int> &imageShape = {3, 48, 320}) const;
 };
 
 } // namespace PaddleOCR

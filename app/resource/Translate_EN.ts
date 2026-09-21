@@ -967,4 +967,64 @@ settings</translation>
         <translation>Choose Directory</translation>
     </message>
 </context>
+<context>
+    <name>CharacterTemplateEditorDialog</name>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="30"/>
+        <source>添加字符框</source>
+        <translation>Add Character Boxes</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>手动框选：</source>
+        <translation>Manual Selection:</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>按住鼠标左键拖拽，松开鼠标后完成框选</source>
+        <translation>Hold the left mouse button and drag. Release it to finish drawing the box.</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>自动分割：</source>
+        <translation>Auto Segment:</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>点击自动分割按钮，系统将自动完成字符框选，如果存在没有框到的字符，可以继续手动框选</source>
+        <translation>Click Auto Segment to draw character boxes automatically. Continue drawing manually if any characters are missed.</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="44"/>
+        <source>字符模版预览</source>
+        <translation>Character Template Preview</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="45"/>
+        <source>预览已经框选的字符，如果有字符框选的不好，可以点击右上角删除该字符</source>
+        <translation>Preview the selected characters. If a character box is inaccurate, click the delete button in its upper-right corner.</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="53"/>
+        <source>删除上一个字符框</source>
+        <translation>Remove Previous Character Box</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="55"/>
+        <source>自动分割</source>
+        <translation>Auto Segment</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="66"/>
+        <source>命名提示</source>
+        <translation>Naming Tips</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="67"/>
+        <source>字符名称已自动命名，请检查命名是否正确，不正确的请手动更改
+输入名称时，只需输入字符名称即可，重复字符系统会自动命名成1(1)、1(2)</source>
+        <translation>Character names have been filled automatically. Check them and manually correct any mistakes.
+When entering a name, enter only the character itself. Duplicate characters are named automatically as 1(1), 1(2).</translation>
+    </message>
+</context>
 </TS>

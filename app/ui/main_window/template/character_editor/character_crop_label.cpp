@@ -16,14 +16,15 @@ void CharacterCropLabel::setSourceImage(const QImage &image)
     update();
 }
 
-void CharacterCropLabel::setItems(const QList<TemplateCharacterBox> &items)
+void CharacterCropLabel::setItems(const QVector<TemplateCharacterBox> &items)
 {
     m_items.clear();
     const QRect imageBounds(0, 0, m_image.width(), m_image.height());
     for (const TemplateCharacterBox &item : items) {
         TemplateCharacterBox normalizedItem = item;
         normalizedItem.rect = item.rect.normalized().intersected(imageBounds);
-        if (normalizedItem.rect.width() > 2 && normalizedItem.rect.height() > 2) {
+        if (normalizedItem.rect.width() >= 4
+                && normalizedItem.rect.height() >= 4) {
             m_items.append(normalizedItem);
         }
     }
@@ -31,34 +32,33 @@ void CharacterCropLabel::setItems(const QList<TemplateCharacterBox> &items)
     emit itemsChanged();
 }
 
-QList<TemplateCharacterBox> CharacterCropLabel::items() const
+QVector<TemplateCharacterBox> CharacterCropLabel::items() const
 {
-    QList<TemplateCharacterBox> normalizedItems;
-    for (const TemplateCharacterBox &item : m_items) {
-        TemplateCharacterBox normalizedItem = item;
-        normalizedItem.rect = item.rect.normalized();
-        if (normalizedItem.rect.width() > 2 && normalizedItem.rect.height() > 2) {
-            normalizedItems.append(normalizedItem);
-        }
-    }
-    return normalizedItems;
+    return m_items;
 }
 
-QList<TemplateCharacterBox> CharacterCropLabel::previewItems() const
+QVector<TemplateCharacterBox> CharacterCropLabel::previewItems() const
 {
-    QList<TemplateCharacterBox> normalizedItems = items();
+    QVector<TemplateCharacterBox> preview = m_items;
     if (m_drawing && !m_currentRect.isNull()) {
         TemplateCharacterBox currentItem;
-        currentItem.rect = m_currentRect.normalized().intersected(
-                    QRect(0, 0, m_image.width(), m_image.height()));
-        if (currentItem.rect.width() > 2 && currentItem.rect.height() > 2) {
-            normalizedItems.append(currentItem);
+        currentItem.rect = m_currentRect.normalized();
+        if (currentItem.rect.width() >= 4
+                && currentItem.rect.height() >= 4) {
+            preview.append(currentItem);
         }
     }
-    return normalizedItems;
+    return preview;
 }
 
-void CharacterCropLabel::undoLast()
+void CharacterCropLabel::removeAt(int index)
+{
+    m_items.removeAt(index);
+    update();
+    emit itemsChanged();
+}
+
+void CharacterCropLabel::removeLast()
 {
     if (!m_items.isEmpty()) {
         m_items.removeLast();
@@ -152,9 +152,8 @@ void CharacterCropLabel::mouseReleaseEvent(QMouseEvent *event)
     }
 
     m_drawing = false;
-    QRect finalRect = m_currentRect.normalized().intersected(
-                QRect(0, 0, m_image.width(), m_image.height()));
-    if (finalRect.width() > 2 && finalRect.height() > 2) {
+    const QRect finalRect = m_currentRect.normalized();
+    if (finalRect.width() >= 4 && finalRect.height() >= 4) {
         TemplateCharacterBox item;
         item.rect = finalRect;
         m_items.append(item);

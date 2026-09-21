@@ -47,7 +47,7 @@ std::string withoutLineBreaks(const std::string &text)
 OcrDetectionResult OcrDetectionPipeline::detect(
         cv::Mat &croppedImage,
         const std::string &targetText,
-        IOcrEngine &ocrEngine) const
+        DeepOcrEngine &ocrEngine) const
 {
     OcrDetectionResult result;
     if (croppedImage.empty()) {
@@ -79,7 +79,7 @@ OcrDetectionResult OcrDetectionPipeline::detect(
 DetectionResult OcrDetectionPipeline::detect(
         const DetectionWorkItem &item,
         const std::string &targetText,
-        IOcrEngine &ocrEngine) const
+        DeepOcrEngine &ocrEngine) const
 {
     OrientedDateRoi oriented;
     if (!item.isValid() || !item.hasPose) {

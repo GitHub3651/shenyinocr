@@ -135,9 +135,29 @@ QLabel:disabled {
 QLabel#label_plcConnectionSection,
 QLabel#label_plcProcessParametersSection,
 QLabel#label_characterSampleTitle,
-QLabel#label_characterExistingTitle,
 QLabel#label_currentEditTemplate {
     font-weight: 600;
+}
+
+QLabel#label_characterDrawHintTitle,
+QLabel#label_characterExistingTitle,
+QLabel#label_characterNameHintTitle {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+QLabel#label_characterManualAction,
+QLabel#label_characterAutoSplitAction {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+QLabel#label_characterManualDescription,
+QLabel#label_characterAutoSplitDescription,
+QLabel#label_characterPreviewHint,
+QLabel#label_characterNameHint {
+    font-size: 16px;
+    font-weight: 400;
 }
 
 QLabel#label_recognitionText {
@@ -166,6 +186,20 @@ QLabel#label_characterSample,
 QLabel#label_characterPreviewImage {
     background-color: #FFFFFF;
     border: 1px solid #B8C4CE;
+}
+
+QToolButton#toolButton_deleteCharacterBox {
+    background-color: transparent;
+    border: none;
+    padding: 0;
+}
+
+QToolButton#toolButton_deleteCharacterBox:hover {
+    background-color: #B8D8F0;
+}
+
+QToolButton#toolButton_deleteCharacterBox:pressed {
+    background-color: #7FAFD3;
 }
 
 QFrame#frame_templateGuide,

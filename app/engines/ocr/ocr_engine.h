@@ -3,6 +3,9 @@
 
 #include <opencv2/core.hpp>
 
+#include <QString>
+
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,10 +17,17 @@ struct OcrRecognitionItem
 
 class IOcrEngine
 {
-public:
-    virtual ~IOcrEngine() = default;
+protected:
+    explicit IOcrEngine(const QString &configPath);
+    ~IOcrEngine();
 
-    virtual std::vector<OcrRecognitionItem> recognize(cv::Mat &image) = 0;
+    std::vector<OcrRecognitionItem> recognize(cv::Mat &image);
+    std::string recognizeCharacter(cv::Mat &image);
+    std::vector<OcrRecognitionItem> segmentCharacters(cv::Mat &image);
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
 };
 
 #endif // DEVICES_OCR_OCR_ENGINE_H

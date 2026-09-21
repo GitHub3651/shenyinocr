@@ -57,7 +57,7 @@ SOURCES += \
     runtime/inspection_presentation_renderer.cpp \
     engines/barcode/vendor/barcode_decoder_adapter.cpp \
     devices/camera/vendor/hikvision_camera_device.cpp \
-    engines/ocr/vendor/paddle_ocr_engine.cpp \
+    engines/ocr/ocr_engine.cpp \
     devices/plc/vendor/snap7_plc_device.cpp \
     runtime/camera_session.cpp \
     runtime/capture_worker.cpp \
@@ -110,6 +110,7 @@ HEADERS += \
     templates/template_store.h \
     ui/main_window/template/selection/template_selection_dialog.h \
     ui/main_window/template/save/template_save_dialog.h \
+    ui/main_window/template/character_editor/character_ocr_engine.h \
     ui/main_window/template/character_editor/character_template_editor_dialog.h \
     ui/main_window/template/character_editor/character_crop_label.h \
     contracts/inspection_presentation.h \
@@ -135,7 +136,6 @@ HEADERS += \
     devices/camera/camera_device.h \
     devices/camera/vendor/hikvision_camera_device.h \
     engines/ocr/ocr_engine.h \
-    engines/ocr/vendor/paddle_ocr_engine.h \
     devices/plc/plc_device.h \
     devices/plc/vendor/snap7_plc_device.h \
     runtime/camera_session.h \
@@ -155,6 +155,7 @@ HEADERS += \
     detection/common/template_pose_selector.h \
     detection/common/inspection_positioner.h \
     detection/common/tracking_pose_matcher.h \
+    detection/detectionmode/ocr/deep_ocr_engine.h \
     detection/detectionmode/ocr/ocr_detection_pipeline.h \
     detection/detectionmode/barcode_word/barcode_word_detection_pipeline.h \
     detection/detectionmode/stamp/stamp_detection_pipeline.h \

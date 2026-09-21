@@ -65,7 +65,9 @@ app/
 │     │  ├─ overlap_detector.h/.cpp
 │     │  └─ stamp_detection_pipeline.h/.cpp
 │     ├─ word/word_detection_pipeline.h/.cpp
-│     ├─ ocr/ocr_detection_pipeline.h/.cpp
+│     ├─ ocr/
+│     │  ├─ deep_ocr_engine.h
+│     │  └─ ocr_detection_pipeline.h/.cpp
 │     ├─ tissue/
 │     │  ├─ tissue_detection_pipeline.h/.cpp
 │     │  └─ tissue_roll_detector.h/.cpp
@@ -87,9 +89,8 @@ app/
 │  │     ├─ barcode_decoder_adapter.h/.cpp
 │  │     └─ barcode_decoder_api.h
 │  └─ ocr/
-│     ├─ ocr_engine.h
+│     ├─ ocr_engine.h/.cpp
 │     └─ vendor/
-│        ├─ paddle_ocr_engine.h/.cpp
 │        └─ paddle/
 │           ├─ include/
 │           │  ├─ clipper.h
@@ -156,11 +157,12 @@ app/
          ├─ selection/template_selection_dialog.ui/.h/.cpp
          ├─ save/template_save_dialog.ui/.h/.cpp
          └─ character_editor/
+            ├─ character_ocr_engine.h
             ├─ character_template_editor_dialog.ui/.h/.cpp
             └─ character_crop_label.h/.cpp
 ```
 
-当前统计：147 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
+当前统计：148 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
 
 ## 3. 程序启动和对象所有权
 
@@ -321,6 +323,7 @@ toolButton_selectTemplate
 | `detectionmode/stamp/overlap_detector.h/.cpp` | 钢印环定位、区域变换和钢印/日期重叠判断；纯内存算法。 |
 | `detectionmode/stamp/stamp_detection_pipeline.h/.cpp` | 钢印字符检测、重叠结果和统一输出。 |
 | `detectionmode/word/word_detection_pipeline.h/.cpp` | 字库字符匹配、文字组合、Overlay 和 OK/NG。 |
+| `detectionmode/ocr/deep_ocr_engine.h` | 正式深度 OCR 具体引擎，只公开逐帧 `recognize()`。 |
 | `detectionmode/ocr/ocr_detection_pipeline.h/.cpp` | 校正 OCR ROI，调用公共 DET+REC Engine，清洗和组合片段，并在忽略双方换行后执行大小写敏感的目标比较。 |
 | `detectionmode/tissue/tissue_roll_detector.h/.cpp` | 纸巾纹理/粗糙度算法；阈值由构造参数提供。 |
 | `detectionmode/tissue/tissue_detection_pipeline.h/.cpp` | 纸巾算法适配为统一 `DetectionResult`。 |
@@ -360,12 +363,11 @@ toolButton_selectTemplate
 | `barcode/barcode_decoder.h` | 条码引擎稳定接口。 |
 | `barcode/vendor/barcode_decoder_api.h` | DLL ABI 声明。 |
 | `barcode/vendor/barcode_decoder_adapter.h/.cpp` | DLL 动态加载、调用和错误映射。 |
-| `ocr/ocr_engine.h` | 唯一公共 DET+REC 接口；接收调用方准备好的图像或 ROI，返回按阅读顺序排列的逐框原始文字片段。 |
-| `ocr/vendor/paddle_ocr_engine.h/.cpp` | PP-OCRv6 tiny DET+REC 编排和模型配置，不执行业务清洗或 OK/NG 判定。 |
+| `ocr/ocr_engine.h/.cpp` | 公共 OCR 实现基类和模型生命周期；集中实现正式识别、单字符识别和字符分割，不执行业务清洗、模板过滤或 OK/NG 判定。 |
 | `ocr/vendor/paddle/include/clipper.h`、`src/clipper.cpp` | 文本框多边形裁切几何。 |
 | `ocr/vendor/paddle/include/config.h`、`src/config.cpp` | `config_ocr.txt` 配置读取和相对路径解析。 |
 | `ocr/vendor/paddle/include/ocr_det.h`、`src/ocr_det.cpp` | PP-OCRv6 tiny 文本检测器。 |
-| `ocr/vendor/paddle/include/ocr_rec.h`、`src/ocr_rec.cpp` | 透视裁剪、窄高图旋转和 PP-OCRv6 tiny 文本识别。 |
+| `ocr/vendor/paddle/include/ocr_rec.h`、`src/ocr_rec.cpp` | 正式文字行识别、单字符识别和字符分割三个固定入口；字符位置和前景边界只在字符分割入口计算。 |
 | `ocr/vendor/paddle/include/postprocess_op.h`、`src/postprocess_op.cpp` | 检测后处理。 |
 | `ocr/vendor/paddle/include/preprocess_op.h`、`src/preprocess_op.cpp` | DET/REC 推理预处理。 |
 | `ocr/vendor/paddle/include/utility.h`、`src/utility.cpp` | 字典读取、四点框阅读顺序排序和解码辅助。 |
@@ -400,6 +402,7 @@ toolButton_selectTemplate
 | `main_window/template/template_editor_page.h/.cpp` | 模板取景、冻结、选择、编辑、保存、字符编辑和批量更新。 |
 | `main_window/template/selection/template_selection_dialog.ui/.h/.cpp` | 当前模板路径展示、添加、移除和确认应用。 |
 | `main_window/template/save/template_save_dialog.ui/.h/.cpp` | 模板名称、保存目录、浏览和输入校验。 |
+| `main_window/template/character_editor/character_ocr_engine.h` | 字符模板编辑具体引擎，只公开自动分割和单字符自动命名能力。 |
 | `main_window/template/character_editor/character_template_editor_dialog.ui/.h/.cpp` | 字符框排序、命名、预览和字符图片结果。 |
 | `main_window/template/character_editor/character_crop_label.h/.cpp` | 字符框绘制、撤销、清空和坐标换算。 |
 | `main_window/inspection_image_canvas.h/.cpp` | 主图像显示和模式化模板区域绘制。 |

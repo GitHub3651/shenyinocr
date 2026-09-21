@@ -73,9 +73,9 @@ void DetResizeImg::Run(const cv::Mat &image,
                cv::Size(resizedWidth, resizedHeight));
 }
 
-void RecResizeImg::Run(const cv::Mat &image,
-                       cv::Mat &resizedImage,
-                       const std::vector<int> &imageShape) const
+int RecResizeImg::Run(const cv::Mat &image,
+                      cv::Mat &resizedImage,
+                      const std::vector<int> &imageShape) const
 {
     const int channels = imageShape[0];
     const int targetHeight = imageShape[1];
@@ -109,6 +109,7 @@ void RecResizeImg::Run(const cv::Mat &image,
                 CV_MAKETYPE(CV_32F, channels));
     normalized.copyTo(
                 resizedImage(cv::Rect(0, 0, contentWidth, targetHeight)));
+    return contentWidth;
 }
 
 } // namespace PaddleOCR

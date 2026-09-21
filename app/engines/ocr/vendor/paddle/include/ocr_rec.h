@@ -11,6 +11,18 @@
 
 namespace PaddleOCR {
 
+struct RecCharacterResult
+{
+    std::string text;
+    cv::Rect2f normalizedRect;
+};
+
+struct RecLineResult
+{
+    std::vector<RecCharacterResult> characters;
+    bool rotated90 = false;
+};
+
 class CRNNRecognizer
 {
 public:
@@ -23,9 +35,15 @@ public:
             const std::vector<std::vector<std::vector<int>>> &boxes,
             const cv::Mat &image);
 
+    std::string RunCharacter(const cv::Mat &image);
+
+    std::vector<RecLineResult> RunCharacters(
+            const std::vector<std::vector<std::vector<int>>> &boxes,
+            const cv::Mat &image);
+
 private:
     void LoadModel(const std::string &modelDirectory);
-    cv::Mat GetRotateCropImage(
+    cv::Mat GetPerspectiveCropImage(
             const cv::Mat &image,
             const std::vector<std::vector<int>> &box) const;
 

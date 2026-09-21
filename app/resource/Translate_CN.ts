@@ -896,6 +896,14 @@
         <translation>确定</translation>
     </message>
     <message>
+        <source>Cancel</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Open</source>
+        <translation>打开</translation>
+    </message>
+    <message>
         <source>&amp;Yes</source>
         <translation>确定</translation>
     </message>
@@ -980,6 +988,66 @@
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="583"/>
         <source>选择目录</source>
         <translation>选择目录</translation>
+    </message>
+</context>
+<context>
+    <name>CharacterTemplateEditorDialog</name>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="30"/>
+        <source>添加字符框</source>
+        <translation>添加字符框</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>手动框选：</source>
+        <translation>手动框选：</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>按住鼠标左键拖拽，松开鼠标后完成框选</source>
+        <translation>按住鼠标左键拖拽，松开鼠标后完成框选</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>自动分割：</source>
+        <translation>自动分割：</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="31"/>
+        <source>点击自动分割按钮，系统将自动完成字符框选，如果存在没有框到的字符，可以继续手动框选</source>
+        <translation>点击自动分割按钮，系统将自动完成字符框选，如果存在没有框到的字符，可以继续手动框选</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="44"/>
+        <source>字符模版预览</source>
+        <translation>字符模版预览</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="45"/>
+        <source>预览已经框选的字符，如果有字符框选的不好，可以点击右上角删除该字符</source>
+        <translation>预览已经框选的字符，如果有字符框选的不好，可以点击右上角删除该字符</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="53"/>
+        <source>删除上一个字符框</source>
+        <translation>删除上一个字符框</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="55"/>
+        <source>自动分割</source>
+        <translation>自动分割</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="66"/>
+        <source>命名提示</source>
+        <translation>命名提示</translation>
+    </message>
+    <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="67"/>
+        <source>字符名称已自动命名，请检查命名是否正确，不正确的请手动更改
+输入名称时，只需输入字符名称即可，重复字符系统会自动命名成1(1)、1(2)</source>
+        <translation>字符名称已自动命名，请检查命名是否正确，不正确的请手动更改
+输入名称时，只需输入字符名称即可，重复字符系统会自动命名成1(1)、1(2)</translation>
     </message>
 </context>
 </TS>

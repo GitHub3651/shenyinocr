@@ -571,7 +571,7 @@ event=run.start_failed code=<语义码> reason=<用户可读原因> diagnostic=<
 - `app/runtime/image_save_service.cpp`
 - `app/detection/common/character_template_matcher.cpp`
 - 实际承接模板最终结果的现有UI边界
-- `app/engines/ocr/vendor/paddle_ocr_engine.cpp`
+- `app/engines/ocr/ocr_engine.cpp`
 - 第10.3节列出的四个文档
 
 除非实施时静态调用链证明缺少唯一最终日志，否则不扩张到其他生产文件；不得新增日志生产文件。

@@ -1,23 +1,29 @@
 #include "ui/main_window/template/character_editor/character_template_editor_dialog.h"
+#include "system_support/logging/log_categories.h"
+#include "ui/main_window/template/character_editor/character_ocr_engine.h"
 #include "ui/main_window/template/character_editor/character_crop_label.h"
 #include "ui_character_template_editor_dialog.h"
 
-#include <QGridLayout>
+#include <QCoreApplication>
+#include <QDir>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QPixmap>
 #include <QRegularExpression>
-#include <QScrollArea>
 #include <QScrollBar>
 #include <QStyle>
 #include <QTimer>
-#include <QVariant>
+#include <QToolButton>
 #include <QVBoxLayout>
 
+#include <opencv2/imgproc.hpp>
+
 #include <algorithm>
+#include <exception>
 
 namespace {
 
@@ -30,6 +36,31 @@ void setInputError(QLineEdit *edit, bool hasError)
     edit->style()->unpolish(edit);
     edit->style()->polish(edit);
     edit->update();
+}
+
+QString filteredTemplateCharacter(const QString &text)
+{
+    const QString value = text.trimmed();
+    const QStringList units =
+            TemplateStore::templateTargetUnits(value);
+    if (value.size() != 1 || units.size() != 1) {
+        return QString();
+    }
+    return value;
+}
+
+cv::Mat bgrMatFromQImage(const QImage &source)
+{
+    QImage rgb = source.convertToFormat(QImage::Format_RGB888);
+    cv::Mat rgbView(
+                rgb.height(),
+                rgb.width(),
+                CV_8UC3,
+                rgb.bits(),
+                rgb.bytesPerLine());
+    cv::Mat bgr;
+    cv::cvtColor(rgbView, bgr, cv::COLOR_RGB2BGR);
+    return bgr;
 }
 
 } // namespace
@@ -45,16 +76,31 @@ CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(
 {
     ui->setupUi(this);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    loadSavedCharacterBoxes();
+
+    const QString configPath =
+            QDir(QCoreApplication::applicationDirPath())
+            .filePath(QStringLiteral("config_ocr.txt"));
+    try {
+        m_ocrEngine.reset(new CharacterOcrEngine(configPath));
+    }
+    catch (const std::exception &error) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=character_template.ocr_init_failed diagnostic=%1")
+                   .arg(QString::fromLocal8Bit(error.what()));
+    }
 
     ui->label_characterCropCanvas->setSourceImage(m_sourceImage);
-    ui->label_characterCropCanvas->setItems(m_initialBoxes);
+    ui->label_characterCropCanvas->setItems(
+                m_resultSettings.characterBoxes);
     connect(ui->label_characterCropCanvas, &CharacterCropLabel::itemsChanged,
             this, &CharacterTemplateEditorDialog::refreshCharacterPreviewList);
-    connect(ui->pushButton_undoCharacterBox, &QPushButton::clicked,
-            ui->label_characterCropCanvas, &CharacterCropLabel::undoLast);
+    connect(ui->pushButton_removeLastCharacterBox, &QPushButton::clicked,
+            ui->label_characterCropCanvas, &CharacterCropLabel::removeLast);
     connect(ui->pushButton_clearCharacterBoxes, &QPushButton::clicked,
             ui->label_characterCropCanvas, &CharacterCropLabel::clearRects);
+    connect(ui->pushButton_autoSplitCharacters, &QPushButton::clicked,
+            this, &CharacterTemplateEditorDialog::autoSplitCharacters);
     connect(ui->pushButton_nextCharacterNaming, &QPushButton::clicked,
             this, &CharacterTemplateEditorDialog::moveToNamingPage);
     connect(ui->pushButton_cancelCharacterDrawing, &QPushButton::clicked,
@@ -82,11 +128,6 @@ CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(
 }
 
 CharacterTemplateEditorDialog::~CharacterTemplateEditorDialog() = default;
-
-int CharacterTemplateEditorDialog::savedCount() const
-{
-    return m_savedCount;
-}
 
 TemplateSettings CharacterTemplateEditorDialog::resultSettings() const
 {
@@ -120,6 +161,7 @@ void CharacterTemplateEditorDialog::moveToNamingPage()
         return a.rect.center().x() < b.rect.center().x();
     });
 
+    recognizeUnnamedCharacterNames();
     rebuildNamePage();
     ui->stackedWidget->setCurrentWidget(ui->page_names);
 }
@@ -146,7 +188,7 @@ void CharacterTemplateEditorDialog::rebuildNamePage()
     m_saveNameLabels.clear();
 
     for (int i = 0; i < m_sortedBoxes.size(); ++i) {
-        const QRect rect = m_sortedBoxes.at(i).rect.intersected(QRect(0, 0, m_sourceImage.width(), m_sourceImage.height()));
+        const QRect rect = m_sortedBoxes.at(i).rect;
         QImage preview = m_sourceImage.copy(rect);
 
         QWidget *rowWidget = new QWidget(ui->page_names);
@@ -200,21 +242,6 @@ void CharacterTemplateEditorDialog::rebuildNamePage()
     refreshSaveNamePreviews();
 }
 
-void CharacterTemplateEditorDialog::loadSavedCharacterBoxes()
-{
-    m_initialBoxes.clear();
-
-    const QRect imageBounds(0, 0, m_sourceImage.width(), m_sourceImage.height());
-    for (const TemplateCharacterBox &savedBox : m_resultSettings.characterBoxes) {
-        TemplateCharacterBox item;
-        item.name = savedBox.name;
-        item.rect = savedBox.rect.normalized().intersected(imageBounds);
-        if (item.rect.width() > 2 && item.rect.height() > 2) {
-            m_initialBoxes.append(item);
-        }
-    }
-}
-
 void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
 {
     QLayoutItem *item = nullptr;
@@ -225,21 +252,25 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
         delete item;
     }
 
-    const QList<TemplateCharacterBox> boxes =
+    const QVector<TemplateCharacterBox> boxes =
             ui->label_characterCropCanvas->previewItems();
     if (boxes.isEmpty()) {
         QLabel *emptyLabel = new QLabel(QStringLiteral("当前还没有字符框，请在左侧框选字符。"));
         emptyLabel->setObjectName(QStringLiteral("label_characterPreviewEmpty"));
         emptyLabel->setWordWrap(true);
-        ui->gridLayout_preview->addWidget(emptyLabel, 0, 0);
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        ui->gridLayout_preview->addWidget(
+                    emptyLabel, 0, 0, Qt::AlignCenter);
         return;
     }
 
-    const int columns = 2;
+    const int confirmedCount =
+            ui->label_characterCropCanvas->items().size();
+    const int columns = 3;
     QStringList reservedFileNames;
     for (int i = 0; i < boxes.size(); ++i) {
         const TemplateCharacterBox box = boxes.at(i);
-        const QRect rect = box.rect.intersected(QRect(0, 0, m_sourceImage.width(), m_sourceImage.height()));
+        const QRect rect = box.rect;
         QWidget *itemWidget = new QWidget();
         itemWidget->setFixedSize(110, 118);
         QVBoxLayout *itemLayout = new QVBoxLayout(itemWidget);
@@ -250,9 +281,25 @@ void CharacterTemplateEditorDialog::refreshCharacterPreviewList()
         previewLabel->setObjectName(QStringLiteral("label_characterPreviewImage"));
         previewLabel->setFixedSize(92, 56);
         previewLabel->setAlignment(Qt::AlignCenter);
-        if (rect.width() > 0 && rect.height() > 0) {
-            const QImage previewImage = m_sourceImage.copy(rect);
-            previewLabel->setPixmap(QPixmap::fromImage(previewImage).scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        const QImage previewImage = m_sourceImage.copy(rect);
+        previewLabel->setPixmap(QPixmap::fromImage(previewImage).scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+        if (i < confirmedCount) {
+            QToolButton *deleteButton = new QToolButton(previewLabel);
+            deleteButton->setObjectName(
+                        QStringLiteral("toolButton_deleteCharacterBox"));
+            deleteButton->setIcon(
+                        QIcon(QStringLiteral(":/svg/unused/trash.svg")));
+            deleteButton->setIconSize(QSize(16, 16));
+            deleteButton->setToolTip(QStringLiteral("删除此字符框"));
+            deleteButton->setFixedSize(24, 24);
+            deleteButton->move(previewLabel->width()
+                               - deleteButton->width(),
+                               0);
+            connect(deleteButton, &QToolButton::clicked,
+                    this, [this, i]() {
+                ui->label_characterCropCanvas->removeAt(i);
+            });
         }
 
         const QString boxName = box.name.trimmed();
@@ -365,7 +412,6 @@ bool CharacterTemplateEditorDialog::saveTemplates()
         }
     }
 
-    m_resultSettings.characterBoxes.clear();
     m_resultSettings.characterSourceSize = m_sourceImage.size();
     m_characterImages.clear();
     QStringList reservedFileNames;
@@ -375,22 +421,125 @@ bool CharacterTemplateEditorDialog::saveTemplates()
                 nextAvailableFileName(
                     characterStorageStem(name), reservedFileNames);
         reservedFileNames.append(fileName);
-        const QRect rect = m_sortedBoxes.at(index).rect
-                .normalized()
-                .intersected(QRect(QPoint(0, 0), m_sourceImage.size()));
-        if (rect.width() <= 0 || rect.height() <= 0) {
-            return false;
-        }
+        const QRect rect = m_sortedBoxes.at(index).rect;
         m_sortedBoxes[index].name = name;
-        TemplateCharacterBox box;
-        box.name = name;
-        box.rect = rect;
-        m_resultSettings.characterBoxes.append(box);
         m_characterImages.insert(fileName, m_sourceImage.copy(rect));
     }
 
-    m_savedCount = m_characterImages.size();
-    ui->label_characterCropCanvas->setItems(m_sortedBoxes);
-    refreshCharacterPreviewList();
-    return m_savedCount > 0;
+    m_resultSettings.characterBoxes = m_sortedBoxes;
+    return !m_characterImages.isEmpty();
+}
+
+void CharacterTemplateEditorDialog::autoSplitCharacters()
+{
+    if (!m_ocrEngine) {
+        QMessageBox::information(
+                    this,
+                    QStringLiteral("自动分割不可用"),
+                    QStringLiteral(
+                        "深度 OCR 自动分割功能当前不可用，"
+                        "请继续手动框选字符。"));
+        return;
+    }
+
+    cv::Mat source = bgrMatFromQImage(m_sourceImage);
+    try {
+        const std::vector<OcrRecognitionItem> result =
+                m_ocrEngine->segmentCharacters(source);
+        QVector<TemplateCharacterBox> generatedBoxes;
+        for (const OcrRecognitionItem &item : result) {
+            if (filteredTemplateCharacter(
+                    QString::fromStdString(item.text)).isEmpty()) {
+                continue;
+            }
+
+            const cv::Rect detectedRect = cv::boundingRect(item.box);
+            TemplateCharacterBox box;
+            box.rect = QRect(
+                        detectedRect.x,
+                        detectedRect.y,
+                        detectedRect.width,
+                        detectedRect.height);
+            if (box.rect.width() < 4 || box.rect.height() < 4) {
+                continue;
+            }
+            generatedBoxes.append(box);
+        }
+
+        if (generatedBoxes.isEmpty()) {
+            QMessageBox::information(
+                        this,
+                        QStringLiteral("自动分割"),
+                        QStringLiteral(
+                            "没有识别到可分割的字符，"
+                            "请继续手动框选。"));
+            return;
+        }
+
+        if (!ui->label_characterCropCanvas->items().isEmpty()
+                && QMessageBox::question(
+                    this,
+                    QStringLiteral("替换字符框"),
+                    QStringLiteral(
+                        "自动分割将一次性替换现有全部字符框，"
+                        "是否继续？"),
+                    QMessageBox::Ok | QMessageBox::Cancel,
+                    QMessageBox::Cancel) != QMessageBox::Ok) {
+            return;
+        }
+
+        ui->label_characterCropCanvas->setItems(generatedBoxes);
+    }
+    catch (const std::exception &error) {
+        qCWarning(logTemplate).noquote()
+                << QStringLiteral(
+                    "event=character_template.auto_split_failed diagnostic=%1")
+                   .arg(QString::fromLocal8Bit(error.what()));
+        QMessageBox::warning(
+                    this,
+                    QStringLiteral("自动分割失败"),
+                    QStringLiteral(
+                        "深度 OCR 自动分割失败，"
+                        "请继续手动框选字符。"));
+    }
+}
+
+void CharacterTemplateEditorDialog::recognizeUnnamedCharacterNames()
+{
+    if (!m_ocrEngine) {
+        return;
+    }
+
+    cv::Mat source = bgrMatFromQImage(m_sourceImage);
+    for (int index = 0; index < m_sortedBoxes.size(); ++index) {
+        TemplateCharacterBox &box = m_sortedBoxes[index];
+        if (!box.name.trimmed().isEmpty()) {
+            continue;
+        }
+
+        const QRect rect = box.rect;
+        cv::Mat characterImage = source(
+                    cv::Rect(rect.x(),
+                             rect.y(),
+                             rect.width(),
+                             rect.height()));
+        try {
+            const QString recognizedText =
+                    filteredTemplateCharacter(
+                        QString::fromStdString(
+                            m_ocrEngine->recognizeCharacter(
+                                characterImage)));
+            if (!recognizedText.isEmpty()) {
+                box.name = recognizedText;
+            }
+        }
+        catch (const std::exception &error) {
+            qCWarning(logTemplate).noquote()
+                    << QStringLiteral(
+                        "event=character_template.ocr_name_failed "
+                        "index=%1 diagnostic=%2")
+                       .arg(index)
+                       .arg(QString::fromLocal8Bit(error.what()));
+        }
+    }
 }

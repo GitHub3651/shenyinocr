@@ -56,7 +56,7 @@ AppSettings::defaults()
 - 46 个文件共有 355 条“函数说明”；
 - 48 个文件共有 130 条“组件说明”。
 
-项目适配器 `app/engines/ocr/vendor/paddle_ocr_engine.h/.cpp` 和 `app/devices/plc/vendor/snap7_plc_device.h/.cpp` 属于第一方代码，纳入清理。当前大量注释只复述文件名、类型名或函数名；`MainWindow` 析构注释还描述了实际不存在的“删除临时文件”行为。
+公共实现 `app/engines/ocr/ocr_engine.h/.cpp` 和项目适配器 `app/devices/plc/vendor/snap7_plc_device.h/.cpp` 属于第一方代码，纳入清理。当前大量注释只复述文件名、类型名或函数名；`MainWindow` 析构注释还描述了实际不存在的“删除临时文件”行为。
 
 ### 3.3 零调用接口与逐层转发
 
@@ -581,7 +581,7 @@ tools/result_receiver/result_receiver_server.cpp
 
 ### 10.1 删除范围
 
-在第一方 `app/` 与 `tools/` 的 `.h/.cpp` 中删除，但完整排除 `tools/barcode_decoder/**`、`app/engines/barcode/**` 和 `app/contracts/barcode_parameter_defaults.h`。供应商源码只排除 `app/engines/ocr/vendor/paddle/**` 和 `app/devices/plc/vendor/snap7.h`、`app/devices/plc/vendor/snap7.cpp`；项目适配器 `app/engines/ocr/vendor/paddle_ocr_engine.h/.cpp` 与 `app/devices/plc/vendor/snap7_plc_device.h/.cpp` 必须纳入：
+在第一方 `app/` 与 `tools/` 的 `.h/.cpp` 中删除，但完整排除 `tools/barcode_decoder/**`、`app/engines/barcode/**` 和 `app/contracts/barcode_parameter_defaults.h`。供应商源码只排除 `app/engines/ocr/vendor/paddle/**` 和 `app/devices/plc/vendor/snap7.h`、`app/devices/plc/vendor/snap7.cpp`；公共实现 `app/engines/ocr/ocr_engine.h/.cpp` 与项目适配器 `app/devices/plc/vendor/snap7_plc_device.h/.cpp` 必须纳入：
 
 ```text
 文件作用：本文件用于……

@@ -93,5 +93,3 @@ myImage/
 # Existing application translations are retained during the layout migration.
 !app/Translate_CN.qm
 !app/Translate_EN.qm
-!app/resource/Translate_CN.qm
-!app/resource/Translate_EN.qm

@@ -4,9 +4,9 @@
 
 #include <QImage>
 #include <QLabel>
-#include <QList>
 #include <QPoint>
 #include <QRect>
+#include <QVector>
 
 class CharacterCropLabel : public QLabel
 {
@@ -16,10 +16,11 @@ public:
     explicit CharacterCropLabel(QWidget *parent = nullptr);
 
     void setSourceImage(const QImage &image);
-    void setItems(const QList<TemplateCharacterBox> &items);
-    QList<TemplateCharacterBox> items() const;
-    QList<TemplateCharacterBox> previewItems() const;
-    void undoLast();
+    void setItems(const QVector<TemplateCharacterBox> &items);
+    QVector<TemplateCharacterBox> items() const;
+    QVector<TemplateCharacterBox> previewItems() const;
+    void removeAt(int index);
+    void removeLast();
     void clearRects();
 
 signals:
@@ -37,7 +38,7 @@ private:
     QRect imageToWidgetRect(const QRect &imageRect, const QRect &targetRect) const;
 
     QImage m_image;
-    QList<TemplateCharacterBox> m_items;
+    QVector<TemplateCharacterBox> m_items;
     bool m_drawing = false;
     QPoint m_startPoint;
     QRect m_currentRect;

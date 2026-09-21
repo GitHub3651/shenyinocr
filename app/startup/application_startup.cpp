@@ -25,7 +25,6 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QLibraryInfo>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QTimer>
@@ -66,25 +65,15 @@ void showRuntimeGuardExitMessage(const QString &message)
 }
 
 void installQtTranslations(QApplication *application,
-                           QTranslator *qtBaseTranslator,
                            QTranslator *qtTranslator,
                            QTranslator *applicationTranslator)
 {
-    if (!application || !qtBaseTranslator || !qtTranslator
-            || !applicationTranslator) {
+    if (!application || !qtTranslator || !applicationTranslator) {
         return;
     }
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    const QString translationPath = QLibraryInfo::path(
-                QLibraryInfo::TranslationsPath);
-#else
-    const QString translationPath = QLibraryInfo::location(
-                QLibraryInfo::TranslationsPath);
-#endif
-    if (qtBaseTranslator->load(
-                QStringLiteral("qtbase_zh_CN"), translationPath)) {
-        application->installTranslator(qtBaseTranslator);
-    }
+    const QString translationPath = QDir(
+                QCoreApplication::applicationDirPath()).filePath(
+                QStringLiteral("translations"));
     if (qtTranslator->load(
                 QStringLiteral("qt_zh_CN"), translationPath)) {
         application->installTranslator(qtTranslator);
@@ -101,12 +90,10 @@ int ApplicationStartup::run(int argc, char *argv[])
 {
     QApplication application(argc, argv);
 
-    QTranslator qtBaseTranslator;
     QTranslator qtTranslator;
     QTranslator applicationTranslator;
     installQtTranslations(
-                &application, &qtBaseTranslator, &qtTranslator,
-                &applicationTranslator);
+                &application, &qtTranslator, &applicationTranslator);
     {
         QFile themeFile(QStringLiteral(":/qss/app_theme.qss"));
         if (!themeFile.open(QFile::ReadOnly)) {
