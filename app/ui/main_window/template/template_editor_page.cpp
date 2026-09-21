@@ -1152,7 +1152,11 @@ void TemplateEditorPage::showManualCharacterTemplateEditorDialog()
     const cv::Rect characterRegion(
                 characterRegionRect.x(), characterRegionRect.y(),
                 characterRegionRect.width(), characterRegionRect.height());
+    const QString templatePath =
+            m_detectionSettingsUi.comboBox_currentEditTemplate
+            ->currentData().toString();
     CharacterTemplateEditorDialog dialog(
+                templatePath,
                 imageFromBgrMat(value.rawImage(characterRegion)),
                 value.settings, &m_dialogParent);
     if (dialog.exec() != QDialog::Accepted) {

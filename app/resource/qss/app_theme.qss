@@ -141,7 +141,16 @@ QLabel#label_currentEditTemplate {
 
 QLabel#label_characterDrawHintTitle,
 QLabel#label_characterExistingTitle,
-QLabel#label_characterNameHintTitle {
+QLabel#label_characterNameHintTitle,
+QLabel#label_currentCharacterTemplate {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+QLineEdit#lineEdit_currentCharacterTemplate {
+    background: transparent;
+    border: none;
+    padding: 0;
     font-size: 18px;
     font-weight: 600;
 }

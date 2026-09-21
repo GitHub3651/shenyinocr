@@ -66,6 +66,7 @@ cv::Mat bgrMatFromQImage(const QImage &source)
 } // namespace
 
 CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(
+        const QString &templatePath,
         const QImage &sourceImage,
         const TemplateSettings &initialSettings,
         QWidget *parent)
@@ -76,6 +77,7 @@ CharacterTemplateEditorDialog::CharacterTemplateEditorDialog(
 {
     ui->setupUi(this);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+    ui->lineEdit_currentCharacterTemplate->setText(templatePath);
 
     const QString configPath =
             QDir(QCoreApplication::applicationDirPath())

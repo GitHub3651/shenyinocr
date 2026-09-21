@@ -14,13 +14,25 @@
    <string>分割字符模板</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>0</number>
+   </property>
+   <property name="topMargin">
+    <number>0</number>
+   </property>
+   <property name="rightMargin">
+    <number>0</number>
+   </property>
+   <property name="bottomMargin">
+    <number>0</number>
+   </property>
    <item>
     <widget class="QStackedWidget" name="stackedWidget">
      <property name="currentIndex">
       <number>0</number>
      </property>
      <widget class="QWidget" name="page_draw">
-      <layout class="QVBoxLayout" name="verticalLayout_draw" stretch="1,0">
+      <layout class="QVBoxLayout" name="verticalLayout_draw" stretch="0,1,0">
        <property name="spacing">
         <number>8</number>
        </property>
@@ -36,6 +48,27 @@
        <property name="bottomMargin">
         <number>10</number>
        </property>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout_currentCharacterTemplate">
+         <property name="spacing">
+          <number>0</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="label_currentCharacterTemplate">
+           <property name="text">
+            <string>当前正在分割的模板文件夹：</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="lineEdit_currentCharacterTemplate">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_content" stretch="1,0">
          <property name="spacing">
@@ -207,7 +240,7 @@
                 <x>0</x>
                 <y>0</y>
                 <width>376</width>
-                <height>792</height>
+                <height>775</height>
                </rect>
               </property>
               <layout class="QGridLayout" name="gridLayout_preview">

@@ -17,6 +17,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QString>
 #include <QMessageBox>
@@ -72,6 +73,10 @@ MainWindow::MainWindow(
                     .leftDrawerSplitterState);
     }
 
+    connect(m_detectionSettingsUi->barcodeCsvOutputDirectory,
+            &QLineEdit::textChanged,
+            m_detectionSettingsUi->barcodeCsvOutputDirectory,
+            &QWidget::setToolTip);
     m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
                 machineSettings().barcodeCsvOutputDirectory);
     {

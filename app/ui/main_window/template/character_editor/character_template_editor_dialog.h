@@ -24,6 +24,7 @@ class CharacterTemplateEditorDialog : public QDialog
 {
 public:
     explicit CharacterTemplateEditorDialog(
+        const QString &templatePath,
         const QImage &sourceImage,
         const TemplateSettings &initialSettings,
         QWidget *parent = nullptr);

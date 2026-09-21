@@ -970,6 +970,11 @@ settings</translation>
 <context>
     <name>CharacterTemplateEditorDialog</name>
     <message>
+        <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="47"/>
+        <source>当前分割模板：</source>
+        <translation>Current Segmentation Template:</translation>
+    </message>
+    <message>
         <location filename="ui/main_window/template/character_editor/character_template_editor_dialog.ui" line="30"/>
         <source>添加字符框</source>
         <translation>Add Character Boxes</translation>
