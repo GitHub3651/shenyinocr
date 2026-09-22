@@ -11,6 +11,13 @@ msvc {
 
 TARGET = ShengYin
 TEMPLATE = app
+VERSION = 2026.9.1000.0
+RC_CODEPAGE = 65001
+QMAKE_RC = rc /NOLOGO /c65001
+QMAKE_TARGET_COMPANY = ShengYin
+QMAKE_TARGET_PRODUCT = 智能视觉检测系统
+QMAKE_TARGET_DESCRIPTION = 智能视觉检测系统
+QMAKE_TARGET_COPYRIGHT = Copyright©2026 Shanghai ShengYin Intelligent Technology Co., Ltd. All rights reserved.
 
 # The .pro file lives in app/. All repository-level paths are derived from
 # this one location so Qt Creator kits do not depend on the former nested root.
