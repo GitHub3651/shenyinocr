@@ -18,8 +18,6 @@ PROJECT_ROOT = $$clean_path($$PWD/..)
 THIRD_PARTY = $$PROJECT_ROOT/third_party
 
 DEFINES += QT_DEPRECATED_WARNINGS
-DEFINES += CV_IGNORE_DEBUG_BUILD_GUARD
-
 CONFIG(debug, debug|release) {
     QMAKE_CXXFLAGS_DEBUG += /MTd
 }
@@ -211,6 +209,7 @@ INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/xx
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/mklml/include
 INCLUDEPATH += $$THIRD_PARTY/paddle_inference_install_dir/third_party/install/onednn/include
 INCLUDEPATH += $$THIRD_PARTY/opencv/include
+DEPENDPATH += $$THIRD_PARTY/opencv/include
 
 
 LIBS += -L$$THIRD_PARTY/paddle_inference_install_dir/paddle/lib -lpaddle_inference
@@ -232,11 +231,8 @@ LIBS += -L$$THIRD_PARTY/hikvision_mvs_sdk/lib/win64/ -lMvCameraControl
 LIBS += -L$$THIRD_PARTY/Libraries/win64/ -lsnap7
 win32:LIBS += -lole32 -loleaut32 -lwbemuuid
 
-INCLUDEPATH += $$THIRD_PARTY/opencv/x64/vc15/include
-DEPENDPATH += $$THIRD_PARTY/opencv/x64/vc15/include
-
-win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341
-else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc15/lib/ -lopencv_world341d
+win32:CONFIG(release, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc16/lib/ -lopencv_world4140
+else:win32:CONFIG(debug, debug|release): LIBS += -L$$THIRD_PARTY/opencv/x64/vc16/lib/ -lopencv_world4140d
 
 # Let Qt Creator run the Release executable from its build directory. The
 # validated dist package provides non-Qt runtime assets; the active Qt kit

@@ -9,7 +9,7 @@
 | PP-OCRv6 tiny DET 模型 | 多行文字框检测 | `dist/ShengYin/OCR/PP-OCRv6_tiny/det` | `PP-OCRv6_tiny_det_infer`，Paddle 3.0 推理模型 | Apache-2.0 | `https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_det_infer.tar` |
 | PP-OCRv6 tiny REC 模型 | 文字框识别 | `dist/ShengYin/OCR/PP-OCRv6_tiny/rec` | `PP-OCRv6_tiny_rec_infer`，Paddle 3.0 推理模型 | Apache-2.0 | `https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv6_tiny_rec_infer.tar` |
 | PP-OCRv6 tiny 字典 | REC CTC 解码 | `dist/ShengYin/OCR/PP-OCRv6_tiny/ppocrv6_tiny_dict.txt` | PaddleOCR v3.7.0 `ppocr/utils/dict/ppocrv6_tiny_dict.txt` | Apache-2.0 | `https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/v3.7.0/ppocr/utils/dict/ppocrv6_tiny_dict.txt` |
-| OpenCV | 图像处理、模板匹配、定位与图像编解码 | `third_party/opencv` | 3.4.1、MSVC 2017 x64 | Apache-2.0 | 当前项目随附的开发包 |
+| OpenCV | 图像处理、模板匹配、定位与图像编解码 | `third_party/opencv` | 4.14.0；官方 Windows x64；MSVC 2019 `vc16`，由当前 MSVC 2022 Kit 链接 | Apache-2.0 | `https://github.com/opencv/opencv/releases/tag/4.14.0` |
 | Halcon 头文件 | 为后续机器视觉功能保留接口；当前未接入编译或运行 | `third_party/halcon/include` | 13.0.2 build 5、头文件包 | MVTec 商业许可 | 从原混合头文件包分离；当前 `.pro` 和源码无 Halcon 引用，未包含 Halcon 库或运行时 |
 | 海康 MVS SDK | 相机控制与取图 | `third_party/hikvision_mvs_sdk/include`、`third_party/hikvision_mvs_sdk/lib/win64` | 当前 Win64 SDK（安装包版本待从原始介质补录） | 海康 SDK 随附许可（非开源） | 当前项目随附的开发包 |
 | Snap7 | PLC 通讯 | `app/devices/plc/vendor`、`third_party/Libraries/win64` | 当前 Win64 包（发布版本待从原始介质补录） | LGPL-3.0-or-later | Git 追踪 `snap7.cpp/.h` 包装；主工程链接 `snap7.lib`，运行时部署匹配的 `snap7.dll` |
