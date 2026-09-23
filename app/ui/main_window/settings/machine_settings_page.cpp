@@ -10,10 +10,12 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDoubleValidator>
 #include <QEvent>
+#include <QFileInfo>
 #include <QIntValidator>
 #include <QLabel>
 #include <QLineEdit>
@@ -21,6 +23,7 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStringList>
 #include <QUrl>
 #include <QWidget>
 
@@ -129,6 +132,50 @@ void MachineSettingsPage::setupBindings()
 {
     m_bindings.clear();
     m_hardwareActions.clear();
+
+    struct UsageManual
+    {
+        const char *modeId;
+        const char *fileName;
+        const char *displayText;
+    };
+    const UsageManual usageManuals[] = {
+        { "stamp",
+          "钢印检测使用说明书.pdf", "钢印检测使用说明书" },
+        { "word",
+          "字符识别模式使用说明书.pdf", "字符识别模式使用说明书" },
+        { "ocr",
+          "深度OCR模式使用说明书.pdf", "深度OCR模式使用说明书" },
+        { "tissue",
+          "纸巾检测使用说明书.pdf", "纸巾检测使用说明书" },
+        { "barcodeWord",
+          "二维码+三期检测使用说明书.pdf", "二维码+三期检测使用说明书" }
+    };
+    const QDir documentDirectory(
+                QCoreApplication::applicationDirPath()
+                + QStringLiteral("/document"));
+    QStringList manualLinks;
+    for (const UsageManual &manual : usageManuals) {
+        if (!m_authorizedModeIds.contains(
+                    QString::fromLatin1(manual.modeId))) {
+            continue;
+        }
+        const QString filePath = documentDirectory.filePath(
+                    QString::fromUtf8(manual.fileName));
+        if (!QFileInfo::exists(filePath)) {
+            continue;
+        }
+        const QString url = QUrl::fromLocalFile(filePath).toString(
+                    QUrl::FullyEncoded);
+        manualLinks.append(
+                    QStringLiteral(
+                        "<a href=\"%1\" style=\"color:#1769AA\">%2</a>")
+                    .arg(url, QString::fromUtf8(manual.displayText)));
+    }
+    m_softwareSettingsUi.label_usageManualLinks->setText(
+                manualLinks.join(QStringLiteral("<br/><br/>")));
+    m_softwareSettingsUi.groupBox_usageInstructions->setVisible(
+                !manualLinks.isEmpty());
 
     {
         QSignalBlocker blocker(m_detectionSettingsUi.comboBox_detectionMode);

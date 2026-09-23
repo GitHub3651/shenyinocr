@@ -99,6 +99,34 @@
     </widget>
        </item>
        <item row="1" column="0">
+        <widget class="QGroupBox" name="groupBox_usageInstructions">
+         <property name="title">
+          <string>使用说明</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_usageInstructions">
+          <item>
+           <widget class="QLabel" name="label_usageManualLinks">
+            <property name="cursor">
+             <cursorShape>PointingHandCursor</cursorShape>
+            </property>
+            <property name="text">
+             <string/>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::RichText</enum>
+            </property>
+            <property name="textInteractionFlags">
+             <set>Qt::LinksAccessibleByMouse</set>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="2" column="0">
     <spacer name="verticalSpacer_softwareSettingsBottom">
      <property name="orientation">
       <enum>Qt::Vertical</enum>
