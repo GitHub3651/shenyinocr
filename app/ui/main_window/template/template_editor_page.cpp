@@ -265,8 +265,10 @@ void TemplateEditorPage::applyOperationState(
     }
     applyOperationUiAccess(m_detectionSettingsUi.comboBox_currentEditTemplate,
                            snapshot.templateEditing);
+    OperationUiSnapshot::Access removeAccess = snapshot.templateEditing;
+    removeAccess.enabled = removeAccess.enabled && currentTemplateIndex() >= 0;
     applyOperationUiAccess(m_detectionSettingsUi.toolButton_removeCurrentTemplate,
-                           snapshot.templateEditing);
+                           removeAccess);
     m_detectionSettingsUi.pushButton_createTemplate->setText(
                 snapshot.templateCaptureText);
     applyOperationUiAccess(m_detectionSettingsUi.pushButton_selectTemplate,
@@ -542,7 +544,7 @@ bool TemplateEditorPage::loadTemplateAtIndex(
     }
     DetectionMode mode;
     if (!detectionModeFromUiId(currentDetectModeId(), &mode)) {
-        hideTemplateGuide();
+        clearTemplateState();
         return false;
     }
     const QString path = m_detectionSettingsUi.comboBox_currentEditTemplate
@@ -550,11 +552,8 @@ bool TemplateEditorPage::loadTemplateAtIndex(
     const QString templateName = QFileInfo(path).fileName();
     QString errorMessage;
     if (!m_templateService.beginEdit(path, mode, &errorMessage)) {
-        m_templateService.cancel();
-        m_templateService.setActivePreparedTemplate(
-                    PreparedTemplateSnapshot());
+        clearTemplateState();
         m_selectedTemplateInvalid = true;
-        hideTemplateGuide();
         emit operationUiRefreshRequested();
         if (showMessage) {
             showWarning(QStringLiteral("模板加载失败"), errorMessage);
@@ -590,6 +589,7 @@ bool TemplateEditorPage::loadTemplateAtIndex(
         emit templateImagePresentationRequested(editable.rawImage);
         showTemplateImageSource(templateName);
     } else {
+        m_mainWindowUi.inspectionImageCanvas->clear();
         hideTemplateGuide();
     }
     clearTemplateDirty();
@@ -651,6 +651,8 @@ void TemplateEditorPage::clearTemplateState()
     m_templateService.setActivePreparedTemplate(
                 PreparedTemplateSnapshot());
     m_selectedTemplateInvalid = false;
+    m_mainWindowUi.inspectionImageCanvas->clear();
+    applyTemplateSettingsToUi(TemplateSettings());
     clearTemplateDirty();
     hideTemplateGuide();
 }
