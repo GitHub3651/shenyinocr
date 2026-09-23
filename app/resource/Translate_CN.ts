@@ -985,6 +985,11 @@
         <translation>保存文件夹</translation>
     </message>
     <message>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="573"/>
+        <source>双击可打开当前文件夹</source>
+        <translation>双击可打开当前文件夹</translation>
+    </message>
+    <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="583"/>
         <source>选择目录</source>
         <translation>选择目录</translation>
@@ -1053,6 +1058,14 @@
 输入名称时，只需输入字符名称即可，重复字符系统会自动命名成1(1)、1(2)</source>
         <translation>字符名称已自动命名，请检查命名是否正确，不正确的请手动更改
 输入名称时，只需输入字符名称即可，重复字符系统会自动命名成1(1)、1(2)</translation>
+    </message>
+</context>
+<context>
+    <name>ImageSettingsPage</name>
+    <message>
+        <location filename="ui/main_window/settings/image_settings_page.ui" line="153"/>
+        <source>双击可打开当前文件夹</source>
+        <translation>双击可打开当前文件夹</translation>
     </message>
 </context>
 </TS>

@@ -569,6 +569,9 @@
             <property name="readOnly">
              <bool>true</bool>
             </property>
+            <property name="toolTip">
+             <string>双击可打开当前文件夹</string>
+            </property>
            </widget>
           </item>
           <item row="1" column="2">

@@ -14,10 +14,10 @@
 
 #include <QTimer>
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QLineEdit>
 #include <QPushButton>
 #include <QString>
 #include <QMessageBox>
@@ -73,12 +73,9 @@ MainWindow::MainWindow(
                     .leftDrawerSplitterState);
     }
 
-    connect(m_detectionSettingsUi->barcodeCsvOutputDirectory,
-            &QLineEdit::textChanged,
-            m_detectionSettingsUi->barcodeCsvOutputDirectory,
-            &QWidget::setToolTip);
     m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
                 machineSettings().barcodeCsvOutputDirectory);
+    updateBarcodeCsvDirectoryDisplay();
     {
         QSignalBlocker blocker(m_detectionSettingsUi->barcodeCsvEnable);
         m_detectionSettingsUi->barcodeCsvEnable->setChecked(
@@ -437,6 +434,17 @@ void MainWindow::initializePages(const QStringList &authorizedModeIds)
 
 MainWindow::~MainWindow() = default;
 
+void MainWindow::updateBarcodeCsvDirectoryDisplay()
+{
+    const QString path = m_detectionSettingsUi->barcodeCsvOutputDirectory->text();
+    const QString openDirectoryTip = QCoreApplication::translate(
+                "DetectionSettingsPage", "双击可打开当前文件夹");
+    m_detectionSettingsUi->barcodeCsvOutputDirectory->setToolTip(
+                path.isEmpty()
+                ? openDirectoryTip
+                : path + QStringLiteral("\n") + openDirectoryTip);
+}
+
 void MainWindow::updateBarcodeCsvUi(const RuntimeSnapshot &snapshot)
 {
     DetectionMode mode = DetectionMode::Word;
@@ -476,12 +484,14 @@ void MainWindow::on_barcodeCsvBrowseDirectory_clicked()
     if (!saved.isSuccess()) {
         m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
                     machineSettings().barcodeCsvOutputDirectory);
+        updateBarcodeCsvDirectoryDisplay();
         showParameterWarning(QStringLiteral("二维码结果保存设置失败"),
                              saved.error.userMessage);
         return;
     }
     m_detectionSettingsUi->barcodeCsvOutputDirectory->setText(
                 candidate.barcodeCsvOutputDirectory);
+    updateBarcodeCsvDirectoryDisplay();
 }
 
 void MainWindow::on_barcodeCsvEnable_toggled(bool enabled)

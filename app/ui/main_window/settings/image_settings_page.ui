@@ -149,6 +149,9 @@
             <property name="readOnly">
              <bool>true</bool>
             </property>
+            <property name="toolTip">
+             <string>双击可打开当前文件夹</string>
+            </property>
             <property name="placeholderText">
              <string>请选择图像保存路径</string>
             </property>

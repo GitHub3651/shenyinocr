@@ -962,6 +962,11 @@ settings</translation>
         <translation>Save folder</translation>
     </message>
     <message>
+        <location filename="ui/main_window/settings/detection_settings_page.ui" line="573"/>
+        <source>双击可打开当前文件夹</source>
+        <translation>Double-click to open this folder</translation>
+    </message>
+    <message>
         <location filename="ui/main_window/settings/detection_settings_page.ui" line="583"/>
         <source>选择目录</source>
         <translation>Choose Directory</translation>
@@ -1030,6 +1035,14 @@ settings</translation>
 输入名称时，只需输入字符名称即可，重复字符系统会自动命名成1(1)、1(2)</source>
         <translation>Character names have been filled automatically. Check them and manually correct any mistakes.
 When entering a name, enter only the character itself. Duplicate characters are named automatically as 1(1), 1(2).</translation>
+    </message>
+</context>
+<context>
+    <name>ImageSettingsPage</name>
+    <message>
+        <location filename="ui/main_window/settings/image_settings_page.ui" line="153"/>
+        <source>双击可打开当前文件夹</source>
+        <translation>Double-click to open this folder</translation>
     </message>
 </context>
 </TS>

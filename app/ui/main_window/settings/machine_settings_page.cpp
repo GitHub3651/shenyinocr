@@ -278,6 +278,8 @@ void MachineSettingsPage::setupBindings()
         &MachineSettingsPage::updateImageSaveOptionsVisibility);
     updateImageSaveOptionsVisibility();
     m_softwareSettingsUi.lineEdit_softwareDataDirectory->installEventFilter(this);
+    m_imageSettingsUi.lineEdit_imageSavePath->installEventFilter(this);
+    m_detectionSettingsUi.barcodeCsvOutputDirectory->installEventFilter(this);
 }
 
 void MachineSettingsPage::setupNumericInputValidators()
@@ -368,7 +370,7 @@ void MachineSettingsPage::applyToUi(
                     settings.detectionSchemes.tissueRoughnessThreshold,
                     'f', 3));
 
-    updateSaveDirectoryText();
+    updateImageSaveDirectoryDisplay();
 
     m_applyingSettings = previousApplying;
     m_updatingSettingsUi = previousUpdating;
@@ -446,7 +448,7 @@ void MachineSettingsPage::registerGlobalSetting(
             }
         }
         if (key == QStringLiteral("image.save_path")) {
-            updateSaveDirectoryText();
+            updateImageSaveDirectoryDisplay();
         }
     };
 
@@ -862,7 +864,7 @@ void MachineSettingsPage::restoreAppliedValues(const QStringList &keys)
         updateImageSaveOptionsVisibility();
     }
     if (keys.contains(QStringLiteral("image.save_path"))) {
-        updateSaveDirectoryText();
+        updateImageSaveDirectoryDisplay();
     }
 }
 
@@ -931,17 +933,20 @@ void MachineSettingsPage::updateImageSaveOptionsVisibility()
     m_imageSettingsUi.comboBox_imageSaveContent->setVisible(saveImages);
 }
 
-void MachineSettingsPage::updateSaveDirectoryText()
+void MachineSettingsPage::updateImageSaveDirectoryDisplay()
 {
     const QString saveDir =
             m_imageSettingsUi.lineEdit_imageSavePath->text().trimmed();
+    const QString openDirectoryTip = QCoreApplication::translate(
+                "ImageSettingsPage", "双击可打开当前文件夹");
     if (saveDir.isEmpty()) {
         m_imageSettingsUi.lineEdit_imageSavePath->clear();
-        m_imageSettingsUi.lineEdit_imageSavePath->setToolTip(QString());
+        m_imageSettingsUi.lineEdit_imageSavePath->setToolTip(openDirectoryTip);
         return;
     }
     m_imageSettingsUi.lineEdit_imageSavePath->setText(saveDir);
-    m_imageSettingsUi.lineEdit_imageSavePath->setToolTip(saveDir);
+    m_imageSettingsUi.lineEdit_imageSavePath->setToolTip(
+                saveDir + QStringLiteral("\n") + openDirectoryTip);
 }
 
 void MachineSettingsPage::applyOperationState(
@@ -990,28 +995,30 @@ bool MachineSettingsPage::eventFilter(
     QObject *watched,
     QEvent *event)
 {
-    if (watched == m_softwareSettingsUi.lineEdit_softwareDataDirectory
+    if ((watched == m_imageSettingsUi.lineEdit_imageSavePath
+            || watched == m_detectionSettingsUi.barcodeCsvOutputDirectory
+            || watched == m_softwareSettingsUi.lineEdit_softwareDataDirectory)
             && event->type() == QEvent::MouseButtonDblClick) {
-        const QString path =
-            m_softwareSettingsUi.lineEdit_softwareDataDirectory->text().trimmed();
+        QLineEdit *lineEdit = static_cast<QLineEdit *>(watched);
+        const QString path = lineEdit->text().trimmed();
         if (path.isEmpty()) {
             return true;
         }
         QDir directory(path);
-        if (!directory.exists()
-                && !QDir().mkpath(directory.absolutePath())) {
+        if ((!directory.exists()
+                && !QDir().mkpath(directory.absolutePath()))
+                || !QDesktopServices::openUrl(
+                    QUrl::fromLocalFile(directory.absolutePath()))) {
             qCWarning(logUi).noquote()
                     << QStringLiteral(
                         "event=settings.directory_open_failed path=%1")
                        .arg(directory.absolutePath());
-            QMessageBox::warning(
-                        m_softwareSettingsUi.lineEdit_softwareDataDirectory,
-                        QStringLiteral("提示"),
-                        QStringLiteral("无法打开软件设置文件夹"));
-            return true;
+            QMessageBox::warning(lineEdit,
+                                 QStringLiteral("提示"),
+                                 watched == m_softwareSettingsUi.lineEdit_softwareDataDirectory
+                                 ? QStringLiteral("无法打开软件设置文件夹")
+                                 : QStringLiteral("该文件夹路径不存在，请检查"));
         }
-        QDesktopServices::openUrl(
-            QUrl::fromLocalFile(directory.absolutePath()));
         return true;
     }
     if (event->type() == QEvent::Wheel

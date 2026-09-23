@@ -115,6 +115,7 @@ private:
     void hideLeftDrawer();
     void setupDetectModeChangeTracking();
     void setupNonPersistentDefaults();
+    void updateBarcodeCsvDirectoryDisplay();
     void updateBarcodeCsvUi(const RuntimeSnapshot &snapshot);
 
     std::unique_ptr<Ui::MainWindow> ui;

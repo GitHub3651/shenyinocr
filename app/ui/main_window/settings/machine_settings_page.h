@@ -96,7 +96,7 @@ private:
         HardwareDependency hardwareDependency);
     void applyTissueRoughnessThreshold();
     void updateImageSaveOptionsVisibility();
-    void updateSaveDirectoryText();
+    void updateImageSaveDirectoryDisplay();
     bool isDirtyByValue(const QString &key) const;
     void updateDirtyLabel(const QString &key);
     void restoreCameraUiFromApplied();
