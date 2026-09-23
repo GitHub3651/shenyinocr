@@ -312,7 +312,7 @@ CameraResult HikvisionCameraDevice::applySettings(
     }
     if (settings.updateLineDebouncerTime) {
         nativeResult = invokeCameraSdk([&]() {
-            return MV_CC_SetEnumValue(
+            return MV_CC_SetIntValue(
                         m_impl->handle,
                         "LineDebouncerTime",
                         settings.lineDebouncerTime);

@@ -304,6 +304,8 @@ void TemplateEditorPage::applyOperationState(
         showInspectionStatus();
     } else if (requestedState == OperationUiState::Stopping) {
         cancelTemplateDrawing();
+    } else if (requestedState == OperationUiState::CameraPreviewing) {
+        hideTemplateGuide();
     }
 }
 

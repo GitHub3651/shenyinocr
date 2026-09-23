@@ -9,6 +9,7 @@ enum class OperationUiState
     CameraClosed = 0,
     CameraReady,
     CameraPreviewing,
+    Starting,
     Detecting,
     Stopping,
     TemplatePreviewing,

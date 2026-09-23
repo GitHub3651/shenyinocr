@@ -224,13 +224,14 @@ bool MainWindow::applyCameraExposureValue(
     const CameraParameterResultDto result =
             m_inspectionApplicationService
             ->applyCameraExposure(exposureValue);
-    if (result.minimumValue <= result.maximumValue) {
-        QSignalBlocker blocker(m_imageSettingsUi->spinBox_cameraExposure);
-        m_imageSettingsUi->spinBox_cameraExposure->setRange(
-            result.minimumValue, result.maximumValue);
-    }
     if (!result.success && errorMessage) {
-        *errorMessage = result.diagnostic;
+        *errorMessage = result.maximumValue > result.minimumValue
+                && (exposureValue < result.minimumValue
+                    || exposureValue > result.maximumValue)
+                ? QStringLiteral("相机曝光值超出允许范围，请输入 %1 ~ %2。")
+                  .arg(result.minimumValue)
+                  .arg(result.maximumValue)
+                : QStringLiteral("相机曝光设置失败，请检查输入值和相机状态。");
     }
     if (!result.success) {
         qCWarning(logDevice).noquote()
@@ -257,10 +258,8 @@ bool MainWindow::applyCameraExposureFromUi(
 {
     QString error;
     if (!applyCameraExposureValue(m_imageSettingsUi->spinBox_cameraExposure->value(), &error)) {
-        const QString message = QStringLiteral(
-                    "相机曝光设置失败，请检查输入值和相机状态。");
-        if (errors) errors->append(message);
-        if (showSuccessMessage) showParameterWarning("提示", message);
+        if (errors) errors->append(error);
+        if (showSuccessMessage) showParameterWarning("提示", error);
         m_machineSettingsPage->restoreAppliedValue("camera.exposure");
         return false;
     }
@@ -299,8 +298,13 @@ bool MainWindow::applyCameraGainFromUi(
                    .arg(gainValue)
                    .arg(result.nativeErrorCode)
                    .arg(result.diagnostic);
-        const QString message = QStringLiteral(
-                    "相机增益设置失败，请检查输入值和相机状态。");
+        const QString message = result.maximumValue > result.minimumValue
+                && (gainValue < result.minimumValue
+                    || gainValue > result.maximumValue)
+                ? QStringLiteral("相机增益值超出允许范围，请输入 %1 ~ %2。")
+                  .arg(result.minimumValue)
+                  .arg(result.maximumValue)
+                : QStringLiteral("相机增益设置失败，请检查输入值和相机状态。");
         if (errors) errors->append(message);
         if (showSuccessMessage) {
             showParameterWarning("提示", message);

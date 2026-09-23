@@ -170,6 +170,7 @@ OperationUiState MainWindow::operationUiState(
 {
     switch (snapshot.state) {
     case ApplicationRuntimeState::Starting:
+        return OperationUiState::Starting;
     case ApplicationRuntimeState::Running:
         return OperationUiState::Detecting;
     case ApplicationRuntimeState::Stopping:
@@ -653,8 +654,7 @@ void MainWindow::openCamera()
     {
         QSignalBlocker blocker(m_imageSettingsUi->spinBox_cameraExposure);
         m_imageSettingsUi->spinBox_cameraExposure->setRange(
-            openResult.exposureMinimum,
-            openResult.exposureMaximum);
+            0, (std::numeric_limits<int>::max)());
         m_imageSettingsUi->spinBox_cameraExposure->setValue(openResult.appliedExposure);
     }
     m_machineSettingsPage->refreshDirty("camera.exposure");

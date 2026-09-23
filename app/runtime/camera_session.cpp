@@ -276,6 +276,7 @@ bool CameraSession::prepareInspection(
         return false;
     }
     CameraResult result;
+    QString failedStep = QStringLiteral("stop_grabbing");
     if (configuration.hardwareTriggerEnabled) {
         result = m_cameraDevice->stopGrabbing();
         if (result.isSuccess()) {
@@ -283,6 +284,7 @@ bool CameraSession::prepareInspection(
         }
     }
     if (result.isSuccess()) {
+        failedStep = QStringLiteral("trigger_mode");
         result = m_cameraDevice->setTriggerMode(
                     configuration.hardwareTriggerEnabled
                     ? CameraTriggerMode::HardwareLine0
@@ -299,13 +301,16 @@ bool CameraSession::prepareInspection(
                 configuration.hardwareTriggerDelayMicroseconds;
     }
     if (result.isSuccess()) {
+        failedStep = QStringLiteral("run_settings");
         result = m_cameraDevice->applySettings(settings);
     }
     if (result.isSuccess() && configuration.hardwareTriggerEnabled) {
+        failedStep = QStringLiteral("start_grabbing");
         result = m_cameraDevice->startGrabbing();
         if (result.isSuccess()) {
             CameraSettings debounce;
             debounce.updateLineDebouncerTime = true;
+            failedStep = QStringLiteral("line_debouncer");
             result = m_cameraDevice->applySettings(debounce);
         }
         if (result.isSuccess()) {
@@ -314,9 +319,9 @@ bool CameraSession::prepareInspection(
     }
     if (!result.isSuccess()) {
         if (errorMessage) {
-            *errorMessage = cameraErrorText(
-                        QStringLiteral("相机运行参数应用失败"),
-                        result.nativeErrorCode);
+            *errorMessage = QStringLiteral("step=%1 nativeCode=%2")
+                    .arg(failedStep)
+                    .arg(result.nativeErrorCode);
         }
         return false;
     }

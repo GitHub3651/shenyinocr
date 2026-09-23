@@ -20,6 +20,8 @@ OperationUiSnapshot::Access access(
 QString operationBusyReason(OperationUiState state)
 {
     switch (state) {
+    case OperationUiState::Starting:
+        return QStringLiteral("系统正在启动识别，请稍候。");
     case OperationUiState::Detecting:
         return QStringLiteral("当前正在识别，请先停止识别。");
     case OperationUiState::Stopping:
@@ -134,12 +136,15 @@ OperationUiSnapshot OperationUiPolicy::create(
     snapshot.cameraActionText = context.cameraOpen
             ? QStringLiteral("关闭相机")
             : QStringLiteral("打开相机");
-    snapshot.inspectionActionText =
-            state == OperationUiState::Stopping
-            ? QStringLiteral("停止中")
-            : (state == OperationUiState::Detecting
-               ? QStringLiteral("停止识别")
-               : QStringLiteral("启动识别"));
+    if (state == OperationUiState::Starting) {
+        snapshot.inspectionActionText = QStringLiteral("启动中");
+    } else if (state == OperationUiState::Stopping) {
+        snapshot.inspectionActionText = QStringLiteral("停止中");
+    } else if (state == OperationUiState::Detecting) {
+        snapshot.inspectionActionText = QStringLiteral("停止识别");
+    } else {
+        snapshot.inspectionActionText = QStringLiteral("启动识别");
+    }
     snapshot.previewActionText =
             state == OperationUiState::CameraPreviewing
             ? QStringLiteral("停止预览")
@@ -163,6 +168,10 @@ OperationUiSnapshot OperationUiPolicy::create(
     case OperationUiState::CameraPreviewing:
         snapshot.statusText = QStringLiteral("实时预览中");
         snapshot.statusUiState = QStringLiteral("running");
+        break;
+    case OperationUiState::Starting:
+        snapshot.statusText = QStringLiteral("正在启动识别");
+        snapshot.statusUiState = QStringLiteral("warning");
         break;
     case OperationUiState::Detecting:
         snapshot.statusText = context.hardwareTriggerEnabled
