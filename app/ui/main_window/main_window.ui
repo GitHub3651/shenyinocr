@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>智能视觉检测系统</string>
+   <string>晟崟AI视觉检测软件</string>
   </property>
   <layout class="QHBoxLayout" name="horizontalLayout_mainWindow" stretch="0,1">
    <property name="spacing">

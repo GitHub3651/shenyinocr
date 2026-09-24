@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
@@ -65,21 +65,21 @@ foreach ($relativePath in $obsoleteOcrPaths) {
 # Keep the executable produced by the current Qt Creator link. Copy only the
 # version-independent runtime assets from dist; Qt libraries and plugins come
 # from the active Qt kit below.
-& robocopy $sourcePath $destinationPath /E /XO /FFT /R:1 /W:1 /NFL /NDL /NJH /NJS /XF ShengYin.exe README.txt 'Qt5*.dll' libEGL.dll libGLESv2.dll opengl32sw.dll D3Dcompiler_47.dll /XD myImage log platforms imageformats iconengines styles translations
+& robocopy $sourcePath $destinationPath /E /XO /FFT /R:1 /W:1 /NFL /NDL /NJH /NJS /XF ShengYin.exe '晟崟AI视觉检测软件.exe' README.txt 'Qt5*.dll' libEGL.dll libGLESv2.dll opengl32sw.dll D3Dcompiler_47.dll /XD myImage log platforms imageformats iconengines styles translations
 $robocopyExitCode = $LASTEXITCODE
 if ($robocopyExitCode -ge 8) {
     throw "Runtime deployment failed (robocopy exit code $robocopyExitCode)."
 }
 
-$executablePath = Join-Path $destinationPath 'ShengYin.exe'
-if (-not (Test-Path -LiteralPath $executablePath -PathType Leaf)) {
-    throw "Linked executable does not exist: $executablePath"
+$linkedExecutablePath = Join-Path $destinationPath 'ShengYin.exe'
+if (-not (Test-Path -LiteralPath $linkedExecutablePath -PathType Leaf)) {
+    throw "Linked executable does not exist: $linkedExecutablePath"
 }
 
 $originalPath = $env:PATH
 try {
     $env:PATH = "$qtBinPath;$originalPath"
-    & $windeployQtPath --release --force --no-translations --dir $destinationPath $executablePath
+    & $windeployQtPath --release --force --no-translations --dir $destinationPath $linkedExecutablePath
     $winDeployQtExitCode = $LASTEXITCODE
 }
 finally {
@@ -130,5 +130,8 @@ if ($config -notmatch 'OCR/PP-OCRv6_tiny/det/' `
         -or $config -notmatch 'ppocrv6_tiny_dict.txt') {
     throw 'Runtime deployment did not produce the PP-OCRv6 tiny configuration.'
 }
+
+$releaseExecutablePath = Join-Path $destinationPath '晟崟AI视觉检测软件.exe'
+Copy-Item -LiteralPath $linkedExecutablePath -Destination $releaseExecutablePath -Force
 
 Write-Host "Qt and PP-OCRv6 tiny runtime assets are ready in $destinationPath"
