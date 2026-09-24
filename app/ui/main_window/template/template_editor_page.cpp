@@ -146,7 +146,7 @@ QString drawingRegionName(DetectionMode mode, InspectionImageCanvas::DrawingStep
     case InspectionImageCanvas::DrawingStep::TrackingAnchor:
         switch (mode) {
         case DetectionMode::Word:
-            return QStringLiteral("文字检测区域定位参考区域");
+            return QStringLiteral("文字检测区域定位锚点（该框用于定位文字检测区域，所以需要框选与文字检测区域相对位置不变的区域）");
         case DetectionMode::Ocr:
             return QStringLiteral("OCR 检测区域定位参考区域");
         case DetectionMode::BarcodeWord:
@@ -1239,7 +1239,6 @@ void TemplateEditorPage::applyTemplateSettingsToUi(
 void TemplateEditorPage::adjustTemplateGuideHeight()
 {
     m_mainWindowUi.frame_templateGuide->updateGeometry();
-    m_mainWindowUi.frame_templateGuide->adjustSize();
 }
 
 void TemplateEditorPage::updateTemplateGuideText(

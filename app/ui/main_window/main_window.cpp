@@ -205,12 +205,16 @@ MainWindow::MainWindow(
                     QStringLiteral(
                         "系统发生故障，识别已自动停止。\n\n"
                         "故障原因：%1\n"
-                        "本次运行已接收 %2 件，已完成 %3 件。\n\n"
+                        "本次运行软件已接收 %2 张图像，"
+                        "已完成检测 %3 张。\n"
+                        "未完成检测 %4 张，已丢弃。\n\n"
                         "请检查输送线状态和故障期间的产品。\n"
-                        "%4")
+                        "%5")
                     .arg(reasonText)
                     .arg(snapshot.acceptedProductCount)
                     .arg(snapshot.finalizedProductCount)
+                    .arg(snapshot.acceptedProductCount
+                         - snapshot.finalizedProductCount)
                     .arg(actionHint));
     },
     Qt::QueuedConnection);

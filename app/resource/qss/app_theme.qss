@@ -229,7 +229,7 @@ QLabel#label_templateGuideBody {
     color: #000000;
     font-size: 18px;
     font-weight: 400;
-    qproperty-wordWrap: false;
+    qproperty-wordWrap: true;
 }
 
 /* 4. 普通按钮 */
