@@ -115,7 +115,6 @@ public:
     DetectionCompletion complete(
         const std::shared_ptr<const FrameData> &frame,
         const DetectionResult &result);
-    bool claimResult(const ProductKey &productKey);
     bool finalizeResultClaim(const ProductKey &productKey);
 
     bool isDetectionWorkerActive() const;
@@ -147,7 +146,6 @@ private:
     enum class ProductProgress
     {
         Accepted,
-        AlgorithmCompleted,
         Claimed
     };
 

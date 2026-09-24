@@ -196,8 +196,6 @@ bool InspectionRuntime::beginStop()
         }
     }
     if (accepted) {
-        m_uiCompletionMailbox.cancel();
-        m_wakePosted.store(false);
         requestDetectionWorkerStop();
     }
     return accepted;
@@ -210,6 +208,10 @@ void InspectionRuntime::waitForStop()
 
 void InspectionRuntime::finishStop(bool writeRunSummary)
 {
+    if (writeRunSummary
+            && state() == InspectionRuntimeState::Stopping) {
+        drainPresentationMailbox();
+    }
     m_uiCompletionMailbox.cancel();
     m_wakePosted.store(false);
     const DetectionResultStatistics statistics = m_resultService->statistics();
@@ -559,8 +561,7 @@ DetectionCompletion InspectionRuntime::complete(
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     if ((m_state != InspectionRuntimeState::Starting
-         && m_state != InspectionRuntimeState::Running
-         && m_state != InspectionRuntimeState::Stopping)
+         && m_state != InspectionRuntimeState::Running)
             || !frame
             || frame->originalImage.empty()
             || !belongsToCurrentRun(frame->productKey)
@@ -589,27 +590,9 @@ DetectionCompletion InspectionRuntime::complete(
     completion.frame = frame;
     completion.result = result;
     m_acceptedFrames.erase(accepted);
-    product->second = ProductProgress::AlgorithmCompleted;
+    product->second = ProductProgress::Claimed;
     m_lastCompletedProductSequence = frame->productKey.sequence;
     return completion;
-}
-
-bool InspectionRuntime::claimResult(const ProductKey &productKey)
-{
-    std::lock_guard<std::mutex> lock(m_mutex);
-    if (m_state == InspectionRuntimeState::Idle
-            || m_state == InspectionRuntimeState::Fault
-            || !belongsToCurrentRun(productKey)) {
-        return false;
-    }
-    const std::map<quint64, ProductProgress>::iterator product =
-            m_products.find(productKey.sequence);
-    if (product == m_products.end()
-            || product->second != ProductProgress::AlgorithmCompleted) {
-        return false;
-    }
-    product->second = ProductProgress::Claimed;
-    return true;
 }
 
 bool InspectionRuntime::finalizeResultClaim(const ProductKey &productKey)
@@ -636,7 +619,6 @@ void InspectionRuntime::requestDetectionWorkerStop()
     {
         std::lock_guard<std::mutex> lock(m_detectionWorkerMutex);
         m_detectionWorkerActive.store(false);
-        m_uiCompletionMailbox.cancel();
         worker = m_detectionWorker;
     }
     if (worker) {

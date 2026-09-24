@@ -19,7 +19,7 @@
 7. `InspectionPage` 只保留一个生产结果入口：`present(const InspectionPresentation &)`；由它一次性更新同一产品的图片、文字和统计。
 8. 保留容量为一的数据 mailbox；载荷为 `InspectionPresentation`；新结果替换尚未显示的旧结果；生产线程完全不等待 UI。
 9. ResultService 先完成去重、统计、存图任务提交和 PLC 请求，再投递 UI 数据；UI 速度不能决定生产事务是否完成。
-10. stop/Fault/新 Run 时取消并清空未显示的旧 Run 结果；已显示的最后一张图片、已记录统计、已提交存图任务和 PLC 业务结果保留。
+10. 正常 stop 禁止新认领，等待已认领产品完成并显示最后一份结果后取消 mailbox；Fault 立即取消未显示结果；新 Run 不接收旧 Run 数据。
 11. `InspectionPresentationRenderer` 保留为纯图像/数据转换器，删除其 ViewBindings、控件回调和所有 `showXxx()` 方法。
 12. `InspectionRuntime::resultService()` 在本轮重构的末尾删除；先迁移真实调用，不长期保留，也不为隐藏它无原则增加 Runtime 转发接口。
 13. 删除 Application 的 `clearResultView()`、`clearTransientView()`；Runtime 在生命周期内清理后台呈现状态，Page 只清理自己明确的结果区域或临时提示。
@@ -346,7 +346,7 @@ mailbox 是线程交接和反压工具，不是业务层。保留它是为了防
 - `submit()` 不等待 UI，不阻塞统计、PLC 或存图；
 - 若已有待显示数据，用新数据替换旧数据；
 - UI 已经取出的当前快照不再替换；它不占用“待显示”槽位，新的结果可以写入唯一的待显示槽位；
-- 停止（包括故障自动停止）禁止新提交并清空待显示数据；
+- 正常停止禁止新认领，但允许已认领产品提交最后一份结果，Worker 退出后由 UI 线程取出该结果再取消 mailbox；Fault 立即禁止提交并清空待显示数据；
 - 新 Run 重新打开 mailbox，旧 Run 不再提交。
 
 例：UI 正显示产品 10，邮箱待显示产品 11，产品 12 到达时丢弃尚未消费的 11、保留 12。产品 11 的生产事务仍然已经完成。
@@ -369,7 +369,7 @@ bool reopen();
 
 1. 校验 `DetectionCompletion`；
 2. 校验 ProductKey 属于当前 Run；
-3. 认领结果并去重；
+3. Runtime 在接受算法结果时原子认领并去重；
 4. 更新统计和延迟 NG；
 5. 提交异步存图；
 6. 提交或执行到现有业务合同规定阶段的 PLC OK/NG 请求；
@@ -393,7 +393,7 @@ mailbox 被替换或 UI 尚未消费时，不回滚统计、PLC、存图和去�
 
 删除 `clearResultView()` 和 `clearTransientView()`，不以新名字继续保留 Application 的跨层显示 API。
 
-- Runtime 在 stop、Fault 和新 Run 生命周期中自行取消 mailbox、隔离旧 Run 并清理内部呈现状态；
+- Runtime 在正常 stop 时显示最后一份已认领结果后取消 mailbox，在 Fault 和新 Run 生命周期中取消 mailbox、隔离旧 Run 并清理内部呈现状态；
 - `InspectionPage` 只清理自己明确拥有的结果区域或临时提示控件，不清空整个页面；
 - 参数、按钮、统计数据、其他页面内容和已经显示的最后一张结果保留；
 - Application 不转发“清空界面”操作。
@@ -473,7 +473,7 @@ CameraSession
 
 ### 阶段 3：mailbox 数据化和非阻塞化
 
-将 `Work` 改为 `InspectionPresentation`；待显示数据只保留最新一份；UI 唤醒只排一个 queued 事件；停止（包括故障自动停止）清空 mailbox；统计、PLC、存图先于 mailbox 提交。
+将 `Work` 改为 `InspectionPresentation`；待显示数据只保留最新一份；UI 唤醒只排一个 queued 事件；正常停止显示最后一份已认领结果后清空 mailbox，Fault 立即清空；统计、PLC、存图先于 mailbox 提交。
 
 ### 阶段 4：隐藏 ResultService
 
@@ -516,7 +516,7 @@ CameraSession
 | UI 跨线程 | `present()` 只在 UI 线程调用，mailbox 用 queued 唤醒 |
 | UI 跟不上检测 | mailbox 不阻塞生产事务，只替换待显示结果 |
 | 统计/PLC 与 UI 不一致 | 统计、PLC、存图在 mailbox 提交前完成 |
-| 旧 Run 结果 | 停止时禁止新提交、清空 mailbox，新 Run 重新打开 |
+| 旧 Run 结果 | 正常停止只允许已认领产品完成并显示最后结果，随后清空 mailbox；Fault 立即清空，新 Run 重新打开 |
 | 重复结果 | Runtime/ResultService 以 ProductKey 认领一次 |
 | PLC 故障 | 写入/复位失败进入 Runtime Fault |
 | 页面销毁竞态 | 先停 Runtime、取消 mailbox、断开 Runtime → UI 的 Qt 连接，再销毁 Page |
@@ -647,7 +647,7 @@ MainWindow 开始关闭
  → Application 按既有流程停止 CameraSession
  → Runtime 停止 DetectionWorker 并等待线程退出
  → ResultService 完成允许完成的 PLC 复位/存图收尾
- → Runtime cancel mailbox
+ → Runtime 显示最后一份已认领结果并 cancel mailbox
  → 断开 Runtime signal → UI 的 Qt 连接
  → 销毁 Page
  → 释放 MainWindow 的 Ui
@@ -689,7 +689,7 @@ Application 负责“能否发起这个用例”的前置组合，Runtime 负责
  → 帧进入有界 FrameQueue
  → DetectionWorker 取帧并调用当前模式 Pipeline
  → Pipeline 返回 DetectionCompletion
- → ResultService 校验并认领 ProductKey
+ → Runtime 接受算法结果并原子认领 ProductKey
  → 更新统计/延迟 NG
  → 提交存图
  → 提交/执行 PLC 请求并安排复位
@@ -712,10 +712,10 @@ Application 负责“能否发起这个用例”的前置组合，Runtime 负责
  → Runtime 状态 Running → Stopping
  → 禁止新帧进入 ProductKey/FrameQueue
  → Application 按现有流程调用 CameraSession::stopInspection()
- → 请求 DetectionWorker 停止并等待
- → 处理明确允许收尾的产品；记录未确认产品
+ → 请求 DetectionWorker 停止并等待；已返回的算法结果仍交给 Runtime 做原子认领判定
+ → 已认领产品完成 CSV、存图、PLC、统计和结果呈现；记录其余未确认产品
  → 停止 PLC 新输出并完成安全复位
- → cancel mailbox 中未显示快照
+ → UI 线程显示 mailbox 中最后一份结果并 cancel mailbox
  → Runtime 状态 Stopping → Idle
  → Runtime 发布最终 RuntimeSnapshot
 ```
@@ -939,11 +939,11 @@ app/runtime/result_presentation_mailbox.*
 
 ### 34.1 结果已完成但尚未显示
 
-结果事务完成后，Presentation 可能仍在 mailbox 中。停止或故障自动停止时按固定规则直接清空未显示快照，因为生产已经完成，UI 不应阻塞停止。统计、PLC 和存图状态仍保留在 Runtime/ResultService 快照中。
+结果事务完成后，Presentation 可能仍在 mailbox 中。正常停止等待 DetectionWorker 退出后，由 UI 线程显示 mailbox 中最后一份结果，再取消 mailbox；Fault 自动停止仍直接清空未显示快照。统计、PLC 和存图状态保留在 Runtime/ResultService 快照中。
 
 ### 34.2 结果在停止过程中返回
 
-ResultService 提交前必须检查当前 Run 是否仍有效。Runtime 进入 Stopping 后拒绝新的产品认领；迟到完成结果计入“未确认/丢弃”诊断，不得进入新 Run 的 Presentation。
+Runtime 接受算法结果和认领 ProductKey 使用同一状态锁：认领先于正常停止时，该产品必须完成 CSV、存图、PLC、统计、完成计数和最后一次界面呈现；正常停止先于认领时，迟到结果计入“未确认/丢弃”诊断，不得进入新 Run 的 Presentation。
 
 ### 34.3 自动停止后的旧 queued 唤醒
 
@@ -1019,7 +1019,8 @@ t_interval：相邻产品结果产生的时间间隔
 | UI 变慢 | UI 只显示最新待显示快照，生产事务继续 | Mailbox + ResultService |
 | PLC 断连 | Runtime 进入 Fault，停止新生产并自动收口，UI 显示一次警告 | Runtime + UI |
 | 相机断连 | Runtime 进入规定故障或停止状态 | Runtime/Camera |
-| 停止后迟到结果 | 不进入新 Run，不更新 UI | Runtime/ResultService/Mailbox |
+| 正常停止时已认领结果 | 完成 CSV、存图、PLC、统计、完成计数并显示最后结果 | Runtime/ResultService/Mailbox |
+| 正常停止后未认领结果 | 不进入正式结果事务，不进入新 Run，不更新 UI | Runtime/ResultService/Mailbox |
 | 模板预览 | 只更新 TemplateEditorPage，不改生产统计和 PLC | Application + TemplateEditorPage |
 | 新增普通模式 | 主要改 Detection/模板/设置，通用 UI 不变 | Detection |
 

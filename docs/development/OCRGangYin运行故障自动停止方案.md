@@ -44,7 +44,7 @@
 
 ## 4. Runtime 收口
 
-`InspectionRuntime::complete()` 只把产品从 `Accepted` 推进到 `AlgorithmCompleted` 并维护算法完成顺序，不再累加运行完成数。运行内计数改为 `m_finalizedProductCount`，只由 `finalizeResultClaim()` 在产品从 `Claimed` 完成正式结果收口并移出 `m_products` 时累加一次。
+`InspectionRuntime::complete()` 在现有状态锁内校验算法结果并把产品从 `Accepted` 原子推进到 `Claimed`，不再保留无独立用途的 `AlgorithmCompleted` 中间状态。运行内计数由 `m_finalizedProductCount` 保存，只由 `finalizeResultClaim()` 在产品完成正式结果收口并移出 `m_products` 时累加一次。
 
 `ResultService::process()` 继续在现有函数内完成结果收口，不增加事务类或回滚框架：先计算本件候选统计和延迟 NG 请求，按配置完成 CSV、存图任务提交和当前 PLC 动作，再用候选统计投递呈现；运行中存图任务被拒绝或呈现投递失败时进入 `RuntimeInvariantViolation`。只有各步骤完成且 Runtime 未进入 Fault 时，才提交正常统计和本件延迟 NG 请求，并在末尾调用一次 `finalizeResultClaim()`。CSV、存图提交、PLC 或呈现失败进入 Fault 后不得提交统计或已完成数；故障后已认领但未最终提交的产品保留在 `m_products`，由 `finishStop()` 计为未确认。
 
@@ -163,7 +163,7 @@ MainWindow 构造函数中的 `faultSnapshotChanged` 排队连接是唯一界面
 - Application 和 UI 运行状态只包含空闲、启动、运行和停止；界面通过 `Stopping` 和最终 `Idle` 呈现自动停止过程。
 - `InspectionFaultReason` 只包含 `None`、`CameraDisconnected`、`PlcDisconnected`、`HardTriggerQueueOverflow`、`RuntimeInvariantViolation` 和 `BarcodeCsvUnavailable`；每个非 `None` 原因均有真实生产入口。
 - `InspectionFaultSnapshot` 只包含 `reason`、`acceptedProductCount` 和 `finalizedProductCount`，并作为 `faultSnapshotChanged` 的唯一参数。
-- `m_finalizedProductCount` 只在 `finalizeResultClaim()` 成功提交正式结果时增加；`InspectionRuntime::complete()` 不再累加产品完成数。
+- `InspectionRuntime::complete()` 只在 `Starting/Running` 下原子认领合法算法结果；`m_finalizedProductCount` 只在 `finalizeResultClaim()` 成功提交正式结果时增加。
 - `ResultService::process()` 只在正式结果链走完且 Runtime 未进入 Fault 时提交候选统计、登记本件延迟 NG 请求并调用 `finalizeResultClaim()`；故障产品仍留在 `m_products` 等待停止摘要收口。
 - `InspectionApplicationService::stop(InspectionFaultReason)` 直接返回 `CameraRecoveryResultDto`；`CameraSession::stopInspection()` 返回 `void`。
 - 正式采集意外停止进入 `CameraDisconnected` Fault；模板预览意外停止只发出无参数的 `templatePreviewStopped()`。
@@ -218,7 +218,7 @@ MainWindow 构造函数中的 `faultSnapshotChanged` 排队连接是唯一界面
 - `InspectionApplicationService::stop(InspectionFaultReason)` 直接返回 `CameraRecoveryResultDto`；正常停止传入 `None`，故障停止传入首因。
 - `InspectionFaultReason` 的非 `None` 枚举值均能从生产代码定位到对应的 `enterFault()` 调用链，警告原因映射与枚举逐项一致。
 - `CameraSession::stopInspection()` 返回 `void` 并同步停止采集线程；相机 Fault 直接关闭相机且不尝试恢复预览，其他停止以停止前相机是否打开为预览恢复依据。
-- `InspectionRuntime::complete()` 只表示算法完成；`finalizeResultClaim()` 在正式结果收口末尾累加 `m_finalizedProductCount`，警告中的完成数读取同一计数。
+- `InspectionRuntime::complete()` 原子接受并认领算法结果；`finalizeResultClaim()` 在正式结果收口末尾累加 `m_finalizedProductCount`，警告中的完成数读取同一计数。
 - `InspectionRuntime::finishStop()` 同时覆盖正常停止和 Fault；未完成正式结果收口的产品只记录一次，完成后状态为 `Idle`。
 - Application 和 UI 的公开运行状态只有空闲、启动、运行和停止；Fault 收口期间公开为 `Stopping`。
 - `faultSnapshotChanged` 的排队 lambda 直接执行自动停止和警告；每次运行只在停止及对应硬件处置完成后显示一次故障警告，故障快照只携带原因、接收数和正式结果完成数。

@@ -245,10 +245,6 @@ void ResultService::process(const ProcessRequest &request)
         return;
     }
 
-    if (!m_runtime.claimResult(request.completion.frame->productKey)) {
-        return;
-    }
-
     const ProductKey productKey = request.completion.frame->productKey;
     bool barcodeCsvEnabled = false;
     QString barcodeCsvOutputDirectory;
@@ -335,11 +331,9 @@ void ResultService::process(const ProcessRequest &request)
             saveAction != DetectionResultSaveAction::DoNotSave;
     if (imageSaveRequested
             && !submitImageSave(request, saveAction, presentation.image)) {
-        if (m_runtime.isRunning()) {
-            m_runtime.enterFault(
-                        InspectionFaultReason::RuntimeInvariantViolation,
-                        QStringLiteral("图像保存任务提交失败。"));
-        }
+        m_runtime.enterFault(
+                    InspectionFaultReason::RuntimeInvariantViolation,
+                    QStringLiteral("图像保存任务提交失败。"));
         return;
     }
 
@@ -357,11 +351,9 @@ void ResultService::process(const ProcessRequest &request)
     presentation.elapsedText = QStringLiteral("%1 ms")
             .arg(processingElapsedMs, 0, 'f', 2);
     if (!m_runtime.publishPresentation(presentation)) {
-        if (m_runtime.isRunning()) {
-            m_runtime.enterFault(
-                        InspectionFaultReason::RuntimeInvariantViolation,
-                        QStringLiteral("检测结果界面投递失败。"));
-        }
+        m_runtime.enterFault(
+                    InspectionFaultReason::RuntimeInvariantViolation,
+                    QStringLiteral("检测结果界面投递失败。"));
         return;
     }
     if (m_runtime.state() == InspectionRuntimeState::Fault) {

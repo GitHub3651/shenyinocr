@@ -143,11 +143,6 @@ void DetectionWorker::run()
             break;
         }
 
-        if (m_stopRequested.load()) {
-            m_cancelledFrameCount.fetch_add(1);
-            break;
-        }
-
         if (!completion.isValid()) {
             reportFailure(QStringLiteral("检测执行器未返回有效结果"));
             m_cancelledFrameCount.fetch_add(1);

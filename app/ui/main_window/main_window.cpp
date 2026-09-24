@@ -158,8 +158,7 @@ MainWindow::MainWindow(
         this,
         [this](const InspectionPresentation &presentation) {
         m_inspectionPage->present(presentation);
-    },
-    Qt::QueuedConnection);
+    });
     connect(
         m_runtime,
         &InspectionRuntime::faultSnapshotChanged,
