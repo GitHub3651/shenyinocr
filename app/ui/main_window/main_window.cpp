@@ -32,6 +32,9 @@ MainWindow::MainWindow(
     const std::shared_ptr<SettingsApplicationService> &settingsService,
     const std::shared_ptr<TemplateApplicationService> &templateService,
     const QStringList &authorizedModeIds,
+    bool showLicenseExpiry,
+    bool permanentLicense,
+    const QDate &licenseExpiresDate,
     QWidget *parent)
     : QWidget(parent),
       ui(new Ui::MainWindow),
@@ -51,6 +54,17 @@ MainWindow::MainWindow(
     m_imageSettingsUi->setupUi(ui->page_imageSettings);
     m_plcSettingsUi->setupUi(ui->page_plcSettings);
     m_softwareSettingsUi->setupUi(ui->page_softwareSettings);
+    m_softwareSettingsUi->label_licenseExpiry->setVisible(
+                showLicenseExpiry);
+    m_softwareSettingsUi->label_licenseExpiryValue->setVisible(
+                showLicenseExpiry);
+    if (showLicenseExpiry) {
+        m_softwareSettingsUi->label_licenseExpiryValue->setText(
+                    permanentLicense
+                    ? QStringLiteral("长期有效")
+                    : licenseExpiresDate.toString(
+                        QStringLiteral("yyyy-MM-dd")));
+    }
     const auto updateHardwareTriggerText = [this](bool enabled) {
         ui->checkBox_hardwareTriggerEnabled->setText(
                     enabled ? QStringLiteral("开") : QStringLiteral("关"));

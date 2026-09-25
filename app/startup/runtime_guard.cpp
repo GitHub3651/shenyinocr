@@ -13,8 +13,6 @@
 
 namespace {
 
-const QString unactivatedValue = QStringLiteral("UNACTIVATED");
-
 class WmiReader
 {
 public:
@@ -173,7 +171,7 @@ bool systemUuidDeviceCode(const WmiReader &reader, QString *code)
 {
     const QString systemUuid = normalizedIdentifier(reader.value(
                 L"Win32_ComputerSystemProduct", L"UUID"));
-    if (!code || !isValidIdentifier(systemUuid)) {
+    if (!isValidIdentifier(systemUuid)) {
         return false;
     }
     *code = deviceCode(systemUuid);
@@ -186,8 +184,7 @@ bool baseboardBiosDeviceCode(const WmiReader &reader, QString *code)
                 L"Win32_BaseBoard", L"SerialNumber"));
     const QString biosSerial = normalizedIdentifier(reader.value(
                 L"Win32_BIOS", L"SerialNumber"));
-    if (!code
-            || !isValidIdentifier(baseboardSerial)
+    if (!isValidIdentifier(baseboardSerial)
             || !isValidIdentifier(biosSerial)) {
         return false;
     }
@@ -212,9 +209,6 @@ bool selectDeviceBinding(const WmiReader &reader,
                          QString *binding,
                          QString *code)
 {
-    if (!binding || !code) {
-        return false;
-    }
     if (systemUuidDeviceCode(reader, code)) {
         *binding = QStringLiteral("S1");
         return true;
@@ -226,8 +220,14 @@ bool selectDeviceBinding(const WmiReader &reader,
     return false;
 }
 
-bool validateLicense(const LicenseData &license,
-                     QStringList *authorizedModeIds)
+QString licensePath()
+{
+    return QDir(QCoreApplication::applicationDirPath()).filePath(
+                QStringLiteral("license.ini"));
+}
+
+bool authorizedModeIds(const LicenseData &license,
+                       QStringList *orderedModeIds)
 {
     if (license.featureModeIds.isEmpty()) {
         return false;
@@ -244,94 +244,135 @@ bool validateLicense(const LicenseData &license,
         return false;
     }
 
-    const bool bindingUnactivated =
-            license.deviceBinding == unactivatedValue;
-    const bool codeUnactivated = license.deviceCode == unactivatedValue;
-    if (bindingUnactivated != codeUnactivated) {
-        return false;
-    }
-    if (!bindingUnactivated
-            && license.deviceBinding != QLatin1String("S1")
-            && license.deviceBinding != QLatin1String("S2")) {
-        return false;
-    }
-
-    if (!license.permanent
-            && (!license.expiresDate.isValid()
-                || QDate::currentDate() > license.expiresDate)) {
-        return false;
-    }
-
-    if (authorizedModeIds) {
-        authorizedModeIds->clear();
-        for (const DetectionModeDescriptor &descriptor
-             : detectionModeDescriptors()) {
-            const QString modeId = QLatin1String(descriptor.modeId);
-            if (license.featureModeIds.contains(modeId)) {
-                authorizedModeIds->append(modeId);
-            }
+    orderedModeIds->clear();
+    for (const DetectionModeDescriptor &descriptor
+         : detectionModeDescriptors()) {
+        const QString modeId = QLatin1String(descriptor.modeId);
+        if (license.featureModeIds.contains(modeId)) {
+            orderedModeIds->append(modeId);
         }
     }
     return true;
 }
 
-bool matchesCurrentDevice(const WmiReader &reader,
-                          const LicenseData &license)
+RuntimeGuardResult activationResult(RuntimeGuardStatus status,
+                                    const WmiReader &reader)
 {
+    RuntimeGuardResult result;
+    QString binding;
     QString code;
-    return currentDeviceCode(reader, license.deviceBinding, &code)
-            && code == license.deviceCode;
+    if (!selectDeviceBinding(reader, &binding, &code)) {
+        result.status = RuntimeGuardStatus::DeviceUnavailable;
+        return result;
+    }
+    result.status = status;
+    result.activationRequestCode =
+            LicenseCodec::createActivationRequestCode(binding, code);
+    return result;
+}
+
+RuntimeGuardResult validResult(const LicenseData &license,
+                               const QStringList &modeIds)
+{
+    RuntimeGuardResult result;
+    result.status = RuntimeGuardStatus::Valid;
+    result.permanent = license.permanent;
+    result.expiresDate = license.expiresDate;
+    result.showExpiry = license.showExpiry;
+    result.authorizedModeIds = modeIds;
+    result.defaultModeId = license.defaultModeId;
+    return result;
 }
 
 } // namespace
 
-bool RuntimeGuardResult::succeeded() const
-{
-    return valid;
-}
-
 RuntimeGuardResult RuntimeGuard::check()
 {
-    RuntimeGuardResult result;
-    const QString licensePath = QDir(
-                QCoreApplication::applicationDirPath()).filePath(
-                QStringLiteral("license.ini"));
-    LicenseDecodeResult decoded = LicenseCodec::readFile(licensePath);
-    QStringList authorizedModeIds;
-    if (!decoded.succeeded()
-            || !validateLicense(decoded.license, &authorizedModeIds)) {
+    const LicenseDecodeResult decoded = LicenseCodec::readFile(licensePath());
+    if (decoded.status == LicenseCodecStatus::FileReadFailed) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::LicenseReadFailed;
         return result;
     }
 
     WmiReader reader;
     if (!reader.initialize()) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::DeviceUnavailable;
         return result;
     }
 
-    if (decoded.license.deviceBinding == unactivatedValue) {
-        if (!selectDeviceBinding(
-                    reader,
-                    &decoded.license.deviceBinding,
-                    &decoded.license.deviceCode)
-                || LicenseCodec::writeFile(decoded.license, licensePath)
-                   != LicenseCodecStatus::Success) {
-            return result;
-        }
-        decoded = LicenseCodec::readFile(licensePath);
-        if (!decoded.succeeded()
-                || !validateLicense(decoded.license, &authorizedModeIds)) {
-            return result;
-        }
+    if (decoded.status == LicenseCodecStatus::FileMissing) {
+        return activationResult(RuntimeGuardStatus::LicenseMissing, reader);
+    }
+    if (decoded.status != LicenseCodecStatus::Success) {
+        return activationResult(RuntimeGuardStatus::LicenseInvalid, reader);
     }
 
-    if (!matchesCurrentDevice(reader, decoded.license)) {
+    QStringList modeIds;
+    if (!authorizedModeIds(decoded.license, &modeIds)) {
+        return activationResult(RuntimeGuardStatus::LicenseInvalid, reader);
+    }
+    if (decoded.license.deviceBinding != QLatin1String("S1")
+            && decoded.license.deviceBinding != QLatin1String("S2")) {
+        return activationResult(RuntimeGuardStatus::LicenseInvalid, reader);
+    }
+
+    QString code;
+    if (!currentDeviceCode(reader, decoded.license.deviceBinding, &code)
+            || code != decoded.license.deviceCode) {
+        return activationResult(RuntimeGuardStatus::DeviceMismatch, reader);
+    }
+    if (!decoded.license.permanent
+            && QDate::currentDate() > decoded.license.expiresDate) {
+        return activationResult(RuntimeGuardStatus::LicenseExpired, reader);
+    }
+    return validResult(decoded.license, modeIds);
+}
+
+RuntimeGuardResult RuntimeGuard::activate(const QString &activationCode)
+{
+    ActivationCodeData activation;
+    if (!LicenseCodec::parseActivationCode(activationCode, &activation)) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::LicenseInvalid;
         return result;
     }
 
-    result.valid = true;
-    result.permanent = decoded.license.permanent;
-    result.expiresDate = decoded.license.expiresDate;
-    result.authorizedModeIds = authorizedModeIds;
-    result.defaultModeId = decoded.license.defaultModeId;
-    return result;
+    WmiReader reader;
+    if (!reader.initialize()) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::DeviceUnavailable;
+        return result;
+    }
+
+    QString code;
+    if (!currentDeviceCode(reader, activation.deviceBinding, &code)
+            || LicenseCodec::deviceDigest(activation.deviceBinding, code)
+               != activation.deviceDigest) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::DeviceMismatch;
+        return result;
+    }
+    if (!activation.permanent
+            && QDate::currentDate() > activation.expiresDate) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::LicenseExpired;
+        return result;
+    }
+
+    LicenseData license;
+    license.permanent = activation.permanent;
+    license.expiresDate = activation.expiresDate;
+    license.showExpiry = activation.showExpiry;
+    license.featureModeIds = activation.featureModeIds;
+    license.defaultModeId = activation.defaultModeId;
+    license.deviceBinding = activation.deviceBinding;
+    license.deviceCode = code;
+    if (!LicenseCodec::writeFile(license, licensePath())) {
+        RuntimeGuardResult result;
+        result.status = RuntimeGuardStatus::LicenseSaveFailed;
+        return result;
+    }
+    return validResult(license, activation.featureModeIds);
 }

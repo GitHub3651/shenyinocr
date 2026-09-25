@@ -12,6 +12,7 @@
 #include "ui/main_window/operation_ui_policy.h"
 #include "ui/main_window/settings/settings_edit_state.h"
 
+#include <QDate>
 #include <QStringList>
 #include <QWidget>
 
@@ -47,6 +48,9 @@ public:
         const std::shared_ptr<SettingsApplicationService> &settingsService,
         const std::shared_ptr<TemplateApplicationService> &templateService,
         const QStringList &authorizedModeIds,
+        bool showLicenseExpiry,
+        bool permanentLicense,
+        const QDate &licenseExpiresDate,
         QWidget *parent = nullptr);
     ~MainWindow() override;
 

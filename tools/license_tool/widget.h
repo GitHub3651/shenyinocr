@@ -1,15 +1,11 @@
-#ifndef WIDGET_H
-#define WIDGET_H
+#pragma once
 
-#include <QString>
 #include <QStringList>
 #include <QWidget>
 
-QT_BEGIN_NAMESPACE
 namespace Ui {
 class Widget;
 }
-QT_END_NAMESPACE
 
 class Widget : public QWidget
 {
@@ -17,20 +13,17 @@ class Widget : public QWidget
 
 public:
     explicit Widget(QWidget *parent = nullptr);
-    ~Widget();
+    ~Widget() override;
 
 private:
-    void browseOutputFile();
-    void generateLicenseFile();
-    void browseDatFile();
-    void readDatFile();
+    void generateActivationCode();
+    void copyActivationCode();
+    void inspectActivationCode();
+    void inspectLicenseFile();
+    void refreshRequestStatus();
     void refreshExpiresEditor();
     void refreshDefaultModes();
     QStringList selectedFeatureModeIds() const;
-    QString defaultLicensePath() const;
 
-private:
     Ui::Widget *ui;
 };
-
-#endif // WIDGET_H

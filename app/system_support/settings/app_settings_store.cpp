@@ -424,7 +424,7 @@ QJsonObject settingsToJson(const AppSettings &settings)
                                 appSettingsImageSaveTypeIds(), imageSaveContentJsonIds()));
     imageSaving.insert(QStringLiteral("outputDirectory"), settings.imageSavePath);
 
-    DetectionMode selectedMode = DetectionMode::Word;
+    DetectionMode selectedMode;
     detectionModeFromUiId(settings.detectModeId, &selectedMode);
     QJsonObject ui;
     ui.insert(QStringLiteral("selectedDetectionMode"), detectionModeId(selectedMode));

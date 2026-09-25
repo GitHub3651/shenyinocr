@@ -1,23 +1,19 @@
-#include "system_support/license/license_codec.h"
-
-#include "contracts/detection_mode.h"
+#include "activation_protocol.h"
 
 #include <QCryptographicHash>
 #include <QFile>
-#include <QFileInfo>
-#include <QSaveFile>
 #include <QTextStream>
 
 namespace {
+
+const QDate activationDateBase(2020, 1, 1);
+const QString requestPrefix = QStringLiteral("41");
+const QString activationPrefix = QStringLiteral("42");
 
 QByteArray secretKey()
 {
     return QByteArrayLiteral("AutoOCRproject.license.expire.v1.20260706");
 }
-
-const QDate activationDateBase(2020, 1, 1);
-const QString requestPrefix = QStringLiteral("41");
-const QString activationPrefix = QStringLiteral("42");
 
 QByteArray cryptData(const QByteArray &data)
 {
@@ -25,17 +21,11 @@ QByteArray cryptData(const QByteArray &data)
                 secretKey(), QCryptographicHash::Sha256);
     QByteArray result;
     result.reserve(data.size());
-    for (int i = 0; i < data.size(); ++i) {
+    for (int index = 0; index < data.size(); ++index) {
         result.append(static_cast<char>(
-                          data.at(i) ^ key.at(i % key.size())));
+                          data.at(index) ^ key.at(index % key.size())));
     }
     return result;
-}
-
-QString encryptText(const QString &text)
-{
-    return QString::fromLatin1(
-                cryptData(text.toUtf8()).toHex().toUpper());
 }
 
 QString decryptText(const QString &text)
@@ -143,16 +133,6 @@ bool hasValidLuhnCheck(const QString &code)
     return sum % 10 == 0;
 }
 
-void appendEncryptedField(QString *content,
-                          const QString &name,
-                          const QString &value)
-{
-    content->append(encryptText(name));
-    content->append(QLatin1Char('='));
-    content->append(encryptText(value));
-    content->append(QLatin1Char('\n'));
-}
-
 bool readEncryptedField(const QString &line,
                         const QString &expectedName,
                         QString *value)
@@ -175,37 +155,85 @@ bool readEncryptedField(const QString &line,
 
 } // namespace
 
-QString LicenseCodec::deviceDigest(const QString &deviceBinding,
-                                   const QString &deviceCode)
+const QVector<LicenseToolModeDescriptor> &licenseToolModeDescriptors()
 {
-    const QByteArray digest = QCryptographicHash::hash(
-                (deviceBinding + QLatin1Char('|') + deviceCode).toUtf8(),
-                QCryptographicHash::Sha256);
-    quint64 value = 0;
-    for (int index = 0; index < 5; ++index) {
-        value = (value << 8)
-                | static_cast<unsigned char>(digest.at(index));
-    }
-    value >>= 1;
-    return QString::number(value).rightJustified(
-                12, QLatin1Char('0'));
+    static const QVector<LicenseToolModeDescriptor> descriptors = {
+        { "stamp", "钢印检测" },
+        { "word", "字库匹配" },
+        { "ocr", "深度 OCR" },
+        { "tissue", "纸巾检测" },
+        { "barcodeWord", "二维码+三期" }
+    };
+    return descriptors;
 }
 
-QString LicenseCodec::createActivationRequestCode(
-        const QString &deviceBinding,
-        const QString &deviceCode)
+bool parseActivationRequestCode(
+        const QString &code,
+        ActivationRequestData *request)
 {
+    QString compact = code;
+    compact.remove(QLatin1Char(' '));
+    if (compact.size() != 16
+            || !compact.startsWith(requestPrefix)
+            || !hasValidLuhnCheck(compact)) {
+        return false;
+    }
+    const QString plainBody = transformDigits(
+                compact.mid(2, 13),
+                QByteArrayLiteral("REQ4-NUMERIC"), false);
+    QString binding;
+    if (plainBody.at(0) == QLatin1Char('1')) {
+        binding = QStringLiteral("S1");
+    } else if (plainBody.at(0) == QLatin1Char('2')) {
+        binding = QStringLiteral("S2");
+    }
+    if (binding.isEmpty()) {
+        return false;
+    }
+    request->deviceBinding = binding;
+    request->deviceDigest = plainBody.mid(1, 12);
+    return true;
+}
+
+QString createActivationCode(const ActivationCodeData &activation)
+{
+    int featureMask = 0;
+    int defaultModeNumber = 0;
+    const QVector<LicenseToolModeDescriptor> &descriptors =
+            licenseToolModeDescriptors();
+    for (int index = 0; index < descriptors.size(); ++index) {
+        const QString modeId = QLatin1String(descriptors.at(index).modeId);
+        if (activation.featureModeIds.contains(modeId)) {
+            featureMask |= 1 << index;
+        }
+        if (activation.defaultModeId == modeId) {
+            defaultModeNumber = index + 1;
+        }
+    }
+    const int authorizationFlags = featureMask
+            | (activation.showExpiry ? 32 : 0);
+
+    const QString expires = activation.permanent
+            ? QStringLiteral("00000")
+            : QStringLiteral("%1").arg(
+                activationDateBase.daysTo(activation.expiresDate) + 1,
+                5, 10, QLatin1Char('0'));
     const QString plainBody =
-            (deviceBinding == QLatin1String("S1")
+            (activation.deviceBinding == QLatin1String("S1")
              ? QStringLiteral("1") : QStringLiteral("2"))
-            + deviceDigest(deviceBinding, deviceCode);
-    const QString payload = requestPrefix
+            + activation.deviceDigest
+            + expires
+            + QStringLiteral("%1").arg(
+                authorizationFlags,
+                2, 10, QLatin1Char('0'))
+            + QString::number(defaultModeNumber);
+    const QString payload = activationPrefix
             + transformDigits(
-                plainBody, QByteArrayLiteral("REQ4-NUMERIC"), true);
+                plainBody, QByteArrayLiteral("ACT4-NUMERIC"), true);
     return payload + luhnCheckDigit(payload);
 }
 
-bool LicenseCodec::parseActivationCode(
+bool parseActivationCode(
         const QString &code,
         ActivationCodeData *activation)
 {
@@ -216,6 +244,7 @@ bool LicenseCodec::parseActivationCode(
             || !hasValidLuhnCheck(compact)) {
         return false;
     }
+
     const QString plainBody = transformDigits(
                 compact.mid(2, 21),
                 QByteArrayLiteral("ACT4-NUMERIC"), false);
@@ -230,8 +259,8 @@ bool LicenseCodec::parseActivationCode(
     const int featureMask = authorizationFlags & 31;
     const int defaultModeNumber = plainBody.at(20).unicode()
             - QLatin1Char('0').unicode();
-    const QVector<DetectionModeDescriptor> &descriptors =
-            detectionModeDescriptors();
+    const QVector<LicenseToolModeDescriptor> &descriptors =
+            licenseToolModeDescriptors();
     if (binding.isEmpty()
             || authorizationFlags < 1
             || authorizationFlags > 63
@@ -241,6 +270,7 @@ bool LicenseCodec::parseActivationCode(
             || (featureMask & (1 << (defaultModeNumber - 1))) == 0) {
         return false;
     }
+
     activation->deviceBinding = binding;
     activation->deviceDigest = plainBody.mid(1, 12);
     activation->permanent = expiresValue == 0;
@@ -260,17 +290,12 @@ bool LicenseCodec::parseActivationCode(
     return true;
 }
 
-LicenseDecodeResult LicenseCodec::readFile(const QString &filePath)
+bool readLicenseFile(const QString &filePath,
+                     LicenseFileData *license)
 {
-    LicenseDecodeResult result;
-    if (!QFileInfo::exists(filePath)) {
-        result.status = LicenseCodecStatus::FileMissing;
-        return result;
-    }
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        result.status = LicenseCodecStatus::FileReadFailed;
-        return result;
+        return false;
     }
 
     QTextStream stream(&file);
@@ -281,86 +306,67 @@ LicenseDecodeResult LicenseCodec::readFile(const QString &filePath)
     }
     if (lines.size() != 7
             || lines.at(0) != QStringLiteral("version=5")) {
-        result.status = LicenseCodecStatus::InvalidFormat;
-        return result;
+        return false;
     }
 
     QString expires;
     QString features;
     QString showExpiry;
     if (!readEncryptedField(lines.at(1), QStringLiteral("expires"), &expires)
-            || !readEncryptedField(lines.at(2), QStringLiteral("features"), &features)
+            || !readEncryptedField(lines.at(2), QStringLiteral("features"),
+                                   &features)
             || !readEncryptedField(lines.at(3), QStringLiteral("defaultMode"),
-                                   &result.license.defaultModeId)
+                                   &license->defaultModeId)
             || !readEncryptedField(lines.at(4), QStringLiteral("deviceBinding"),
-                                   &result.license.deviceBinding)
+                                   &license->deviceBinding)
             || !readEncryptedField(lines.at(5), QStringLiteral("deviceCode"),
-                                   &result.license.deviceCode)
+                                   &license->deviceCode)
             || !readEncryptedField(lines.at(6), QStringLiteral("showExpiry"),
                                    &showExpiry)) {
-        result.status = LicenseCodecStatus::InvalidFormat;
-        return result;
+        return false;
     }
 
     if (showExpiry == QLatin1String("true")) {
-        result.license.showExpiry = true;
+        license->showExpiry = true;
     } else if (showExpiry == QLatin1String("false")) {
-        result.license.showExpiry = false;
+        license->showExpiry = false;
     } else {
-        result.status = LicenseCodecStatus::InvalidFormat;
-        return result;
+        return false;
     }
 
     if (expires == QLatin1String("permanent")) {
-        result.license.permanent = true;
+        license->permanent = true;
+        license->expiresDate = QDate();
     } else {
-        result.license.expiresDate = QDate::fromString(
+        license->permanent = false;
+        license->expiresDate = QDate::fromString(
                     expires, QStringLiteral("yyyy-MM-dd"));
-        if (!result.license.expiresDate.isValid()
-                || result.license.expiresDate.toString(
+        if (!license->expiresDate.isValid()
+                || license->expiresDate.toString(
                     QStringLiteral("yyyy-MM-dd")) != expires) {
-            result.status = LicenseCodecStatus::InvalidFormat;
-            return result;
+            return false;
         }
     }
 
-    result.license.featureModeIds = features.split(
+    license->featureModeIds = features.split(
                 QLatin1Char(','), QString::KeepEmptyParts);
-    result.status = LicenseCodecStatus::Success;
-    return result;
-}
-
-bool LicenseCodec::writeFile(
-        const LicenseData &license,
-        const QString &filePath)
-{
-    QSaveFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (license->deviceBinding != QLatin1String("S1")
+            && license->deviceBinding != QLatin1String("S2")) {
         return false;
     }
-
-    QString content = QStringLiteral("version=5\n");
-    appendEncryptedField(&content, QStringLiteral("expires"),
-                         license.permanent
-                         ? QStringLiteral("permanent")
-                         : license.expiresDate.toString(
-                             QStringLiteral("yyyy-MM-dd")));
-    appendEncryptedField(&content, QStringLiteral("features"),
-                         license.featureModeIds.join(QLatin1Char(',')));
-    appendEncryptedField(&content, QStringLiteral("defaultMode"),
-                         license.defaultModeId);
-    appendEncryptedField(&content, QStringLiteral("deviceBinding"),
-                         license.deviceBinding);
-    appendEncryptedField(&content, QStringLiteral("deviceCode"),
-                         license.deviceCode);
-    appendEncryptedField(&content, QStringLiteral("showExpiry"),
-                         license.showExpiry
-                         ? QStringLiteral("true")
-                         : QStringLiteral("false"));
-    const QByteArray encoded = content.toUtf8();
-    if (file.write(encoded) != encoded.size()) {
-        file.cancelWriting();
-        return false;
+    for (const QString &modeId : license->featureModeIds) {
+        bool knownMode = false;
+        for (const LicenseToolModeDescriptor &descriptor
+             : licenseToolModeDescriptors()) {
+            if (modeId == QLatin1String(descriptor.modeId)) {
+                knownMode = true;
+                break;
+            }
+        }
+        if (!knownMode) {
+            return false;
+        }
     }
-    return file.commit();
+    return !license->featureModeIds.isEmpty()
+            && license->featureModeIds.contains(license->defaultModeId);
 }

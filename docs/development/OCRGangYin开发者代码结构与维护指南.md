@@ -135,6 +135,8 @@ app/
 │     └─ windows_crash_stack.h/.cpp
 └─ ui/
    ├─ README.md
+   ├─ startup/
+   │  └─ activation_dialog.ui/.h/.cpp
    └─ main_window/
       ├─ main_window.ui/.h/.cpp
       ├─ main_window_inspection.cpp
@@ -162,14 +164,15 @@ app/
             └─ character_crop_label.h/.cpp
 ```
 
-当前统计：148 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
+当前统计：150 个 `.h/.cpp`；模板磁盘模块只有 `template_store.h/.cpp` 两个生产文件。
 
 ## 3. 程序启动和对象所有权
 
 ```text
 startup/main.cpp
  → ApplicationStartup::run()
-    ├─ RuntimeGuard / SingleInstanceGuard / Logger / CrashHandler
+    ├─ RuntimeGuard 检查 version=5 许可证；需要激活时显示 ActivationDialog
+    ├─ SingleInstanceGuard / Logger / CrashHandler
     ├─ AppSettingsStore → SettingsApplicationService
     ├─ TemplateStore（共享唯一实例）
     ├─ CameraDevice / PlcDevice / OCR / Barcode
@@ -376,19 +379,20 @@ toolButton_selectTemplate
 
 | 文件 | 作用与修改注意点 |
 |---|---|
-| `license/license_codec.h/.cpp` | 授权信息编码/校验。 |
+| `license/license_codec.h/.cpp` | 主程序生成 16 位激活申请码、解析 24 位激活码、计算设备摘要，并读写七行 `version=5` 许可证；不包含 LicenseTool 的申请码解析或激活码生成功能。 |
 | `logging/application_logger.h/.cpp` | 应用日志目录和 Qt 日志接管。 |
 | `crash/windows_crash_handler.h/.cpp` | Windows 未处理异常接入。 |
 | `crash/windows_crash_stack.h/.cpp` | Windows 调用栈解析。 |
 | `startup/main.cpp` | 唯一 `main()`。 |
-| `startup/application_startup.h/.cpp` | 旧 Schema 默认设置静默覆盖、其他设置错误提示、所有对象装配、页面组合和事件循环。 |
-| `startup/runtime_guard.h/.cpp` | 运行库/DLL环境前置检查。 |
+| `startup/application_startup.h/.cpp` | 许可证状态处理、许可证默认模式应用、旧 Schema 默认设置静默覆盖、其他设置错误提示、所有对象装配、页面组合、到期定时器和事件循环。 |
+| `startup/runtime_guard.h/.cpp` | 读取并验证已有许可证，生成当前设备激活申请码，验证激活码并使用本机完整设备码保存许可证。 |
 | `startup/single_instance_guard.h/.cpp` | 单实例互斥。 |
 
 ### 5.10 ui
 
 | 文件 | 作用与修改注意点 |
 |---|---|
+| `startup/activation_dialog.ui/.h/.cpp` | 显示具体许可证状态、当前设备激活申请码和激活码输入；激活成功后把同一个已验证授权结果返回启动层。 |
 | `main_window/main_window.ui` | 主窗口骨架、74px 常驻工具栏、相机和识别两个操作入口、设备状态、唯一硬触发开关、左侧 80px 导航、可调宽五页抽屉和五个空页面根节点。 |
 | `main_window/main_window.h/.cpp` | MainWindow 组合、五个页面生成 Ui 所有权、统一相机/识别按钮连接和跨页面协调。 |
 | `main_window/main_window_inspection.cpp` | 检测、相机、运行状态、自动停止警告和窗口关闭协调。 |
@@ -451,6 +455,21 @@ toolButton_selectTemplate
 - `InspectionPositioner` 是否仍评价全部模板；
 - `TemplatePoseSelector` 是否只在严格更高分时替换；
 - Registry 是否用命中下标访问同一检测条目。
+
+### 6.7 修改激活协议
+
+主程序与 `LicenseTool` 不共享源码，但必须遵守同一套固定协议。修改以下任一内容时，必须在 `app/system_support/license/license_codec.cpp` 和 `tools/license_tool/activation_protocol.cpp` 中同步修改，并在 Qt Creator 中重新执行“主程序生成申请码 → LicenseTool 解析申请码并生成激活码 → LicenseTool 读取激活码 → 主程序解析并完成激活 → LicenseTool 读取生成的 license.ini”的完整闭环验证：
+
+- 固定密钥；
+- `41` / `42` 类型前缀；
+- `REQ4-NUMERIC` / `ACT4-NUMERIC` 密钥流标签；
+- 数字加解密和 Luhn 校验规则；
+- 字段位置、长度及日期基准；
+- S1/S2 编码；
+- 授权模式 ID、位图顺序、有效期显示位和默认模式编号；
+- 七行 `version=5` 许可证的字段名称、顺序和值域。
+
+不得只修改一端。两端任一协议项不一致都会造成申请码无法识别、激活码无法解析或授权内容解释错误；协议变更时直接同步修改两端并完成闭环验证。
 
 ## 7. 禁止重新引入的复杂度
 

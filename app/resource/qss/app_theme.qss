@@ -133,6 +133,21 @@ QLabel:disabled {
     color: #909DA8;
 }
 
+QLabel#label_licenseExpiry,
+QLabel#label_licenseExpiryValue {
+    font-weight: 600;
+}
+
+QDialog#ActivationDialog QLabel,
+QDialog#ActivationDialog QLineEdit,
+QDialog#ActivationDialog QPushButton {
+    font-weight: 600;
+}
+
+QDialog#ActivationDialog QLabel#label_status {
+    color: #C13F3F;
+}
+
 QLabel#label_plcConnectionSection,
 QLabel#label_plcProcessParametersSection,
 QLabel#label_characterSampleTitle,
@@ -243,6 +258,11 @@ QPushButton {
     font-weight: 600;
 }
 
+QPushButton:focus {
+    background-color: #F4F9FD;
+    border-color: #1769AA;
+}
+
 QPushButton:hover {
     background-color: #F4F9FD;
     border-color: #6D9EC4;
@@ -251,11 +271,6 @@ QPushButton:hover {
 QPushButton:pressed {
     background-color: #E2EDF5;
     border-color: #0E568E;
-}
-
-QPushButton:focus {
-    background-color: #F4F9FD;
-    border-color: #1769AA;
 }
 
 QPushButton:disabled {
@@ -598,6 +613,11 @@ QPushButton[uiRole="primary"] {
     background-color: #1769AA;
     color: #FFFFFF;
     border-color: #1769AA;
+}
+
+QPushButton[uiRole="primary"]:focus {
+    background-color: #1769AA;
+    border-color: #0E568E;
 }
 
 QPushButton[uiRole="primary"]:hover {

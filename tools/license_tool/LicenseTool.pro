@@ -12,19 +12,14 @@ TARGET = LicenseTool
 
 DESTDIR = $$OUT_PWD
 
-APP_ROOT = $$clean_path($$PWD/../../app)
-INCLUDEPATH += $$APP_ROOT
-
 SOURCES += \
+    activation_protocol.cpp \
     main.cpp \
-    widget.cpp \
-    $$APP_ROOT/contracts/detection_mode.cpp \
-    $$APP_ROOT/system_support/license/license_codec.cpp
+    widget.cpp
 
 HEADERS += \
-    widget.h \
-    $$APP_ROOT/contracts/detection_mode.h \
-    $$APP_ROOT/system_support/license/license_codec.h
+    activation_protocol.h \
+    widget.h
 
 FORMS += \
     widget.ui

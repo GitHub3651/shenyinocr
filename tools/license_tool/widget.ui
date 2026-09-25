@@ -6,146 +6,263 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1200</width>
-    <height>780</height>
+    <width>760</width>
+    <height>940</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>720</width>
-    <height>700</height>
+    <width>680</width>
+    <height>800</height>
    </size>
   </property>
   <property name="windowTitle">
    <string>软件授权工具</string>
   </property>
-  <property name="styleSheet">
-   <string notr="true">QWidget#Widget {
-    background-color: #f5f7fa;
-    color: #303133;
-    font-family: &quot;Microsoft YaHei&quot;, &quot;Segoe UI&quot;, sans-serif;
-    font-size: 14px;
-}
-
-QLabel { background: transparent; }
-QLabel#titleLabel { color: #1f2d3d; font-size: 24px; font-weight: 700; }
-QLabel#subtitleLabel { color: #909399; font-size: 13px; }
-QLabel#generateSectionLabel, QLabel#readSectionLabel {
-    color: #1677d2; font-size: 16px; font-weight: 700; padding: 2px 0;
-}
-QLabel#expiresLabel, QLabel#featuresLabel, QLabel#defaultModeLabel,
-QLabel#deviceBindingLabel, QLabel#outputLabel, QLabel#datLabel,
-QLabel#licenseInfoLabel { color: #606266; font-weight: 600; }
-
-QLineEdit, QDateEdit, QComboBox, QListWidget, QTextEdit {
-    min-height: 36px;
-    background-color: #ffffff;
-    color: #303133;
-    border: 1px solid #dcdfe6;
-    border-radius: 5px;
-    padding: 5px 10px;
-    selection-background-color: #409eff;
-    selection-color: #ffffff;
-}
-QLineEdit:focus, QDateEdit:focus, QComboBox:focus,
-QListWidget:focus, QTextEdit:focus { border-color: #409eff; }
-QLineEdit:read-only, QTextEdit:read-only { background-color: #fbfbfc; }
-
-QPushButton {
-    min-height: 36px;
-    background-color: #ffffff;
-    color: #303133;
-    border: 1px solid #dcdfe6;
-    border-radius: 5px;
-    padding: 0 16px;
-    font-weight: 600;
-}
-QPushButton:hover { background-color: #ecf5ff; border-color: #409eff; color: #1677d2; }
-QPushButton:pressed { background-color: #d9ecff; border-color: #1677d2; }
-QPushButton#generateButton, QPushButton#readDatButton {
-    background-color: #1677d2; color: #ffffff; border-color: #1677d2;
-}
-QPushButton#generateButton:hover, QPushButton#readDatButton:hover {
-    background-color: #409eff; color: #ffffff; border-color: #409eff;
-}
-QPushButton#generateButton:pressed, QPushButton#readDatButton:pressed {
-    background-color: #0f5fae; border-color: #0f5fae;
-}
-QLabel#statusLabel {
-    color: #1677d2; background-color: #f0f7ff; border: 1px solid #d9ecff;
-    border-radius: 5px; padding: 9px 12px;
-}
-QFrame#line { color: #e4e7ed; }</string>
-  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
-   <property name="spacing"><number>12</number></property>
-   <property name="leftMargin"><number>24</number></property>
-   <property name="topMargin"><number>22</number></property>
-   <property name="rightMargin"><number>24</number></property>
-   <property name="bottomMargin"><number>22</number></property>
    <item>
-    <layout class="QVBoxLayout" name="headerLayout">
-     <property name="spacing"><number>2</number></property>
-     <item><widget class="QLabel" name="titleLabel"><property name="text"><string>软件授权工具</string></property></widget></item>
-     <item><widget class="QLabel" name="subtitleLabel"><property name="text"><string>生成与查看主程序使用的 license.ini</string></property></widget></item>
-    </layout>
-   </item>
-   <item><widget class="QLabel" name="generateSectionLabel"><property name="text"><string>生成授权文件</string></property></widget></item>
-   <item>
-    <layout class="QFormLayout" name="formLayout">
-     <property name="fieldGrowthPolicy"><enum>QFormLayout::ExpandingFieldsGrow</enum></property>
-     <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property>
-     <property name="horizontalSpacing"><number>14</number></property>
-     <property name="verticalSpacing"><number>10</number></property>
-     <item row="0" column="0"><widget class="QLabel" name="expiresLabel"><property name="text"><string>有效期</string></property></widget></item>
-     <item row="0" column="1">
-      <layout class="QHBoxLayout" name="expiresLayout">
-       <item><widget class="QComboBox" name="expiresTypeComboBox"><property name="maximumSize"><size><width>180</width><height>16777215</height></size></property></widget></item>
-       <item><widget class="QDateEdit" name="expiresEdit"><property name="maximumSize"><size><width>240</width><height>16777215</height></size></property><property name="displayFormat"><string>yyyy-MM-dd</string></property><property name="calendarPopup"><bool>true</bool></property></widget></item>
-       <item><spacer name="expiresSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
-      </layout>
-     </item>
-     <item row="1" column="0"><widget class="QLabel" name="featuresLabel"><property name="text"><string>授权功能</string></property></widget></item>
-     <item row="1" column="1"><widget class="QListWidget" name="featuresListWidget"><property name="minimumSize"><size><width>0</width><height>130</height></size></property></widget></item>
-     <item row="2" column="0"><widget class="QLabel" name="defaultModeLabel"><property name="text"><string>默认模式</string></property></widget></item>
-     <item row="2" column="1"><widget class="QComboBox" name="defaultModeComboBox"><property name="maximumSize"><size><width>420</width><height>16777215</height></size></property></widget></item>
-     <item row="3" column="0"><widget class="QLabel" name="deviceBindingLabel"><property name="text"><string>设备绑定状态</string></property></widget></item>
-     <item row="3" column="1"><widget class="QLineEdit" name="deviceBindingEdit"><property name="maximumSize"><size><width>420</width><height>16777215</height></size></property><property name="readOnly"><bool>true</bool></property></widget></item>
-     <item row="4" column="0"><widget class="QLabel" name="outputLabel"><property name="text"><string>输出文件</string></property></widget></item>
-     <item row="4" column="1">
-      <layout class="QHBoxLayout" name="outputLayout">
-       <item><widget class="QLineEdit" name="outputEdit"/></item>
-       <item><widget class="QPushButton" name="browseOutputButton"><property name="minimumSize"><size><width>96</width><height>38</height></size></property><property name="text"><string>浏览</string></property></widget></item>
-      </layout>
-     </item>
-    </layout>
+    <widget class="QGroupBox" name="requestGroupBox">
+     <property name="title">
+      <string>激活申请</string>
+     </property>
+     <layout class="QFormLayout" name="requestFormLayout">
+      <property name="fieldGrowthPolicy">
+       <enum>QFormLayout::ExpandingFieldsGrow</enum>
+      </property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="requestCodeLabel">
+        <property name="text">
+         <string>激活申请码：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QLineEdit" name="requestCodeEdit"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="requestStatusTitleLabel">
+        <property name="text">
+         <string>识别状态：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLabel" name="requestStatusLabel">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="actionLayout">
-     <item><widget class="QLabel" name="statusLabel"><property name="minimumSize"><size><width>0</width><height>38</height></size></property><property name="text"><string>请选择有效期、授权功能和默认模式。</string></property><property name="wordWrap"><bool>true</bool></property></widget></item>
-     <item><spacer name="horizontalSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
-     <item><widget class="QPushButton" name="generateButton"><property name="minimumSize"><size><width>112</width><height>38</height></size></property><property name="text"><string>生成</string></property></widget></item>
-    </layout>
+    <widget class="QGroupBox" name="authorizationGroupBox">
+     <property name="title">
+      <string>授权配置</string>
+     </property>
+     <layout class="QFormLayout" name="authorizationFormLayout">
+      <property name="fieldGrowthPolicy">
+       <enum>QFormLayout::ExpandingFieldsGrow</enum>
+      </property>
+      <item row="0" column="0">
+       <widget class="QLabel" name="expiresTypeLabel">
+        <property name="text">
+         <string>有效期类型：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="expiresTypeComboBox"/>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="expiresLabel">
+        <property name="text">
+         <string>到期日期：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QDateEdit" name="expiresEdit">
+        <property name="displayFormat">
+         <string>yyyy-MM-dd</string>
+        </property>
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="featuresLabel">
+        <property name="text">
+         <string>授权模式：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QListWidget" name="featuresListWidget">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>190</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="defaultModeLabel">
+        <property name="text">
+         <string>默认模式：</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QComboBox" name="defaultModeComboBox"/>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <widget class="QCheckBox" name="showExpiryCheckBox">
+        <property name="text">
+         <string>在软件设置中显示许可证有效期</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
-   <item><widget class="QFrame" name="line"><property name="frameShape"><enum>QFrame::HLine</enum></property><property name="frameShadow"><enum>QFrame::Plain</enum></property></widget></item>
-   <item><widget class="QLabel" name="readSectionLabel"><property name="text"><string>查看授权文件</string></property></widget></item>
    <item>
-    <layout class="QFormLayout" name="readFormLayout">
-     <property name="fieldGrowthPolicy"><enum>QFormLayout::ExpandingFieldsGrow</enum></property>
-     <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTop|Qt::AlignTrailing</set></property>
-     <property name="horizontalSpacing"><number>14</number></property>
-     <property name="verticalSpacing"><number>10</number></property>
-     <item row="0" column="0"><widget class="QLabel" name="datLabel"><property name="text"><string>读取文件</string></property></widget></item>
-     <item row="0" column="1">
-      <layout class="QHBoxLayout" name="datLayout">
-       <item><widget class="QLineEdit" name="datEdit"/></item>
-       <item><widget class="QPushButton" name="browseDatButton"><property name="minimumSize"><size><width>96</width><height>38</height></size></property><property name="text"><string>浏览</string></property></widget></item>
-       <item><widget class="QPushButton" name="readDatButton"><property name="minimumSize"><size><width>96</width><height>38</height></size></property><property name="text"><string>读取</string></property></widget></item>
-      </layout>
-     </item>
-     <item row="1" column="0"><widget class="QLabel" name="licenseInfoLabel"><property name="text"><string>文件信息</string></property></widget></item>
-     <item row="1" column="1"><widget class="QTextEdit" name="licenseInfoEdit"><property name="minimumSize"><size><width>0</width><height>100</height></size></property><property name="readOnly"><bool>true</bool></property></widget></item>
-    </layout>
+    <widget class="QGroupBox" name="outputGroupBox">
+     <property name="title">
+      <string>激活码输出</string>
+     </property>
+     <layout class="QVBoxLayout" name="outputVerticalLayout">
+      <item>
+       <layout class="QHBoxLayout" name="outputActionLayout">
+        <item>
+         <widget class="QPushButton" name="generateButton">
+          <property name="text">
+           <string>生成激活码</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="outputHorizontalSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="activationCodeLayout">
+        <item>
+         <widget class="QLineEdit" name="activationCodeEdit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="copyActivationButton">
+          <property name="text">
+           <string>复制激活码</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QLabel" name="outputStatusLabel">
+        <property name="text">
+         <string/>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="inspectionGroupBox">
+     <property name="title">
+      <string>授权内容读取</string>
+     </property>
+     <layout class="QVBoxLayout" name="inspectionVerticalLayout">
+      <item>
+       <layout class="QHBoxLayout" name="inspectActivationLayout">
+        <item>
+         <widget class="QLabel" name="inspectActivationLabel">
+          <property name="text">
+           <string>激活码：</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="inspectActivationCodeEdit"/>
+        </item>
+        <item>
+         <widget class="QPushButton" name="inspectActivationButton">
+          <property name="text">
+           <string>读取激活码</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="inspectLicenseLayout">
+        <item>
+         <widget class="QLabel" name="licensePathLabel">
+          <property name="text">
+           <string>许可证：</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLineEdit" name="licensePathEdit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="inspectLicenseButton">
+          <property name="text">
+           <string>读取 license.ini</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="inspectionResultEdit">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>160</height>
+         </size>
+        </property>
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
   </layout>
  </widget>

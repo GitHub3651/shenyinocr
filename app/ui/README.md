@@ -7,6 +7,8 @@
 ```text
 ui/
 ├─ README.md
+├─ startup/
+│  └─ activation_dialog.ui/.h/.cpp
 └─ main_window/
    ├─ main_window.ui
    ├─ main_window.h/.cpp
@@ -39,6 +41,7 @@ ui/
 ## Designer 编辑入口
 
 - 主窗口骨架和图像上方常驻工具栏：`main_window/main_window.ui`。
+- 首次激活、许可证到期或设备不匹配时的激活窗口：`startup/activation_dialog.ui`。
 - 检测信息、参数设定、图像设置、PLC 通讯和软件设置：分别打开对应功能目录中的五个页面 `.ui`；模板管理分组位于 `main_window/settings/detection_settings_page.ui`。
 - 选择模板、保存模板和分割字符模板：分别打开三个模板子目录中的弹窗 `.ui`。
 
@@ -92,7 +95,7 @@ application_startup
        └─ 创建 TemplateEditorPage
 ```
 
-Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow 直接持有自身和五个页面的生成 Ui；三个模板弹窗分别持有自身生成 Ui。逻辑 Page 使用明确的生成 Ui、服务和状态引用，不通过 ViewBindings、回调包装或控件查找访问界面。
+Startup 不知道 Page、主窗口生成 Ui、控件地址或页面状态。`ApplicationStartup` 只在许可证需要激活时创建 `ActivationDialog`，由该对话框调用 `RuntimeGuard::activate()` 并返回已验证的启动授权结果。MainWindow 直接持有自身和五个页面的生成 Ui；三个模板弹窗分别持有自身生成 Ui。逻辑 Page 使用明确的生成 Ui、服务和状态引用，不通过 ViewBindings、回调包装或控件查找访问界面。
 
 ## 操作状态
 
@@ -120,8 +123,10 @@ Startup 不知道 Page、生成 Ui、控件地址或页面状态。MainWindow �
 
 按钮只使用两个已有角色：
 
-- `uiRole=primary`：当前页面的主要保存或确认动作。
+- `uiRole=primary`：当前页面或对话框的主要保存、确认或激活动作。
 - `uiRole=danger`：删除软件设置、清零等危险动作；删除已保存的软件设置、总数清零、NG 清零和剔除复位同时由固定对象名直接使用同一组危险状态规则。
+
+激活窗口的复制和退出按钮继承普通按钮的默认、焦点、悬停、按下和禁用状态，“激活”按钮使用现有 `uiRole=primary` 的对应完整状态；状态优先级保证按钮获得焦点后仍能显示悬停和按下效果。顶部状态提示统一使用危险红色和 600 加重，复制申请码成功后使用统一消息框提示。界面文件和业务 C++ 不保存颜色、字体、边框或按钮皮肤。
 
 运行时视觉属性保持为：
 

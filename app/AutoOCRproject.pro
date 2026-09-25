@@ -58,6 +58,7 @@ SOURCES += \
     system_support/crash/windows_crash_stack.cpp \
     system_support/crash/windows_crash_handler.cpp \
     startup/runtime_guard.cpp \
+    ui/startup/activation_dialog.cpp \
     startup/single_instance_guard.cpp \
     startup/application_startup.cpp \
     runtime/inspection_presentation_renderer.cpp \
@@ -134,6 +135,7 @@ HEADERS += \
     system_support/crash/windows_crash_stack.h \
     system_support/crash/windows_crash_handler.h \
     startup/runtime_guard.h \
+    ui/startup/activation_dialog.h \
     startup/single_instance_guard.h \
     startup/application_startup.h \
     runtime/inspection_presentation_renderer.h \
@@ -187,6 +189,7 @@ HEADERS += \
     ui/main_window/main_window.h
 
 FORMS += \
+    ui/startup/activation_dialog.ui \
     ui/main_window/main_window.ui \
     ui/main_window/inspection/inspection_info_page.ui \
     ui/main_window/settings/detection_settings_page.ui \
