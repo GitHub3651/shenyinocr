@@ -12,8 +12,8 @@
 
 ## 使用和部署
 
-1. Release 以 ASCII 内部目标 `ShengYin.exe` 完成链接，`app/system_support/deployment/deploy_runtime.ps1` 从 `dist/ShengYin/` 复制运行资源、检查必需文件，并在构建输出目录生成内容相同的 `晟崟AI视觉检测软件.exe`。
-2. `build/release/ShengYin.exe` 只供 qmake、nmake 和 Qt Creator 构建运行；在构建输出目录使用 `晟崟AI视觉检测软件.exe` 完成主程序整体验收。
-3. 验收通过后，用本次生成的 `晟崟AI视觉检测软件.exe` 更新 `dist/ShengYin/`，正式交付目录不保留 `ShengYin.exe`。
-4. 正式交付时直接运行 `dist/ShengYin/晟崟AI视觉检测软件.exe`，不依赖开发机源码目录。
+1. Release 以 ASCII 目标 `ShengYin.exe` 完成链接，`app/system_support/deployment/deploy_runtime.ps1` 从 `dist/ShengYin/` 复制运行资源并检查必需文件，不生成其他名称的 EXE。
+2. 在构建输出目录使用 `build/release/ShengYin.exe` 完成主程序整体验收。
+3. 验收通过后，用本次生成的 `ShengYin.exe` 更新 `dist/ShengYin/`。
+4. 正式交付时直接运行 `dist/ShengYin/ShengYin.exe`，不依赖开发机源码目录。
 5. 现场模板和 AppData 配置保持原有位置，不随发布包迁移。

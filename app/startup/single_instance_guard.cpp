@@ -7,11 +7,5 @@ SingleInstanceGuard::SingleInstanceGuard(const QString &key)
 
 bool SingleInstanceGuard::acquire()
 {
-    if (m_sharedMemory.attach()) {
-        return false;
-    }
-
-    // Marker creation failure does not prove another instance is running.
-    m_sharedMemory.create(1);
-    return true;
+    return m_sharedMemory.create(1);
 }

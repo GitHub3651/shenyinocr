@@ -33,11 +33,11 @@ QLabel#subtitleLabel { color: #909399; font-size: 13px; }
 QLabel#generateSectionLabel, QLabel#readSectionLabel {
     color: #1677d2; font-size: 16px; font-weight: 700; padding: 2px 0;
 }
-QLabel#expiresLabel, QLabel#featuresLabel, QLabel#defaultModeLabel,
+QLabel#issuedDateLabel, QLabel#expiresLabel, QLabel#featuresLabel, QLabel#defaultModeLabel,
 QLabel#deviceBindingLabel, QLabel#outputLabel, QLabel#datLabel,
 QLabel#licenseInfoLabel { color: #606266; font-weight: 600; }
 
-QLineEdit, QDateEdit, QComboBox, QListWidget, QTextEdit {
+QLineEdit, QComboBox, QListWidget, QTextEdit {
     min-height: 36px;
     background-color: #ffffff;
     color: #303133;
@@ -47,7 +47,7 @@ QLineEdit, QDateEdit, QComboBox, QListWidget, QTextEdit {
     selection-background-color: #409eff;
     selection-color: #ffffff;
 }
-QLineEdit:focus, QDateEdit:focus, QComboBox:focus,
+QLineEdit:focus, QComboBox:focus,
 QListWidget:focus, QTextEdit:focus { border-color: #409eff; }
 QLineEdit:read-only, QTextEdit:read-only { background-color: #fbfbfc; }
 
@@ -97,22 +97,33 @@ QFrame#line { color: #e4e7ed; }</string>
      <property name="labelAlignment"><set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set></property>
      <property name="horizontalSpacing"><number>14</number></property>
      <property name="verticalSpacing"><number>10</number></property>
-     <item row="0" column="0"><widget class="QLabel" name="expiresLabel"><property name="text"><string>有效期</string></property></widget></item>
+     <item row="0" column="0"><widget class="QLabel" name="issuedDateLabel"><property name="text"><string>签发日期</string></property></widget></item>
      <item row="0" column="1">
+      <layout class="QHBoxLayout" name="issuedDateLayout">
+       <item><widget class="QComboBox" name="issuedYearComboBox"><property name="maximumSize"><size><width>130</width><height>16777215</height></size></property></widget></item>
+       <item><widget class="QComboBox" name="issuedMonthComboBox"><property name="maximumSize"><size><width>100</width><height>16777215</height></size></property></widget></item>
+       <item><widget class="QComboBox" name="issuedDayComboBox"><property name="maximumSize"><size><width>100</width><height>16777215</height></size></property></widget></item>
+       <item><spacer name="issuedDateSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
+      </layout>
+     </item>
+     <item row="1" column="0"><widget class="QLabel" name="expiresLabel"><property name="text"><string>有效期</string></property></widget></item>
+     <item row="1" column="1">
       <layout class="QHBoxLayout" name="expiresLayout">
        <item><widget class="QComboBox" name="expiresTypeComboBox"><property name="maximumSize"><size><width>180</width><height>16777215</height></size></property></widget></item>
-       <item><widget class="QDateEdit" name="expiresEdit"><property name="maximumSize"><size><width>240</width><height>16777215</height></size></property><property name="displayFormat"><string>yyyy-MM-dd</string></property><property name="calendarPopup"><bool>true</bool></property></widget></item>
+       <item><widget class="QComboBox" name="expiresYearComboBox"><property name="maximumSize"><size><width>130</width><height>16777215</height></size></property></widget></item>
+       <item><widget class="QComboBox" name="expiresMonthComboBox"><property name="maximumSize"><size><width>100</width><height>16777215</height></size></property></widget></item>
+       <item><widget class="QComboBox" name="expiresDayComboBox"><property name="maximumSize"><size><width>100</width><height>16777215</height></size></property></widget></item>
        <item><spacer name="expiresSpacer"><property name="orientation"><enum>Qt::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property></spacer></item>
       </layout>
      </item>
-     <item row="1" column="0"><widget class="QLabel" name="featuresLabel"><property name="text"><string>授权功能</string></property></widget></item>
-     <item row="1" column="1"><widget class="QListWidget" name="featuresListWidget"><property name="minimumSize"><size><width>0</width><height>130</height></size></property></widget></item>
-     <item row="2" column="0"><widget class="QLabel" name="defaultModeLabel"><property name="text"><string>默认模式</string></property></widget></item>
-     <item row="2" column="1"><widget class="QComboBox" name="defaultModeComboBox"><property name="maximumSize"><size><width>420</width><height>16777215</height></size></property></widget></item>
-     <item row="3" column="0"><widget class="QLabel" name="deviceBindingLabel"><property name="text"><string>设备绑定状态</string></property></widget></item>
-     <item row="3" column="1"><widget class="QLineEdit" name="deviceBindingEdit"><property name="maximumSize"><size><width>420</width><height>16777215</height></size></property><property name="readOnly"><bool>true</bool></property></widget></item>
-     <item row="4" column="0"><widget class="QLabel" name="outputLabel"><property name="text"><string>输出文件</string></property></widget></item>
-     <item row="4" column="1">
+     <item row="2" column="0"><widget class="QLabel" name="featuresLabel"><property name="text"><string>授权功能</string></property></widget></item>
+     <item row="2" column="1"><widget class="QListWidget" name="featuresListWidget"><property name="minimumSize"><size><width>0</width><height>130</height></size></property></widget></item>
+     <item row="3" column="0"><widget class="QLabel" name="defaultModeLabel"><property name="text"><string>默认模式</string></property></widget></item>
+     <item row="3" column="1"><widget class="QComboBox" name="defaultModeComboBox"><property name="maximumSize"><size><width>420</width><height>16777215</height></size></property></widget></item>
+     <item row="4" column="0"><widget class="QLabel" name="deviceBindingLabel"><property name="text"><string>设备绑定状态</string></property></widget></item>
+     <item row="4" column="1"><widget class="QLineEdit" name="deviceBindingEdit"><property name="maximumSize"><size><width>420</width><height>16777215</height></size></property><property name="readOnly"><bool>true</bool></property></widget></item>
+     <item row="5" column="0"><widget class="QLabel" name="outputLabel"><property name="text"><string>输出文件</string></property></widget></item>
+     <item row="5" column="1">
       <layout class="QHBoxLayout" name="outputLayout">
        <item><widget class="QLineEdit" name="outputEdit"/></item>
        <item><widget class="QPushButton" name="browseOutputButton"><property name="minimumSize"><size><width>96</width><height>38</height></size></property><property name="text"><string>浏览</string></property></widget></item>

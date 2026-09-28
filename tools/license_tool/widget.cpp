@@ -6,6 +6,7 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -18,45 +19,100 @@
 
 namespace {
 
-QString modeDisplayName(const QString &modeId)
+void refreshDayOptions(QComboBox *yearComboBox,
+                       QComboBox *monthComboBox,
+                       QComboBox *dayComboBox)
 {
-    const DetectionModeDescriptor *descriptor =
-            detectionModeDescriptorFromId(modeId);
-    return descriptor
-            ? QString::fromUtf8(descriptor->displayName)
-            : modeId;
+    const int previousDay = dayComboBox->currentData().toInt();
+    const int daysInMonth = QDate(
+                yearComboBox->currentData().toInt(),
+                monthComboBox->currentData().toInt(),
+                1).daysInMonth();
+    dayComboBox->clear();
+    for (int day = 1; day <= daysInMonth; ++day) {
+        dayComboBox->addItem(
+                    QStringLiteral("%1 日").arg(
+                        day, 2, 10, QLatin1Char('0')),
+                    day);
+    }
+    const int selectedDay = previousDay > 0
+            ? qMin(previousDay, daysInMonth)
+            : 1;
+    dayComboBox->setCurrentIndex(
+                dayComboBox->findData(selectedDay));
 }
 
-QString licenseInfoText(const QString &filePath, QString *errorMessage)
+void initializeDateOptions(QComboBox *yearComboBox,
+                           QComboBox *monthComboBox,
+                           QComboBox *dayComboBox,
+                           const QDate &date,
+                           int firstYear,
+                           int lastYear)
+{
+    for (int year = firstYear; year <= lastYear; ++year) {
+        yearComboBox->addItem(
+                    QStringLiteral("%1 年").arg(year), year);
+    }
+    for (int month = 1; month <= 12; ++month) {
+        monthComboBox->addItem(
+                    QStringLiteral("%1 月").arg(
+                        month, 2, 10, QLatin1Char('0')),
+                    month);
+    }
+    yearComboBox->setCurrentIndex(
+                yearComboBox->findData(date.year()));
+    monthComboBox->setCurrentIndex(
+                monthComboBox->findData(date.month()));
+    refreshDayOptions(yearComboBox, monthComboBox, dayComboBox);
+    dayComboBox->setCurrentIndex(
+                dayComboBox->findData(date.day()));
+}
+
+QDate selectedDate(QComboBox *yearComboBox,
+                   QComboBox *monthComboBox,
+                   QComboBox *dayComboBox)
+{
+    return QDate(yearComboBox->currentData().toInt(),
+                 monthComboBox->currentData().toInt(),
+                 dayComboBox->currentData().toInt());
+}
+
+QString licenseInfoText(const QString &filePath, QString &errorMessage)
 {
     const LicenseDecodeResult result = LicenseCodec::readFile(filePath);
-    if (!result.succeeded()) {
-        if (errorMessage) {
-            *errorMessage =
-                    result.status == LicenseCodecStatus::FileReadFailed
-                    ? QStringLiteral("文件读取失败或内容为空。")
-                    : QStringLiteral("文件格式无效。");
-        }
+    if (result.status != LicenseCodecStatus::Success) {
+        errorMessage = result.status == LicenseCodecStatus::FileReadFailed
+                ? QStringLiteral("无法读取许可证文件，"
+                                 "请检查文件是否存在及是否可访问。")
+                : QStringLiteral("许可证文件格式无效或内容已损坏。");
         return QString();
     }
 
     QStringList featureNames;
     for (const QString &modeId : result.license.featureModeIds) {
-        featureNames.append(modeDisplayName(modeId));
+        featureNames.append(
+                    QString::fromUtf8(
+                        detectionModeDescriptorFromId(modeId)->displayName));
     }
 
     const QString expires = result.license.permanent
             ? QStringLiteral("长期有效")
             : result.license.expiresDate.toString(
                 QStringLiteral("yyyy-MM-dd"));
-    const QString dateStatus = result.license.permanent
-            ? QStringLiteral("长期有效")
-            : (QDate::currentDate() <= result.license.expiresDate
-               ? QStringLiteral("有效")
-               : QStringLiteral("已超过"));
+    QString dateStatus = QStringLiteral("长期有效");
+    if (!result.license.permanent) {
+        const QDate currentDate = QDateTime::currentDateTimeUtc()
+                .addSecs(8 * 60 * 60).date();
+        if (currentDate < result.license.issuedDate) {
+            dateStatus = QStringLiteral("未到签发日期");
+        } else if (currentDate <= result.license.expiresDate) {
+            dateStatus = QStringLiteral("有效");
+        } else {
+            dateStatus = QStringLiteral("已超过");
+        }
+    }
     const bool unactivated =
-            result.license.deviceBinding == QLatin1String("UNACTIVATED")
-            && result.license.deviceCode == QLatin1String("UNACTIVATED");
+            result.license.deviceBinding == QLatin1String("UNACTIVATED");
     const QString bindingMethod = unactivated
             ? QStringLiteral("未激活")
             : result.license.deviceBinding;
@@ -64,12 +120,17 @@ QString licenseInfoText(const QString &filePath, QString *errorMessage)
     QString text;
     text += QStringLiteral("文件路径：")
             + QDir::toNativeSeparators(filePath) + QLatin1Char('\n');
+    text += QStringLiteral("签发日期：")
+            + result.license.issuedDate.toString(
+                QStringLiteral("yyyy-MM-dd")) + QLatin1Char('\n');
     text += QStringLiteral("有效期：") + expires + QLatin1Char('\n');
     text += QStringLiteral("有效期状态：") + dateStatus + QLatin1Char('\n');
     text += QStringLiteral("授权功能：")
             + featureNames.join(QStringLiteral("、")) + QLatin1Char('\n');
     text += QStringLiteral("默认模式：")
-            + modeDisplayName(result.license.defaultModeId)
+            + QString::fromUtf8(
+                detectionModeDescriptorFromId(
+                    result.license.defaultModeId)->displayName)
             + QLatin1Char('\n');
     text += QStringLiteral("设备绑定方式：")
             + bindingMethod + QLatin1Char('\n');
@@ -94,7 +155,23 @@ Widget::Widget(QWidget *parent)
                 QStringLiteral("具体日期"), QStringLiteral("date"));
     ui->expiresTypeComboBox->addItem(
                 QStringLiteral("长期有效"), QStringLiteral("permanent"));
-    ui->expiresEdit->setDate(QDate::currentDate().addYears(1));
+    const QDate currentDate = QDate::currentDate();
+    const int firstYear = currentDate.year() - 10;
+    const int lastYear = currentDate.year() + 20;
+    initializeDateOptions(
+                ui->issuedYearComboBox,
+                ui->issuedMonthComboBox,
+                ui->issuedDayComboBox,
+                currentDate,
+                firstYear,
+                lastYear);
+    initializeDateOptions(
+                ui->expiresYearComboBox,
+                ui->expiresMonthComboBox,
+                ui->expiresDayComboBox,
+                currentDate.addYears(1),
+                firstYear,
+                lastYear);
     for (const DetectionModeDescriptor &descriptor
          : detectionModeDescriptors()) {
         QListWidgetItem *item = new QListWidgetItem(
@@ -121,6 +198,34 @@ Widget::Widget(QWidget *parent)
     connect(ui->expiresTypeComboBox,
             QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) { refreshExpiresEditor(); });
+    connect(ui->issuedYearComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        refreshDayOptions(ui->issuedYearComboBox,
+                          ui->issuedMonthComboBox,
+                          ui->issuedDayComboBox);
+    });
+    connect(ui->issuedMonthComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        refreshDayOptions(ui->issuedYearComboBox,
+                          ui->issuedMonthComboBox,
+                          ui->issuedDayComboBox);
+    });
+    connect(ui->expiresYearComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        refreshDayOptions(ui->expiresYearComboBox,
+                          ui->expiresMonthComboBox,
+                          ui->expiresDayComboBox);
+    });
+    connect(ui->expiresMonthComboBox,
+            QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) {
+        refreshDayOptions(ui->expiresYearComboBox,
+                          ui->expiresMonthComboBox,
+                          ui->expiresDayComboBox);
+    });
     connect(ui->featuresListWidget, &QListWidget::itemChanged,
             this, [this](QListWidgetItem *) { refreshDefaultModes(); });
 }
@@ -146,38 +251,55 @@ void Widget::generateLicenseFile()
 {
     const QString outputPath = ui->outputEdit->text().trimmed();
     if (outputPath.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("提示"),
+        QMessageBox::warning(this, QStringLiteral("输入不完整"),
                              QStringLiteral("请选择输出文件。"));
+        return;
+    }
+
+    const bool permanent =
+            ui->expiresTypeComboBox->currentData().toString()
+            == QLatin1String("permanent");
+    const QDate issuedDate = selectedDate(
+                ui->issuedYearComboBox,
+                ui->issuedMonthComboBox,
+                ui->issuedDayComboBox);
+    const QDate expiresDate = selectedDate(
+                ui->expiresYearComboBox,
+                ui->expiresMonthComboBox,
+                ui->expiresDayComboBox);
+    if (!permanent && expiresDate < issuedDate) {
+        const QString errorMessage =
+                QStringLiteral("有效期不能早于签发日期，请重新选择。");
+        QMessageBox::warning(
+                    this, QStringLiteral("日期错误"), errorMessage);
+        ui->statusLabel->setText(errorMessage);
         return;
     }
 
     const QStringList features = selectedFeatureModeIds();
     if (features.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("提示"),
+        QMessageBox::warning(this, QStringLiteral("输入不完整"),
                              QStringLiteral("请至少选择一个授权功能。"));
         return;
     }
     const QString defaultModeId =
             ui->defaultModeComboBox->currentData().toString();
-    if (defaultModeId.isEmpty() || !features.contains(defaultModeId)) {
-        QMessageBox::warning(this, QStringLiteral("提示"),
-                             QStringLiteral("请选择授权功能中的默认模式。"));
-        return;
-    }
 
     LicenseData license;
-    license.permanent = ui->expiresTypeComboBox->currentData().toString()
-            == QLatin1String("permanent");
-    license.expiresDate = ui->expiresEdit->date();
+    license.permanent = permanent;
+    license.issuedDate = issuedDate;
+    license.expiresDate = expiresDate;
     license.featureModeIds = features;
     license.defaultModeId = defaultModeId;
     license.deviceBinding = QStringLiteral("UNACTIVATED");
     license.deviceCode = QStringLiteral("UNACTIVATED");
     if (LicenseCodec::writeFile(license, outputPath)
             != LicenseCodecStatus::Success) {
-        const QString errorMessage = QStringLiteral("写入文件失败。");
+        const QString errorMessage =
+                QStringLiteral("无法写入许可证文件，"
+                               "请检查输出路径、文件权限或文件是否正被占用。");
         QMessageBox::critical(
-                    this, QStringLiteral("提示"), errorMessage);
+                    this, QStringLiteral("生成失败"), errorMessage);
         ui->statusLabel->setText(errorMessage);
         return;
     }
@@ -185,8 +307,8 @@ void Widget::generateLicenseFile()
     ui->statusLabel->setText(QStringLiteral("license.ini 已生成。"));
     ui->datEdit->setText(outputPath);
     readDatFile();
-    QMessageBox::information(this, QStringLiteral("提示"),
-                             QStringLiteral("生成完成。"));
+    QMessageBox::information(this, QStringLiteral("生成完成"),
+                             QStringLiteral("许可证文件已生成。"));
 }
 
 void Widget::browseDatFile()
@@ -205,17 +327,17 @@ void Widget::readDatFile()
 {
     const QString filePath = ui->datEdit->text().trimmed();
     if (filePath.isEmpty()) {
-        QMessageBox::warning(this, QStringLiteral("提示"),
+        QMessageBox::warning(this, QStringLiteral("输入不完整"),
                              QStringLiteral("请选择文件。"));
         return;
     }
 
     QString errorMessage;
-    const QString text = licenseInfoText(filePath, &errorMessage);
+    const QString text = licenseInfoText(filePath, errorMessage);
     if (text.isEmpty()) {
         ui->licenseInfoEdit->clear();
         QMessageBox::critical(
-                    this, QStringLiteral("提示"), errorMessage);
+                    this, QStringLiteral("读取失败"), errorMessage);
         return;
     }
 
@@ -224,9 +346,12 @@ void Widget::readDatFile()
 
 void Widget::refreshExpiresEditor()
 {
-    ui->expiresEdit->setEnabled(
-                ui->expiresTypeComboBox->currentData().toString()
-                == QLatin1String("date"));
+    const bool enabled =
+            ui->expiresTypeComboBox->currentData().toString()
+            == QLatin1String("date");
+    ui->expiresYearComboBox->setEnabled(enabled);
+    ui->expiresMonthComboBox->setEnabled(enabled);
+    ui->expiresDayComboBox->setEnabled(enabled);
 }
 
 void Widget::refreshDefaultModes()

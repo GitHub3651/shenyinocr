@@ -41,7 +41,7 @@
        <item row="0" column="0">
     <widget class="QGroupBox" name="groupBox_softwareData">
      <property name="title">
-      <string>软件设置</string>
+      <string>软件数据</string>
      </property>
      <layout class="QFormLayout" name="formLayout_softwareData">
       <item row="0" column="0">
@@ -53,7 +53,7 @@
          </size>
         </property>
         <property name="text">
-         <string>软件设置文件夹：</string>
+         <string>软件数据文件夹：</string>
         </property>
        </widget>
       </item>
@@ -88,7 +88,7 @@
          <string>删除当前 Windows 用户的软件设置文件并关闭软件，不删除产品模板、识别图片、授权文件或日志。</string>
         </property>
         <property name="text">
-         <string>删除已保存的软件设置</string>
+         <string>删除已保存的软件数据</string>
         </property>
         <property name="uiRole" stdset="0">
          <string>danger</string>

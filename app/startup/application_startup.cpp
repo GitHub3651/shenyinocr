@@ -50,11 +50,12 @@ QString settingsLoadStatusName(AppSettingsLoadStatus status)
     return QStringLiteral("unknown");
 }
 
-void showRuntimeGuardExitMessage(const QString &message)
+void showRuntimeGuardExitMessage(const QString &title,
+                                 const QString &message)
 {
     QMessageBox messageBox(
                 QMessageBox::Critical,
-                QStringLiteral("提示"),
+                title,
                 message,
                 QMessageBox::NoButton);
     messageBox.addButton(
@@ -89,6 +90,14 @@ void installQtTranslations(QApplication *application,
 int ApplicationStartup::run(int argc, char *argv[])
 {
     QApplication application(argc, argv);
+    SingleInstanceGuard singleInstanceGuard(QStringLiteral("ecust"));
+    if (!singleInstanceGuard.acquire()) {
+        QMessageBox::warning(
+                    nullptr,
+                    QStringLiteral("警告"),
+                    QStringLiteral("软件已在运行，请勿重复打开。"));
+        return 0;
+    }
 
     QTranslator qtTranslator;
     QTranslator applicationTranslator;
@@ -108,22 +117,53 @@ int ApplicationStartup::run(int argc, char *argv[])
     qRegisterMetaType<InspectionFaultSnapshot>("InspectionFaultSnapshot");
     QApplication::setQuitOnLastWindowClosed(true);
     const RuntimeGuardResult license = RuntimeGuard::check();
-    if (!license.succeeded()) {
+    if (license.status == RuntimeGuardStatus::TimeError) {
         showRuntimeGuardExitMessage(
-                    QStringLiteral("系统初始化失败，"
-                                   "请联系供应商。"));
+                    QStringLiteral("时间同步异常"),
+                    QStringLiteral("时间同步异常，请检查系统时间或联系供应商"));
         return -1;
     }
-    std::unique_ptr<QTimer> licenseExpiryTimer;
-
-    SingleInstanceGuard singleInstanceGuard(QStringLiteral("ecust"));
-    if (!singleInstanceGuard.acquire()) {
-        QMessageBox::warning(
-                    nullptr,
-                    QStringLiteral("警告"),
-                    QStringLiteral("软件已在运行，请勿重复打开。"));
-        return 0;
+    if (license.status == RuntimeGuardStatus::Expired) {
+        showRuntimeGuardExitMessage(
+                    QStringLiteral("许可证已到期"),
+                    QStringLiteral("软件许可证已到期，无法继续使用。\n"
+                                   "请联系供应商续期。"));
+        return -1;
     }
+    if (license.status == RuntimeGuardStatus::DeviceBindingError) {
+        showRuntimeGuardExitMessage(
+                    QStringLiteral("绑定设备失败"),
+                    QStringLiteral("设备绑定失败，请联系供应商"));
+        return -1;
+    }
+    if (license.status != RuntimeGuardStatus::Valid) {
+        showRuntimeGuardExitMessage(
+                    QStringLiteral("系统初始化失败"),
+                    QStringLiteral("系统初始化失败，请联系供应商"));
+        return -1;
+    }
+    if (!license.permanent && license.remainingDays <= 7) {
+        const QString message = license.remainingDays == 0
+                ? QStringLiteral("软件许可证今天到期。\n"
+                                 "今天仍可正常使用，请及时联系供应商续期。")
+                : QStringLiteral("软件许可证还有 %1 天到期。\n"
+                                 "到期日期：%2\n"
+                                 "请及时联系供应商续期。")
+                  .arg(license.remainingDays)
+                  .arg(license.expiresDate.toString(
+                           QStringLiteral("yyyy-MM-dd")));
+        QMessageBox messageBox(
+                    QMessageBox::Warning,
+                    QStringLiteral("许可证即将到期"),
+                    message,
+                    QMessageBox::NoButton);
+        messageBox.addButton(
+                    QStringLiteral("确认"),
+                    QMessageBox::AcceptRole);
+        messageBox.setWindowModality(Qt::ApplicationModal);
+        messageBox.exec();
+    }
+    std::unique_ptr<QTimer> licenseExpiryTimer;
 
     const QString applicationDirectory =
             QCoreApplication::applicationDirPath();
@@ -164,6 +204,10 @@ int ApplicationStartup::run(int argc, char *argv[])
         }
         const std::shared_ptr<AppSettingsStore> settingsStore(
                     new AppSettingsStore(applicationDataRoot));
+        DetectionMode licenseDefaultMode;
+        detectionModeFromId(license.defaultModeId, &licenseDefaultMode);
+        const QString licenseDefaultUiId =
+                detectionModeUiId(licenseDefaultMode);
         AppSettings startupSettings;
         AppSettingsLoadStatus settingsStatus =
                 AppSettingsLoadStatus::FirstRun;
@@ -174,6 +218,7 @@ int ApplicationStartup::run(int argc, char *argv[])
             if (settingsError.code
                     == QLatin1String("SETTINGS_RESET_REQUIRED")) {
                 startupSettings = AppSettings::defaults();
+                startupSettings.detectModeId = licenseDefaultUiId;
                 if (settingsStore->save(startupSettings,
                                         &settingsError)) {
                     settingsStatus = AppSettingsLoadStatus::Loaded;
@@ -214,16 +259,14 @@ int ApplicationStartup::run(int argc, char *argv[])
             return -1;
             }
         }
-        DetectionMode savedMode = DetectionMode::Word;
+        DetectionMode savedMode;
         const bool savedModeAuthorized = detectionModeFromUiId(
                     startupSettings.detectModeId, &savedMode)
                 && license.authorizedModeIds.contains(
                     detectionModeId(savedMode));
         if (settingsStatus == AppSettingsLoadStatus::FirstRun
                 || !savedModeAuthorized) {
-            DetectionMode defaultMode = DetectionMode::Word;
-            detectionModeFromId(license.defaultModeId, &defaultMode);
-            startupSettings.detectModeId = detectionModeUiId(defaultMode);
+            startupSettings.detectModeId = licenseDefaultUiId;
         }
         qCInfo(logStartup).noquote()
                 << QStringLiteral(
@@ -299,18 +342,30 @@ int ApplicationStartup::run(int argc, char *argv[])
                     license.authorizedModeIds);
         window.showMaximized();
         if (!license.permanent) {
+            const QDate issuedDate = license.issuedDate;
             const QDate expiresDate = license.expiresDate;
             licenseExpiryTimer.reset(new QTimer);
             QObject::connect(
                         licenseExpiryTimer.get(),
                         &QTimer::timeout,
-                        [expiresDate]() {
-                if (QDate::currentDate() > expiresDate) {
-                    showRuntimeGuardExitMessage(
-                                QStringLiteral("程序出错，即将退出，"
-                                               "请联系供应商。"));
-                    QCoreApplication::quit();
+                        [issuedDate, expiresDate]() {
+                const RuntimeGuardStatus status =
+                        RuntimeGuard::checkRuntimeDate(
+                            issuedDate, expiresDate);
+                if (status == RuntimeGuardStatus::Valid) {
+                    return;
                 }
+                if (status == RuntimeGuardStatus::TimeError) {
+                    showRuntimeGuardExitMessage(
+                                QStringLiteral("时间同步异常"),
+                                QStringLiteral("时间同步异常，请检查系统时间或联系供应商"));
+                } else {
+                    showRuntimeGuardExitMessage(
+                                QStringLiteral("许可证已到期"),
+                                QStringLiteral("软件许可证已到期，无法继续使用。\n"
+                                               "请联系供应商续期。"));
+                }
+                QCoreApplication::quit();
             });
             licenseExpiryTimer->start(24 * 60 * 60 * 1000);
         }

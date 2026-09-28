@@ -42,36 +42,25 @@ QString decryptText(const QString &text)
 
 bool containsRequiredFields(const QMap<QString, QString> &values)
 {
-    return values.contains(QStringLiteral("expires"))
+    return values.contains(QStringLiteral("issuedDate"))
+            && values.contains(QStringLiteral("expires"))
             && values.contains(QStringLiteral("features"))
             && values.contains(QStringLiteral("defaultMode"))
             && values.contains(QStringLiteral("deviceBinding"))
             && values.contains(QStringLiteral("deviceCode"));
 }
 
-QString expiresValue(const LicenseData &license)
-{
-    return license.permanent
-            ? QStringLiteral("permanent")
-            : license.expiresDate.toString(QStringLiteral("yyyy-MM-dd"));
-}
-
-void appendEncryptedField(QString *content,
+void appendEncryptedField(QString &content,
                           const QString &name,
                           const QString &value)
 {
-    content->append(encryptText(name));
-    content->append(QLatin1Char('='));
-    content->append(encryptText(value));
-    content->append(QLatin1Char('\n'));
+    content.append(encryptText(name));
+    content.append(QLatin1Char('='));
+    content.append(encryptText(value));
+    content.append(QLatin1Char('\n'));
 }
 
 } // namespace
-
-bool LicenseDecodeResult::succeeded() const
-{
-    return status == LicenseCodecStatus::Success;
-}
 
 LicenseDecodeResult LicenseCodec::readFile(const QString &filePath)
 {
@@ -84,7 +73,7 @@ LicenseDecodeResult LicenseCodec::readFile(const QString &filePath)
     QTextStream stream(&file);
     stream.setCodec("UTF-8");
     if (stream.atEnd()
-            || stream.readLine() != QStringLiteral("version=3")) {
+            || stream.readLine() != QStringLiteral("version=4")) {
         result.status = LicenseCodecStatus::InvalidFormat;
         return result;
     }
@@ -105,6 +94,16 @@ LicenseDecodeResult LicenseCodec::readFile(const QString &filePath)
     }
 
     if (!containsRequiredFields(values)) {
+        result.status = LicenseCodecStatus::InvalidFormat;
+        return result;
+    }
+
+    const QString issuedDate = values.value(QStringLiteral("issuedDate"));
+    result.license.issuedDate = QDate::fromString(
+                issuedDate, QStringLiteral("yyyy-MM-dd"));
+    if (!result.license.issuedDate.isValid()
+            || result.license.issuedDate.toString(
+                QStringLiteral("yyyy-MM-dd")) != issuedDate) {
         result.status = LicenseCodecStatus::InvalidFormat;
         return result;
     }
@@ -140,14 +139,6 @@ LicenseCodecStatus LicenseCodec::writeFile(
         const LicenseData &license,
         const QString &filePath)
 {
-    if ((!license.permanent && !license.expiresDate.isValid())
-            || license.featureModeIds.isEmpty()
-            || license.defaultModeId.isEmpty()
-            || license.deviceBinding.isEmpty()
-            || license.deviceCode.isEmpty()) {
-        return LicenseCodecStatus::InvalidFormat;
-    }
-
     const QFileInfo fileInfo(filePath);
     const QDir directory = fileInfo.absoluteDir();
     if (!directory.exists()
@@ -160,16 +151,22 @@ LicenseCodecStatus LicenseCodec::writeFile(
         return LicenseCodecStatus::FileWriteFailed;
     }
 
-    QString content = QStringLiteral("version=3\n");
-    appendEncryptedField(&content, QStringLiteral("expires"),
-                         expiresValue(license));
-    appendEncryptedField(&content, QStringLiteral("features"),
+    QString content = QStringLiteral("version=4\n");
+    appendEncryptedField(content, QStringLiteral("issuedDate"),
+                         license.issuedDate.toString(
+                             QStringLiteral("yyyy-MM-dd")));
+    appendEncryptedField(content, QStringLiteral("expires"),
+                         license.permanent
+                         ? QStringLiteral("permanent")
+                         : license.expiresDate.toString(
+                             QStringLiteral("yyyy-MM-dd")));
+    appendEncryptedField(content, QStringLiteral("features"),
                          license.featureModeIds.join(QLatin1Char(',')));
-    appendEncryptedField(&content, QStringLiteral("defaultMode"),
+    appendEncryptedField(content, QStringLiteral("defaultMode"),
                          license.defaultModeId);
-    appendEncryptedField(&content, QStringLiteral("deviceBinding"),
+    appendEncryptedField(content, QStringLiteral("deviceBinding"),
                          license.deviceBinding);
-    appendEncryptedField(&content, QStringLiteral("deviceCode"),
+    appendEncryptedField(content, QStringLiteral("deviceCode"),
                          license.deviceCode);
     file.write(content.toUtf8());
     return file.commit()

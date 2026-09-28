@@ -153,7 +153,7 @@ version=3
 | 许可证默认模式未授权或不存在 | 阻止启动 | 否 |
 | 许可证缺失、损坏或失效 | 阻止启动 | 否 |
 
-当前 `AppSettings::defaults()` 中的字库匹配只作为结构层的通用默认值保留。生产启动时，首次启动或已保存模式未获授权时，在内存中的 `startupSettings.detectModeId` 使用许可证 `defaultMode` 对应的 UI ID；不修改 Schema，不删除其他模式数据，也不强制覆盖已保存且已授权的模式。
+`AppSettings::defaults()` 不设置检测模式。生产启动时，首次启动、设置缺失或已保存模式未获授权时，`startupSettings.detectModeId` 使用许可证 `defaultMode` 对应的 UI ID；设置序列化也不提供内置模式回退。此调整不修改 Schema，不删除其他模式数据，也不强制覆盖已保存且已授权的模式。
 
 许可证默认模式仅用于首次启动、设置缺失和已保存模式未获授权的情况；已保存且获授权的模式不被覆盖。
 
@@ -198,6 +198,8 @@ version=3
 预计修改范围：
 
 - `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin\app\system_support\license\license_codec.h/.cpp`
+- `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin\app\system_support\settings\app_settings.cpp`
+- `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin\app\system_support\settings\app_settings_store.cpp`
 - `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin\app\startup\runtime_guard.h/.cpp`
 - `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin\app\startup\application_startup.cpp`
 - `D:\BaiduNetdiskDownload\ocr20260407\ocrgangyin\app\AutoOCRproject.pro`
@@ -210,7 +212,7 @@ version=3
 
 本次实施仅完成本方案定义的许可证格式、启动校验、设备绑定、默认模式和授权模式界面限制，以及使这些改动能够编译运行的直接配套修改。优先在现有文件、类型、函数和调用链中原位实现；不得新增本方案未要求的模块、服务、抽象层、通用框架、配置字段、界面入口、兼容层或未来扩展预留。确有必要修改上述范围之外的文件时，必须先把具体文件及必要性补入本方案并取得确认。
 
-`app_settings_store.h/.cpp` 不在修改范围内：许可证默认模式只覆盖本次启动使用的内存设置，不改变现有设置 Schema 和存储格式。`runtime_guard.*` 负责在启动阶段一次性读取、绑定并输出解析后的许可证信息；启动层保存具体日期许可证已经校验通过的到期日期，由 24 小时定时器直接比较当前日期，过期时显示现有运行期提示并调用 `QCoreApplication::quit()`，长期许可证不创建该定时器。
+`app_settings.cpp` 不设置内置检测模式，`app_settings_store.cpp` 只读写调用方提供的有效模式，不补充模式回退；许可证默认模式由启动层注入，不改变现有设置 Schema 和存储格式。`runtime_guard.*` 负责在启动阶段一次性读取、绑定并输出解析后的许可证信息；启动层保存具体日期许可证已经校验通过的到期日期，由 24 小时定时器直接比较当前日期，过期时显示现有运行期提示并调用 `QCoreApplication::quit()`，长期许可证不创建该定时器。
 
 许可证信息只由启动层持有并按启动需要使用：启动层根据已校验的授权模式 ID 集合和默认模式确定本次启动模式，并把授权模式 ID 集合传给 `MachineSettingsPage`；不新增全局单例，不把许可证字段写入 `AppSettings`，不让设置页自行读取 `license.ini`。
 

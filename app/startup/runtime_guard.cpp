@@ -6,7 +6,10 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDate>
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
+#include <QSaveFile>
 
 #include <Windows.h>
 #include <Wbemidl.h>
@@ -14,6 +17,82 @@
 namespace {
 
 const QString unactivatedValue = QStringLiteral("UNACTIVATED");
+
+QDate shanghaiDate()
+{
+    return QDateTime::currentDateTimeUtc().addSecs(8 * 60 * 60).date();
+}
+
+QByteArray cryptRuntimeData(const QByteArray &data)
+{
+    const QByteArray key = QByteArrayLiteral(
+                "OCRGangYin.runtime.date.v1.20260925");
+    QByteArray result;
+    result.reserve(data.size());
+    for (int i = 0; i < data.size(); ++i) {
+        result.append(static_cast<char>(
+                          data.at(i) ^ key.at(i % key.size())));
+    }
+    return result;
+}
+
+bool writeRuntimeDate(const QString &filePath, const QDate &date)
+{
+    const QByteArray content = cryptRuntimeData(
+                date.toString(QStringLiteral("yyyy-MM-dd")).toUtf8())
+            .toHex().toUpper();
+    QSaveFile file(filePath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)
+            || file.write(content) != content.size()) {
+        return false;
+    }
+    return file.commit();
+}
+
+RuntimeGuardStatus checkRuntimeDateValue(const QDate &currentDate,
+                                        const QDate &issuedDate,
+                                        const QDate &expiresDate)
+{
+    if (currentDate < issuedDate) {
+        return RuntimeGuardStatus::TimeError;
+    }
+
+    const QString filePath = QDir(
+                QCoreApplication::applicationDirPath()).filePath(
+                QStringLiteral("runtime.dat"));
+    QFile file(filePath);
+    if (!file.exists()) {
+        if (!writeRuntimeDate(filePath, currentDate)) {
+            return RuntimeGuardStatus::TimeError;
+        }
+    } else {
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return RuntimeGuardStatus::TimeError;
+        }
+        const QByteArray content = file.readAll().trimmed();
+        file.close();
+        const QString text = QString::fromUtf8(
+                    cryptRuntimeData(QByteArray::fromHex(content)));
+        const QDate recordedDate = QDate::fromString(
+                    text, QStringLiteral("yyyy-MM-dd"));
+        if (!recordedDate.isValid()
+                || recordedDate.toString(
+                    QStringLiteral("yyyy-MM-dd")) != text) {
+            return RuntimeGuardStatus::TimeError;
+        }
+        if (currentDate < recordedDate) {
+            return RuntimeGuardStatus::TimeError;
+        }
+        if (currentDate > recordedDate
+                && !writeRuntimeDate(filePath, currentDate)) {
+            return RuntimeGuardStatus::TimeError;
+        }
+    }
+
+    return currentDate > expiresDate
+            ? RuntimeGuardStatus::Expired
+            : RuntimeGuardStatus::Valid;
+}
 
 class WmiReader
 {
@@ -82,10 +161,6 @@ public:
     QString value(const wchar_t *className,
                   const wchar_t *propertyName) const
     {
-        if (!m_services) {
-            return QString();
-        }
-
         const QString queryText = QStringLiteral("SELECT %1 FROM %2")
                 .arg(QString::fromWCharArray(propertyName),
                      QString::fromWCharArray(className));
@@ -169,35 +244,34 @@ QString deviceCode(const QString &source)
                 .toHex().toUpper());
 }
 
-bool systemUuidDeviceCode(const WmiReader &reader, QString *code)
+bool systemUuidDeviceCode(const WmiReader &reader, QString &code)
 {
     const QString systemUuid = normalizedIdentifier(reader.value(
                 L"Win32_ComputerSystemProduct", L"UUID"));
-    if (!code || !isValidIdentifier(systemUuid)) {
+    if (!isValidIdentifier(systemUuid)) {
         return false;
     }
-    *code = deviceCode(systemUuid);
+    code = deviceCode(systemUuid);
     return true;
 }
 
-bool baseboardBiosDeviceCode(const WmiReader &reader, QString *code)
+bool baseboardBiosDeviceCode(const WmiReader &reader, QString &code)
 {
     const QString baseboardSerial = normalizedIdentifier(reader.value(
                 L"Win32_BaseBoard", L"SerialNumber"));
     const QString biosSerial = normalizedIdentifier(reader.value(
                 L"Win32_BIOS", L"SerialNumber"));
-    if (!code
-            || !isValidIdentifier(baseboardSerial)
+    if (!isValidIdentifier(baseboardSerial)
             || !isValidIdentifier(biosSerial)) {
         return false;
     }
-    *code = deviceCode(baseboardSerial + QLatin1Char('|') + biosSerial);
+    code = deviceCode(baseboardSerial + QLatin1Char('|') + biosSerial);
     return true;
 }
 
 bool currentDeviceCode(const WmiReader &reader,
                        const QString &binding,
-                       QString *code)
+                       QString &code)
 {
     if (binding == QLatin1String("S1")) {
         return systemUuidDeviceCode(reader, code);
@@ -209,86 +283,29 @@ bool currentDeviceCode(const WmiReader &reader,
 }
 
 bool selectDeviceBinding(const WmiReader &reader,
-                         QString *binding,
-                         QString *code)
+                         QString &binding,
+                         QString &code)
 {
-    if (!binding || !code) {
-        return false;
-    }
     if (systemUuidDeviceCode(reader, code)) {
-        *binding = QStringLiteral("S1");
+        binding = QStringLiteral("S1");
         return true;
     }
     if (baseboardBiosDeviceCode(reader, code)) {
-        *binding = QStringLiteral("S2");
+        binding = QStringLiteral("S2");
         return true;
     }
     return false;
-}
-
-bool validateLicense(const LicenseData &license,
-                     QStringList *authorizedModeIds)
-{
-    if (license.featureModeIds.isEmpty()) {
-        return false;
-    }
-    for (const QString &modeId : license.featureModeIds) {
-        DetectionMode mode;
-        if (!detectionModeFromId(modeId, &mode)) {
-            return false;
-        }
-    }
-    DetectionMode defaultMode;
-    if (!detectionModeFromId(license.defaultModeId, &defaultMode)
-            || !license.featureModeIds.contains(license.defaultModeId)) {
-        return false;
-    }
-
-    const bool bindingUnactivated =
-            license.deviceBinding == unactivatedValue;
-    const bool codeUnactivated = license.deviceCode == unactivatedValue;
-    if (bindingUnactivated != codeUnactivated) {
-        return false;
-    }
-    if (!bindingUnactivated
-            && license.deviceBinding != QLatin1String("S1")
-            && license.deviceBinding != QLatin1String("S2")) {
-        return false;
-    }
-
-    if (!license.permanent
-            && (!license.expiresDate.isValid()
-                || QDate::currentDate() > license.expiresDate)) {
-        return false;
-    }
-
-    if (authorizedModeIds) {
-        authorizedModeIds->clear();
-        for (const DetectionModeDescriptor &descriptor
-             : detectionModeDescriptors()) {
-            const QString modeId = QLatin1String(descriptor.modeId);
-            if (license.featureModeIds.contains(modeId)) {
-                authorizedModeIds->append(modeId);
-            }
-        }
-    }
-    return true;
 }
 
 bool matchesCurrentDevice(const WmiReader &reader,
                           const LicenseData &license)
 {
     QString code;
-    return currentDeviceCode(reader, license.deviceBinding, &code)
+    return currentDeviceCode(reader, license.deviceBinding, code)
             && code == license.deviceCode;
 }
 
 } // namespace
-
-bool RuntimeGuardResult::succeeded() const
-{
-    return valid;
-}
 
 RuntimeGuardResult RuntimeGuard::check()
 {
@@ -297,12 +314,33 @@ RuntimeGuardResult RuntimeGuard::check()
                 QCoreApplication::applicationDirPath()).filePath(
                 QStringLiteral("license.ini"));
     LicenseDecodeResult decoded = LicenseCodec::readFile(licensePath);
-    QStringList authorizedModeIds;
-    if (!decoded.succeeded()
-            || !validateLicense(decoded.license, &authorizedModeIds)) {
+    if (decoded.status != LicenseCodecStatus::Success) {
         return result;
     }
+    QStringList authorizedModeIds;
+    for (const DetectionModeDescriptor &descriptor
+         : detectionModeDescriptors()) {
+        const QString modeId = QLatin1String(descriptor.modeId);
+        if (decoded.license.featureModeIds.contains(modeId)) {
+            authorizedModeIds.append(modeId);
+        }
+    }
 
+    if (!decoded.license.permanent) {
+        const QDate currentDate = shanghaiDate();
+        const RuntimeGuardStatus dateStatus = checkRuntimeDateValue(
+                    currentDate,
+                    decoded.license.issuedDate,
+                    decoded.license.expiresDate);
+        if (dateStatus != RuntimeGuardStatus::Valid) {
+            result.status = dateStatus;
+            return result;
+        }
+        result.remainingDays = currentDate.daysTo(
+                    decoded.license.expiresDate);
+    }
+
+    result.status = RuntimeGuardStatus::DeviceBindingError;
     WmiReader reader;
     if (!reader.initialize()) {
         return result;
@@ -311,15 +349,14 @@ RuntimeGuardResult RuntimeGuard::check()
     if (decoded.license.deviceBinding == unactivatedValue) {
         if (!selectDeviceBinding(
                     reader,
-                    &decoded.license.deviceBinding,
-                    &decoded.license.deviceCode)
+                    decoded.license.deviceBinding,
+                    decoded.license.deviceCode)
                 || LicenseCodec::writeFile(decoded.license, licensePath)
                    != LicenseCodecStatus::Success) {
             return result;
         }
         decoded = LicenseCodec::readFile(licensePath);
-        if (!decoded.succeeded()
-                || !validateLicense(decoded.license, &authorizedModeIds)) {
+        if (decoded.status != LicenseCodecStatus::Success) {
             return result;
         }
     }
@@ -328,10 +365,18 @@ RuntimeGuardResult RuntimeGuard::check()
         return result;
     }
 
-    result.valid = true;
+    result.status = RuntimeGuardStatus::Valid;
     result.permanent = decoded.license.permanent;
+    result.issuedDate = decoded.license.issuedDate;
     result.expiresDate = decoded.license.expiresDate;
     result.authorizedModeIds = authorizedModeIds;
     result.defaultModeId = decoded.license.defaultModeId;
     return result;
+}
+
+RuntimeGuardStatus RuntimeGuard::checkRuntimeDate(
+        const QDate &issuedDate,
+        const QDate &expiresDate)
+{
+    return checkRuntimeDateValue(shanghaiDate(), issuedDate, expiresDate);
 }

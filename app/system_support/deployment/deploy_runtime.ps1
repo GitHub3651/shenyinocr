@@ -97,7 +97,6 @@ Copy-Item -LiteralPath $qtChineseTranslationPath `
 
 $requiredFiles = @(
     'config_ocr.txt',
-    'license.ini',
     'BarcodeDecoder.dll',
     'paddle_inference.dll',
     'common.dll',
@@ -130,8 +129,5 @@ if ($config -notmatch 'OCR/PP-OCRv6_tiny/det/' `
         -or $config -notmatch 'ppocrv6_tiny_dict.txt') {
     throw 'Runtime deployment did not produce the PP-OCRv6 tiny configuration.'
 }
-
-$releaseExecutablePath = Join-Path $destinationPath '晟崟AI视觉检测软件.exe'
-Copy-Item -LiteralPath $linkedExecutablePath -Destination $releaseExecutablePath -Force
 
 Write-Host "Qt and PP-OCRv6 tiny runtime assets are ready in $destinationPath"

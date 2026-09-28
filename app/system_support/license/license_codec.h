@@ -15,6 +15,7 @@ enum class LicenseCodecStatus
 struct LicenseData
 {
     bool permanent = false;
+    QDate issuedDate;
     QDate expiresDate;
     QStringList featureModeIds;
     QString defaultModeId;
@@ -26,8 +27,6 @@ struct LicenseDecodeResult
 {
     LicenseCodecStatus status = LicenseCodecStatus::FileReadFailed;
     LicenseData license;
-
-    bool succeeded() const;
 };
 
 class LicenseCodec

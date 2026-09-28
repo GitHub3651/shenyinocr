@@ -4,19 +4,30 @@
 #include <QString>
 #include <QStringList>
 
+enum class RuntimeGuardStatus
+{
+    Valid,
+    Expired,
+    TimeError,
+    DeviceBindingError,
+    Invalid
+};
+
 struct RuntimeGuardResult
 {
-    bool valid = false;
+    RuntimeGuardStatus status = RuntimeGuardStatus::Invalid;
     bool permanent = false;
+    QDate issuedDate;
     QDate expiresDate;
+    int remainingDays = -1;
     QStringList authorizedModeIds;
     QString defaultModeId;
-
-    bool succeeded() const;
 };
 
 class RuntimeGuard
 {
 public:
     static RuntimeGuardResult check();
+    static RuntimeGuardStatus checkRuntimeDate(const QDate &issuedDate,
+                                               const QDate &expiresDate);
 };

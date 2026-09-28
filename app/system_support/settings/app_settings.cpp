@@ -109,7 +109,6 @@ bool operator!=(const DetectionSchemes &left,
 
 AppSettings::AppSettings()
     : schemaVersion(CurrentSchemaVersion),
-      detectModeId(detectionModeUiId(DetectionMode::Word)),
       imageSaveModeId(QStringLiteral("save_none")),
       imageSaveTypeId(QStringLiteral("save_annotated_only")),
       cameraExposure(300),
